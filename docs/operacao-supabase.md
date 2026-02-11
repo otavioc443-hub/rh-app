@@ -23,6 +23,7 @@ Se precisar reaplicar a base de hardening:
 
 - `supabase/sql/2026-02-11_hardening_policies.sql`
 - `supabase/sql/2026-02-11_hardening_policy_functions.sql`
+- `supabase/sql/2026-02-11_hardening_storage_objects_policies.sql`
 
 ## 2) Conferir variaveis de ambiente
 

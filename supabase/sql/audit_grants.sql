@@ -24,20 +24,42 @@ where g.table_schema = 'public'
 order by g.table_name, g.grantee, g.privilege_type;
 
 -- 2) Grants no schema public
+-- Nota: alguns ambientes Supabase/Postgres nao expõem information_schema.schema_privileges.
+-- Por isso usamos has_schema_privilege(...), que é portável.
+with target_roles as (
+  select rolname as grantee
+  from pg_roles
+  where rolname in ('anon', 'authenticated', 'service_role', 'postgres')
+),
+privs as (
+  select unnest(array['USAGE', 'CREATE']) as privilege_type
+)
 select
-  grantee,
-  privilege_type
-from information_schema.schema_privileges
-where schema_name = 'public'
-order by grantee, privilege_type;
+  'public'::text as schema_name,
+  r.grantee,
+  p.privilege_type
+from target_roles r
+cross join privs p
+where has_schema_privilege(r.grantee, 'public', p.privilege_type)
+order by r.grantee, p.privilege_type;
 
 -- 3) Grants no schema storage (visibilidade de buckets/objetos)
+with target_roles as (
+  select rolname as grantee
+  from pg_roles
+  where rolname in ('anon', 'authenticated', 'service_role', 'postgres')
+),
+privs as (
+  select unnest(array['USAGE', 'CREATE']) as privilege_type
+)
 select
-  grantee,
-  privilege_type
-from information_schema.schema_privileges
-where schema_name = 'storage'
-order by grantee, privilege_type;
+  'storage'::text as schema_name,
+  r.grantee,
+  p.privilege_type
+from target_roles r
+cross join privs p
+where has_schema_privilege(r.grantee, 'storage', p.privilege_type)
+order by r.grantee, p.privilege_type;
 
 -- 4) Grants em storage.objects / storage.buckets
 select
