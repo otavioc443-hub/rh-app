@@ -8,6 +8,7 @@ No Supabase SQL Editor, execute o arquivo:
 
 - `supabase/sql/preflight_checks.sql`
 - `supabase/sql/audit_policy_functions.sql`
+- `supabase/sql/audit_grants.sql`
 
 Ele valida:
 
@@ -16,6 +17,7 @@ Ele valida:
 - existencia de policies nas tabelas criticas
 - existencia do bucket `company-logos`
 - configuracao das funcoes usadas em policies (`is_rh_or_admin`, `current_role`)
+- grants efetivos em tabelas/schemas criticos (`public` e `storage`)
 
 Se precisar reaplicar a base de hardening:
 
