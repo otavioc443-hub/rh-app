@@ -25,19 +25,26 @@ import {
   MonitorCheck,
   GitBranch,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
 type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "admin";
 
-type NavChild = { label: string; icon?: any; href: string; exact?: boolean };
+type NavChild = { label: string; icon?: LucideIcon; href: string; exact?: boolean };
 type NavItem = {
   label: string;
-  icon: any;
+  icon: LucideIcon;
   href?: string;
   exact?: boolean;
   children?: NavChild[];
   roles?: Role[];
 };
+
+declare global {
+  interface Window {
+    __logoutManual?: () => Promise<void>;
+  }
+}
 
 function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -174,8 +181,8 @@ export default function Sidebar({ role }: { role: Role }) {
 
   async function handleLogout() {
     try {
-      if (typeof window !== "undefined" && (window as any).__logoutManual) {
-        await (window as any).__logoutManual();
+      if (typeof window !== "undefined" && window.__logoutManual) {
+        await window.__logoutManual();
       }
     } catch {}
     await supabase.auth.signOut();
