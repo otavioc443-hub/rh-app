@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { CalendarClock, Users, Wand2 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 type Colaborador = {
   id: string;
@@ -11,7 +12,7 @@ type Colaborador = {
   is_active: boolean;
 };
 
-function KpiCard({ label, value, icon: Icon }: { label: string; value: string; icon: any }) {
+function KpiCard({ label, value, icon: Icon }: { label: string; value: string; icon: LucideIcon }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5">
       <div className="flex items-start justify-between gap-4">

@@ -37,7 +37,7 @@ function prettyRole(r: Role | null) {
 }
 
 export default function PermissoesClient() {
-  const { loading: roleLoading, role: viewerRole } = useUserRole() as any;
+  const { loading: roleLoading, role: viewerRole } = useUserRole();
   const canView = viewerRole === "admin" || viewerRole === "rh";
 
   const [loading, setLoading] = useState(true);
@@ -60,6 +60,12 @@ export default function PermissoesClient() {
   const [editActive, setEditActive] = useState<boolean>(true);
   const [editDepartmentId, setEditDepartmentId] = useState<string>("");
 
+  const deptNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const d of departments) map.set(d.id, d.name);
+    return map;
+  }, [departments]);
+
   // roles permitidas conforme quem está editando
   const roleOptions: Role[] = useMemo(() => {
     if (viewerRole === "admin") return ["colaborador", "coordenador", "gestor", "rh", "admin"];
@@ -77,9 +83,10 @@ export default function PermissoesClient() {
 
       if (error) throw error;
       setDepartments((data ?? []) as DepartmentRow[]);
-    } catch (e: any) {
+    } catch (e: unknown) {
       // não quebra a tela — só não mostra os nomes
-      console.warn("Falha ao carregar departments:", e?.message);
+      const message = e instanceof Error ? e.message : "Erro ao carregar departments.";
+      console.warn("Falha ao carregar departments:", message);
       setDepartments([]);
     } finally {
       setDeptLoading(false);
@@ -106,9 +113,9 @@ export default function PermissoesClient() {
       if (error) throw error;
 
       setRows((data ?? []) as UserPermissionRow[]);
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError(
-        e?.message ??
+        (e instanceof Error ? e.message : null) ??
           "Não foi possível carregar dados. Verifique se a VIEW admin_profiles_view existe e se RLS permite SELECT."
       );
     } finally {
@@ -171,14 +178,14 @@ export default function PermissoesClient() {
         throw new Error("Você não tem permissão para atribuir essa role.");
       }
 
-      const payload: any = {
+      const payload: { role: Role; active: boolean; department_id: string | null } = {
         role: editRole,
         active: editActive,
         department_id: editDepartmentId ? editDepartmentId : null,
       };
 
       // UPDATE direto na tabela profiles (mais seguro)
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("profiles")
         .update(payload)
         .eq("id", selected.id)
@@ -191,8 +198,8 @@ export default function PermissoesClient() {
       await fetchProfiles();
 
       closeModal();
-    } catch (e: any) {
-      setError(e?.message ?? "Falha ao salvar. Verifique RLS/Policy.");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Falha ao salvar. Verifique RLS/Policy.");
     } finally {
       setSaving(false);
     }
@@ -214,12 +221,6 @@ export default function PermissoesClient() {
       </div>
     );
   }
-
-  const deptNameById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const d of departments) map.set(d.id, d.name);
-    return map;
-  }, [departments]);
 
   return (
     <div className="space-y-4">

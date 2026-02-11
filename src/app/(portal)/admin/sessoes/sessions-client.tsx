@@ -5,6 +5,8 @@ import { supabase } from "@/lib/supabaseClient";
 import { useUserRole } from "@/hooks/useUserRole";
 
 type LogoutReason = "manual" | "idle" | "token_expired" | null;
+type SessionMode = "online" | "all";
+type SessionReasonFilter = "all" | "manual" | "idle" | "token_expired";
 
 type SessionRow = {
   id: string;
@@ -60,14 +62,14 @@ function simplifyUA(ua: string | null) {
   return { browser, device };
 }
 
-function escapeCsv(value: any) {
+function escapeCsv(value: unknown) {
   const str = String(value ?? "");
   if (/[",\n;]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
   return str;
 }
 
 // ✅ sempre gera CSV com cabeçalho, mesmo sem linhas
-function downloadCsvWithHeaders(filename: string, headers: string[], rows: Record<string, any>[]) {
+function downloadCsvWithHeaders(filename: string, headers: string[], rows: Record<string, unknown>[]) {
   const csv =
     headers.join(";") +
     "\n" +
@@ -85,7 +87,7 @@ function downloadCsvWithHeaders(filename: string, headers: string[], rows: Recor
 }
 
 export default function SessionsClient() {
-  const { loading: roleLoading, role } = useUserRole() as any;
+  const { loading: roleLoading, role } = useUserRole();
   const canView = role === "admin" || role === "rh";
 
   const [loading, setLoading] = useState(true);
@@ -93,8 +95,8 @@ export default function SessionsClient() {
   const [error, setError] = useState<string | null>(null);
 
   // filtros
-  const [mode, setMode] = useState<"online" | "all">("online");
-  const [reason, setReason] = useState<"all" | "manual" | "idle" | "token_expired">("all");
+  const [mode, setMode] = useState<SessionMode>("online");
+  const [reason, setReason] = useState<SessionReasonFilter>("all");
   const [search, setSearch] = useState("");
   const [limit, setLimit] = useState(50);
 
@@ -136,8 +138,8 @@ export default function SessionsClient() {
       if (error) throw error;
 
       setRows((data ?? []) as SessionRow[]);
-    } catch (e: any) {
-      setError(e?.message ?? "Erro ao carregar sessões.");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Erro ao carregar sessões.");
     } finally {
       setLoading(false);
     }
@@ -285,7 +287,7 @@ export default function SessionsClient() {
             <label className="block text-xs font-semibold text-slate-700">Modo</label>
             <select
               value={mode}
-              onChange={(e) => setMode(e.target.value as any)}
+              onChange={(e) => setMode(e.target.value as SessionMode)}
               className="mt-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
             >
               <option value="online">Online agora</option>
@@ -297,7 +299,7 @@ export default function SessionsClient() {
             <label className="block text-xs font-semibold text-slate-700">Logout</label>
             <select
               value={reason}
-              onChange={(e) => setReason(e.target.value as any)}
+              onChange={(e) => setReason(e.target.value as SessionReasonFilter)}
               className="mt-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
             >
               <option value="all">Todos</option>

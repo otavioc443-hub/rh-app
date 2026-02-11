@@ -20,7 +20,7 @@ function needsRH(pathname: string) {
   return pathname === "/rh" || pathname.startsWith("/rh/");
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   // libera páginas públicas

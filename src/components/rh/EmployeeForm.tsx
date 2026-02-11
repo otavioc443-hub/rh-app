@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 export type ColaboradorPayload = {
@@ -78,7 +79,7 @@ export type ColaboradorPayload = {
   unidade?: string;
   id_unidade_externo?: string;
 
-  [key: string]: any;
+  [key: string]: unknown;
 };
 
 type Props = {
@@ -107,7 +108,15 @@ function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-function Section({ title, subtitle, children }: any) {
+function Section({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  children: ReactNode;
+}) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-6">
       <div className="text-base font-semibold text-slate-900">{title}</div>
@@ -117,7 +126,17 @@ function Section({ title, subtitle, children }: any) {
   );
 }
 
-function Field({ label, required, children, helper }: any) {
+function Field({
+  label,
+  required,
+  children,
+  helper,
+}: {
+  label: string;
+  required?: boolean;
+  children: ReactNode;
+  helper?: string;
+}) {
   return (
     <div>
       <label className="block text-xs font-semibold text-slate-600">
@@ -151,7 +170,7 @@ export default function EmployeeForm({
   const [nomePai, setNomePai] = useState(initial?.nome_pai ?? "");
   const [nomeMae, setNomeMae] = useState(initial?.nome_mae ?? "");
   const [pne, setPne] = useState<string>(() => {
-    const v: any = initial?.pne;
+    const v: unknown = initial?.pne;
     if (typeof v === "boolean") return v ? "sim" : "nao";
     const s = String(v ?? "").toLowerCase();
     if (s === "sim" || s === "true" || s === "1") return "sim";

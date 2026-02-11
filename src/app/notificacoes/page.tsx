@@ -20,11 +20,12 @@ export default function NotificacoesPage() {
       setMsg(error.message);
       return;
     }
-    setItems((data as any) ?? []);
+    setItems((data ?? []) as NotificationRow[]);
   }
 
   useEffect(() => {
-    load();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
   }, []);
 
   async function markRead(id: string) {

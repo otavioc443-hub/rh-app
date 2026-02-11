@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { CalendarClock, CheckCircle2, Clock3, XCircle } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 function KpiCard({
   label,
@@ -10,7 +11,7 @@ function KpiCard({
 }: {
   label: string;
   value: string;
-  icon: any;
+  icon: LucideIcon;
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5">

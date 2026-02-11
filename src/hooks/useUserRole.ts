@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-type Role = "colaborador" | "gestor" | "rh" | "admin";
+type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "admin";
 type ProfileRow = { role: Role | null; active: boolean | null };
 
 // ✅ cache em memória (persiste durante a sessão do app)

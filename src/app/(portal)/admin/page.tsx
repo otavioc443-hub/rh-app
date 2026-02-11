@@ -161,7 +161,6 @@ export default function AdminPage() {
     if (!checking && meRole === "admin") {
       loadProfiles();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checking, meRole]);
 
   // =========================
@@ -251,8 +250,8 @@ export default function AdminPage() {
       setInviteRole("colaborador");
 
       await loadProfiles();
-    } catch (e: any) {
-      setMsg(e.message);
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao enviar convite.");
     } finally {
       setInviting(false);
     }

@@ -42,7 +42,7 @@ type AuditRow = {
   created_at: string;
   actor_email: string | null;
   action: string | null;
-  details: any;
+  details: unknown;
 };
 
 const steps = [
@@ -125,8 +125,8 @@ export default function CollaboratorEditWizard({
 
       if (!alive) return;
 
-      if (!cRes.error) setCargos((cRes.data ?? []) as any);
-      if (!dRes.error) setDepts((dRes.data ?? []) as any);
+      if (!cRes.error) setCargos((cRes.data ?? []) as Cargo[]);
+      if (!dRes.error) setDepts((dRes.data ?? []) as Dept[]);
 
       // 2) colaborador
       const { data, error } = await supabase
@@ -197,8 +197,8 @@ export default function CollaboratorEditWizard({
 
       if (!res.ok) throw new Error(json?.error ?? "Falha ao carregar histórico.");
       setHistory(json.logs ?? []);
-    } catch (e: any) {
-      setMsg(e?.message ?? "Erro ao carregar histórico.");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao carregar histórico.");
       setHistory([]);
     } finally {
       setHistoryLoading(false);
@@ -214,7 +214,7 @@ export default function CollaboratorEditWizard({
       const termination_date = form.is_active ? null : (form.termination_date || null);
       const termination_reason = form.is_active ? null : (form.termination_reason || null);
 
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         nome: form.nome,
         empresa: form.empresa,
         setor: form.setor,
@@ -250,8 +250,8 @@ export default function CollaboratorEditWizard({
       if (error) throw new Error(error.message);
 
       onSaved();
-    } catch (e: any) {
-      setMsg(e?.message ?? "Erro ao salvar.");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao salvar.");
     } finally {
       setSaving(false);
     }

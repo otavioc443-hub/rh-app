@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { User } from "@supabase/supabase-js";
+import Image from "next/image";
+import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 
 type Profile = {
@@ -53,13 +56,13 @@ export default function FeedbackPage() {
   const [comment, setComment] = useState("");
   const [msg, setMsg] = useState("");
 
-  function hydrateFromUser(user: any) {
+  function hydrateFromUser(user: User) {
     setUserEmail(user?.email ?? null);
     setUserId(user?.id ?? null);
 
-    const md = (user?.user_metadata ?? {}) as Record<string, any>;
-    const full_name = (md.full_name || md.name || "").toString();
-    const avatar_url = (md.avatar_url || md.picture || "").toString();
+    const md = (user.user_metadata ?? {}) as Record<string, unknown>;
+    const full_name = String(md.full_name ?? md.name ?? "");
+    const avatar_url = String(md.avatar_url ?? md.picture ?? "");
 
     setProfile({ full_name, avatar_url });
   }
@@ -182,9 +185,9 @@ export default function FeedbackPage() {
 
       {/* logos topo direito */}
       <div className="fixed top-5 right-6 z-50 flex items-center gap-4 bg-white/85 backdrop-blur-md border rounded-xl px-4 py-2 shadow">
-        <img src="/logo.png" alt="Sólida" className="h-8 w-auto object-contain" />
+        <Image src="/logo.png" alt="Sólida" width={120} height={32} className="h-8 w-auto object-contain" />
         <div className="h-6 w-px bg-gray-300" />
-        <img src="/logo2.png" alt="Área" className="h-7 w-auto object-contain" />
+        <Image src="/logo2.png" alt="Área" width={110} height={28} className="h-7 w-auto object-contain" />
       </div>
 
       {/* sidebar fixa canto esquerdo */}
@@ -219,12 +222,12 @@ export default function FeedbackPage() {
         </div>
 
         <div className="mt-6 flex flex-col gap-2">
-          <a href="/perfil" className="text-sm underline">
+          <Link href="/perfil" className="text-sm underline">
             Meu Perfil
-          </a>
-          <a href="/" className="text-sm underline">
+          </Link>
+          <Link href="/" className="text-sm underline">
             Voltar
-          </a>
+          </Link>
         </div>
       </aside>
 
@@ -311,3 +314,5 @@ export default function FeedbackPage() {
     </main>
   );
 }
+
+

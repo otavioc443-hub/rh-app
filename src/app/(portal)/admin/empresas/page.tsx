@@ -266,7 +266,6 @@ export default function AdminEmpresasPage() {
     if (!checking && meRole === "admin") {
       loadCompanies();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checking, meRole]);
 
   useEffect(() => {
@@ -491,8 +490,8 @@ export default function AdminEmpresasPage() {
       resetCompanyForm();
       await loadCompanies();
       setSelectedCnpj(normalizedCnpj);
-    } catch (e: any) {
-      setMsg(e?.message ?? "Erro ao salvar empresa.");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao salvar empresa.");
     } finally {
       setSavingCompany(false);
     }
@@ -510,8 +509,8 @@ export default function AdminEmpresasPage() {
       setMsg("Empresa removida.");
       if (cnpjValue && onlyDigits(selectedCnpj) === (cnpjValue ?? "")) setSelectedCnpj("");
       await loadCompanies();
-    } catch (e: any) {
-      setMsg(e?.message ?? "Erro ao excluir empresa.");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao excluir empresa.");
     }
   }
 
@@ -558,8 +557,8 @@ export default function AdminEmpresasPage() {
       setMsg(deptMode === "setor" ? "Setor cadastrado." : "Departamento cadastrado.");
       resetDeptCreateForm();
       await loadDepartmentsByCnpj(normalizedCnpj);
-    } catch (e: any) {
-      setMsg(e?.message ?? "Erro ao cadastrar.");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao cadastrar.");
     } finally {
       setSavingDept(false);
     }
@@ -620,8 +619,8 @@ export default function AdminEmpresasPage() {
       setMsg("Atualizado com sucesso.");
       cancelEditDept();
       await loadDepartmentsByCnpj(normalizedCnpj);
-    } catch (e: any) {
-      setMsg(e?.message ?? "Erro ao atualizar.");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao atualizar.");
     } finally {
       setSavingDept(false);
     }
@@ -638,8 +637,8 @@ export default function AdminEmpresasPage() {
 
       setMsg("Removido.");
       if (onlyDigits(selectedCnpj).length === 14) await loadDepartmentsByCnpj(selectedCnpj);
-    } catch (e: any) {
-      setMsg(e?.message ?? "Erro ao excluir.");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao excluir.");
     }
   }
 

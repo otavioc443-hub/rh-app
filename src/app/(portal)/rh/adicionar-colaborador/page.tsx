@@ -17,7 +17,7 @@ function toDb(payload: ColaboradorPayload) {
   };
 
   // ✅ primeiro espalha tudo (mantém campos extras)
-  const base: any = { ...payload };
+  const base: Record<string, unknown> = { ...payload };
 
   // ✅ depois normaliza os principais (evita "" virar valor no banco)
   base.empresa = n(payload.empresa) || null;
@@ -79,13 +79,15 @@ export default function Page() {
       }
 
       const row = toDb(payload);
-      const { error } = await supabase.from("colaboradores").upsert(row as any, { onConflict: "cpf" });
+      const { error } = await supabase
+        .from("colaboradores")
+        .upsert(row as Record<string, unknown>, { onConflict: "cpf" });
       if (error) throw error;
 
       setMsg("✅ Colaborador salvo com sucesso!");
       await loadStats();
-    } catch (e: any) {
-      setMsg(`❌ ${e?.message ?? "Erro ao salvar."}`);
+    } catch (e: unknown) {
+      setMsg(`❌ ${e instanceof Error ? e.message : "Erro ao salvar."}`);
     } finally {
       setSaving(false);
     }
@@ -96,14 +98,18 @@ export default function Page() {
     setSaving(true);
 
     try {
-      const mapped = rows.map(toDb).filter((r: any) => r?.cpf && r?.email && r?.nome);
-      const { error } = await supabase.from("colaboradores").upsert(mapped as any, { onConflict: "cpf" });
+      const mapped = rows
+        .map(toDb)
+        .filter((r) => Boolean(r.cpf) && Boolean(r.email) && Boolean(r.nome));
+      const { error } = await supabase
+        .from("colaboradores")
+        .upsert(mapped as Record<string, unknown>[], { onConflict: "cpf" });
       if (error) throw error;
 
       setMsg(`✅ Importação concluída: ${mapped.length} colaborador(es).`);
       await loadStats();
-    } catch (e: any) {
-      setMsg(`❌ ${e?.message ?? "Erro ao importar."}`);
+    } catch (e: unknown) {
+      setMsg(`❌ ${e instanceof Error ? e.message : "Erro ao importar."}`);
     } finally {
       setSaving(false);
     }

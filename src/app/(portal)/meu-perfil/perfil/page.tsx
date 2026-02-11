@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { User } from "@supabase/supabase-js";
+import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 
 function getInitials(name: string) {
@@ -34,13 +36,13 @@ export default function PerfilPage() {
     [fullName]
   );
 
-  function hydrateFromUser(user: any) {
+  function hydrateFromUser(user: User) {
     setUserId(user?.id ?? null);
     setUserEmail(user?.email ?? null);
 
-    const md = (user?.user_metadata ?? {}) as Record<string, any>;
-    setFullName((md.full_name || md.name || "").toString());
-    setAvatarUrl((md.avatar_url || md.picture || "").toString());
+    const md = (user.user_metadata ?? {}) as Record<string, unknown>;
+    setFullName(String(md.full_name ?? md.name ?? ""));
+    setAvatarUrl(String(md.avatar_url ?? md.picture ?? ""));
   }
 
   useEffect(() => {
@@ -195,9 +197,9 @@ export default function PerfilPage() {
             Você precisa estar logado para editar seu perfil.
           </p>
 
-          <a href="/" className="inline-block mt-4 underline">
+          <Link href="/" className="inline-block mt-4 underline">
             Voltar
-          </a>
+          </Link>
         </div>
       </main>
     );
@@ -213,12 +215,12 @@ export default function PerfilPage() {
           </div>
 
           <div className="flex gap-3">
-            <a href="/feedback" className="underline text-sm">
+            <Link href="/feedback" className="underline text-sm">
               Ir para Feedback
-            </a>
-            <a href="/" className="underline text-sm">
+            </Link>
+            <Link href="/" className="underline text-sm">
               Home
-            </a>
+            </Link>
           </div>
         </div>
 

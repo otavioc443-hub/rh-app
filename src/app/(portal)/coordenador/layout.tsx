@@ -6,7 +6,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 
 export default function CoordenadorLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { loading, active, role } = useUserRole() as any;
+  const { loading, active, role } = useUserRole();
 
   useEffect(() => {
     if (loading) return;

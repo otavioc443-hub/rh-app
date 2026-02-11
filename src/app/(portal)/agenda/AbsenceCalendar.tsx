@@ -138,8 +138,8 @@ export default function AbsenceCalendar({ myAllowance, myRequests, onRefresh }: 
       setReason("");
       setMsg("Solicitação enviada ao gestor para aprovação ✅");
       await onRefresh();
-    } catch (e: any) {
-      setMsg(e?.message ?? "Erro ao solicitar ausência.");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao solicitar ausência.");
     } finally {
       setLoading(false);
     }

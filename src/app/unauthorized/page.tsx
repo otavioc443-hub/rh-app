@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 export default function UnauthorizedPage() {
   return (
     <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
@@ -6,7 +8,9 @@ export default function UnauthorizedPage() {
         <p style={{ opacity: 0.8, marginBottom: 16 }}>
           Você não tem permissão para acessar esta área.
         </p>
-        <a href="/" style={{ textDecoration: "underline" }}>Voltar para o início</a>
+        <Link href="/" style={{ textDecoration: "underline" }}>
+          Voltar para o início
+        </Link>
       </div>
     </main>
   );

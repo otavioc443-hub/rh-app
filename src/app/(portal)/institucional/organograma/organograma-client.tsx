@@ -194,12 +194,14 @@ export default function Page() {
       return;
     }
 
-    setColabs((data as any) ?? []);
+    setColabs((data ?? []) as Colab[]);
     setLoading(false);
   }
 
   useEffect(() => {
-    load();
+    queueMicrotask(() => {
+      void load();
+    });
   }, []);
 
   const roots = useMemo(() => buildTree(colabs), [colabs]);
@@ -237,8 +239,9 @@ export default function Page() {
       a.href = dataUrl;
       a.download = "organograma.png";
       a.click();
-    } catch (e: any) {
-      setMsg(`❌ Falha ao gerar download: ${e?.message ?? "erro desconhecido"}`);
+    } catch (e: unknown) {
+      const errMsg = e instanceof Error ? e.message : "erro desconhecido";
+      setMsg(`❌ Falha ao gerar download: ${errMsg}`);
     }
   }
 

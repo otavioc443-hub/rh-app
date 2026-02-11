@@ -12,6 +12,11 @@ type CargoRow = {
   created_at: string | null;
 };
 
+type CargoPayload = {
+  name: string;
+  cbo: string | null;
+};
+
 function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
@@ -37,8 +42,8 @@ export default function CargosPage() {
       const { data, error } = await supabase.from("cargos").select("id,name,cbo,created_at").order("name", { ascending: true });
       if (error) throw error;
       setRows((data ?? []) as CargoRow[]);
-    } catch (e: any) {
-      setMsg(`❌ ${e?.message ?? "Erro ao carregar cargos."}`);
+    } catch (e: unknown) {
+      setMsg(`❌ ${e instanceof Error ? e.message : "Erro ao carregar cargos."}`);
       setRows([]);
     } finally {
       setLoading(false);
@@ -63,18 +68,16 @@ export default function CargosPage() {
     setLoading(true);
     try {
       // upsert por name (precisa de unique no banco — deixei o SQL no final)
-      const { error } = await supabase.from("cargos").upsert(
-        { name: n, cbo: cbo.trim() || null } as any,
-        { onConflict: "name" }
-      );
+      const payload: CargoPayload = { name: n, cbo: cbo.trim() || null };
+      const { error } = await supabase.from("cargos").upsert(payload, { onConflict: "name" });
       if (error) throw error;
 
       setName("");
       setCbo("");
       setMsg("✅ Cargo salvo.");
       await load();
-    } catch (e: any) {
-      setMsg(`❌ ${e?.message ?? "Erro ao salvar cargo."}`);
+    } catch (e: unknown) {
+      setMsg(`❌ ${e instanceof Error ? e.message : "Erro ao salvar cargo."}`);
     } finally {
       setLoading(false);
     }
@@ -99,14 +102,15 @@ export default function CargosPage() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.from("cargos").update({ name: n, cbo: editCbo.trim() || null } as any).eq("id", id);
+      const payload: CargoPayload = { name: n, cbo: editCbo.trim() || null };
+      const { error } = await supabase.from("cargos").update(payload).eq("id", id);
       if (error) throw error;
 
       setMsg("✅ Atualizado.");
       cancelEdit();
       await load();
-    } catch (e: any) {
-      setMsg(`❌ ${e?.message ?? "Erro ao atualizar."}`);
+    } catch (e: unknown) {
+      setMsg(`❌ ${e instanceof Error ? e.message : "Erro ao atualizar."}`);
     } finally {
       setLoading(false);
     }
@@ -124,8 +128,8 @@ export default function CargosPage() {
 
       setMsg("✅ Removido.");
       await load();
-    } catch (e: any) {
-      setMsg(`❌ ${e?.message ?? "Erro ao excluir."}`);
+    } catch (e: unknown) {
+      setMsg(`❌ ${e instanceof Error ? e.message : "Erro ao excluir."}`);
     } finally {
       setLoading(false);
     }

@@ -69,8 +69,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    load();
-    const { data: sub } = supabase.auth.onAuthStateChange(() => load());
+    const runLoad = () => {
+      void load();
+    };
+
+    queueMicrotask(runLoad);
+    const { data: sub } = supabase.auth.onAuthStateChange(runLoad);
     return () => sub.subscription.unsubscribe();
   }, []);
 

@@ -15,6 +15,17 @@ type Row = {
   dep_nome?: string | null;
 };
 
+type RelName = { name?: string | null } | null;
+type ColaboradorJoinRow = {
+  id: string;
+  nome: string | null;
+  cargo_id: string | null;
+  department_id: string | null;
+  is_active: boolean | null;
+  cargos?: RelName;
+  departments?: RelName;
+};
+
 function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
@@ -64,14 +75,14 @@ export default function Page() {
     }
 
     const mapped: Row[] =
-      (data ?? []).map((r: any) => ({
+      ((data ?? []) as ColaboradorJoinRow[]).map((r) => ({
         id: r.id,
         nome: r.nome,
         cargo_id: r.cargo_id,
         department_id: r.department_id,
         is_active: !!r.is_active,
-        cargo_nome: r?.cargos?.name ?? null,
-        dep_nome: r?.departments?.name ?? null,
+        cargo_nome: r.cargos?.name ?? null,
+        dep_nome: r.departments?.name ?? null,
       })) ?? [];
 
     setRows(mapped);
@@ -102,7 +113,7 @@ export default function Page() {
 
       // ✅ evita “Unexpected token <”
       const text = await res.text();
-      let payload: any;
+      let payload: { error?: string; message?: string } | null = null;
       try {
         payload = JSON.parse(text);
       } catch {
@@ -111,8 +122,8 @@ export default function Page() {
 
       if (!res.ok) throw new Error(payload?.error || "Falha ao enviar acesso.");
       setToast(payload?.message ?? "Convite enviado com sucesso.");
-    } catch (e: any) {
-      setToast(e?.message ?? "Erro ao enviar acesso.");
+    } catch (e: unknown) {
+      setToast(e instanceof Error ? e.message : "Erro ao enviar acesso.");
     } finally {
       setSendingId(null);
     }

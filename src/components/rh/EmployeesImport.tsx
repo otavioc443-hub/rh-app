@@ -7,6 +7,7 @@ import type { ColaboradorPayload } from "./EmployeeForm";
 import { Card, CardBody } from "@/components/ui/PageShell";
 
 type Props = { onImport: (rows: ColaboradorPayload[]) => Promise<void> };
+type CsvRow = Record<string, string | undefined>;
 
 function toISODate(value?: string) {
   if (!value) return "";
@@ -17,7 +18,7 @@ function toISODate(value?: string) {
   if (m) return `${m[3]}-${m[2]}-${m[1]}`;
   return v;
 }
-function toBoolSimNao(value: any) {
+function toBoolSimNao(value: unknown) {
   const v = String(value ?? "").trim().toLowerCase();
   if (!v) return undefined;
   if (v === "sim" || v === "true" || v === "1") return true;
@@ -27,7 +28,7 @@ function toBoolSimNao(value: any) {
 
 export default function EmployeesImport({ onImport }: Props) {
   const [fileName, setFileName] = useState("");
-  const [allRows, setAllRows] = useState<any[]>([]);
+  const [allRows, setAllRows] = useState<CsvRow[]>([]);
   const [preview, setPreview] = useState<ColaboradorPayload[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
@@ -37,7 +38,7 @@ export default function EmployeesImport({ onImport }: Props) {
     []
   );
 
-  function validate(rows: any[]) {
+  function validate(rows: CsvRow[]) {
     const errs: string[] = [];
     if (!rows.length) errs.push("A planilha veio vazia.");
     const headers = Object.keys(rows[0] ?? {});
@@ -46,7 +47,7 @@ export default function EmployeesImport({ onImport }: Props) {
     return errs;
   }
 
-  function mapRow(r: any): ColaboradorPayload {
+  function mapRow(r: CsvRow): ColaboradorPayload {
     return {
       nome: r["Nome*"] ?? "",
       matricula: r["Matrícula"] ?? "",
@@ -120,12 +121,12 @@ export default function EmployeesImport({ onImport }: Props) {
     if (!file) return;
 
     const parseWith = (delimiter?: string) =>
-      new Promise<any[]>((resolve, reject) => {
+      new Promise<CsvRow[]>((resolve, reject) => {
         Papa.parse(file, {
           header: true,
           skipEmptyLines: "greedy",
           delimiter: delimiter ?? "",
-          complete: (res) => resolve((res.data ?? []) as any[]),
+          complete: (res) => resolve((res.data ?? []) as CsvRow[]),
           error: (err) => reject(err),
         });
       });
@@ -145,8 +146,8 @@ export default function EmployeesImport({ onImport }: Props) {
 
       setAllRows(rows);
       setPreview(rows.slice(0, 6).map(mapRow));
-    } catch (e: any) {
-      setErrors([e?.message ?? "Falha ao ler o arquivo."]);
+    } catch (e: unknown) {
+      setErrors([e instanceof Error ? e.message : "Falha ao ler o arquivo."]);
     }
   }
 
@@ -159,8 +160,8 @@ export default function EmployeesImport({ onImport }: Props) {
       setAllRows([]);
       setPreview([]);
       setFileName("");
-    } catch (e: any) {
-      setErrors([e?.message ?? "Falha ao importar."]);
+    } catch (e: unknown) {
+      setErrors([e instanceof Error ? e.message : "Falha ao importar."]);
     } finally {
       setLoading(false);
     }

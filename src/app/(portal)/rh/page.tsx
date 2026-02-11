@@ -122,9 +122,10 @@ export default function RhPage() {
 
   useEffect(() => {
     if (!checking && (meRole === "rh" || meRole === "admin")) {
-      loadProfiles();
+      queueMicrotask(() => {
+        void loadProfiles();
+      });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [checking, meRole]);
 
   // =========================

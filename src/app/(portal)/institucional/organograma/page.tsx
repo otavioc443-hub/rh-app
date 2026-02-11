@@ -34,6 +34,8 @@ type Node = {
   children: Node[];
 };
 
+type CssVars = React.CSSProperties & Record<`--${string}`, string>;
+
 function normEmail(v?: string | null) {
   return (v ?? "").trim().toLowerCase();
 }
@@ -221,7 +223,7 @@ export default function Page() {
       return;
     }
 
-    setColabs((data as any) ?? []);
+    setColabs((data ?? []) as Colab[]);
     setLoading(false);
   }
 
@@ -294,10 +296,11 @@ export default function Page() {
 
       const { toPng } = await import("html-to-image");
 
-      // @ts-ignore
-      if (document?.fonts?.ready) {
-        // @ts-ignore
-        await document.fonts.ready;
+      const docWithFonts = document as Document & {
+        fonts?: { ready?: Promise<unknown> };
+      };
+      if (docWithFonts.fonts?.ready) {
+        await docWithFonts.fonts.ready;
       }
 
       // salva styles originais do stage
@@ -325,7 +328,7 @@ export default function Page() {
       a.href = dataUrl;
       a.download = `organograma_${new Date().toISOString().slice(0, 10)}.png`;
       a.click();
-    } catch (e: any) {
+    } catch (e: unknown) {
       // tentativa de restaurar (caso erro aconteça antes)
       try {
         const stageEl = stageRef.current;
@@ -335,7 +338,8 @@ export default function Page() {
         }
       } catch {}
 
-      setMsg(`❌ Falha no download: ${e?.message ?? "erro desconhecido"}`);
+      const errMsg = e instanceof Error ? e.message : "erro desconhecido";
+      setMsg(`❌ Falha no download: ${errMsg}`);
     }
   }
 
@@ -606,23 +610,23 @@ export default function Page() {
                 style={
                   compact
                     ? ({
-                        ["--card-w" as any]: "200px",
-                        ["--card-pad" as any]: "12px 10px 10px 10px",
-                        ["--avatar" as any]: "62px",
-                        ["--avatar-fs" as any]: "15px",
-                        ["--name-fs" as any]: "12.5px",
-                        ["--role-fs" as any]: "10.5px",
-                        ["--role-pad" as any]: "6px 9px",
-                        ["--tag-fs" as any]: "10px",
-                        ["--tag-pad" as any]: "6px 9px",
-                        ["--pill-fs" as any]: "10px",
-                        ["--org-gap" as any]: "12px",
-                        ["--org-pt" as any]: "16px",
-                        ["--org-child-pt" as any]: "20px",
-                        ["--org-minw" as any]: "190px",
-                        ["--org-line-h" as any]: "16px",
-                        ["--org-li-pad" as any]: "14px 8px 0 8px",
-                      } as React.CSSProperties)
+                        "--card-w": "200px",
+                        "--card-pad": "12px 10px 10px 10px",
+                        "--avatar": "62px",
+                        "--avatar-fs": "15px",
+                        "--name-fs": "12.5px",
+                        "--role-fs": "10.5px",
+                        "--role-pad": "6px 9px",
+                        "--tag-fs": "10px",
+                        "--tag-pad": "6px 9px",
+                        "--pill-fs": "10px",
+                        "--org-gap": "12px",
+                        "--org-pt": "16px",
+                        "--org-child-pt": "20px",
+                        "--org-minw": "190px",
+                        "--org-line-h": "16px",
+                        "--org-li-pad": "14px 8px 0 8px",
+                      } as CssVars)
                     : undefined
                 }
               >

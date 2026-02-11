@@ -40,12 +40,14 @@ export default function Page() {
       .order("created_at", { ascending: false });
 
     if (error) setMsg(`❌ ${error.message}`);
-    setRows((data as any) ?? []);
+    setRows((data ?? []) as Row[]);
     setLoading(false);
   }
 
   useEffect(() => {
-    load();
+    queueMicrotask(() => {
+      void load();
+    });
   }, []);
 
   const filtered = useMemo(() => {
@@ -64,7 +66,7 @@ export default function Page() {
     setMsg("");
     const { data, error } = await supabase.from("colaboradores").select("*").eq("id", id).single();
     if (error) return setMsg(`❌ ${error.message}`);
-    setEditing(data as any);
+    setEditing(data as Row);
   }
 
   async function saveEdit(payload: ColaboradorPayload) {

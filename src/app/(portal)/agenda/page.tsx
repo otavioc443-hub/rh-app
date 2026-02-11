@@ -8,7 +8,6 @@ import AbsenceSummary from "@/components/agenda/AbsenceSummary";
 import { addDays, toISODate } from "@/lib/absence";
 
 export default function AgendaPage() {
-  const [me, setMe] = useState<Profile | null>(null);
   const [myAllowance, setMyAllowance] = useState<Allowance | null>(null);
   const [myRequests, setMyRequests] = useState<AbsenceRequest[]>([]);
   const [approvedTeam, setApprovedTeam] = useState<AbsenceRequest[]>([]);
@@ -22,16 +21,6 @@ export default function AgendaPage() {
       const user = userData.user;
       if (!user) return;
 
-      // meu perfil
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id, full_name, role, manager_id")
-        .eq("id", user.id)
-        .single();
-
-      if (profile) setMe(profile);
-
-      // minha allowance ativa (pega a mais recente válida)
       const { data: allowances } = await supabase
         .from("absence_allowances")
         .select("*")
@@ -40,20 +29,16 @@ export default function AgendaPage() {
         .order("created_at", { ascending: false })
         .limit(1);
 
-      setMyAllowance((allowances?.[0] as any) ?? null);
+      setMyAllowance((allowances?.[0] as Allowance | undefined) ?? null);
 
-      // minhas solicitações
       const { data: requests } = await supabase
         .from("absence_requests")
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
-      setMyRequests((requests as any) ?? []);
+      setMyRequests((requests ?? []) as AbsenceRequest[]);
 
-      // aprovadas (pra cards de ausência hoje e 30 dias)
-      // OBS: para colaborador comum, RLS só deixa ver as dele.
-      // Para RH/Admin, verá de todos; para gestor, verá do time quando consultar na tela de gestor.
       const today = toISODate(new Date());
       const in30 = toISODate(addDays(new Date(), 30));
 
@@ -65,10 +50,9 @@ export default function AgendaPage() {
         .gte("end_date", today)
         .order("start_date", { ascending: true });
 
-      const approvedRows = ((approved as any) ?? []) as AbsenceRequest[];
+      const approvedRows = (approved ?? []) as AbsenceRequest[];
       setApprovedTeam(approvedRows);
 
-      // buscar profiles dos user_id encontrados (para mostrar nome)
       const ids = Array.from(new Set(approvedRows.map((r) => r.user_id)));
       if (ids.length > 0) {
         const { data: ps } = await supabase
@@ -77,7 +61,9 @@ export default function AgendaPage() {
           .in("id", ids);
 
         const map: Record<string, Profile> = {};
-        (ps as any[] | null)?.forEach((p) => (map[p.id] = p as Profile));
+        for (const p of (ps ?? []) as Profile[]) {
+          map[p.id] = p;
+        }
         setProfilesById(map);
       } else {
         setProfilesById({});
@@ -88,8 +74,7 @@ export default function AgendaPage() {
   }
 
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    void load();
   }, []);
 
   const approvedForSummary = useMemo(() => approvedTeam, [approvedTeam]);
@@ -99,7 +84,7 @@ export default function AgendaPage() {
       <div>
         <h1 className="text-2xl font-semibold">Agenda</h1>
         <p className="text-sm text-slate-600">
-          Acompanhe ausências programadas, solicite dentro do período liberado pelo RH e veja aprovações.
+          Acompanhe ausencias programadas, solicite dentro do periodo liberado pelo RH e veja aprovacoes.
         </p>
       </div>
 
