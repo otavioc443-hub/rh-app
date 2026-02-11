@@ -7,6 +7,7 @@ Este guia e para validar ambiente e seguranca antes de publicar.
 No Supabase SQL Editor, execute o arquivo:
 
 - `supabase/sql/preflight_checks.sql`
+- `supabase/sql/audit_policy_functions.sql`
 
 Ele valida:
 
@@ -14,6 +15,11 @@ Ele valida:
 - status de RLS nas tabelas criticas
 - existencia de policies nas tabelas criticas
 - existencia do bucket `company-logos`
+- configuracao das funcoes usadas em policies (`is_rh_or_admin`, `current_role`)
+
+Se precisar reaplicar a base de hardening:
+
+- `supabase/sql/2026-02-11_hardening_policies.sql`
 
 ## 2) Conferir variaveis de ambiente
 
