@@ -1,0 +1,72 @@
+.org-chart {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 24px;
+}
+
+.org-chart ul {
+  padding-top: 20px;
+  position: relative;
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+}
+
+.org-chart li {
+  list-style-type: none;
+  text-align: center;
+  position: relative;
+  padding: 20px 10px 0 10px;
+}
+
+/* Linhas horizontais entre irmãos */
+.org-chart li::before,
+.org-chart li::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  width: 50%;
+  height: 20px;
+  border-top: 2px solid #cbd5e1;
+}
+
+.org-chart li::before {
+  right: 50%;
+  border-right: 2px solid #cbd5e1;
+}
+
+.org-chart li::after {
+  left: 50%;
+  border-left: 2px solid #cbd5e1;
+}
+
+/* Nó único: remove linhas */
+.org-chart li:only-child::before,
+.org-chart li:only-child::after {
+  display: none;
+}
+
+/* Pontas */
+.org-chart li:first-child::before {
+  border: 0 none;
+}
+.org-chart li:last-child::after {
+  border: 0 none;
+}
+
+/* Linha vertical descendo do pai para os filhos */
+.org-chart ul ul::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: 20px;
+  border-left: 2px solid #cbd5e1;
+  transform: translateX(-50%);
+}
+
+/* click affordance */
+.org-node-btn {
+  cursor: pointer;
+  user-select: none;
+}
