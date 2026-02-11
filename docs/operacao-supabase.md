@@ -29,6 +29,7 @@ Para habilitar PDI funcional no portal:
 
 - `supabase/sql/2026-02-11_create_pdi_items.sql`
 - `supabase/sql/2026-02-11_create_competencias_assessments.sql`
+- `supabase/sql/2026-02-11_create_institutional_events.sql`
 
 ## 2) Conferir variaveis de ambiente
 
