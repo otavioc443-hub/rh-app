@@ -25,6 +25,10 @@ Se precisar reaplicar a base de hardening:
 - `supabase/sql/2026-02-11_hardening_policy_functions.sql`
 - `supabase/sql/2026-02-11_hardening_storage_objects_policies.sql`
 
+Para habilitar PDI funcional no portal:
+
+- `supabase/sql/2026-02-11_create_pdi_items.sql`
+
 ## 2) Conferir variaveis de ambiente
 
 No ambiente local/deploy, valide:
