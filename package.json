@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:admin-flow": "node scripts/test-admin-flow.mjs"
+    "test:admin-flow": "node scripts/test-admin-flow.mjs",
+    "test:feature-modules": "node scripts/test-feature-modules.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",

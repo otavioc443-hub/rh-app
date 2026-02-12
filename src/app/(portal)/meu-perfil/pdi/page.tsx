@@ -38,6 +38,7 @@ export default function PdiPage() {
   const [title, setTitle] = useState("");
   const [action, setAction] = useState("");
   const [targetDate, setTargetDate] = useState("");
+  const isSetupHint = msg.toLowerCase().includes("supabase/sql/");
 
   async function load() {
     setLoading(true);
@@ -211,7 +212,14 @@ export default function PdiPage() {
       </div>
 
       {msg ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">{msg}</div>
+        <div
+          className={[
+            "rounded-2xl border p-4 text-sm",
+            isSetupHint ? "border-amber-200 bg-amber-50 text-amber-800" : "border-slate-200 bg-white text-slate-700",
+          ].join(" ")}
+        >
+          {msg}
+        </div>
       ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6">

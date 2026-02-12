@@ -134,7 +134,7 @@ export default function AniversariantesPage() {
       </div>
 
       {msg ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">{msg}</div>
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{msg}</div>
       ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
