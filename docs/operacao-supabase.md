@@ -9,6 +9,7 @@ No Supabase SQL Editor, execute o arquivo:
 - `supabase/sql/preflight_checks.sql`
 - `supabase/sql/audit_policy_functions.sql`
 - `supabase/sql/audit_grants.sql`
+- `supabase/sql/preflight_feature_modules.sql`
 
 Ele valida:
 
@@ -18,6 +19,7 @@ Ele valida:
 - existencia do bucket `company-logos`
 - configuracao das funcoes usadas em policies (`is_rh_or_admin`, `current_role`)
 - grants efetivos em tabelas/schemas criticos (`public` e `storage`)
+- estado dos modulos novos (tabelas, RLS e policies)
 
 Se precisar reaplicar a base de hardening:
 
@@ -31,6 +33,13 @@ Para habilitar PDI funcional no portal:
 - `supabase/sql/2026-02-11_create_competencias_assessments.sql`
 - `supabase/sql/2026-02-11_create_institutional_events.sql`
 - `supabase/sql/2026-02-11_create_performance_assessments.sql`
+
+Ordem sugerida apos aplicar SQLs:
+
+1. `supabase/sql/preflight_feature_modules.sql`
+2. `supabase/sql/preflight_checks.sql`
+3. `supabase/sql/audit_policy_functions.sql`
+4. `supabase/sql/audit_grants.sql`
 
 ## 2) Conferir variaveis de ambiente
 
