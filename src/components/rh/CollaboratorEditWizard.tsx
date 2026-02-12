@@ -1,41 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { useEffect, useState } from "react";
 import { X, History } from "lucide-react";
-
-type Cargo = { id: string; name: string };
-type Dept = { id: string; name: string };
-
-type FormState = {
-  // básico
-  nome: string;
-  empresa: string;
-  setor: string;
-  cargo_id: string | "";
-  department_id: string | "";
-  is_active: boolean;
-
-  // contato
-  email: string;
-  telefone: string;
-  celular: string;
-
-  // pagamento
-  bank_name: string;
-  agency: string;
-  account: string;
-  pix_key: string;
-  pix_key_type: string; // CPF/EMAIL/TELEFONE/ALEATORIA
-  pix_bank: string;
-  frequency: string;
-  work_period: string;
-  tariff_value: string;
-
-  // desligamento
-  termination_date: string;
-  termination_reason: string;
-};
+import { supabase } from "@/lib/supabaseClient";
+import EmployeeForm, { ColaboradorPayload } from "@/components/rh/EmployeeForm";
 
 type AuditRow = {
   id: string;
@@ -45,14 +13,126 @@ type AuditRow = {
   details: unknown;
 };
 
-const steps = [
-  { id: "basico", label: "Básico" },
-  { id: "contato", label: "Contato" },
-  { id: "pagamento", label: "Pagamento" },
-  { id: "desligamento", label: "Desligamento" },
-] as const;
+function n(v: unknown) {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "string") return v.trim();
+  if (typeof v === "number" || typeof v === "boolean") return String(v).trim();
+  return "";
+}
 
-type StepId = typeof steps[number]["id"];
+function num(v: unknown) {
+  const s = n(v).replace(",", ".");
+  if (!s) return null;
+  const x = Number(s);
+  return Number.isFinite(x) ? x : null;
+}
+
+function mapRowToInitial(row: Record<string, unknown>): Partial<ColaboradorPayload> {
+  return {
+    ...(row as Partial<ColaboradorPayload>),
+    departamento: (row.departamento as string | null) ?? "",
+    banco: ((row.banco as string | null) ?? (row.bank_name as string | null) ?? "") as string,
+    agencia: ((row.agencia as string | null) ?? (row.agency as string | null) ?? "") as string,
+    conta_corrente: ((row.conta_corrente as string | null) ?? (row.account as string | null) ?? "") as string,
+    pix_key: (row.pix_key as string | null) ?? "",
+    pix_key_type: (row.pix_key_type as string | null) ?? "CPF",
+    pix_bank: (row.pix_bank as string | null) ?? "",
+  };
+}
+
+function toDb(payload: ColaboradorPayload, isActive: boolean, editorEmail: string | null) {
+  const base: Record<string, unknown> = { ...payload };
+
+  base.nome = n(payload.nome) || null;
+  base.empresa = n(payload.empresa) || null;
+  base.departamento = n(payload.departamento) || null;
+  base.setor = n(payload.setor) || null;
+
+  base.email = n(payload.email) || null;
+  base.telefone = n(payload.telefone) || null;
+  base.celular = n(payload.celular) || null;
+  base.telefone_emergencia = n(payload.telefone_emergencia) || null;
+  base.email_pessoal = n(payload.email_pessoal) || null;
+  base.email_empresarial = n(payload.email_empresarial) || null;
+
+  base.cargo = n(payload.cargo) || null;
+  base.cbo = n(payload.cbo) || null;
+  base.salario = num(payload.salario);
+  base.turno = n(payload.turno) || null;
+  base.moeda = n(payload.moeda) || null;
+  base.tipo_contrato = n(payload.tipo_contrato) || null;
+  base.escolaridade = n(payload.escolaridade) || null;
+  base.superior_direto = n(payload.superior_direto) || null;
+  base.email_superior_direto = n(payload.email_superior_direto) || null;
+  base.grau_hierarquico = n(payload.grau_hierarquico) || null;
+  base.duracao_contrato = n(payload.duracao_contrato) || null;
+
+  base.data_nascimento = n(payload.data_nascimento ?? "") || null;
+  base.data_admissao = n(payload.data_admissao ?? "") || null;
+  base.data_contrato = n(payload.data_contrato ?? "") || null;
+  base.vencimento_contrato = n(payload.vencimento_contrato ?? "") || null;
+  base.data_demissao = n(payload.data_demissao ?? "") || null;
+
+  base.cpf = n(payload.cpf) || null;
+  base.pne =
+    payload.pne === "" || payload.pne === null || payload.pne === undefined
+      ? null
+      : payload.pne === true || String(payload.pne).toLowerCase() === "sim";
+  base.rg = n(payload.rg) || null;
+  base.titulo_eleitor = n(payload.titulo_eleitor) || null;
+  base.zona_eleitoral = n(payload.zona_eleitoral) || null;
+  base.secao_eleitoral = n(payload.secao_eleitoral) || null;
+  base.ctps_num = n(payload.ctps_num) || null;
+  base.ctps_serie = n(payload.ctps_serie) || null;
+  base.reservista = n(payload.reservista) || null;
+  base.cnh = n(payload.cnh) || null;
+  base.pis = n(payload.pis) || null;
+
+  const banco = n(payload.banco) || null;
+  const agencia = n(payload.agencia) || null;
+  const conta = n(payload.conta_corrente) || null;
+
+  base.banco = banco;
+  base.agencia = agencia;
+  base.conta_corrente = conta;
+
+  // Compatibilidade com schema antigo (serao removidas se colunas nao existirem)
+  base.bank_name = banco;
+  base.agency = agencia;
+  base.account = conta;
+
+  base.pix_key = n(payload.pix_key) || null;
+  base.pix_key_type = n(payload.pix_key_type) || null;
+  base.pix_bank = n(payload.pix_bank) || null;
+
+  base.valor_rescisao = num(payload.valor_rescisao);
+  base.motivo_demissao = n(payload.motivo_demissao) || null;
+
+  base.cep = n(payload.cep) || null;
+  base.logradouro = n(payload.logradouro) || null;
+  base.numero = n(payload.numero) || null;
+  base.complemento = n(payload.complemento) || null;
+  base.bairro = n(payload.bairro) || null;
+  base.cidade = n(payload.cidade) || null;
+
+  base.sistema = n(payload.sistema) || null;
+  base.id_colaborador_externo = n(payload.id_colaborador_externo) || null;
+  base.id_departamento_externo = n(payload.id_departamento_externo) || null;
+  base.id_cargo_externo = n(payload.id_cargo_externo) || null;
+  base.unidade = n(payload.unidade) || null;
+  base.id_unidade_externo = n(payload.id_unidade_externo) || null;
+
+  base.is_active = isActive;
+  if (isActive && !base.data_demissao) {
+    base.data_demissao = null;
+    base.motivo_demissao = null;
+  }
+
+  base.updated_by_email = editorEmail;
+  base.updated_at = new Date().toISOString();
+
+  return base;
+}
 
 export default function CollaboratorEditWizard({
   collaboratorId,
@@ -63,13 +143,12 @@ export default function CollaboratorEditWizard({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [step, setStep] = useState<StepId>("basico");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-
-  const [cargos, setCargos] = useState<Cargo[]>([]);
-  const [depts, setDepts] = useState<Dept[]>([]);
+  const [initial, setInitial] = useState<Partial<ColaboradorPayload>>({});
+  const [isActive, setIsActive] = useState(true);
+  const [rowColumns, setRowColumns] = useState<Set<string>>(new Set());
 
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<AuditRow[]>([]);
@@ -80,36 +159,6 @@ export default function CollaboratorEditWizard({
     by: null,
   });
 
-  const [form, setForm] = useState<FormState>({
-    nome: "",
-    empresa: "",
-    setor: "",
-    cargo_id: "",
-    department_id: "",
-    is_active: true,
-
-    email: "",
-    telefone: "",
-    celular: "",
-
-    bank_name: "",
-    agency: "",
-    account: "",
-    pix_key: "",
-    pix_key_type: "CPF",
-    pix_bank: "",
-    frequency: "",
-    work_period: "",
-    tariff_value: "",
-
-    termination_date: "",
-    termination_reason: "",
-  });
-
-  function setField<K extends keyof FormState>(k: K, v: FormState[K]) {
-    setForm((prev) => ({ ...prev, [k]: v }));
-  }
-
   useEffect(() => {
     let alive = true;
 
@@ -117,18 +166,6 @@ export default function CollaboratorEditWizard({
       setLoading(true);
       setMsg(null);
 
-      // 1) cargas/depts
-      const [cRes, dRes] = await Promise.all([
-        supabase.from("cargos").select("id, name").order("name"),
-        supabase.from("departments").select("id, name").order("name"),
-      ]);
-
-      if (!alive) return;
-
-      if (!cRes.error) setCargos((cRes.data ?? []) as Cargo[]);
-      if (!dRes.error) setDepts((dRes.data ?? []) as Dept[]);
-
-      // 2) colaborador
       const { data, error } = await supabase
         .from("colaboradores")
         .select("*")
@@ -138,44 +175,20 @@ export default function CollaboratorEditWizard({
       if (!alive) return;
 
       if (error || !data) {
-        setMsg(error?.message ?? "Não foi possível carregar o colaborador.");
+        setMsg(error?.message ?? "Nao foi possivel carregar o colaborador.");
         setLoading(false);
         return;
       }
 
-      // 3) auditoria rápida (última alteração)
-      // (se você já tem `updated_at` e `updated_by_email`, usamos; se não, fica vazio)
+      const row = data as Record<string, unknown>;
+      setInitial(mapRowToInitial(row));
+      setIsActive(Boolean(row.is_active ?? true));
+      setRowColumns(new Set(Object.keys(row)));
+
       setLastInfo({
-        at: data.updated_at ? new Date(data.updated_at).toLocaleString("pt-BR") : null,
-        by: data.updated_by_email ?? null,
+        at: typeof row.updated_at === "string" ? new Date(row.updated_at).toLocaleString("pt-BR") : null,
+        by: typeof row.updated_by_email === "string" ? row.updated_by_email : null,
       });
-
-      setForm((prev) => ({
-        ...prev,
-        nome: data.nome ?? "",
-        empresa: data.empresa ?? "",
-        setor: data.setor ?? "",
-        cargo_id: data.cargo_id ?? "",
-        department_id: data.department_id ?? "",
-        is_active: !!data.is_active,
-
-        email: data.email ?? "",
-        telefone: data.telefone ?? "",
-        celular: data.celular ?? "",
-
-        bank_name: data.bank_name ?? "",
-        agency: data.agency ?? "",
-        account: data.account ?? "",
-        pix_key: data.pix_key ?? "",
-        pix_key_type: data.pix_key_type ?? "CPF",
-        pix_bank: data.pix_bank ?? "",
-        frequency: data.frequency ?? "",
-        work_period: data.work_period ?? "",
-        tariff_value: data.tariff_value ?? "",
-
-        termination_date: data.termination_date ?? "",
-        termination_reason: data.termination_reason ?? "",
-      }));
 
       setLoading(false);
     }
@@ -195,58 +208,32 @@ export default function CollaboratorEditWizard({
       const text = await res.text();
       const json = JSON.parse(text);
 
-      if (!res.ok) throw new Error(json?.error ?? "Falha ao carregar histórico.");
+      if (!res.ok) throw new Error(json?.error ?? "Falha ao carregar historico.");
       setHistory(json.logs ?? []);
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao carregar histórico.");
+      setMsg(e instanceof Error ? e.message : "Erro ao carregar historico.");
       setHistory([]);
     } finally {
       setHistoryLoading(false);
     }
   }
 
-  async function save() {
+  async function save(payload: ColaboradorPayload) {
     setSaving(true);
     setMsg(null);
 
     try {
-      // regra: se ativo, limpa desligamento
-      const termination_date = form.is_active ? null : (form.termination_date || null);
-      const termination_reason = form.is_active ? null : (form.termination_reason || null);
-
-      const payload: Record<string, unknown> = {
-        nome: form.nome,
-        empresa: form.empresa,
-        setor: form.setor,
-        cargo_id: form.cargo_id || null,
-        department_id: form.department_id || null,
-        is_active: form.is_active,
-
-        email: form.email || null,
-        telefone: form.telefone || null,
-        celular: form.celular || null,
-
-        bank_name: form.bank_name || null,
-        agency: form.agency || null,
-        account: form.account || null,
-        pix_key: form.pix_key || null,
-        pix_key_type: form.pix_key_type || null,
-        pix_bank: form.pix_bank || null,
-        frequency: form.frequency || null,
-        work_period: form.work_period || null,
-        tariff_value: form.tariff_value || null,
-
-        termination_date,
-        termination_reason,
-      };
-
       const { data: userRes } = await supabase.auth.getUser();
       const editorEmail = userRes?.user?.email ?? null;
+      const row = toDb(payload, isActive, editorEmail);
+      const filtered = Object.fromEntries(
+        Object.entries(row).filter(([key]) => rowColumns.has(key))
+      );
 
-      payload.updated_by_email = editorEmail;
-      payload.updated_at = new Date().toISOString();
-
-      const { error } = await supabase.from("colaboradores").update(payload).eq("id", collaboratorId);
+      const { error } = await supabase
+        .from("colaboradores")
+        .update(filtered)
+        .eq("id", collaboratorId);
       if (error) throw new Error(error.message);
 
       onSaved();
@@ -257,58 +244,25 @@ export default function CollaboratorEditWizard({
     }
   }
 
-  const stepIndex = useMemo(() => steps.findIndex((s) => s.id === step), [step]);
-
-  function next() {
-    const i = stepIndex;
-    if (i < steps.length - 1) setStep(steps[i + 1].id);
-  }
-  function prev() {
-    const i = stepIndex;
-    if (i > 0) setStep(steps[i - 1].id);
-  }
-
   return (
     <div className="fixed inset-0 z-[60]">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="absolute left-1/2 top-1/2 w-[min(980px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2">
+      <div className="absolute left-1/2 top-1/2 w-[min(1100px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2">
         <div className="rounded-3xl border border-slate-200 bg-white shadow-xl">
           <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
             <div>
               <div className="text-lg font-semibold text-slate-900">Editar colaborador</div>
               <div className="mt-1 text-xs text-slate-600">
-                Última alteração:{" "}
-                <b>{lastInfo.at ?? "-"}</b>
-                {lastInfo.by ? <> • por <b>{lastInfo.by}</b></> : null}
+                Ultima alteracao: <b>{lastInfo.at ?? "-"}</b>
+                {lastInfo.by ? (
+                  <>
+                    {" "}por <b>{lastInfo.by}</b>
+                  </>
+                ) : null}
               </div>
             </div>
 
-            <button
-              onClick={onClose}
-              className="rounded-xl border border-slate-200 p-2 text-slate-700 hover:bg-slate-50"
-              aria-label="Fechar"
-            >
-              <X size={18} />
-            </button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-4">
-            {steps.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => setStep(s.id)}
-                className={[
-                  "rounded-full border px-4 py-2 text-sm font-semibold",
-                  step === s.id
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-200 bg-white text-slate-800 hover:bg-slate-50",
-                ].join(" ")}
-              >
-                {s.label}
-              </button>
-            ))}
-
-            <div className="ml-auto flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <button
                 onClick={async () => {
                   setShowHistory(true);
@@ -317,301 +271,57 @@ export default function CollaboratorEditWizard({
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
               >
                 <History size={16} />
-                Histórico
+                Historico
+              </button>
+
+              <button
+                onClick={onClose}
+                className="rounded-xl border border-slate-200 p-2 text-slate-700 hover:bg-slate-50"
+                aria-label="Fechar"
+              >
+                <X size={18} />
               </button>
             </div>
           </div>
 
           {msg && <div className="border-b border-slate-200 px-5 py-3 text-sm text-red-600">{msg}</div>}
 
-          {/* ✅ altura fixa + scroll interno */}
-          <div className="max-h-[65vh] overflow-y-auto p-5">
+          <div className="max-h-[75vh] overflow-y-auto p-5">
             {loading ? (
               <div className="text-sm text-slate-600">Carregando...</div>
             ) : (
-              <>
-                {step === "basico" && (
-                  <div className="rounded-3xl border border-slate-200 p-5">
-                    <h3 className="text-base font-semibold text-slate-900">Básico</h3>
-                    <p className="mt-1 text-sm text-slate-600">Etapa 1 de {steps.length}</p>
+              <div className="space-y-5">
+                <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={isActive}
+                    onChange={(e) => setIsActive(e.target.checked)}
+                    className="h-4 w-4"
+                  />
+                  <span className="text-sm font-medium text-slate-800">
+                    Colaborador ativo (desmarque para registrar desligamento)
+                  </span>
+                </label>
 
-                    <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
-                      <Field label="Nome">
-                        <input
-                          value={form.nome}
-                          onChange={(e) => setField("nome", e.target.value)}
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                        />
-                      </Field>
-
-                      <Field label="Cargo">
-                        <select
-                          value={form.cargo_id}
-                          onChange={(e) => setField("cargo_id", e.target.value)}
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                        >
-                          <option value="">Selecione...</option>
-                          {cargos.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                      </Field>
-
-                      <Field label="Departamento">
-                        <select
-                          value={form.department_id}
-                          onChange={(e) => setField("department_id", e.target.value)}
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                        >
-                          <option value="">Selecione...</option>
-                          {depts.map((d) => (
-                            <option key={d.id} value={d.id}>
-                              {d.name}
-                            </option>
-                          ))}
-                        </select>
-                      </Field>
-
-                      <Field label="Empresa">
-                        <input
-                          value={form.empresa}
-                          onChange={(e) => setField("empresa", e.target.value)}
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                        />
-                      </Field>
-
-                      <Field label="Setor">
-                        <input
-                          value={form.setor}
-                          onChange={(e) => setField("setor", e.target.value)}
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                        />
-                      </Field>
-
-                      <div className="md:col-span-3">
-                        <label className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3">
-                          <input
-                            type="checkbox"
-                            checked={form.is_active}
-                            onChange={(e) => setField("is_active", e.target.checked)}
-                            className="h-4 w-4"
-                          />
-                          <span className="text-sm text-slate-800 font-medium">
-                            Colaborador ativo (pode acessar o portal)
-                          </span>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {step === "contato" && (
-                  <div className="rounded-3xl border border-slate-200 p-5">
-                    <h3 className="text-base font-semibold text-slate-900">Contato</h3>
-                    <p className="mt-1 text-sm text-slate-600">Etapa 2 de {steps.length}</p>
-
-                    {/* ✅ aqui corrige o cursor: inputs estáveis */}
-                    <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
-                      <Field label="E-mail">
-                        <input
-                          value={form.email}
-                          onChange={(e) => setField("email", e.target.value)}
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                        />
-                      </Field>
-
-                      <Field label="Telefone">
-                        <input
-                          value={form.telefone}
-                          onChange={(e) => setField("telefone", e.target.value)}
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                        />
-                      </Field>
-
-                      <Field label="Celular">
-                        <input
-                          value={form.celular}
-                          onChange={(e) => setField("celular", e.target.value)}
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                        />
-                      </Field>
-                    </div>
-                  </div>
-                )}
-
-                {step === "pagamento" && (
-                  <div className="rounded-3xl border border-slate-200 p-5">
-                    <h3 className="text-base font-semibold text-slate-900">Pagamento</h3>
-                    <p className="mt-1 text-sm text-slate-600">Etapa 3 de {steps.length}</p>
-
-                    <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
-                      <Field label="Banco">
-                        <input
-                          value={form.bank_name}
-                          onChange={(e) => setField("bank_name", e.target.value)}
-                          placeholder="Ex.: 260 - NU PAGAMENTOS S.A."
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                        />
-                      </Field>
-
-                      <Field label="Agência">
-                        <input
-                          value={form.agency}
-                          onChange={(e) => setField("agency", e.target.value)}
-                          placeholder="Ex.: 0001"
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                        />
-                      </Field>
-
-                      <Field label="Conta corrente">
-                        <input
-                          value={form.account}
-                          onChange={(e) => setField("account", e.target.value)}
-                          placeholder="Ex.: 123456-7"
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                        />
-                      </Field>
-
-                      <Field label="Chave PIX">
-                        <input
-                          value={form.pix_key}
-                          onChange={(e) => setField("pix_key", e.target.value)}
-                          placeholder="Digite a chave"
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                        />
-                      </Field>
-
-                      <Field label="Tipo de chave">
-                        <select
-                          value={form.pix_key_type}
-                          onChange={(e) => setField("pix_key_type", e.target.value)}
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                        >
-                          <option value="CPF">CPF</option>
-                          <option value="EMAIL">E-mail</option>
-                          <option value="TELEFONE">Telefone</option>
-                          <option value="ALEATORIA">Aleatória</option>
-                        </select>
-                      </Field>
-
-                      <Field label="Banco (PIX)">
-                        <input
-                          value={form.pix_bank}
-                          onChange={(e) => setField("pix_bank", e.target.value)}
-                          placeholder="Opcional"
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                        />
-                      </Field>
-
-                      <Field label="Frequência">
-                        <select
-                          value={form.frequency}
-                          onChange={(e) => setField("frequency", e.target.value)}
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                        >
-                          <option value="">Selecione...</option>
-                          <option value="Mensal">Mensal</option>
-                          <option value="Quinzenal">Quinzenal</option>
-                          <option value="Semanal">Semanal</option>
-                        </select>
-                      </Field>
-
-                      <Field label="Período trabalhado">
-                        <input
-                          value={form.work_period}
-                          onChange={(e) => setField("work_period", e.target.value)}
-                          placeholder="Ex.: 01 a 30"
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                        />
-                      </Field>
-
-                      <Field label="Valor da tarifa">
-                        <input
-                          value={form.tariff_value}
-                          onChange={(e) => setField("tariff_value", e.target.value)}
-                          placeholder="Ex.: 10"
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                        />
-                      </Field>
-                    </div>
-                  </div>
-                )}
-
-                {step === "desligamento" && (
-                  <div className="rounded-3xl border border-slate-200 p-5">
-                    <h3 className="text-base font-semibold text-slate-900">Desligamento</h3>
-                    <p className="mt-1 text-sm text-slate-600">Etapa 4 de {steps.length}</p>
-
-                    <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
-                      <Field label="Data demissão">
-                        <input
-                          type="date"
-                          value={form.termination_date}
-                          onChange={(e) => setField("termination_date", e.target.value)}
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                        />
-                      </Field>
-
-                      <Field label="Motivo">
-                        <input
-                          value={form.termination_reason}
-                          onChange={(e) => setField("termination_reason", e.target.value)}
-                          className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none focus:border-slate-400"
-                        />
-                      </Field>
-
-                      <div className="md:col-span-2 text-xs text-slate-500">
-                        Se o colaborador estiver <b>ativo</b>, os campos de desligamento serão limpos ao salvar.
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </>
+                <EmployeeForm
+                  initial={initial}
+                  submitting={saving}
+                  submitLabel={saving ? "Salvando..." : "Salvar alteracoes"}
+                  onSubmit={save}
+                />
+              </div>
             )}
-          </div>
-
-          <div className="flex items-center justify-between gap-3 border-t border-slate-200 p-5">
-            <button
-              onClick={prev}
-              disabled={stepIndex === 0 || saving}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-50"
-            >
-              Voltar
-            </button>
-
-            <div className="flex items-center gap-2">
-              {stepIndex < steps.length - 1 ? (
-                <button
-                  onClick={next}
-                  disabled={saving}
-                  className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60"
-                >
-                  Avançar
-                </button>
-              ) : (
-                <button
-                  onClick={save}
-                  disabled={saving}
-                  className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60"
-                >
-                  {saving ? "Salvando..." : "Salvar"}
-                </button>
-              )}
-            </div>
           </div>
         </div>
       </div>
 
-      {/* Histórico */}
       {showHistory && (
         <div className="fixed inset-0 z-[70]">
           <div className="absolute inset-0 bg-black/30" onClick={() => setShowHistory(false)} />
           <div className="absolute left-1/2 top-1/2 w-[min(720px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2">
             <div className="rounded-3xl border border-slate-200 bg-white shadow-xl">
               <div className="flex items-center justify-between border-b border-slate-200 p-5">
-                <div className="text-base font-semibold text-slate-900">Histórico de alterações</div>
+                <div className="text-base font-semibold text-slate-900">Historico de alteracoes</div>
                 <button
                   onClick={() => setShowHistory(false)}
                   className="rounded-xl border border-slate-200 p-2 text-slate-700 hover:bg-slate-50"
@@ -630,8 +340,7 @@ export default function CollaboratorEditWizard({
                     {history.map((h) => (
                       <div key={h.id} className="rounded-2xl border border-slate-200 p-4">
                         <div className="text-sm font-semibold text-slate-900">
-                          {h.action ?? "Alteração"} •{" "}
-                          {new Date(h.created_at).toLocaleString("pt-BR")}
+                          {h.action ?? "Alteracao"} - {new Date(h.created_at).toLocaleString("pt-BR")}
                         </div>
                         <div className="mt-1 text-xs text-slate-600">
                           por: <b>{h.actor_email ?? "-"}</b>
@@ -644,28 +353,10 @@ export default function CollaboratorEditWizard({
                   </div>
                 )}
               </div>
-
-              <div className="border-t border-slate-200 p-5">
-                <button
-                  onClick={() => setShowHistory(false)}
-                  className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-semibold text-white hover:opacity-95"
-                >
-                  Fechar
-                </button>
-              </div>
             </div>
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="mb-2 text-sm font-semibold text-slate-900">{label}</div>
-      {children}
     </div>
   );
 }

@@ -19,6 +19,15 @@ type Department = {
   name: string;
 };
 
+type Profile = {
+  role: Role | null;
+  active: boolean | null;
+  company_id: string | null;
+  department_id: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
+};
+
 function withTimeout<T>(p: Promise<T>, ms = 7000): Promise<T> {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error("timeout")), ms);
@@ -41,6 +50,8 @@ export default function PortalShell({ children }: { children: React.ReactNode })
   const [debugErr, setDebugErr] = useState<string | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
   const [department, setDepartment] = useState<Department | null>(null);
+  const [fullName, setFullName] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   const inFlight = useRef(false);
   const alive = useRef(true);
@@ -79,9 +90,9 @@ export default function PortalShell({ children }: { children: React.ReactNode })
 
         const { data: profile, error: profileErr } = await supabase
           .from("profiles")
-          .select("role, active, company_id, department_id")
+          .select("role, active, company_id, department_id, full_name, avatar_url")
           .eq("id", userId)
-          .maybeSingle();
+          .maybeSingle<Profile>();
 
         if (!alive.current) return;
 
@@ -109,6 +120,8 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         }
 
         setRole(r);
+        setFullName(profile.full_name ?? null);
+        setAvatarUrl(profile.avatar_url ?? null);
 
         const companyReq = profile.company_id
           ? supabase
@@ -151,6 +164,8 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       setRole(null);
       setCompany(null);
       setDepartment(null);
+      setFullName(null);
+      setAvatarUrl(null);
       setFatalError(null);
       setDebugErr(null);
       boot();
@@ -227,48 +242,19 @@ export default function PortalShell({ children }: { children: React.ReactNode })
     );
   }
 
-  const companyName = company?.name ?? "Portal de RH";
-  const deptName = department?.name ?? null;
-  const roleLabel =
-    role === "admin" ? "Admin" : role === "rh" ? "RH" : role === "gestor" ? "Gestor" : "Colaborador";
-
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="flex">
-        <Sidebar role={role} />
+        <Sidebar
+          role={role}
+          fullName={fullName}
+          avatarUrl={avatarUrl}
+          companyName={company?.name ?? null}
+          companyLogoUrl={company?.logo_url ?? null}
+          departmentName={department?.name ?? null}
+        />
 
         <main className="flex-1">
-          <div className="sticky top-0 z-10 border-b border-slate-200 bg-white">
-            <div className="mx-auto w-full max-w-[1400px] px-6 py-4">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3 min-w-0">
-                  {company?.logo_url ? (
-                    <img
-                      src={company.logo_url}
-                      alt={companyName}
-                      className="h-10 w-10 rounded-xl object-contain border border-slate-200 bg-white"
-                    />
-                  ) : (
-                    <div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-900 text-white font-semibold">
-                      RH
-                    </div>
-                  )}
-
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-slate-900">{companyName}</p>
-                    <p className="truncate text-xs text-slate-500">
-                      {deptName ? `Setor: ${deptName}` : "Setor nao informado"}
-                    </p>
-                  </div>
-                </div>
-
-                <span className="shrink-0 inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
-                  {roleLabel}
-                </span>
-              </div>
-            </div>
-          </div>
-
           <div className="mx-auto w-full max-w-[1400px] px-6 py-6">{children}</div>
         </main>
       </div>

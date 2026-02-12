@@ -15,16 +15,7 @@ type Row = {
   dep_nome?: string | null;
 };
 
-type RelName = { name?: string | null } | null;
-type ColaboradorJoinRow = {
-  id: string;
-  nome: string | null;
-  cargo_id: string | null;
-  department_id: string | null;
-  is_active: boolean | null;
-  cargos?: RelName;
-  departments?: RelName;
-};
+type AnyColaborador = Record<string, unknown>;
 
 function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -52,19 +43,9 @@ export default function Page() {
     setLoading(true);
     setErr(null);
 
-    const { data, error } = await supabase
+    const { data: rawRows, error } = await supabase
       .from("colaboradores")
-      .select(
-        `
-        id,
-        nome,
-        cargo_id,
-        department_id,
-        is_active,
-        cargos:cargo_id ( id, name ),
-        departments:department_id ( id, name )
-      `
-      )
+      .select("*")
       .order("nome", { ascending: true });
 
     if (error) {
@@ -74,16 +55,61 @@ export default function Page() {
       return;
     }
 
-    const mapped: Row[] =
-      ((data ?? []) as ColaboradorJoinRow[]).map((r) => ({
-        id: r.id,
-        nome: r.nome,
-        cargo_id: r.cargo_id,
-        department_id: r.department_id,
-        is_active: !!r.is_active,
-        cargo_nome: r.cargos?.name ?? null,
-        dep_nome: r.departments?.name ?? null,
-      })) ?? [];
+    const rows = (rawRows ?? []) as AnyColaborador[];
+    const normalized = rows.map((r) => {
+      const id = String(r.id ?? "");
+      const nome = typeof r.nome === "string" ? r.nome : null;
+      const cargoId = typeof r.cargo_id === "string" ? r.cargo_id : null;
+      const departmentId = typeof r.department_id === "string" ? r.department_id : null;
+      const cargoText = typeof r.cargo === "string" ? r.cargo : null;
+      const depText =
+        typeof r.departamento === "string"
+          ? r.departamento
+          : typeof r.setor === "string"
+          ? r.setor
+          : null;
+
+      const isActiveRaw = r.is_active ?? r.active;
+      const isActive = typeof isActiveRaw === "boolean" ? isActiveRaw : true;
+
+      return {
+        id,
+        nome,
+        cargo_id: cargoId,
+        department_id: departmentId,
+        cargo_text: cargoText,
+        dep_text: depText,
+        is_active: isActive,
+      };
+    });
+
+    const cargoIds = Array.from(new Set(normalized.map((r) => r.cargo_id).filter(Boolean))) as string[];
+    const depIds = Array.from(new Set(normalized.map((r) => r.department_id).filter(Boolean))) as string[];
+
+    const cargoNameById = new Map<string, string>();
+    if (cargoIds.length > 0) {
+      const { data: cargosData } = await supabase.from("cargos").select("id, name").in("id", cargoIds);
+      for (const c of cargosData ?? []) cargoNameById.set(c.id as string, (c.name as string) ?? "-");
+    }
+
+    const depNameById = new Map<string, string>();
+    if (depIds.length > 0) {
+      const { data: depsData } = await supabase
+        .from("departments")
+        .select("id, name")
+        .in("id", depIds);
+      for (const d of depsData ?? []) depNameById.set(d.id as string, (d.name as string) ?? "-");
+    }
+
+    const mapped: Row[] = normalized.map((r) => ({
+      id: r.id,
+      nome: r.nome,
+      cargo_id: r.cargo_id,
+      department_id: r.department_id,
+      is_active: !!r.is_active,
+      cargo_nome: r.cargo_id ? (cargoNameById.get(r.cargo_id) ?? null) : r.cargo_text,
+      dep_nome: r.department_id ? (depNameById.get(r.department_id) ?? null) : r.dep_text,
+    }));
 
     setRows(mapped);
     setLoading(false);
@@ -105,7 +131,7 @@ export default function Page() {
     setToast(null);
 
     try {
-      const res = await fetch("/api/rh/colaboradores/enviar-acesso", {
+      const res = await fetch("/api/rh/enviar-acesso", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ collaboratorId }),

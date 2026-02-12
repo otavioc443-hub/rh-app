@@ -22,7 +22,7 @@ export type ColaboradorPayload = {
   etnia?: string;
   nome_pai?: string;
   nome_mae?: string;
-  pne?: boolean | string;
+  pne?: boolean | string | null;
 
   data_admissao?: string | null;
   data_demissao?: string | null;
@@ -71,6 +71,9 @@ export type ColaboradorPayload = {
   agencia?: string;
   conta_corrente?: string;
   pis?: string;
+  pix_key?: string;
+  pix_key_type?: string;
+  pix_bank?: string;
 
   sistema?: string;
   id_colaborador_externo?: string;
@@ -231,6 +234,9 @@ export default function EmployeeForm({
   const [agencia, setAgencia] = useState(initial?.agencia ?? "");
   const [contaCorrente, setContaCorrente] = useState(initial?.conta_corrente ?? "");
   const [pis, setPis] = useState(initial?.pis ?? "");
+  const [pixKey, setPixKey] = useState(initial?.pix_key ?? "");
+  const [pixKeyType, setPixKeyType] = useState(initial?.pix_key_type ?? "CPF");
+  const [pixBank, setPixBank] = useState(initial?.pix_bank ?? "");
 
   const [sistema, setSistema] = useState(initial?.sistema ?? "");
   const [idColabExt, setIdColabExt] = useState(initial?.id_colaborador_externo ?? "");
@@ -418,6 +424,7 @@ export default function EmployeeForm({
     const setor = departments.find((d) => d.id === sectorId);
 
     const payload: ColaboradorPayload = {
+      ...(initial ?? {}),
       empresa: company?.name ?? "",
       departamento: dep?.name ?? "",
       setor: setor?.name ?? "",
@@ -433,7 +440,7 @@ export default function EmployeeForm({
       etnia,
       nome_pai: nomePai,
       nome_mae: nomeMae,
-      pne: pne === "" ? "" : pne === "sim",
+      pne: pne === "" ? null : pne === "sim",
 
       data_admissao: dataAdmissao || null,
       data_demissao: dataDemissao || null,
@@ -482,6 +489,9 @@ export default function EmployeeForm({
       agencia,
       conta_corrente: contaCorrente,
       pis,
+      pix_key: pixKey,
+      pix_key_type: pixKeyType,
+      pix_bank: pixBank,
 
       sistema,
       id_colaborador_externo: idColabExt,
@@ -489,8 +499,6 @@ export default function EmployeeForm({
       id_cargo_externo: idCargoExt,
       unidade,
       id_unidade_externo: idUnidadeExt,
-
-      ...(initial ?? {}),
     };
 
     await onSubmit(payload);
@@ -841,13 +849,48 @@ export default function EmployeeForm({
       <Section title="Dados bancários">
         <div className="grid gap-4 md:grid-cols-3">
           <Field label="Banco">
-            <input value={banco} onChange={(e) => setBanco(e.target.value)} className={inputCls} />
+            <select value={banco} onChange={(e) => setBanco(e.target.value)} className={inputCls}>
+              <option value="">Selecione...</option>
+              <option value="001 - Banco do Brasil">001 - Banco do Brasil</option>
+              <option value="033 - Santander">033 - Santander</option>
+              <option value="104 - Caixa">104 - Caixa</option>
+              <option value="237 - Bradesco">237 - Bradesco</option>
+              <option value="341 - Itau">341 - Itau</option>
+              <option value="260 - Nubank">260 - Nubank</option>
+              <option value="077 - Inter">077 - Inter</option>
+              <option value="Outro">Outro</option>
+            </select>
           </Field>
           <Field label="Agência">
             <input value={agencia} onChange={(e) => setAgencia(e.target.value)} className={inputCls} />
           </Field>
           <Field label="Conta Corrente">
             <input value={contaCorrente} onChange={(e) => setContaCorrente(e.target.value)} className={inputCls} />
+          </Field>
+          <Field label="Tipo de chave PIX">
+            <select value={pixKeyType} onChange={(e) => setPixKeyType(e.target.value)} className={inputCls}>
+              <option value="CPF">CPF</option>
+              <option value="CNPJ">CNPJ</option>
+              <option value="EMAIL">E-mail</option>
+              <option value="TELEFONE">Telefone</option>
+              <option value="ALEATORIA">Aleatoria</option>
+            </select>
+          </Field>
+          <Field label="Chave PIX">
+            <input value={pixKey} onChange={(e) => setPixKey(e.target.value)} className={inputCls} />
+          </Field>
+          <Field label="Banco PIX">
+            <select value={pixBank} onChange={(e) => setPixBank(e.target.value)} className={inputCls}>
+              <option value="">Selecione...</option>
+              <option value="001 - Banco do Brasil">001 - Banco do Brasil</option>
+              <option value="033 - Santander">033 - Santander</option>
+              <option value="104 - Caixa">104 - Caixa</option>
+              <option value="237 - Bradesco">237 - Bradesco</option>
+              <option value="341 - Itau">341 - Itau</option>
+              <option value="260 - Nubank">260 - Nubank</option>
+              <option value="077 - Inter">077 - Inter</option>
+              <option value="Outro">Outro</option>
+            </select>
           </Field>
         </div>
       </Section>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { supabase } from "@/lib/supabaseClient";
 
 const DEFAULT_AFTER_LOGIN = "/home";
@@ -104,11 +105,11 @@ export default function LoginPage() {
         <div className="w-full max-w-md bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200 p-8">
           <div className="flex flex-col items-center text-center">
             <div className="flex items-center justify-center gap-6 mb-4">
-              <img src="/logo.png" alt="Solida" className="h-16 w-auto" />
+              <Image src="/logo.png" alt="Solida" width={160} height={64} className="h-16 w-auto" />
 
               <span className="h-12 w-[2px] bg-slate-300" />
 
-              <img src="/logo2.png" alt="Area" className="h-12 w-auto" />
+              <Image src="/logo2.png" alt="Area" width={120} height={48} className="h-12 w-auto" />
             </div>
 
             <p className="mt-1 text-sm text-gray-600">Acesso ao Portal de RH</p>

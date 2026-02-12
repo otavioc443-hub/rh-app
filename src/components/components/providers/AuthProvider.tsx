@@ -60,41 +60,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const idleTimerRef = useRef<number | null>(null);
   const isIdleLogoutRunningRef = useRef(false);
 
-  async function createAuditSession(params: {
-    userId: string;
-    companyId: string | null;
-    departmentId: string | null;
-  }) {
+  async function callSessionAudit(body: Record<string, unknown>) {
     try {
-      const { data, error } = await supabase
-        .from("session_audit")
-        .insert({
-          user_id: params.userId,
-          company_id: params.companyId,
-          department_id: params.departmentId,
-          user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
-        })
-        .select("id")
-        .single();
-
-      if (error) return null;
-      return (data?.id as string) ?? null;
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token ?? null;
+      const res = await fetch("/api/session-audit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+      const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) {
+        console.warn("session-audit error", payload);
+        return null;
+      }
+      return payload;
     } catch {
       return null;
     }
   }
 
+  async function createAuditSession(params: {
+    userId: string;
+    companyId: string | null;
+    departmentId: string | null;
+  }) {
+    const payload = await callSessionAudit({
+      action: "start",
+      userId: params.userId,
+      companyId: params.companyId,
+      departmentId: params.departmentId,
+      userAgent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+    });
+    return typeof payload?.sessionId === "string" ? payload.sessionId : null;
+  }
+
   async function updateLastSeen() {
     const sessionId = sessionIdRef.current;
     if (!sessionId) return;
-    try {
-      await supabase
-        .from("session_audit")
-        .update({ last_seen_at: new Date().toISOString() })
-        .eq("id", sessionId);
-    } catch {
-      // silencioso
-    }
+    await callSessionAudit({ action: "heartbeat", sessionId });
   }
 
   async function closeAuditSession(reason: "manual" | "idle" | "token_expired") {
@@ -102,13 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!sessionId) return;
 
     try {
-      await supabase
-        .from("session_audit")
-        .update({
-          logout_at: new Date().toISOString(),
-          logout_reason: reason,
-        })
-        .eq("id", sessionId);
+      await callSessionAudit({ action: "end", sessionId, reason });
     } catch {
       // silencioso
     } finally {
@@ -244,6 +245,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, 60_000);
 
     return () => window.clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.userId]);
 
   // 🧠 Idle: escuta eventos e reseta timer
@@ -278,6 +280,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       delete window.__logoutManual;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const value = useMemo(() => state, [state]);

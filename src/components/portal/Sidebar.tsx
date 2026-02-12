@@ -50,7 +50,23 @@ function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-export default function Sidebar({ role }: { role: Role }) {
+type SidebarProps = {
+  role: Role;
+  fullName: string | null;
+  avatarUrl: string | null;
+  companyName: string | null;
+  companyLogoUrl: string | null;
+  departmentName: string | null;
+};
+
+export default function Sidebar({
+  role,
+  fullName,
+  avatarUrl,
+  companyName,
+  companyLogoUrl,
+  departmentName,
+}: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -81,8 +97,6 @@ export default function Sidebar({ role }: { role: Role }) {
           { label: "Feedbacks", icon: MessageSquareText, href: "/meu-perfil/feedbacks" },
           { label: "PDI", icon: LineChart, href: "/meu-perfil/pdi" },
 
-          // ✅ rota que vamos criar: /meu-perfil/ausencias-programadas
-          { label: "Ausências programadas", icon: CalendarClock, href: "/meu-perfil/ausencias-programadas" },
 
           { label: "Competências", icon: BadgeCheck, href: "/meu-perfil/competencias" },
           { label: "Avaliação de desempenho", icon: ClipboardList, href: "/meu-perfil/avaliacao-desempenho" },
@@ -98,7 +112,7 @@ export default function Sidebar({ role }: { role: Role }) {
           { label: "Agenda institucional", icon: CalendarClock, href: "/agenda/agenda-institucional" },
 
           // ✅ (opcional) atalho direto
-          { label: "Ausências programadas", icon: CalendarClock, href: "/meu-perfil/ausencias-programadas" },
+          { label: "Ausencias programadas", icon: CalendarClock, href: "/meu-perfil/ausencias-programadas" },
         ],
       },
 
@@ -189,31 +203,64 @@ export default function Sidebar({ role }: { role: Role }) {
     router.replace("/");
   }
 
-  const headerRoleLabel =
+  const roleLabel =
     role === "admin"
-      ? "Acesso administrador"
+      ? "Admin"
       : role === "rh"
-      ? "Acesso RH"
+      ? "RH"
       : role === "gestor"
-      ? "Acesso gestor"
+      ? "Gestor"
       : role === "coordenador"
-      ? "Acesso coordenador"
-      : "Acesso colaborador";
+      ? "Coordenador"
+      : "Colaborador";
+
+  const userSubtitle = departmentName ? `Setor: ${departmentName}` : `Funcao: ${roleLabel}`;
 
   return (
-    <aside className="sticky top-0 h-screen w-[280px] border-r border-slate-200 bg-white">
-      <div className="flex items-center gap-3 px-5 py-5">
-        <div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-900 text-white font-semibold">
-          RH
+    <aside className="sticky top-0 flex h-screen w-[280px] flex-col border-r border-slate-200 bg-white">
+      <div className="border-b border-slate-200 px-5 py-4">
+        <div className="flex items-center gap-3">
+          {companyLogoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={companyLogoUrl}
+              alt={companyName ?? "Empresa"}
+              className="h-10 w-10 rounded-xl object-contain border border-slate-200 bg-white"
+            />
+          ) : (
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-900 text-white font-semibold">
+              RH
+            </div>
+          )}
+
+          <div className="min-w-0 leading-tight">
+            <div className="truncate text-sm font-semibold text-slate-900">{companyName ?? "Portal de RH"}</div>
+            <div className="text-xs text-slate-500">Portal de RH</div>
+          </div>
         </div>
 
-        <div className="leading-tight">
-          <div className="text-sm font-semibold text-slate-900">Portal de RH</div>
-          <div className="text-xs text-slate-500">{headerRoleLabel}</div>
+        <div className="mt-4 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={avatarUrl}
+              alt={fullName ?? "Colaborador"}
+              className="h-10 w-10 rounded-full object-cover border border-slate-200 bg-white"
+            />
+          ) : (
+            <div className="grid h-10 w-10 place-items-center rounded-full bg-slate-900 text-xs font-semibold text-white">
+              {(fullName?.trim()?.[0] ?? "U").toUpperCase()}
+            </div>
+          )}
+
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-slate-900">{fullName ?? "Colaborador"}</p>
+            <p className="truncate text-xs text-slate-500">{userSubtitle}</p>
+          </div>
         </div>
       </div>
 
-      <nav className="px-3 pb-24">
+      <nav className="sidebar-scroll flex-1 overflow-y-auto px-3 py-3 pr-2">
         {navByRole.map((item) => {
           const Icon = item.icon;
 
@@ -279,7 +326,7 @@ export default function Sidebar({ role }: { role: Role }) {
         })}
       </nav>
 
-      <div className="absolute bottom-0 left-0 right-0 border-t border-slate-200 p-4 bg-white">
+      <div className="border-t border-slate-200 p-4 bg-white">
         <button
           onClick={handleLogout}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95"
@@ -291,3 +338,4 @@ export default function Sidebar({ role }: { role: Role }) {
     </aside>
   );
 }
+

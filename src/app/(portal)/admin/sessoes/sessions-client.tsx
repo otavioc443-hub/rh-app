@@ -1,12 +1,12 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
 import { useUserRole } from "@/hooks/useUserRole";
 
 type LogoutReason = "manual" | "idle" | "token_expired" | null;
 type SessionMode = "online" | "all";
 type SessionReasonFilter = "all" | "manual" | "idle" | "token_expired";
+type SessionRoleFilter = "all" | "admin" | "rh" | "gestor" | "coordenador" | "colaborador";
 
 type SessionRow = {
   id: string;
@@ -18,15 +18,15 @@ type SessionRow = {
   logout_at: string | null;
   logout_reason: LogoutReason;
   user_agent: string | null;
-
   full_name: string | null;
   email: string | null;
+  role: string | null;
 };
 
 const ONLINE_WINDOW_MINUTES = 2;
 
 function toLocal(dt: string | null) {
-  if (!dt) return "—";
+  if (!dt) return "-";
   return new Date(dt).toLocaleString("pt-BR");
 }
 
@@ -34,8 +34,8 @@ function minutesAgo(dt: string) {
   const diffMs = Date.now() - new Date(dt).getTime();
   const m = Math.floor(diffMs / 60000);
   if (m <= 0) return "agora";
-  if (m === 1) return "1 min atrás";
-  return `${m} min atrás`;
+  if (m === 1) return "1 min atras";
+  return `${m} min atras`;
 }
 
 function getOnlineStatus(lastSeen: string, logoutAt: string | null) {
@@ -45,9 +45,8 @@ function getOnlineStatus(lastSeen: string, logoutAt: string | null) {
   return { online, ageText };
 }
 
-// Simplificação segura do user_agent (sem libs)
 function simplifyUA(ua: string | null) {
-  if (!ua) return { browser: "—", device: "—" };
+  if (!ua) return { browser: "-", device: "-" };
 
   const s = ua.toLowerCase();
   const isMobile = /mobile|android|iphone|ipad|ipod/.test(s);
@@ -68,7 +67,6 @@ function escapeCsv(value: unknown) {
   return str;
 }
 
-// ✅ sempre gera CSV com cabeçalho, mesmo sem linhas
 function downloadCsvWithHeaders(filename: string, headers: string[], rows: Record<string, unknown>[]) {
   const csv =
     headers.join(";") +
@@ -94,67 +92,47 @@ export default function SessionsClient() {
   const [rows, setRows] = useState<SessionRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // filtros
   const [mode, setMode] = useState<SessionMode>("online");
   const [reason, setReason] = useState<SessionReasonFilter>("all");
   const [search, setSearch] = useState("");
   const [limit, setLimit] = useState(50);
-
-  // ✅ filtro por department_id (por enquanto UUID)
   const [departmentId, setDepartmentId] = useState<"all" | string>("all");
+  const [roleFilter, setRoleFilter] = useState<SessionRoleFilter>("all");
 
   async function fetchSessions() {
     setLoading(true);
     setError(null);
 
     try {
-      let q = supabase
-        .from("session_audit_view")
-        .select(
-          "id,user_id,company_id,department_id,login_at,last_seen_at,logout_at,logout_reason,user_agent,full_name,email"
-        )
-        .order("last_seen_at", { ascending: false })
-        .limit(limit);
+      const params = new URLSearchParams({
+        mode,
+        reason,
+        departmentId,
+        role: roleFilter,
+        search: search.trim(),
+        limit: String(limit),
+      });
 
-      if (mode === "online") {
-        const since = new Date(Date.now() - ONLINE_WINDOW_MINUTES * 60 * 1000).toISOString();
-        q = q.is("logout_at", null).gte("last_seen_at", since);
-      }
+      const res = await fetch(`/api/admin/sessions?${params.toString()}`, { method: "GET" });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.error ?? "Erro ao carregar sessoes.");
 
-      if (reason !== "all") {
-        q = q.eq("logout_reason", reason);
-      }
-
-      if (departmentId !== "all") {
-        q = q.eq("department_id", departmentId);
-      }
-
-      if (search.trim()) {
-        const s = search.trim();
-        q = q.or(`full_name.ilike.%${s}%,email.ilike.%${s}%`);
-      }
-
-      const { data, error } = await q;
-      if (error) throw error;
-
-      setRows((data ?? []) as SessionRow[]);
+      setRows((payload?.rows ?? []) as SessionRow[]);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Erro ao carregar sessões.");
+      setError(e instanceof Error ? e.message : "Erro ao carregar sessoes.");
     } finally {
       setLoading(false);
     }
   }
 
-  // auto-refresh
   useEffect(() => {
     if (!canView) return;
     fetchSessions();
     const t = setInterval(fetchSessions, 30_000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canView, mode, reason, limit, departmentId]);
+  }, [canView, mode, reason, limit, departmentId, roleFilter]);
 
-  // debounce da busca
   useEffect(() => {
     if (!canView) return;
     const t = setTimeout(fetchSessions, 350);
@@ -162,7 +140,6 @@ export default function SessionsClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  // opções de departamento presentes na lista (sem depender de tabela departments)
   const departmentOptions = useMemo(() => {
     const set = new Set<string>();
     for (const r of rows) {
@@ -183,6 +160,7 @@ export default function SessionsClient() {
       "status",
       "nome",
       "email",
+      "role",
       "user_id",
       "department_id",
       "login_at",
@@ -202,6 +180,7 @@ export default function SessionsClient() {
         status: st.online ? "Online" : "Offline",
         nome: r.full_name ?? "",
         email: r.email ?? "",
+        role: r.role ?? "",
         user_id: r.user_id,
         department_id: r.department_id ?? "",
         login_at: r.login_at,
@@ -221,7 +200,7 @@ export default function SessionsClient() {
   if (roleLoading) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <p className="text-sm text-slate-600">Carregando permissões...</p>
+        <p className="text-sm text-slate-600">Carregando permissoes...</p>
       </div>
     );
   }
@@ -229,22 +208,19 @@ export default function SessionsClient() {
   if (!canView) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <h1 className="text-lg font-semibold text-slate-900">Sessões</h1>
-        <p className="mt-2 text-sm text-slate-700">Você não tem permissão para acessar esta página.</p>
+        <h1 className="text-lg font-semibold text-slate-900">Sessoes</h1>
+        <p className="mt-2 text-sm text-slate-700">Voce nao tem permissao para acessar esta pagina.</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      {/* Header */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold text-slate-900">Sessões</h1>
-            <p className="mt-1 text-sm text-slate-600">
-              Online agora, último acesso, dispositivo e motivo de logout.
-            </p>
+            <h1 className="text-xl font-semibold text-slate-900">Sessoes</h1>
+            <p className="mt-1 text-sm text-slate-600">Online agora, ultimo acesso, dispositivo e motivo de logout.</p>
           </div>
 
           <div className="flex gap-2">
@@ -280,7 +256,6 @@ export default function SessionsClient() {
         </div>
       </div>
 
-      {/* Filters + table */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <div className="flex flex-wrap items-end gap-3">
           <div>
@@ -325,6 +300,22 @@ export default function SessionsClient() {
             </select>
           </div>
 
+          <div>
+            <label className="block text-xs font-semibold text-slate-700">Perfil</label>
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value as SessionRoleFilter)}
+              className="mt-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+            >
+              <option value="all">Todos</option>
+              <option value="admin">Admin</option>
+              <option value="rh">RH</option>
+              <option value="gestor">Gestor</option>
+              <option value="coordenador">Coordenador</option>
+              <option value="colaborador">Colaborador</option>
+            </select>
+          </div>
+
           <div className="min-w-[260px] flex-1">
             <label className="block text-xs font-semibold text-slate-700">Buscar (nome ou e-mail)</label>
             <input
@@ -350,9 +341,7 @@ export default function SessionsClient() {
         </div>
 
         {error && (
-          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            {error}
-          </div>
+          <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
         )}
 
         <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
@@ -360,10 +349,10 @@ export default function SessionsClient() {
             <thead className="bg-slate-50 text-slate-700">
               <tr>
                 <th className="px-4 py-3 font-semibold">Status</th>
-                <th className="px-4 py-3 font-semibold">Usuário</th>
+                <th className="px-4 py-3 font-semibold">Usuario</th>
                 <th className="px-4 py-3 font-semibold">Dispositivo</th>
                 <th className="px-4 py-3 font-semibold">Login</th>
-                <th className="px-4 py-3 font-semibold">Último acesso</th>
+                <th className="px-4 py-3 font-semibold">Ultimo acesso</th>
                 <th className="px-4 py-3 font-semibold">Logout</th>
                 <th className="px-4 py-3 font-semibold">Motivo</th>
               </tr>
@@ -395,7 +384,7 @@ export default function SessionsClient() {
                             "inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold",
                             st.online ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700",
                           ].join(" ")}
-                          title={`Último acesso: ${toLocal(r.last_seen_at)}`}
+                          title={`Ultimo acesso: ${toLocal(r.last_seen_at)}`}
                         >
                           {st.online ? "Online" : "Offline"}
                         </span>
@@ -403,8 +392,11 @@ export default function SessionsClient() {
 
                       <td className="px-4 py-3">
                         <div className="flex flex-col">
-                          <span className="text-sm font-semibold text-slate-900">{r.full_name ?? "—"}</span>
-                          <span className="text-xs text-slate-600">{r.email ?? r.user_id}</span>
+                          <span className="text-sm font-semibold text-slate-900">{r.full_name ?? "-"}</span>
+                          <span className="text-xs text-slate-600">
+                            {r.email ?? r.user_id}
+                            {r.role ? ` • ${r.role}` : ""}
+                          </span>
                         </div>
                       </td>
 
@@ -423,7 +415,7 @@ export default function SessionsClient() {
 
                       <td className="px-4 py-3 text-slate-800">{toLocal(r.logout_at)}</td>
 
-                      <td className="px-4 py-3 text-slate-800">{r.logout_reason ?? "—"}</td>
+                      <td className="px-4 py-3 text-slate-800">{r.logout_reason ?? "-"}</td>
                     </tr>
                   );
                 })
@@ -433,10 +425,11 @@ export default function SessionsClient() {
         </div>
 
         <p className="mt-3 text-xs text-slate-500">
-          “Online agora” considera <b>logout_at vazio</b> e <b>last_seen_at</b> nos últimos {ONLINE_WINDOW_MINUTES} minutos.
-          O CSV exporta exatamente o conjunto filtrado exibido (com cabeçalho mesmo sem dados).
+          &quot;Online agora&quot; considera <b>logout_at vazio</b> e <b>last_seen_at</b> nos ultimos {ONLINE_WINDOW_MINUTES} minutos.
+          O CSV exporta exatamente o conjunto filtrado exibido (com cabecalho mesmo sem dados).
         </p>
       </div>
     </div>
   );
 }
+
