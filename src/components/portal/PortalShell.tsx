@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import Sidebar from "@/components/portal/Sidebar";
 
@@ -34,14 +34,11 @@ function withTimeout<T>(p: Promise<T>, ms = 7000): Promise<T> {
 
 export default function PortalShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const pathname = usePathname();
 
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<Role | null>(null);
-
   const [fatalError, setFatalError] = useState<string | null>(null);
   const [debugErr, setDebugErr] = useState<string | null>(null);
-
   const [company, setCompany] = useState<Company | null>(null);
   const [department, setDepartment] = useState<Department | null>(null);
 
@@ -52,8 +49,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
     alive.current = true;
 
     async function safeRedirectToLogin() {
-      // evita loop: se já está no /, não fica chamando replace
-      if (pathname === "/") return;
+      if (window.location.pathname === "/") return;
       router.replace("/?redirectedFrom=%2Fhome");
     }
 
@@ -66,11 +62,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       setDebugErr(null);
 
       try {
-        // 1) Verifica sessão primeiro (mais estável)
-        const { data: sessRes, error: sessErr } = await withTimeout(
-          supabase.auth.getSession(),
-          7000
-        );
+        const { data: sessRes, error: sessErr } = await withTimeout(supabase.auth.getSession(), 7000);
 
         if (!alive.current) return;
 
@@ -79,15 +71,12 @@ export default function PortalShell({ children }: { children: React.ReactNode })
           return;
         }
 
-        const session = sessRes?.session;
-        const userId = session?.user?.id ?? null;
-
+        const userId = sessRes?.session?.user?.id ?? null;
         if (!userId) {
           await safeRedirectToLogin();
           return;
         }
 
-        // 2) Agora sim: profile
         const { data: profile, error: profileErr } = await supabase
           .from("profiles")
           .select("role, active, company_id, department_id")
@@ -97,60 +86,53 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         if (!alive.current) return;
 
         if (profileErr) {
-          setFatalError("Não foi possível ler profiles. Verifique RLS/Policy/GRANT ou cadastro.");
+          setFatalError("Nao foi possivel ler profiles. Verifique RLS/Policy/GRANT ou cadastro.");
           setDebugErr(profileErr.message);
           return;
         }
 
         if (!profile) {
-          setFatalError("Perfil não encontrado na tabela profiles para este usuário.");
+          setFatalError("Perfil nao encontrado na tabela profiles para este usuario.");
           setDebugErr(`Nenhuma linha encontrada para id=${userId}`);
           return;
         }
 
         if (profile.active === false) {
-          setFatalError("Usuário inativo. Procure o administrador do sistema.");
+          setFatalError("Usuario inativo. Procure o administrador do sistema.");
           return;
         }
 
         const r = (profile.role ?? null) as Role | null;
         if (!r) {
-          setFatalError("Perfil sem função (role). Defina role = colaborador/gestor/rh/admin.");
+          setFatalError("Perfil sem funcao (role). Defina role = colaborador/gestor/rh/admin.");
           return;
         }
 
         setRole(r);
 
-        // 3) company
-        if (profile.company_id) {
-          const { data: c, error: cErr } = await supabase
-            .from("companies")
-            .select("id, name, logo_url, primary_color")
-            .eq("id", profile.company_id)
-            .maybeSingle();
-          if (!cErr && c) setCompany(c as Company);
-        } else {
-          setCompany(null);
-        }
+        const companyReq = profile.company_id
+          ? supabase
+              .from("companies")
+              .select("id, name, logo_url, primary_color")
+              .eq("id", profile.company_id)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null });
 
-        // 4) department
-        if (profile.department_id) {
-          const { data: d, error: dErr } = await supabase
-            .from("departments")
-            .select("id, name")
-            .eq("id", profile.department_id)
-            .maybeSingle();
-          if (!dErr && d) setDepartment(d as Department);
-        } else {
-          setDepartment(null);
-        }
-      } catch (err: unknown) {
-        console.error("Erro no PortalShell:", err);
+        const departmentReq = profile.department_id
+          ? supabase.from("departments").select("id, name").eq("id", profile.department_id).maybeSingle()
+          : Promise.resolve({ data: null, error: null });
+
+        const [companyRes, departmentRes] = await Promise.all([companyReq, departmentReq]);
 
         if (!alive.current) return;
 
+        setCompany(!companyRes.error && companyRes.data ? (companyRes.data as Company) : null);
+        setDepartment(!departmentRes.error && departmentRes.data ? (departmentRes.data as Department) : null);
+      } catch (err: unknown) {
+        if (!alive.current) return;
+
         if (err instanceof Error && err.message === "timeout") {
-          setFatalError("Tempo esgotado ao validar sessão. Verifique conexão e Supabase.");
+          setFatalError("Tempo esgotado ao validar sessao. Verifique conexao e Supabase.");
           return;
         }
 
@@ -162,12 +144,10 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       }
     }
 
-    // roda ao montar
     boot();
 
-    // 5) acompanha mudanças na auth e revalida sem loop
-    const { data: sub } = supabase.auth.onAuthStateChange(() => {
-      // reseta estado e recarrega
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "INITIAL_SESSION") return;
       setRole(null);
       setCompany(null);
       setDepartment(null);
@@ -180,7 +160,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       alive.current = false;
       sub.subscription.unsubscribe();
     };
-  }, [router, pathname]);
+  }, [router]);
 
   if (loading) {
     return (
@@ -233,9 +213,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       <div className="min-h-screen grid place-items-center bg-slate-50 p-6">
         <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6">
           <h1 className="text-lg font-semibold text-slate-900">Carregamento incompleto</h1>
-          <p className="mt-2 text-sm text-slate-700">
-            Não foi possível identificar sua função (role).
-          </p>
+          <p className="mt-2 text-sm text-slate-700">Nao foi possivel identificar sua funcao (role).</p>
           <div className="mt-4 flex gap-3">
             <button
               onClick={() => router.replace("/")}
@@ -265,7 +243,6 @@ export default function PortalShell({ children }: { children: React.ReactNode })
               <div className="flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
                   {company?.logo_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={company.logo_url}
                       alt={companyName}
@@ -280,7 +257,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-slate-900">{companyName}</p>
                     <p className="truncate text-xs text-slate-500">
-                      {deptName ? `Setor: ${deptName}` : "Setor não informado"}
+                      {deptName ? `Setor: ${deptName}` : "Setor nao informado"}
                     </p>
                   </div>
                 </div>

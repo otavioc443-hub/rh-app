@@ -40,10 +40,41 @@ export default function SetPasswordPage() {
 
   useEffect(() => {
     async function check() {
-      const { data } = await supabase.auth.getUser();
+      async function tryRecoverSessionFromUrl() {
+        const url = new URL(window.location.href);
+        const tokenHash = url.searchParams.get("token_hash");
+        const type = url.searchParams.get("type");
+        const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+        const accessToken = hash.get("access_token");
+        const refreshToken = hash.get("refresh_token");
+
+        if (tokenHash && type) {
+          await supabase.auth.verifyOtp({
+            type: type as "recovery" | "email" | "signup" | "invite" | "magiclink" | "email_change",
+            token_hash: tokenHash,
+          });
+          return;
+        }
+
+        if (accessToken && refreshToken) {
+          await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+        }
+      }
+
+      let { data } = await supabase.auth.getUser();
 
       if (!data.user) {
-        router.replace("/");
+        await tryRecoverSessionFromUrl();
+        const secondTry = await supabase.auth.getUser();
+        data = secondTry.data;
+      }
+
+      if (!data.user) {
+        setMsg("Link de redefinicao invalido ou expirado. Solicite um novo link.");
+        setLoading(false);
         return;
       }
 
