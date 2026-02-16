@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, History } from "lucide-react";
+import { X, History, TrendingUp, ClipboardPlus, CalendarClock } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import EmployeeForm, { ColaboradorPayload } from "@/components/rh/EmployeeForm";
 
@@ -12,6 +12,25 @@ type AuditRow = {
   action: string | null;
   details: unknown;
 };
+
+type AbsenceEventRow = {
+  id: string;
+  collaborator_id: string;
+  user_id: string | null;
+  event_type: "falta" | "atestado" | "licenca" | "outro";
+  start_date: string;
+  end_date: string | null;
+  days_count: number;
+  has_certificate: boolean;
+  certificate_date: string | null;
+  cid: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function n(v: unknown) {
   if (v === null || v === undefined) return "";
@@ -27,9 +46,25 @@ function num(v: unknown) {
   return Number.isFinite(x) ? x : null;
 }
 
+function formatCurrency(v: number | null) {
+  if (v === null || !Number.isFinite(v)) return "-";
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+}
+
+function diffDaysInclusiveIso(startIso: string, endIso?: string | null) {
+  if (!startIso) return 1;
+  const s = new Date(`${startIso}T00:00:00`);
+  const e = new Date(`${(endIso || startIso)}T00:00:00`);
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return 1;
+  const ms = e.getTime() - s.getTime();
+  return Math.max(1, Math.floor(ms / 86400000) + 1);
+}
+
 function mapRowToInitial(row: Record<string, unknown>): Partial<ColaboradorPayload> {
   return {
     ...(row as Partial<ColaboradorPayload>),
+    company_id: (row.company_id as string | null) ?? "",
+    department_id: (row.department_id as string | null) ?? "",
     departamento: (row.departamento as string | null) ?? "",
     banco: ((row.banco as string | null) ?? (row.bank_name as string | null) ?? "") as string,
     agencia: ((row.agencia as string | null) ?? (row.agency as string | null) ?? "") as string,
@@ -44,6 +79,8 @@ function toDb(payload: ColaboradorPayload, isActive: boolean, editorEmail: strin
   const base: Record<string, unknown> = { ...payload };
 
   base.nome = n(payload.nome) || null;
+  base.company_id = n(payload.company_id) || null;
+  base.department_id = n(payload.department_id) || null;
   base.empresa = n(payload.empresa) || null;
   base.departamento = n(payload.departamento) || null;
   base.setor = n(payload.setor) || null;
@@ -138,10 +175,12 @@ export default function CollaboratorEditWizard({
   collaboratorId,
   onClose,
   onSaved,
+  startWithPromotion = false,
 }: {
   collaboratorId: string;
   onClose: () => void;
   onSaved: () => void;
+  startWithPromotion?: boolean;
 }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -153,6 +192,28 @@ export default function CollaboratorEditWizard({
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<AuditRow[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [activeView, setActiveView] = useState<"dados" | "absenteismo">("dados");
+  const [showPromotion, setShowPromotion] = useState(startWithPromotion);
+  const [promotionSaving, setPromotionSaving] = useState(false);
+  const [promotionCargo, setPromotionCargo] = useState("");
+  const [promotionManualCargo, setPromotionManualCargo] = useState(false);
+  const [promotionDate, setPromotionDate] = useState(todayIsoDate());
+  const [promotionDescription, setPromotionDescription] = useState("");
+  const [cargoOptions, setCargoOptions] = useState<string[]>([]);
+  const [collaboratorUserId, setCollaboratorUserId] = useState<string | null>(null);
+  const [currentCargo, setCurrentCargo] = useState("");
+  const [currentSalary, setCurrentSalary] = useState<number | null>(null);
+  const [promotionSalary, setPromotionSalary] = useState("");
+  const [absenceLoading, setAbsenceLoading] = useState(false);
+  const [absenceSaving, setAbsenceSaving] = useState(false);
+  const [absenceRows, setAbsenceRows] = useState<AbsenceEventRow[]>([]);
+  const [absenceType, setAbsenceType] = useState<AbsenceEventRow["event_type"]>("falta");
+  const [absenceStartDate, setAbsenceStartDate] = useState(todayIsoDate());
+  const [absenceEndDate, setAbsenceEndDate] = useState("");
+  const [absenceHasCertificate, setAbsenceHasCertificate] = useState(false);
+  const [absenceCertificateDate, setAbsenceCertificateDate] = useState("");
+  const [absenceCid, setAbsenceCid] = useState("");
+  const [absenceNotes, setAbsenceNotes] = useState("");
 
   const [lastInfo, setLastInfo] = useState<{ at: string | null; by: string | null }>({
     at: null,
@@ -184,6 +245,13 @@ export default function CollaboratorEditWizard({
       setInitial(mapRowToInitial(row));
       setIsActive(Boolean(row.is_active ?? true));
       setRowColumns(new Set(Object.keys(row)));
+      setCollaboratorUserId(typeof row.user_id === "string" ? row.user_id : null);
+      setCurrentCargo(typeof row.cargo === "string" ? row.cargo : "");
+      setPromotionCargo(typeof row.cargo === "string" ? row.cargo : "");
+      setPromotionManualCargo(false);
+      const salaryValue = typeof row.salario === "number" ? row.salario : num(row.salario);
+      setCurrentSalary(salaryValue);
+      setPromotionSalary(salaryValue === null ? "" : String(salaryValue));
 
       setLastInfo({
         at: typeof row.updated_at === "string" ? new Date(row.updated_at).toLocaleString("pt-BR") : null,
@@ -200,6 +268,27 @@ export default function CollaboratorEditWizard({
     };
   }, [collaboratorId]);
 
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data } = await supabase.from("cargos").select("name").order("name", { ascending: true });
+      if (!alive) return;
+      const options = (data ?? [])
+        .map((r) => (typeof r.name === "string" ? r.name.trim() : ""))
+        .filter(Boolean);
+      setCargoOptions(Array.from(new Set(options)));
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (activeView !== "absenteismo") return;
+    void loadAbsenceEvents();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView, collaboratorId]);
+
   async function loadHistory() {
     setHistoryLoading(true);
     setMsg(null);
@@ -215,6 +304,89 @@ export default function CollaboratorEditWizard({
       setHistory([]);
     } finally {
       setHistoryLoading(false);
+    }
+  }
+
+  async function loadAbsenceEvents() {
+    setAbsenceLoading(true);
+    setMsg(null);
+    try {
+      const { data, error } = await supabase
+        .from("collaborator_absence_events")
+        .select("id,collaborator_id,user_id,event_type,start_date,end_date,days_count,has_certificate,certificate_date,cid,notes,created_at")
+        .eq("collaborator_id", collaboratorId)
+        .order("start_date", { ascending: false })
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        const text = error.message.toLowerCase();
+        if (text.includes("does not exist") || text.includes("schema cache") || text.includes("relation")) {
+          setMsg(
+            "Modulo de absenteismo ainda nao disponivel. Rode supabase/sql/2026-02-16_create_collaborator_absence_events.sql."
+          );
+          setAbsenceRows([]);
+        } else {
+          throw new Error(error.message);
+        }
+      } else {
+        setAbsenceRows((data ?? []) as AbsenceEventRow[]);
+      }
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao carregar registros de absenteismo.");
+      setAbsenceRows([]);
+    } finally {
+      setAbsenceLoading(false);
+    }
+  }
+
+  async function saveAbsenceEvent() {
+    if (!absenceStartDate) {
+      setMsg("Informe a data da falta/ocorrencia.");
+      return;
+    }
+    if (absenceEndDate && absenceEndDate < absenceStartDate) {
+      setMsg("Data final nao pode ser menor que a data inicial.");
+      return;
+    }
+    if (absenceHasCertificate && !absenceCertificateDate) {
+      setMsg("Informe a data do atestado.");
+      return;
+    }
+
+    setAbsenceSaving(true);
+    setMsg(null);
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const createdBy = authData.user?.id ?? null;
+      const payload = {
+        collaborator_id: collaboratorId,
+        user_id: collaboratorUserId,
+        event_type: absenceType,
+        start_date: absenceStartDate,
+        end_date: absenceEndDate || null,
+        days_count: diffDaysInclusiveIso(absenceStartDate, absenceEndDate || null),
+        has_certificate: absenceHasCertificate,
+        certificate_date: absenceHasCertificate ? absenceCertificateDate || null : null,
+        cid: absenceHasCertificate ? n(absenceCid) || null : null,
+        notes: n(absenceNotes) || null,
+        created_by: createdBy,
+      };
+      const { error } = await supabase.from("collaborator_absence_events").insert(payload);
+      if (error) throw new Error(error.message);
+
+      setAbsenceType("falta");
+      setAbsenceStartDate(todayIsoDate());
+      setAbsenceEndDate("");
+      setAbsenceHasCertificate(false);
+      setAbsenceCertificateDate("");
+      setAbsenceCid("");
+      setAbsenceNotes("");
+      setMsg("Registro de absenteismo salvo.");
+      await loadAbsenceEvents();
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao salvar absenteismo.");
+    } finally {
+      setAbsenceSaving(false);
     }
   }
 
@@ -236,11 +408,145 @@ export default function CollaboratorEditWizard({
         .eq("id", collaboratorId);
       if (error) throw new Error(error.message);
 
+      const companyId = n(payload.company_id) || null;
+      const departmentId = n(payload.department_id) || null;
+      const syncRes = await fetch(`/api/rh/colaboradores/${collaboratorId}/sync-profile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          company_id: companyId,
+          department_id: departmentId,
+        }),
+      });
+      if (!syncRes.ok) {
+        const text = await syncRes.text();
+        let errMsg = "Falha ao sincronizar vinculo no perfil.";
+        try {
+          const json = JSON.parse(text) as { error?: string };
+          if (json.error) errMsg = json.error;
+        } catch {
+          if (text) errMsg = text;
+        }
+        throw new Error(errMsg);
+      }
+
       onSaved();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao salvar.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function promoteCollaborator() {
+    const nextCargo = n(promotionCargo);
+    const nextSalary = num(promotionSalary);
+    if (!nextCargo) {
+      setMsg("Informe o novo cargo para registrar a promocao.");
+      return;
+    }
+    if (nextSalary === null || nextSalary <= 0) {
+      setMsg("Informe o novo salario da promocao.");
+      return;
+    }
+    if (!promotionDate) {
+      setMsg("Informe a data da promocao.");
+      return;
+    }
+    if (!collaboratorUserId) {
+      setMsg("Colaborador sem user_id vinculado. Nao foi possivel registrar promocao.");
+      return;
+    }
+
+    setPromotionSaving(true);
+    setMsg(null);
+    try {
+      const { data: userRes } = await supabase.auth.getUser();
+      const editorId = userRes?.user?.id ?? null;
+      const editorEmail = userRes?.user?.email ?? null;
+      const nowIso = new Date().toISOString();
+
+      const baseUpdate: Record<string, unknown> = {
+        cargo: nextCargo,
+        salario: nextSalary,
+        updated_by_email: editorEmail,
+        updated_at: nowIso,
+      };
+      const filtered = Object.fromEntries(Object.entries(baseUpdate).filter(([key]) => rowColumns.has(key)));
+      const { error: upErr } = await supabase.from("colaboradores").update(filtered).eq("id", collaboratorId);
+      if (upErr) throw new Error(upErr.message);
+
+      const eventWithSalary = {
+        user_id: collaboratorUserId,
+        event_date: promotionDate,
+        event_type: "promotion",
+        title: `Promocao para ${nextCargo}`,
+        description: n(promotionDescription) || "Promocao registrada na edicao do colaborador.",
+        from_cargo: currentCargo || null,
+        to_cargo: nextCargo,
+        from_salary: currentSalary,
+        to_salary: nextSalary,
+        created_by: editorId,
+      };
+      let salaryTimelineFallback = false;
+      let { error: evtErr } = await supabase.from("career_timeline_events").insert(eventWithSalary);
+      if (evtErr) {
+        const text = evtErr.message.toLowerCase();
+        const hasSalaryColumnsIssue =
+          text.includes("from_salary") || text.includes("to_salary") || text.includes("schema cache");
+        if (hasSalaryColumnsIssue) {
+          const eventWithoutSalary = {
+            user_id: collaboratorUserId,
+            event_date: promotionDate,
+            event_type: "promotion",
+            title: `Promocao para ${nextCargo}`,
+            description: n(promotionDescription) || "Promocao registrada na edicao do colaborador.",
+            from_cargo: currentCargo || null,
+            to_cargo: nextCargo,
+            created_by: editorId,
+          };
+          const retry = await supabase.from("career_timeline_events").insert(eventWithoutSalary);
+          evtErr = retry.error ?? null;
+          if (!evtErr) {
+            salaryTimelineFallback = true;
+          }
+        }
+      }
+
+      if (evtErr) {
+        const text = evtErr.message.toLowerCase();
+        if (text.includes("does not exist") || text.includes("relation") || text.includes("schema cache")) {
+          setMsg(
+            "Cargo atualizado, mas o historico de carreira nao esta disponivel. Rode supabase/sql/2026-02-16_create_career_timeline_events.sql."
+          );
+        } else {
+          setMsg(`Cargo atualizado, mas falhou ao registrar evento: ${evtErr.message}`);
+        }
+      } else {
+        if (salaryTimelineFallback) {
+          setMsg(
+            "Promocao registrada. Rode supabase/sql/2026-02-16_add_salary_to_career_timeline_events.sql para salvar salario na linha do tempo."
+          );
+        } else {
+          setMsg("Promocao registrada e adicionada na linha do tempo.");
+        }
+      }
+
+      setCurrentCargo(nextCargo);
+      setCurrentSalary(nextSalary);
+      setInitial((prev) => ({ ...prev, cargo: nextCargo, salario: String(nextSalary) }));
+      setLastInfo({
+        at: new Date(nowIso).toLocaleString("pt-BR"),
+        by: editorEmail,
+      });
+      setPromotionDescription("");
+      setPromotionSalary(String(nextSalary));
+      setShowPromotion(false);
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao promover colaborador.");
+    } finally {
+      setPromotionSaving(false);
     }
   }
 
@@ -263,6 +569,39 @@ export default function CollaboratorEditWizard({
             </div>
 
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setActiveView("dados");
+                  setShowPromotion(false);
+                }}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+              >
+                <ClipboardPlus size={16} />
+                Dados
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveView("absenteismo");
+                  setShowPromotion(false);
+                }}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+              >
+                <CalendarClock size={16} />
+                Absenteismo
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveView("dados");
+                  setShowPromotion((v) => !v);
+                }}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+              >
+                <TrendingUp size={16} />
+                Promover
+              </button>
+
               <button
                 onClick={async () => {
                   setShowHistory(true);
@@ -291,24 +630,243 @@ export default function CollaboratorEditWizard({
               <div className="text-sm text-slate-600">Carregando...</div>
             ) : (
               <div className="space-y-5">
-                <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                  <input
-                    type="checkbox"
-                    checked={isActive}
-                    onChange={(e) => setIsActive(e.target.checked)}
-                    className="h-4 w-4"
-                  />
-                  <span className="text-sm font-medium text-slate-800">
-                    Colaborador ativo (desmarque para registrar desligamento)
-                  </span>
-                </label>
+                {activeView === "dados" ? (
+                  <>
+                    {showPromotion ? (
+                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                        <div className="text-sm font-semibold text-emerald-900">Registrar promocao</div>
+                        <div className="mt-1 text-xs text-emerald-800">
+                          Cargo atual: <b>{currentCargo || "-"}</b>
+                        </div>
+                        <div className="mt-1 text-xs text-emerald-800">
+                          Salario atual: <b>{formatCurrency(currentSalary)}</b>
+                        </div>
+                        <div className="mt-3 grid gap-3 md:grid-cols-3">
+                          <select
+                            value={promotionManualCargo ? "__manual__" : promotionCargo}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v === "__manual__") {
+                                setPromotionManualCargo(true);
+                                setPromotionCargo("");
+                                return;
+                              }
+                              setPromotionManualCargo(false);
+                              setPromotionCargo(v);
+                            }}
+                            className="h-10 rounded-xl border border-emerald-200 bg-white px-3 text-sm text-slate-900 md:col-span-2"
+                          >
+                            <option value="">Selecione o novo cargo</option>
+                            {cargoOptions.map((opt) => (
+                              <option key={opt} value={opt}>
+                                {opt}
+                              </option>
+                            ))}
+                            <option value="__manual__">Digitar manualmente</option>
+                          </select>
 
-                <EmployeeForm
-                  initial={initial}
-                  submitting={saving}
-                  submitLabel={saving ? "Salvando..." : "Salvar alteracoes"}
-                  onSubmit={save}
-                />
+                          <input
+                            type="date"
+                            value={promotionDate}
+                            onChange={(e) => setPromotionDate(e.target.value)}
+                            className="h-10 rounded-xl border border-emerald-200 bg-white px-3 text-sm text-slate-900"
+                          />
+                        </div>
+                        <input
+                          value={promotionSalary}
+                          onChange={(e) => setPromotionSalary(e.target.value)}
+                          placeholder="Novo salario (ex.: 6500 ou 6500,00)"
+                          className="mt-3 h-10 w-full rounded-xl border border-emerald-200 bg-white px-3 text-sm text-slate-900"
+                        />
+                        {promotionManualCargo ? (
+                          <input
+                            value={promotionCargo}
+                            onChange={(e) => setPromotionCargo(e.target.value)}
+                            placeholder="Novo cargo (manual)"
+                            className="mt-3 h-10 w-full rounded-xl border border-emerald-200 bg-white px-3 text-sm text-slate-900"
+                          />
+                        ) : null}
+                        <textarea
+                          value={promotionDescription}
+                          onChange={(e) => setPromotionDescription(e.target.value)}
+                          placeholder="Descricao (opcional)"
+                          className="mt-3 min-h-[84px] w-full rounded-xl border border-emerald-200 bg-white p-3 text-sm text-slate-900"
+                        />
+                        <div className="mt-3 flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void promoteCollaborator()}
+                            disabled={promotionSaving}
+                            className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
+                          >
+                            <TrendingUp size={16} />
+                            {promotionSaving ? "Registrando..." : "Registrar promocao"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowPromotion(false)}
+                            className="rounded-xl border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={isActive}
+                        onChange={(e) => setIsActive(e.target.checked)}
+                        className="h-4 w-4"
+                      />
+                      <span className="text-sm font-medium text-slate-800">
+                        Colaborador ativo (desmarque para registrar desligamento)
+                      </span>
+                    </label>
+
+                    <EmployeeForm
+                      initial={initial}
+                      submitting={saving}
+                      submitLabel={saving ? "Salvando..." : "Salvar alteracoes"}
+                      onSubmit={save}
+                    />
+                  </>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="text-sm font-semibold text-slate-900">Registrar absenteismo</div>
+                      <div className="mt-3 grid gap-3 md:grid-cols-3">
+                        <label className="grid gap-1 text-xs font-semibold text-slate-700">
+                          Tipo
+                          <select
+                            value={absenceType}
+                            onChange={(e) => setAbsenceType(e.target.value as AbsenceEventRow["event_type"])}
+                            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                          >
+                            <option value="falta">Falta</option>
+                            <option value="atestado">Atestado</option>
+                            <option value="licenca">Licenca</option>
+                            <option value="outro">Outro</option>
+                          </select>
+                        </label>
+                        <label className="grid gap-1 text-xs font-semibold text-slate-700">
+                          Data inicio
+                          <input
+                            type="date"
+                            value={absenceStartDate}
+                            onChange={(e) => setAbsenceStartDate(e.target.value)}
+                            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                          />
+                        </label>
+                        <label className="grid gap-1 text-xs font-semibold text-slate-700">
+                          Data fim (opcional)
+                          <input
+                            type="date"
+                            value={absenceEndDate}
+                            onChange={(e) => setAbsenceEndDate(e.target.value)}
+                            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                          />
+                        </label>
+                      </div>
+
+                      <label className="mt-3 inline-flex items-center gap-2 text-sm text-slate-800">
+                        <input
+                          type="checkbox"
+                          checked={absenceHasCertificate}
+                          onChange={(e) => setAbsenceHasCertificate(e.target.checked)}
+                        />
+                        Possui atestado
+                      </label>
+
+                      {absenceHasCertificate ? (
+                        <div className="mt-3 grid gap-3 md:grid-cols-2">
+                          <label className="grid gap-1 text-xs font-semibold text-slate-700">
+                            Data do atestado
+                            <input
+                              type="date"
+                              value={absenceCertificateDate}
+                              onChange={(e) => setAbsenceCertificateDate(e.target.value)}
+                              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                            />
+                          </label>
+                          <label className="grid gap-1 text-xs font-semibold text-slate-700">
+                            CID
+                            <input
+                              value={absenceCid}
+                              onChange={(e) => setAbsenceCid(e.target.value)}
+                              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                              placeholder="Ex.: J11"
+                            />
+                          </label>
+                        </div>
+                      ) : null}
+
+                      <textarea
+                        value={absenceNotes}
+                        onChange={(e) => setAbsenceNotes(e.target.value)}
+                        placeholder="Demais informacoes relacionadas"
+                        className="mt-3 min-h-[88px] w-full rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-900"
+                      />
+
+                      <div className="mt-3 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void saveAbsenceEvent()}
+                          disabled={absenceSaving}
+                          className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60"
+                        >
+                          {absenceSaving ? "Salvando..." : "Registrar"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void loadAbsenceEvents()}
+                          className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                        >
+                          Recarregar
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="text-sm font-semibold text-slate-900">Historico de absenteismo</div>
+                      {absenceLoading ? (
+                        <div className="mt-3 text-sm text-slate-600">Carregando...</div>
+                      ) : absenceRows.length ? (
+                        <div className="mt-3 overflow-x-auto">
+                          <table className="min-w-[920px] w-full text-left text-sm">
+                            <thead className="bg-slate-50 text-slate-700">
+                              <tr>
+                                <th className="p-3">Tipo</th>
+                                <th className="p-3">Inicio</th>
+                                <th className="p-3">Fim</th>
+                                <th className="p-3">Dias</th>
+                                <th className="p-3">Atestado</th>
+                                <th className="p-3">CID</th>
+                                <th className="p-3">Observacao</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {absenceRows.map((r) => (
+                                <tr key={r.id} className="border-t">
+                                  <td className="p-3">{r.event_type}</td>
+                                  <td className="p-3">{r.start_date}</td>
+                                  <td className="p-3">{r.end_date ?? "-"}</td>
+                                  <td className="p-3">{r.days_count}</td>
+                                  <td className="p-3">{r.has_certificate ? (r.certificate_date ?? "Sim") : "Nao"}</td>
+                                  <td className="p-3">{r.cid ?? "-"}</td>
+                                  <td className="p-3">{r.notes ?? "-"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <div className="mt-3 text-sm text-slate-600">Sem registros de absenteismo.</div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

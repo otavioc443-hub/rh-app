@@ -24,11 +24,12 @@ import {
   Cake,
   MonitorCheck,
   GitBranch,
+  Wallet,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
-type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "admin";
+type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "financeiro" | "admin";
 
 type NavChild = { label: string; icon?: LucideIcon; href: string; exact?: boolean };
 type NavItem = {
@@ -57,6 +58,7 @@ type SidebarProps = {
   companyName: string | null;
   companyLogoUrl: string | null;
   departmentName: string | null;
+  jobTitle: string | null;
 };
 
 export default function Sidebar({
@@ -66,6 +68,7 @@ export default function Sidebar({
   companyName,
   companyLogoUrl,
   departmentName,
+  jobTitle,
 }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -94,10 +97,11 @@ export default function Sidebar({
         icon: UserRound,
         roles: ["colaborador", "coordenador", "gestor", "rh", "admin"],
         children: [
-          { label: "Feedbacks", icon: MessageSquareText, href: "/meu-perfil/feedbacks" },
+          { label: "Meus dados", icon: UserRound, href: "/meu-perfil/meus-dados" },
+          { label: "Projetos", icon: ClipboardList, href: "/meu-perfil/projetos" },
+          { label: "Linha do tempo", icon: GitBranch, href: "/meu-perfil/linha-do-tempo" },
+          { label: "Feedbacks", icon: MessageSquareText, href: "/meu-perfil/feedback" },
           { label: "PDI", icon: LineChart, href: "/meu-perfil/pdi" },
-
-
           { label: "Competências", icon: BadgeCheck, href: "/meu-perfil/competencias" },
           { label: "Avaliação de desempenho", icon: ClipboardList, href: "/meu-perfil/avaliacao-desempenho" },
         ],
@@ -110,8 +114,6 @@ export default function Sidebar({
         children: [
           { label: "Aniversariantes", icon: Cake, href: "/agenda/aniversariantes" },
           { label: "Agenda institucional", icon: CalendarClock, href: "/agenda/agenda-institucional" },
-
-          // ✅ (opcional) atalho direto
           { label: "Ausencias programadas", icon: CalendarClock, href: "/meu-perfil/ausencias-programadas" },
         ],
       },
@@ -119,9 +121,12 @@ export default function Sidebar({
       {
         label: "Coordenador",
         icon: Layers,
-        href: "/coordenador",
-        exact: true,
         roles: ["coordenador", "admin"],
+        children: [
+          { label: "Painel Coordenador", icon: LayoutDashboard, href: "/coordenador", exact: true },
+          { label: "Aplicar Feedback", icon: MessageSquareText, href: "/coordenador/feedback" },
+          { label: "Projetos", icon: ClipboardList, href: "/coordenador/projetos" },
+        ],
       },
 
       {
@@ -130,25 +135,58 @@ export default function Sidebar({
         roles: ["gestor", "admin"],
         children: [
           { label: "Painel Gestor", icon: LayoutDashboard, href: "/gestor", exact: true },
-
-          // ✅ rota que vamos criar: /gestor/ausencias
+          { label: "Aplicar Feedback", icon: MessageSquareText, href: "/gestor/feedback" },
+          { label: "Projetos", icon: ClipboardList, href: "/gestor/projetos" },
+          { label: "Pagamentos extras", icon: Wallet, href: "/gestor/pagamentos-extras" },
           { label: "Ausências", icon: CalendarClock, href: "/gestor/ausencias" },
         ],
       },
 
-      // ✅ RH atualizado
+      {
+        label: "Financeiro",
+        icon: Wallet,
+        roles: ["financeiro", "admin"],
+        children: [
+          { label: "Painel Financeiro", icon: LayoutDashboard, href: "/financeiro", exact: true },
+          { label: "Solicitacoes", icon: ClipboardList, href: "/financeiro/solicitacoes" },
+        ],
+      },
+
+      {
+        label: "CEO",
+        icon: Shield,
+        roles: ["admin"],
+        children: [
+          { label: "Aprovar aditivos", icon: ClipboardList, href: "/ceo/aditivos-contratuais", exact: true },
+        ],
+      },
+
       {
         label: "RH",
         icon: Users,
         roles: ["rh", "admin"],
         children: [
           { label: "Painel RH", icon: LayoutDashboard, href: "/rh", exact: true },
+          { label: "Dashboard RH", icon: LineChart, href: "/rh/dashboard" },
+          { label: "Solicitacoes", icon: ClipboardList, href: "/rh/solicitacoes" },
           { label: "Colaboradores", icon: Users, href: "/rh/colaboradores" },
           { label: "Adicionar Colaborador", icon: UserPlus, href: "/rh/adicionar-colaborador" },
           { label: "Inclusão Cargos", icon: Briefcase, href: "/rh/cargos" },
-
-          // ✅ rota que vamos criar: /rh/ausencias
+          { label: "Institucional", icon: Building2, href: "/rh/institucional" },
+          { label: "Governança Feedback", icon: MessageSquareText, href: "/rh/feedbacks" },
           { label: "Ausências", icon: CalendarClock, href: "/rh/ausencias" },
+        ],
+      },
+
+      {
+        label: "Diretoria",
+        icon: Briefcase,
+        roles: ["admin"],
+        children: [
+          { label: "Acompanhamento", icon: ClipboardList, href: "/diretoria/projetos", exact: true },
+          { label: "Novo projeto", icon: Briefcase, href: "/diretoria/projetos/novo" },
+          { label: "Aditivos/Contratos", icon: ClipboardList, href: "/diretoria/contratos" },
+          { label: "Clientes", icon: Building2, href: "/diretoria/clientes" },
         ],
       },
 
@@ -159,6 +197,7 @@ export default function Sidebar({
         children: [
           { label: "Painel Admin", icon: LayoutDashboard, href: "/admin", exact: true },
           { label: "Cadastro de empresas", icon: Building2, href: "/admin/empresas" },
+          { label: "Configuracao SLA", icon: CalendarClock, href: "/admin/sla" },
           { label: "Sessões", icon: MonitorCheck, href: "/admin/sessoes" },
           { label: "Permissões", icon: UserCog, href: "/admin/permissoes" },
         ],
@@ -167,10 +206,7 @@ export default function Sidebar({
     []
   );
 
-  const navByRole = useMemo(
-    () => nav.filter((item) => !item.roles || item.roles.includes(role)),
-    [nav, role]
-  );
+  const navByRole = useMemo(() => nav.filter((item) => !item.roles || item.roles.includes(role)), [nav, role]);
 
   const isActive = (href?: string, exact?: boolean) => {
     if (!href) return false;
@@ -202,19 +238,7 @@ export default function Sidebar({
     await supabase.auth.signOut();
     router.replace("/");
   }
-
-  const roleLabel =
-    role === "admin"
-      ? "Admin"
-      : role === "rh"
-      ? "RH"
-      : role === "gestor"
-      ? "Gestor"
-      : role === "coordenador"
-      ? "Coordenador"
-      : "Colaborador";
-
-  const userSubtitle = departmentName ? `Setor: ${departmentName}` : `Funcao: ${roleLabel}`;
+  const userSubtitle = jobTitle?.trim() ? jobTitle : departmentName ? `Setor: ${departmentName}` : null;
 
   return (
     <aside className="sticky top-0 flex h-screen w-[280px] flex-col border-r border-slate-200 bg-white">
@@ -228,9 +252,7 @@ export default function Sidebar({
               className="h-10 w-10 rounded-xl object-contain border border-slate-200 bg-white"
             />
           ) : (
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-900 text-white font-semibold">
-              RH
-            </div>
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-900 text-white font-semibold">RH</div>
           )}
 
           <div className="min-w-0 leading-tight">
@@ -255,7 +277,7 @@ export default function Sidebar({
 
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-slate-900">{fullName ?? "Colaborador"}</p>
-            <p className="truncate text-xs text-slate-500">{userSubtitle}</p>
+            {userSubtitle ? <p className="truncate text-xs text-slate-500">{userSubtitle}</p> : null}
           </div>
         </div>
       </div>
@@ -338,4 +360,5 @@ export default function Sidebar({
     </aside>
   );
 }
+
 

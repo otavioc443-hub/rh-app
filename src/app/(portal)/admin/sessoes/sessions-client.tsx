@@ -92,7 +92,7 @@ export default function SessionsClient() {
   const [rows, setRows] = useState<SessionRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const [mode, setMode] = useState<SessionMode>("online");
+  const [mode, setMode] = useState<SessionMode>("all");
   const [reason, setReason] = useState<SessionReasonFilter>("all");
   const [search, setSearch] = useState("");
   const [limit, setLimit] = useState(50);
@@ -150,9 +150,10 @@ export default function SessionsClient() {
 
   const stats = useMemo(() => {
     const online = rows.filter((r) => getOnlineStatus(r.last_seen_at, r.logout_at).online).length;
+    const uniqueUsers = new Set(rows.map((r) => r.user_id)).size;
     const idle = rows.filter((r) => r.logout_reason === "idle").length;
     const manual = rows.filter((r) => r.logout_reason === "manual").length;
-    return { online, idle, manual };
+    return { online, uniqueUsers, idle, manual };
   }, [rows]);
 
   function handleExportCsv() {
@@ -246,12 +247,14 @@ export default function SessionsClient() {
             <p className="mt-1 text-2xl font-semibold text-slate-900">{stats.online}</p>
           </div>
           <div className="rounded-xl border border-slate-200 p-4">
-            <p className="text-xs text-slate-500">Logouts por idle (lista atual)</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">{stats.idle}</p>
+            <p className="text-xs text-slate-500">Usuarios distintos (lista atual)</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">{stats.uniqueUsers}</p>
           </div>
           <div className="rounded-xl border border-slate-200 p-4">
-            <p className="text-xs text-slate-500">Logouts manuais (lista atual)</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">{stats.manual}</p>
+            <p className="text-xs text-slate-500">Logouts (idle / manual)</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">
+              {stats.idle} / {stats.manual}
+            </p>
           </div>
         </div>
       </div>
@@ -392,11 +395,10 @@ export default function SessionsClient() {
 
                       <td className="px-4 py-3">
                         <div className="flex flex-col">
-                          <span className="text-sm font-semibold text-slate-900">{r.full_name ?? "-"}</span>
-                          <span className="text-xs text-slate-600">
-                            {r.email ?? r.user_id}
-                            {r.role ? ` • ${r.role}` : ""}
+                          <span className="text-sm font-semibold text-slate-900">
+                            {r.full_name?.trim() || r.email?.trim() || "Usuario"}
                           </span>
+                          <span className="text-xs text-slate-600">{r.email ?? "E-mail nao informado"}</span>
                         </div>
                       </td>
 

@@ -5,6 +5,8 @@ import type { ReactNode } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 export type ColaboradorPayload = {
+  company_id?: string | null;
+  department_id?: string | null;
   // vínculo portal
   empresa?: string;
   departamento?: string;
@@ -97,6 +99,7 @@ type Department = { id: string; company_id: string; name: string; parent_departm
 
 type CargoRow = { id: string; name: string; cbo: string | null };
 type ColabRow = { id: string; nome: string | null; email: string | null; cargo: string | null; cpf: string | null };
+const CONTRACT_TYPE_OPTIONS = ["CLT", "PJ", "Temporario", "Estagio", "Aprendiz", "Autonomo", "Terceirizado"] as const;
 
 function digits(v: string) {
   return (v ?? "").replace(/\D/g, "");
@@ -105,6 +108,14 @@ function formatCnpj(cnpj?: string | null) {
   const d = digits(cnpj ?? "");
   if (d.length !== 14) return cnpj ?? "";
   return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2}).*$/, "$1.$2.$3/$4-$5");
+}
+
+function normalizeText(value: string | null | undefined) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
 }
 
 function cx(...classes: Array<string | false | undefined>) {
@@ -262,6 +273,10 @@ export default function EmployeeForm({
   const [loadingColabs, setLoadingColabs] = useState(true);
 
   const [msg, setMsg] = useState("");
+  const hasKnownContractType = useMemo(
+    () => CONTRACT_TYPE_OPTIONS.some((v) => v.toLowerCase() === tipoContrato.trim().toLowerCase()),
+    [tipoContrato]
+  );
 
   // carrega empresas
   useEffect(() => {
@@ -333,10 +348,18 @@ export default function EmployeeForm({
   // tenta preselecionar empresa pelo texto salvo
   useEffect(() => {
     if (!companies.length) return;
-    const empresaTxt = (initial?.empresa ?? "").trim().toLowerCase();
+    const existingCompanyId = String(initial?.company_id ?? "").trim();
+    if (existingCompanyId && companies.some((c) => c.id === existingCompanyId)) {
+      setCompanyId(existingCompanyId);
+      return;
+    }
+
+    const empresaTxt = normalizeText(String(initial?.empresa ?? ""));
     if (!empresaTxt) return;
-    const found = companies.find((c) => c.name.trim().toLowerCase() === empresaTxt);
-    if (found) setCompanyId(found.id);
+    const found = companies.find((c) => normalizeText(c.name) === empresaTxt);
+    if (found) {
+      setCompanyId(found.id);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companies.length]);
 
@@ -384,6 +407,37 @@ export default function EmployeeForm({
     if (!departmentId) return [];
     return departments.filter((d) => d.parent_department_id === departmentId);
   }, [departments, departmentId]);
+  useEffect(() => {
+    if (!departments.length) return;
+
+    const existingDepartmentId = String(initial?.department_id ?? "").trim();
+    if (existingDepartmentId && departments.some((d) => d.id === existingDepartmentId)) {
+      setDepartmentId(existingDepartmentId);
+      return;
+    }
+
+    const depTxt = normalizeText(String(initial?.departamento ?? ""));
+    if (depTxt) {
+      const foundDep = departments.find(
+        (d) => normalizeText(d.name) === depTxt && d.parent_department_id === null
+      );
+      if (foundDep) {
+        setDepartmentId(foundDep.id);
+        return;
+      }
+    }
+
+    const setorTxt = normalizeText(String(initial?.setor ?? ""));
+    if (!setorTxt) return;
+    const foundSetor = departments.find(
+      (d) => normalizeText(d.name) === setorTxt && d.parent_department_id !== null
+    );
+    if (foundSetor?.parent_department_id) {
+      setDepartmentId(foundSetor.parent_department_id);
+      setSectorId(foundSetor.id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [departments.length]);
 
   // quando selecionar cargo do select -> se cargo tem CBO, preenche o campo cbo (editável)
   const cargoByName = useMemo(() => {
@@ -425,6 +479,8 @@ export default function EmployeeForm({
 
     const payload: ColaboradorPayload = {
       ...(initial ?? {}),
+      company_id: company?.id ?? null,
+      department_id: departmentId || null,
       empresa: company?.name ?? "",
       departamento: dep?.name ?? "",
       setor: setor?.name ?? "",
@@ -691,8 +747,34 @@ export default function EmployeeForm({
             <input value={moeda} onChange={(e) => setMoeda(e.target.value)} className={inputCls} />
           </Field>
 
-          <Field label="Tipo de contrato">
-            <input value={tipoContrato} onChange={(e) => setTipoContrato(e.target.value)} className={inputCls} />
+          <Field label="Tipo de contrato" helper="Selecione um tipo padrao (CLT, PJ, etc).">
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                {CONTRACT_TYPE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    onClick={() => setTipoContrato(opt)}
+                    className={cx(
+                      "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                      tipoContrato.trim().toLowerCase() === opt.toLowerCase()
+                        ? "border-slate-900 bg-slate-900 text-white"
+                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    )}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+              {!hasKnownContractType ? (
+                <input
+                  value={tipoContrato}
+                  onChange={(e) => setTipoContrato(e.target.value)}
+                  className={inputCls}
+                  placeholder="Outro tipo de contrato"
+                />
+              ) : null}
+            </div>
           </Field>
           <Field label="Data do contrato">
             <input type="date" value={dataContrato} onChange={(e) => setDataContrato(e.target.value)} className={inputCls} />
@@ -716,11 +798,9 @@ export default function EmployeeForm({
               {colabs.map((c) => {
                 const n = (c.nome ?? "").trim();
                 if (!n) return null;
-                const extra = [c.cargo ? ` • ${c.cargo}` : null, c.email ? ` • ${c.email}` : null].filter(Boolean).join("");
                 return (
                   <option key={c.id} value={n}>
                     {n}
-                    {extra}
                   </option>
                 );
               })}
@@ -932,3 +1012,5 @@ export default function EmployeeForm({
     </form>
   );
 }
+
+

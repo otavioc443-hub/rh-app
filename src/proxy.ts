@@ -14,7 +14,7 @@ function isPublicPath(pathname: string) {
 }
 
 function needsAdmin(pathname: string) {
-  return pathname === "/admin" || pathname.startsWith("/admin/");
+  return pathname === "/admin" || pathname.startsWith("/admin/") || pathname === "/diretoria" || pathname.startsWith("/diretoria/") || pathname === "/ceo" || pathname.startsWith("/ceo/");
 }
 function needsRH(pathname: string) {
   return pathname === "/rh" || pathname.startsWith("/rh/");

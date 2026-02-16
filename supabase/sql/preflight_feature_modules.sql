@@ -7,7 +7,13 @@ with expected as (
     'pdi_items',
     'competencias_assessments',
     'performance_assessments',
-    'institutional_events'
+    'institutional_events',
+    'institutional_content',
+    'projects',
+    'project_members',
+    'project_deliverables',
+    'deliverable_contributions',
+    'project_extra_payments'
   ]) as table_name
 )
 select
@@ -25,7 +31,13 @@ with expected as (
     'pdi_items',
     'competencias_assessments',
     'performance_assessments',
-    'institutional_events'
+    'institutional_events',
+    'institutional_content',
+    'projects',
+    'project_members',
+    'project_deliverables',
+    'deliverable_contributions',
+    'project_extra_payments'
   ]) as table_name
 )
 select
@@ -53,6 +65,12 @@ where schemaname = 'public'
     'pdi_items',
     'competencias_assessments',
     'performance_assessments',
-    'institutional_events'
+    'institutional_events',
+    'institutional_content',
+    'projects',
+    'project_members',
+    'project_deliverables',
+    'deliverable_contributions',
+    'project_extra_payments'
   )
 order by tablename, policyname;

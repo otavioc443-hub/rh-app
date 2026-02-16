@@ -93,3 +93,13 @@ select
 from storage.buckets
 where name = 'company-logos';
 
+-- 6) Bucket de assets do Institucional (imagens do RH > Institucional)
+select
+  id,
+  name,
+  public,
+  file_size_limit,
+  allowed_mime_types
+from storage.buckets
+where name = 'institutional-assets';
+

@@ -18,6 +18,7 @@ import {
 
 type Colab = {
   id?: string;
+  user_id?: string | null;
   nome?: string | null;
   email?: string | null;
   cargo?: string | null;
@@ -26,6 +27,7 @@ type Colab = {
   data_demissao?: string | null;
   email_superior_direto?: string | null;
   superior_direto?: string | null;
+  avatar_url?: string | null;
 };
 
 type Node = {
@@ -39,6 +41,26 @@ type CssVars = React.CSSProperties & Record<`--${string}`, string>;
 function normEmail(v?: string | null) {
   return (v ?? "").trim().toLowerCase();
 }
+function normText(v?: string | null) {
+  return (v ?? "").trim().toLowerCase();
+}
+function roleScore(cargo?: string | null) {
+  const c = normText(cargo);
+  if (!c) return 99;
+  if (/\b(ceo|presidente|founder|fundador)\b/.test(c)) return 0;
+  if (/\b(vice|vp)\b/.test(c)) return 1;
+  if (/\b(diretor|diretora|c-level|cto|cfo|coo|cio|cmo|chro)\b/.test(c)) return 2;
+  if (/\b(gerente|manager|head)\b/.test(c)) return 3;
+  if (/\b(coordenador|coordenadora|supervisor|supervisora|lider|líder)\b/.test(c)) return 4;
+  if (/\b(analista|especialista)\b/.test(c)) return 5;
+  if (/\b(assistente|auxiliar|estagiario|estagiária|trainee)\b/.test(c)) return 6;
+  return 7;
+}
+function compareNodeSeniority(a: Node, b: Node) {
+  const byRole = roleScore(a.c.cargo) - roleScore(b.c.cargo);
+  if (byRole !== 0) return byRole;
+  return (a.c.nome ?? "").localeCompare(b.c.nome ?? "");
+}
 
 function initials(nome?: string | null) {
   const parts = (nome ?? "").trim().split(/\s+/).filter(Boolean);
@@ -49,31 +71,72 @@ function initials(nome?: string | null) {
 }
 
 function buildTree(colabs: Colab[]) {
+  const nodes: Node[] = [];
+  const byKey = new Map<string, Node>();
   const byEmail = new Map<string, Node>();
+  const byName = new Map<string, Node>();
 
-  for (const c of colabs) {
+  for (let i = 0; i < colabs.length; i += 1) {
+    const c = colabs[i];
     const email = normEmail(c.email);
-    if (!email) continue;
-    byEmail.set(email, { key: email, c, children: [] });
+    const name = normText(c.nome);
+    const key = email || (c.id ? `id:${c.id}` : name ? `name:${name}:${i}` : `row:${i}`);
+
+    const node: Node = { key, c, children: [] };
+    nodes.push(node);
+    byKey.set(key, node);
+
+    if (email && !byEmail.has(email)) byEmail.set(email, node);
+    if (name && !byName.has(name)) byName.set(name, node);
   }
 
-  const roots: Node[] = [];
+  const parentByChild = new Map<string, string>();
 
-  for (const node of byEmail.values()) {
-    const bossEmail = normEmail(node.c.email_superior_direto);
-    if (bossEmail && byEmail.has(bossEmail) && bossEmail !== node.key) {
-      byEmail.get(bossEmail)!.children.push(node);
-    } else {
-      roots.push(node);
+  for (const child of nodes) {
+    const bossEmail = normEmail(child.c.email_superior_direto);
+    const bossName = normText(child.c.superior_direto);
+
+    const parent = (bossEmail && byEmail.get(bossEmail)) || (bossName && byName.get(bossName)) || null;
+    if (!parent || parent.key === child.key) continue;
+
+    // Evita ciclo: nao liga se o pai ja for descendente do filho.
+    let p: string | undefined = parent.key;
+    let hasCycle = false;
+    while (p) {
+      if (p === child.key) {
+        hasCycle = true;
+        break;
+      }
+      p = parentByChild.get(p);
     }
+    if (hasCycle) continue;
+
+    parentByChild.set(child.key, parent.key);
   }
+
+  for (const child of nodes) {
+    const parentKey = parentByChild.get(child.key);
+    if (!parentKey) continue;
+    const parent = byKey.get(parentKey);
+    if (parent) parent.children.push(child);
+  }
+
+  const roots = nodes.filter((n) => !parentByChild.has(n.key));
+  if (!roots.length) roots.push(...nodes);
 
   const sortRec = (n: Node) => {
     n.children.sort((a, b) => (a.c.nome ?? "").localeCompare(b.c.nome ?? ""));
     n.children.forEach(sortRec);
   };
-
-  roots.sort((a, b) => (a.c.nome ?? "").localeCompare(b.c.nome ?? ""));
+  roots.sort(compareNodeSeniority);
+  // Forca uma hierarquia unica: maior senioridade no topo, demais raizes abaixo.
+  if (roots.length > 1) {
+    const top = roots[0];
+    for (let i = 1; i < roots.length; i += 1) {
+      top.children.push(roots[i]);
+    }
+    roots.splice(1);
+  }
   roots.forEach(sortRec);
 
   return { roots, byEmail };
@@ -110,10 +173,18 @@ function PersonCard({
   onToggle: () => void;
 }) {
   const active = !node.c.data_demissao;
+  const avatarUrl = (node.c.avatar_url ?? "").trim();
 
   return (
     <div className="oc-card">
-      <div className="oc-avatar">{initials(node.c.nome)}</div>
+      <div className="oc-avatar">
+        {avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={avatarUrl} alt={node.c.nome ?? "Colaborador"} className="h-full w-full rounded-full object-cover" />
+        ) : (
+          initials(node.c.nome)
+        )}
+      </div>
 
       <div className="oc-name" title={node.c.nome ?? ""}>
         {node.c.nome ?? "—"}
@@ -212,7 +283,7 @@ export default function Page() {
 
     const { data, error } = await supabase
       .from("colaboradores")
-      .select("id,nome,email,cargo,departamento,empresa,data_demissao,superior_direto,email_superior_direto")
+      .select("*")
       .is("data_demissao", null)
       .order("nome", { ascending: true });
 
@@ -223,7 +294,60 @@ export default function Page() {
       return;
     }
 
-    setColabs((data ?? []) as Colab[]);
+    const rows = (data ?? []) as Record<string, unknown>[];
+    const normalized: Colab[] = rows.map((r) => ({
+      id: typeof r.id === "string" ? r.id : undefined,
+      user_id: typeof r.user_id === "string" ? r.user_id : null,
+      nome: typeof r.nome === "string" ? r.nome : null,
+      email: typeof r.email === "string" ? r.email : null,
+      cargo: typeof r.cargo === "string" ? r.cargo : null,
+      departamento: typeof r.departamento === "string" ? r.departamento : null,
+      empresa: typeof r.empresa === "string" ? r.empresa : null,
+      data_demissao: typeof r.data_demissao === "string" ? r.data_demissao : null,
+      superior_direto: typeof r.superior_direto === "string" ? r.superior_direto : null,
+      email_superior_direto:
+        typeof r.email_superior_direto === "string" ? r.email_superior_direto : null,
+      avatar_url: null,
+    }));
+
+    const userIds = Array.from(
+      new Set(normalized.map((r) => (typeof r.user_id === "string" ? r.user_id : "")).filter(Boolean))
+    );
+    const emails = Array.from(new Set(normalized.map((r) => normEmail(r.email)).filter(Boolean)));
+
+    const avatarByUserId = new Map<string, string>();
+    const avatarByEmail = new Map<string, string>();
+
+    if (userIds.length) {
+      const profById = await supabase.from("profiles").select("id,avatar_url").in("id", userIds);
+      if (!profById.error) {
+        for (const p of (profById.data ?? []) as Array<{ id: string; avatar_url: string | null }>) {
+          const url = (p.avatar_url ?? "").trim();
+          if (url) avatarByUserId.set(String(p.id), url);
+        }
+      }
+    }
+
+    if (emails.length) {
+      const profByEmail = await supabase.from("profiles").select("email,avatar_url").in("email", emails);
+      if (!profByEmail.error) {
+        for (const p of (profByEmail.data ?? []) as Array<{ email: string | null; avatar_url: string | null }>) {
+          const email = normEmail(p.email);
+          const url = (p.avatar_url ?? "").trim();
+          if (email && url) avatarByEmail.set(email, url);
+        }
+      }
+    }
+
+    setColabs(
+      normalized.map((r) => ({
+        ...r,
+        avatar_url:
+          (r.user_id ? avatarByUserId.get(r.user_id) : undefined) ??
+          avatarByEmail.get(normEmail(r.email)) ??
+          null,
+      }))
+    );
     setLoading(false);
   }
 

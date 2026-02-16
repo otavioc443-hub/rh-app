@@ -1,0 +1,256 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Building2, RefreshCcw, Save } from "lucide-react";
+import { supabase } from "@/lib/supabaseClient";
+
+type ClientRow = {
+  id: string;
+  name: string;
+  legal_name: string | null;
+  document: string | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  notes: string | null;
+  active: boolean;
+  created_at: string;
+};
+
+export default function DiretoriaClientesPage() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const [clients, setClients] = useState<ClientRow[]>([]);
+  const [editingId, setEditingId] = useState<string>("");
+
+  const [name, setName] = useState("");
+  const [legalName, setLegalName] = useState("");
+  const [document, setDocument] = useState("");
+  const [contactName, setContactName] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [notes, setNotes] = useState("");
+  const [active, setActive] = useState(true);
+
+  async function load() {
+    setLoading(true);
+    setMsg("");
+    try {
+      const clientRes = await supabase
+        .from("project_clients")
+        .select("id,name,legal_name,document,contact_name,contact_email,contact_phone,notes,active,created_at")
+        .order("created_at", { ascending: false });
+      if (clientRes.error) throw clientRes.error;
+      setClients((clientRes.data ?? []) as ClientRow[]);
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao carregar clientes.");
+      setClients([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  function startNew() {
+    setEditingId("");
+    setName("");
+    setLegalName("");
+    setDocument("");
+    setContactName("");
+    setContactEmail("");
+    setContactPhone("");
+    setNotes("");
+    setActive(true);
+  }
+
+  function startEdit(row: ClientRow) {
+    setEditingId(row.id);
+    setName(row.name ?? "");
+    setLegalName(row.legal_name ?? "");
+    setDocument(row.document ?? "");
+    setContactName(row.contact_name ?? "");
+    setContactEmail(row.contact_email ?? "");
+    setContactPhone(row.contact_phone ?? "");
+    setNotes(row.notes ?? "");
+    setActive(!!row.active);
+  }
+
+  async function saveClient() {
+    if (!name.trim()) {
+      setMsg("Informe o nome do cliente.");
+      return;
+    }
+    setSaving(true);
+    setMsg("");
+    try {
+      const payload = {
+        name: name.trim(),
+        legal_name: legalName.trim() || null,
+        document: document.trim() || null,
+        contact_name: contactName.trim() || null,
+        contact_email: contactEmail.trim() || null,
+        contact_phone: contactPhone.trim() || null,
+        notes: notes.trim() || null,
+        active,
+      };
+      if (editingId) {
+        const res = await supabase.from("project_clients").update(payload).eq("id", editingId);
+        if (res.error) throw res.error;
+        setMsg("Cliente atualizado.");
+      } else {
+        const res = await supabase.from("project_clients").insert(payload);
+        if (res.error) throw res.error;
+        setMsg("Cliente cadastrado.");
+      }
+      startNew();
+      await load();
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao salvar cliente.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 grid h-10 w-10 place-items-center rounded-xl bg-slate-900 text-white">
+              <Building2 size={18} />
+            </div>
+            <div>
+              <h1 className="text-xl font-semibold text-slate-900">Diretoria - Clientes</h1>
+              <p className="mt-1 text-sm text-slate-600">
+                Cadastro central de clientes para seleção no módulo de projetos.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => void load()}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+          >
+            <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
+            Atualizar
+          </button>
+        </div>
+      </div>
+
+      {msg ? <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">{msg}</div> : null}
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+        <p className="text-sm font-semibold text-slate-900">{editingId ? "Editar cliente" : "Novo cliente"}</p>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <label className="grid gap-1 text-xs font-semibold text-slate-700">
+            Nome fantasia
+            <input value={name} onChange={(e) => setName(e.target.value)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm" />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold text-slate-700">
+            Razão social
+            <input value={legalName} onChange={(e) => setLegalName(e.target.value)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm" />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold text-slate-700">
+            CNPJ/Documento
+            <input value={document} onChange={(e) => setDocument(e.target.value)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm" />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold text-slate-700">
+            Contato
+            <input value={contactName} onChange={(e) => setContactName(e.target.value)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm" />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold text-slate-700">
+            E-mail contato
+            <input value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm" />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold text-slate-700">
+            Telefone contato
+            <input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm" />
+          </label>
+          <label className="grid gap-1 text-xs font-semibold text-slate-700 md:col-span-2">
+            Observações
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="min-h-[90px] rounded-xl border border-slate-200 p-3 text-sm" />
+          </label>
+        </div>
+
+        <label className="mt-3 inline-flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} />
+          Cliente ativo
+        </label>
+
+        <div className="mt-4 flex gap-2">
+          <button
+            type="button"
+            onClick={() => void saveClient()}
+            disabled={saving || loading}
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60"
+          >
+            <Save size={16} />
+            {saving ? "Salvando..." : "Salvar cliente"}
+          </button>
+          <button
+            type="button"
+            onClick={startNew}
+            className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+          >
+            Limpar
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+        <p className="text-sm font-semibold text-slate-900">Clientes cadastrados ({clients.length})</p>
+        <div className="mt-4 overflow-x-auto">
+          <table className="min-w-[980px] w-full text-left text-sm">
+            <thead className="bg-slate-50 text-slate-700">
+              <tr>
+                <th className="p-3">Cliente</th>
+                <th className="p-3">Documento</th>
+                <th className="p-3">Contato</th>
+                <th className="p-3">Status</th>
+                <th className="p-3 text-right">Ação</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td className="p-3 text-slate-500" colSpan={5}>Carregando...</td>
+                </tr>
+              ) : clients.length ? (
+                clients.map((c) => (
+                  <tr key={c.id} className="border-t">
+                    <td className="p-3">
+                      <div className="font-semibold text-slate-900">{c.name}</div>
+                      <div className="text-xs text-slate-500">{c.legal_name || "-"}</div>
+                    </td>
+                    <td className="p-3">{c.document || "-"}</td>
+                    <td className="p-3">{c.contact_name || c.contact_email || "-"}</td>
+                    <td className="p-3">{c.active ? "Ativo" : "Inativo"}</td>
+                    <td className="p-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => startEdit(c)}
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+                      >
+                        Editar
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="p-3 text-slate-500" colSpan={5}>Nenhum cliente cadastrado.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}

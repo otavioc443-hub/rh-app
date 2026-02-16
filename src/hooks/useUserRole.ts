@@ -1,12 +1,21 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "admin";
+type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "financeiro" | "admin";
 type ProfileRow = { role: Role | null; active: boolean | null };
+type CurrentRoleResult = string | null;
 
-// ✅ cache em memória (persiste durante a sessão do app)
+const ROLE_SET = new Set<Role>(["colaborador", "coordenador", "gestor", "rh", "financeiro", "admin"]);
+
+function coerceRole(v: unknown): Role | null {
+  if (!v) return null;
+  const s = String(v) as Role;
+  return ROLE_SET.has(s) ? s : null;
+}
+
+// cache em memória (persiste durante a sessão do app)
 let cached:
   | { role: Role | null; active: boolean; userId: string | null; ts: number }
   | null = null;
@@ -78,7 +87,7 @@ export function useUserRole() {
           return;
         }
 
-        // ✅ TROCA CRÍTICA: single() -> maybeSingle()
+        // âœ… TROCA CRÃTICA: single() -> maybeSingle()
         const { data: profile, error: profErr } = await supabase
           .from("profiles")
           .select("role, active")
@@ -109,8 +118,19 @@ export function useUserRole() {
 
         const p = profile as ProfileRow;
 
+        // Role efetiva: preferimos a funcao do banco (current_role),
+        // pois ela pode considerar mapeamento por cargo (cargos.portal_role).
+        let effectiveRole: Role | null = coerceRole(p.role);
+        try {
+          const { data: cr, error: crErr } = await supabase.rpc("current_role");
+          if (!mounted.current) return;
+          if (!crErr) effectiveRole = coerceRole(cr as CurrentRoleResult) ?? effectiveRole;
+        } catch {
+          // fallback silencioso: mantem a role do profile
+        }
+
         cached = {
-          role: (p.role ?? null) as Role | null,
+          role: effectiveRole,
           active: p.active === true,
           userId,
           ts: Date.now(),
@@ -159,6 +179,8 @@ export function useUserRole() {
   const isAdmin = active && role === "admin";
   const isRH = active && (role === "rh" || role === "admin");
   const isGestor = active && role === "gestor";
+  const isFinanceiro = active && (role === "financeiro" || role === "admin");
 
-  return { loading, role, active, isAdmin, isRH, isGestor, error };
+  return { loading, role, active, isAdmin, isRH, isGestor, isFinanceiro, error };
 }
+

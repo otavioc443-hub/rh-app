@@ -1,318 +1,169 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { User } from "@supabase/supabase-js";
-import Image from "next/image";
-import Link from "next/link";
-import { supabase } from "@/lib/supabaseClient";
+import { RefreshCcw } from "lucide-react";
+import { useUserRole } from "@/hooks/useUserRole";
 
-type Profile = {
-  full_name?: string;
-  avatar_url?: string;
+type FeedbackReceived = {
+  id: string;
+  created_at: string;
+  cycle_name: string | null;
+  evaluator_name: string | null;
+  evaluator_email: string | null;
+  comment: string | null;
+  scores: Record<string, number> | null;
+  source_role: string | null;
 };
 
-type CriterionKey =
-  | "clima"
-  | "lideranca"
-  | "comunicacao"
-  | "processos"
-  | "bemestar"
-  | "treinamento";
-
-const CRITERIA: { key: CriterionKey; label: string; helper?: string }[] = [
-  { key: "clima", label: "Clima e Cultura", helper: "Como você percebe o ambiente e relações no dia a dia?" },
-  { key: "lideranca", label: "Liderança", helper: "Clareza, apoio, direcionamento e exemplo." },
-  { key: "comunicacao", label: "Comunicação", helper: "Informações chegam com clareza e no tempo certo?" },
-  { key: "processos", label: "Processos", helper: "Fluxos funcionam bem? Há burocracia excessiva?" },
-  { key: "bemestar", label: "Bem-estar", helper: "Rotina saudável, equilíbrio e respeito." },
-  { key: "treinamento", label: "Treinamento e Desenvolvimento", helper: "Oportunidades de aprender e evoluir." },
-];
-
-function getInitials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  const first = parts[0]?.[0] ?? "";
-  const last = parts.length > 1 ? parts[parts.length - 1]?.[0] ?? "" : "";
-  return (first + last).toUpperCase();
+function avg(scores: Record<string, number> | null) {
+  if (!scores) return "-";
+  const vals = Object.values(scores);
+  if (!vals.length) return "-";
+  return (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
 }
 
 export default function FeedbackPage() {
-  const [booting, setBooting] = useState(true);
-  const [loading, setLoading] = useState(false);
-
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [userId, setUserId] = useState<string | null>(null);
-
-  const [profile, setProfile] = useState<Profile>({ full_name: "", avatar_url: "" });
-
-  const [scores, setScores] = useState<Record<CriterionKey, number>>({
-    clima: 5,
-    lideranca: 5,
-    comunicacao: 5,
-    processos: 5,
-    bemestar: 5,
-    treinamento: 5,
-  });
-
-  const [comment, setComment] = useState("");
+  const { loading: roleLoading, role } = useUserRole();
+  const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
+  const [rows, setRows] = useState<FeedbackReceived[]>([]);
 
-  function hydrateFromUser(user: User) {
-    setUserEmail(user?.email ?? null);
-    setUserId(user?.id ?? null);
+  const canViewHistory = role === "colaborador";
 
-    const md = (user.user_metadata ?? {}) as Record<string, unknown>;
-    const full_name = String(md.full_name ?? md.name ?? "");
-    const avatar_url = String(md.avatar_url ?? md.picture ?? "");
-
-    setProfile({ full_name, avatar_url });
-  }
-
-  async function refreshProfile() {
-    const { data } = await supabase.auth.getUser();
-    const user = data.user;
-    if (user) hydrateFromUser(user);
+  async function load() {
+    setLoading(true);
+    setMsg("");
+    try {
+      const res = await fetch("/api/feedback/received", { method: "GET" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error ?? "Falha ao carregar feedbacks recebidos.");
+      setRows((json.rows ?? []) as FeedbackReceived[]);
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao carregar feedbacks.");
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
-    let mounted = true;
+    if (roleLoading || !canViewHistory) return;
+    void load();
+  }, [roleLoading, canViewHistory]);
 
-    async function init() {
-      const { data } = await supabase.auth.getUser();
-      if (!mounted) return;
+  const stats = useMemo(() => {
+    const total = rows.length;
+    const overall = rows.length
+      ? (
+          rows
+            .map((r) => Number(avg(r.scores)))
+            .filter((n) => Number.isFinite(n))
+            .reduce((a, b) => a + b, 0) / rows.length
+        ).toFixed(1)
+      : "-";
+    const latest = rows[0]?.created_at ? new Date(rows[0].created_at).toLocaleDateString("pt-BR") : "-";
+    return { total, overall, latest };
+  }, [rows]);
 
-      if (data.user) hydrateFromUser(data.user);
-      setBooting(false);
-    }
-
-    init();
-
-    // ✅ atualiza automaticamente quando sessão muda (login/logout)
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      const user = session?.user ?? null;
-      if (user) hydrateFromUser(user);
-      else {
-        setUserEmail(null);
-        setUserId(null);
-        setProfile({ full_name: "", avatar_url: "" });
-      }
-    });
-
-    return () => {
-      mounted = false;
-      sub.subscription.unsubscribe();
-    };
-  }, []);
-
-  const displayName = useMemo(() => {
-    const name = profile.full_name?.trim();
-    if (name) return name;
-    if (userEmail) return userEmail.split("@")[0];
-    return "Colaborador";
-  }, [profile.full_name, userEmail]);
-
-  const initials = useMemo(() => getInitials(displayName), [displayName]);
-
-  function setScore(key: CriterionKey, value: number) {
-    setScores((prev) => ({ ...prev, [key]: value }));
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setMsg("");
-
-    if (!userId) {
-      setMsg("Você precisa estar logado para enviar feedback.");
-      return;
-    }
-
-    if (!comment.trim()) {
-      setMsg("Escreva um comentário geral antes de enviar.");
-      return;
-    }
-
-    setLoading(true);
-
-    const payload = {
-      user_id: userId,
-      user_email: userEmail,
-      scores,
-      comment: comment.trim(),
-      created_at: new Date().toISOString(),
-    };
-
-    const { error } = await supabase.from("feedbacks").insert([payload]);
-
-    setLoading(false);
-
-    if (error) {
-      setMsg("Erro ao enviar: " + error.message);
-      return;
-    }
-
-    setComment("");
-    setScores({
-      clima: 5,
-      lideranca: 5,
-      comunicacao: 5,
-      processos: 5,
-      bemestar: 5,
-      treinamento: 5,
-    });
-    setMsg("Feedback enviado com sucesso ✅ Obrigado!");
-
-    // opcional: atualiza perfil se algo mudou no metadata
-    refreshProfile();
-  }
-
-  if (booting) {
+  if (roleLoading) {
     return (
-      <main className="min-h-screen flex items-center justify-center p-6 bg-gray-50">
-        <div className="bg-white border rounded-2xl shadow p-6 max-w-md w-full text-center">
-          <h1 className="text-xl font-semibold">Feedback</h1>
-          <p className="mt-2 text-gray-600">Carregando…</p>
-        </div>
-      </main>
+      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+        <p className="text-sm text-slate-600">Carregando...</p>
+      </div>
+    );
+  }
+
+  if (!canViewHistory) {
+    const nextPath =
+      role === "coordenador" || role === "admin"
+        ? "/coordenador/feedback"
+        : role === "rh"
+        ? "/rh/feedbacks"
+        : "/home";
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+        <h1 className="text-xl font-semibold text-slate-900">Feedback</h1>
+        <p className="mt-2 text-sm text-slate-600">
+          Esta tela e exclusiva para colaborador visualizar feedback recebido.
+        </p>
+        <a
+          href={nextPath}
+          className="mt-4 inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+        >
+          Ir para minha area
+        </a>
+      </div>
     );
   }
 
   return (
-    <main
-      className="min-h-screen bg-cover bg-center relative"
-      style={{ backgroundImage: "url('/fundo.jpg')" }}
-    >
-      {/* fundo mais apagado */}
-      <div className="absolute inset-0 bg-white/75 backdrop-blur-[2px]" />
-
-      {/* logos topo direito */}
-      <div className="fixed top-5 right-6 z-50 flex items-center gap-4 bg-white/85 backdrop-blur-md border rounded-xl px-4 py-2 shadow">
-        <Image src="/logo.png" alt="Sólida" width={120} height={32} className="h-8 w-auto object-contain" />
-        <div className="h-6 w-px bg-gray-300" />
-        <Image src="/logo2.png" alt="Área" width={110} height={28} className="h-7 w-auto object-contain" />
-      </div>
-
-      {/* sidebar fixa canto esquerdo */}
-      <aside className="fixed left-0 top-0 z-40 h-screen w-[300px] border-r bg-white/92 backdrop-blur-md shadow-sm p-6">
-        <div className="flex items-center gap-4">
-          {profile.avatar_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={profile.avatar_url}
-              alt={displayName}
-              className="h-14 w-14 rounded-full object-cover border"
-            />
-          ) : (
-            <div className="h-14 w-14 rounded-full bg-black text-white flex items-center justify-center font-semibold">
-              {initials}
-            </div>
-          )}
-
-          <div className="min-w-0">
-            <p className="font-semibold leading-tight truncate">{displayName}</p>
-            <p className="text-xs text-gray-600 truncate">
-              {userEmail ? userEmail : "Não logado"}
+    <div className="space-y-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold text-slate-900">Feedback recebido</h1>
+            <p className="mt-1 text-sm text-slate-600">
+              Historico de devolutivas liberadas para voce dentro do periodo definido pelo RH.
             </p>
           </div>
-        </div>
-
-        <div className="mt-5 text-sm text-gray-700">
-          <p className="font-semibold text-gray-900">SER – Feedback</p>
-          <p className="mt-2 text-xs leading-relaxed text-gray-600">
-            Suas respostas ajudam a fortalecer cultura, processos e bem-estar.
-          </p>
-        </div>
-
-        <div className="mt-6 flex flex-col gap-2">
-          <Link href="/perfil" className="text-sm underline">
-            Meu Perfil
-          </Link>
-          <Link href="/" className="text-sm underline">
-            Voltar
-          </Link>
-        </div>
-      </aside>
-
-      {/* conteúdo com espaço para sidebar e topo */}
-      <div className="relative z-10 ml-[300px] min-h-screen px-8 py-10 pt-24">
-        <div className="max-w-5xl">
-          <section className="bg-white/96 backdrop-blur-md border rounded-2xl shadow-lg p-8">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h1 className="text-3xl font-bold">Feedback</h1>
-                <p className="text-sm text-gray-600 mt-2">
-                  {userEmail
-                    ? "Avalie todos os critérios abaixo e deixe um comentário geral."
-                    : "Você não está logado. Faça login na Home para responder."}
-                </p>
-              </div>
-            </div>
-
-            <form onSubmit={handleSubmit} className="mt-8 space-y-8">
-              <div className="space-y-7">
-                {CRITERIA.map((c) => (
-                  <div key={c.key} className="border rounded-2xl p-5">
-                    <div className="flex items-start justify-between gap-4 flex-wrap">
-                      <div>
-                        <p className="font-semibold">{c.label}</p>
-                        {c.helper && (
-                          <p className="text-xs text-gray-600 mt-1">{c.helper}</p>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {[1, 2, 3, 4, 5].map((n) => (
-                          <button
-                            key={n}
-                            type="button"
-                            onClick={() => setScore(c.key, n)}
-                            className={`h-11 w-11 rounded-xl border transition ${
-                              scores[c.key] === n
-                                ? "bg-black text-white"
-                                : "bg-white hover:bg-gray-50"
-                            }`}
-                          >
-                            {n}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Comentário geral</label>
-                <textarea
-                  className="mt-2 w-full border rounded-xl p-4 min-h-[220px]"
-                  placeholder="Descreva sugestões, pontos de atenção e exemplos práticos…"
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                />
-                <p className="text-xs text-gray-500 mt-2">
-                  Dica: cite situações (sem expor pessoas) e proponha melhorias.
-                </p>
-              </div>
-
-              <button
-                disabled={loading || !userId}
-                className="w-full px-4 py-4 rounded-xl bg-black text-white font-medium disabled:opacity-60"
-                type="submit"
-              >
-                {loading ? "Enviando..." : "Enviar feedback"}
-              </button>
-
-              {msg && <p className="text-sm text-center">{msg}</p>}
-
-              <p className="text-xs text-gray-500 text-center">
-                Ao enviar, você concorda com as diretrizes internas de uso.
-              </p>
-            </form>
-          </section>
-
-          <div className="h-10" />
+          <button
+            onClick={() => void load()}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+          >
+            <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
+            Atualizar
+          </button>
         </div>
       </div>
-    </main>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          <p className="text-sm text-slate-500">Total de feedbacks</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">{stats.total}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          <p className="text-sm text-slate-500">Media geral</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">{stats.overall}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5">
+          <p className="text-sm text-slate-500">Ultima devolutiva</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">{stats.latest}</p>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="space-y-3">
+          {loading ? (
+            <div className="rounded-xl border border-slate-200 p-4 text-sm text-slate-500">Carregando...</div>
+          ) : rows.length ? (
+            rows.map((r) => (
+              <div key={r.id} className="rounded-xl border border-slate-200 p-4">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{r.cycle_name ?? "Ciclo"}</p>
+                    <p className="text-xs text-slate-600">
+                      Avaliador: {r.evaluator_name ?? "N/A"} ({r.evaluator_email ?? "N/A"}) | Perfil: {r.source_role ?? "-"}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-700">{r.comment ?? "Sem comentario."}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-500">Media</p>
+                    <p className="text-xl font-semibold text-slate-900">{avg(r.scores)}</p>
+                    <p className="text-xs text-slate-500">{new Date(r.created_at).toLocaleDateString("pt-BR")}</p>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-xl border border-slate-200 p-4 text-sm text-slate-500">
+              Nenhum feedback disponivel para visualizacao no momento.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {msg ? <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">{msg}</div> : null}
+    </div>
   );
 }
-
-

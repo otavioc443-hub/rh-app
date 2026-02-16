@@ -207,6 +207,12 @@ export default function RhPage() {
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <button
+              onClick={() => router.push("/rh/dashboard")}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+            >
+              Ver dashboard RH
+            </button>
             <div className="relative w-full sm:w-[360px]">
               <Search size={16} className="absolute left-3 top-3 text-slate-400" />
               <input

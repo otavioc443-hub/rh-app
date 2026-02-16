@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -54,7 +54,7 @@ type Department = {
 
 type DeptMode = "departamento" | "setor";
 
-const LOGO_BUCKET = "company-logos";
+// bucket tratado no servidor via /api/admin/company-logo/upload
 
 function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -73,7 +73,7 @@ function formatCnpj(v: string) {
     .replace(/(\d{4})(\d)/, "$1-$2");
 }
 
-function fileExt(filename: string) {
+  function fileExt(filename: string) {
   const parts = filename.split(".");
   return (parts[parts.length - 1] || "").toLowerCase();
 }
@@ -189,7 +189,7 @@ export default function AdminEmpresasPage() {
   // =========================
   async function loadCompanies() {
     setLoading(true);
-    setMsg("");
+    // Nao limpar msg aqui: isso apaga erros/sucessos do fluxo de upload/salvar.
 
     const { data, error } = await supabase
       .from("companies")
@@ -234,7 +234,7 @@ export default function AdminEmpresasPage() {
   }
 
   async function loadDepartmentsByCnpj(inputCnpj: string) {
-    setMsg("");
+    // Nao limpar msg aqui: evita apagar mensagens do usuario.
     const companyId = await getCompanyIdByCnpj(inputCnpj);
 
     if (!companyId) {
@@ -355,20 +355,39 @@ export default function AdminEmpresasPage() {
 
     setUploadingLogo(true);
     try {
-      const path = `${normalizedCnpj}/logo.png`;
+      setMsg("Enviando logo...");
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token ?? null;
 
-      const { error: upErr } = await supabase.storage
-        .from(LOGO_BUCKET)
-        .upload(path, logoFile, {
-          cacheControl: "3600",
-          upsert: true,
-          contentType: "image/png",
-        });
+      const fd = new FormData();
+      fd.append("file", logoFile);
+      fd.append("cnpj", normalizedCnpj);
 
-      if (upErr) throw upErr;
+      const res = await fetch("/api/admin/company-logo/upload", {
+        method: "POST",
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: fd,
+      });
 
-      const { data } = supabase.storage.from(LOGO_BUCKET).getPublicUrl(path);
-      return data?.publicUrl ?? null;
+      const json = (await res.json()) as Record<string, unknown> & { ok?: boolean; publicUrl?: string; error?: string };
+      if (!res.ok || !json.publicUrl) {
+        const base = json.error || `Erro no upload (status ${res.status})`;
+        const extra = Object.keys(json)
+          .filter((k) => !["ok", "publicUrl", "error"].includes(k))
+          .reduce<Record<string, unknown>>((acc, k) => {
+            acc[k] = json[k];
+            return acc;
+          }, {});
+        const extraTxt = Object.keys(extra).length ? ` | detalhe: ${JSON.stringify(extra)}` : "";
+        throw new Error(`${base}${extraTxt}`);
+      }
+
+      // Mostra a URL final como preview e evita salvar blob: no banco.
+      setLogoPreviewUrl(json.publicUrl);
+      setLogoFile(null);
+      setMsg("Logo enviada. Clique em salvar para aplicar.");
+      return json.publicUrl;
     } finally {
       setUploadingLogo(false);
     }
@@ -473,7 +492,8 @@ export default function AdminEmpresasPage() {
         estado: estado.trim() || null,
 
         // compatível com o resto do portal
-        logo_url: uploadedLogoUrl ?? (logoPreviewUrl || null),
+        // Nunca persistir blob: no banco
+        logo_url: uploadedLogoUrl ?? (logoPreviewUrl?.startsWith("blob:") ? null : logoPreviewUrl || null),
         primary_color: primaryColor.trim() || "#111827",
       };
 
@@ -699,7 +719,7 @@ export default function AdminEmpresasPage() {
         )}
       </div>
 
-      {/* Seletor por CNPJ + botão novo */}
+      {/* Seletor por CNPJ + botao novo */}
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
@@ -713,12 +733,12 @@ export default function AdminEmpresasPage() {
               onChange={(e) => setSelectedCnpj(e.target.value)}
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-300"
             >
-              <option value="">— Selecione por CNPJ —</option>
+              <option value="">- Selecione por CNPJ -</option>
               {companies
                 .filter((c) => (c.cnpj ?? "").length === 14)
                 .map((c) => (
                   <option key={c.id} value={c.cnpj ?? ""}>
-                    {formatCnpj(c.cnpj ?? "")} — {c.name}
+                    {formatCnpj(c.cnpj ?? "")} - {c.name}
                   </option>
                 ))}
             </select>
@@ -804,7 +824,7 @@ export default function AdminEmpresasPage() {
             </div>
           </div>
 
-          {/* Cor primária */}
+          {/* Cor primaria */}
           <div>
             <label className="block text-xs font-semibold text-slate-600">Cor primária</label>
             <input
@@ -813,6 +833,20 @@ export default function AdminEmpresasPage() {
               placeholder="#111827"
               className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-300"
             />
+            <div className="mt-2 flex flex-wrap items-start gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPrimaryColor("#005a46");
+                  if (!logoPreviewUrl) setLogoPreviewUrl("/logo.png");
+                  if (!name.trim()) setName("Sólida do Brasil Energias Renováveis");
+                }}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+              >
+                Aplicar branding Sólida
+              </button>
+              <p className="mt-1 text-[11px] text-slate-500">Define cor `#005a46` e usa `/logo.png` se a logo estiver vazia.</p>
+            </div>
           </div>
 
           <div className="md:col-span-2">
@@ -1009,7 +1043,7 @@ export default function AdminEmpresasPage() {
                   <div className="font-medium text-slate-900">
                     {c.name}{" "}
                     <span className="text-xs font-semibold text-slate-500">
-                      {c.cnpj ? `— ${formatCnpj(c.cnpj)}` : ""}
+                      {c.cnpj ? `- ${formatCnpj(c.cnpj)}` : ""}
                     </span>
                   </div>
                   <div className="text-xs text-slate-500">{c.razao_social ?? c.nome_fantasia ?? ""}</div>
@@ -1102,7 +1136,7 @@ export default function AdminEmpresasPage() {
                   disabled={onlyDigits(selectedCnpj).length !== 14 || deptMode === "departamento"}
                   className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-300 disabled:opacity-60"
                 >
-                  <option value="">— Sem pai (topo) —</option>
+                  <option value="">- Sem pai (topo) -</option>
                   {topDepartments.map((d) => (
                     <option key={d.id} value={d.id}>
                       {d.name}
@@ -1125,14 +1159,14 @@ export default function AdminEmpresasPage() {
 
             <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200">
               <div className="bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-900">
-                Itens ({departments.length}) {selectedCompanyName ? `— ${selectedCompanyName}` : ""}
+                Itens ({departments.length}) {selectedCompanyName ? `- ${selectedCompanyName}` : ""}
               </div>
 
               <div className="divide-y divide-slate-200">
                 {departments.map((d) => {
                   const isSector = !!d.parent_department_id;
                   const parentName = isSector
-                    ? topDepartments.find((x) => x.id === d.parent_department_id)?.name ?? "—"
+                    ? topDepartments.find((x) => x.id === d.parent_department_id)?.name ?? "-"
                     : null;
 
                   const isEditing = editingDeptId === d.id;
@@ -1196,7 +1230,7 @@ export default function AdminEmpresasPage() {
                               onChange={(e) => setEditDeptParentId(e.target.value)}
                               className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-slate-300"
                             >
-                              <option value="">— Sem pai (topo) —</option>
+                              <option value="">- Sem pai (topo) -</option>
                               {topDepartments.filter((p) => p.id !== d.id).map((p) => (
                                 <option key={p.id} value={p.id}>
                                   {p.name}
@@ -1256,3 +1290,4 @@ export default function AdminEmpresasPage() {
     </div>
   );
 }
+

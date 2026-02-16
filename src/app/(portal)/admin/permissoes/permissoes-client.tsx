@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserRole } from "@/hooks/useUserRole";
 
-type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "admin";
+type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "financeiro" | "admin";
 
 type UserPermissionRow = {
   id: string;
@@ -32,6 +32,7 @@ function prettyRole(r: Role | null) {
   if (r === "coordenador") return "Coordenador";
   if (r === "gestor") return "Gestor";
   if (r === "rh") return "RH";
+  if (r === "financeiro") return "Financeiro";
   if (r === "admin") return "Admin";
   return r;
 }
@@ -68,7 +69,7 @@ export default function PermissoesClient() {
 
   // roles permitidas conforme quem está editando
   const roleOptions: Role[] = useMemo(() => {
-    if (viewerRole === "admin") return ["colaborador", "coordenador", "gestor", "rh", "admin"];
+    if (viewerRole === "admin") return ["colaborador", "coordenador", "gestor", "rh", "financeiro", "admin"];
     return ["colaborador", "coordenador", "gestor"];
   }, [viewerRole]);
 
@@ -174,7 +175,7 @@ export default function PermissoesClient() {
     setError(null);
 
     try {
-      if (viewerRole !== "admin" && (editRole === "admin" || editRole === "rh")) {
+      if (viewerRole !== "admin" && (editRole === "admin" || editRole === "rh" || editRole === "financeiro")) {
         throw new Error("Você não tem permissão para atribuir essa role.");
       }
 

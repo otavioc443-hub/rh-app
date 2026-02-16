@@ -4,8 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import Sidebar from "@/components/portal/Sidebar";
+import NotificationBell from "@/components/portal/NotificationBell";
 
-type Role = "colaborador" | "gestor" | "rh" | "admin";
+type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "financeiro" | "admin";
+
+const ROLE_SET = new Set<Role>(["colaborador", "coordenador", "gestor", "rh", "financeiro", "admin"]);
+function coerceRole(v: unknown): Role | null {
+  if (!v) return null;
+  const s = String(v) as Role;
+  return ROLE_SET.has(s) ? s : null;
+}
 
 type Company = {
   id: string;
@@ -26,6 +34,11 @@ type Profile = {
   department_id: string | null;
   full_name: string | null;
   avatar_url: string | null;
+};
+
+type ColaboradorName = {
+  nome: string | null;
+  cargo: string | null;
 };
 
 function withTimeout<T>(p: Promise<T>, ms = 7000): Promise<T> {
@@ -51,6 +64,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
   const [company, setCompany] = useState<Company | null>(null);
   const [department, setDepartment] = useState<Department | null>(null);
   const [fullName, setFullName] = useState<string | null>(null);
+  const [jobTitle, setJobTitle] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   const inFlight = useRef(false);
@@ -83,6 +97,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         }
 
         const userId = sessRes?.session?.user?.id ?? null;
+        const userEmail = sessRes?.session?.user?.email ?? null;
         if (!userId) {
           await safeRedirectToLogin();
           return;
@@ -113,14 +128,42 @@ export default function PortalShell({ children }: { children: React.ReactNode })
           return;
         }
 
-        const r = (profile.role ?? null) as Role | null;
+        // Role efetiva: preferimos a funcao do banco (current_role),
+        // pois ela pode considerar mapeamento por cargo (cargos.portal_role).
+        let r: Role | null = coerceRole(profile.role);
+        try {
+          const { data: cr, error: crErr } = await supabase.rpc("current_role");
+          if (!crErr) r = coerceRole(cr) ?? r;
+        } catch {
+          // fallback silencioso: mantem a role do profile
+        }
+
         if (!r) {
-          setFatalError("Perfil sem funcao (role). Defina role = colaborador/gestor/rh/admin.");
+          setFatalError("Perfil sem funcao (role). Defina role = colaborador/coordenador/gestor/rh/admin.");
           return;
         }
 
+        let resolvedFullName = profile.full_name?.trim() ?? "";
+        let resolvedJobTitle: string | null = null;
+
+        if (userEmail) {
+          const { data: colab } = await supabase
+            .from("colaboradores")
+            .select("nome,cargo")
+            .eq("email", userEmail)
+            .maybeSingle<ColaboradorName>();
+
+          if ((!resolvedFullName || resolvedFullName.includes("@")) && colab?.nome?.trim()) {
+            resolvedFullName = colab.nome.trim();
+          }
+          if (colab?.cargo?.trim()) {
+            resolvedJobTitle = colab.cargo.trim();
+          }
+        }
+
         setRole(r);
-        setFullName(profile.full_name ?? null);
+        setFullName(resolvedFullName || null);
+        setJobTitle(resolvedJobTitle);
         setAvatarUrl(profile.avatar_url ?? null);
 
         const companyReq = profile.company_id
@@ -165,15 +208,26 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       setCompany(null);
       setDepartment(null);
       setFullName(null);
+      setJobTitle(null);
       setAvatarUrl(null);
       setFatalError(null);
       setDebugErr(null);
       boot();
     });
 
+    const onProfileUpdated = () => {
+      void boot();
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("portal-profile-updated", onProfileUpdated);
+    }
+
     return () => {
       alive.current = false;
       sub.subscription.unsubscribe();
+      if (typeof window !== "undefined") {
+        window.removeEventListener("portal-profile-updated", onProfileUpdated);
+      }
     };
   }, [router]);
 
@@ -252,10 +306,16 @@ export default function PortalShell({ children }: { children: React.ReactNode })
           companyName={company?.name ?? null}
           companyLogoUrl={company?.logo_url ?? null}
           departmentName={department?.name ?? null}
+          jobTitle={jobTitle}
         />
 
         <main className="flex-1">
-          <div className="mx-auto w-full max-w-[1400px] px-6 py-6">{children}</div>
+          <div className="mx-auto w-full max-w-[1400px] px-6 py-6">
+            <div className="mb-4 flex items-center justify-end">
+              <NotificationBell />
+            </div>
+            {children}
+          </div>
         </main>
       </div>
     </div>

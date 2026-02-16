@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { Pencil, Send } from "lucide-react";
+import { Pencil, Send, TrendingUp } from "lucide-react";
 import CollaboratorEditWizard from "@/components/rh/CollaboratorEditWizard";
 
 type Row = {
@@ -35,7 +35,7 @@ export default function Page() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
-  const [editing, setEditing] = useState<Row | null>(null);
+  const [editing, setEditing] = useState<{ row: Row; startWithPromotion: boolean } | null>(null);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -256,7 +256,15 @@ export default function Page() {
                         </button>
 
                         <button
-                          onClick={() => setEditing(r)}
+                          onClick={() => setEditing({ row: r, startWithPromotion: true })}
+                          className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+                        >
+                          <TrendingUp size={16} />
+                          Promover
+                        </button>
+
+                        <button
+                          onClick={() => setEditing({ row: r, startWithPromotion: false })}
                           className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
                         >
                           <Pencil size={16} />
@@ -278,7 +286,8 @@ export default function Page() {
 
       {editing && (
         <CollaboratorEditWizard
-          collaboratorId={editing.id}
+          collaboratorId={editing.row.id}
+          startWithPromotion={editing.startWithPromotion}
           onClose={() => setEditing(null)}
           onSaved={async () => {
             setEditing(null);

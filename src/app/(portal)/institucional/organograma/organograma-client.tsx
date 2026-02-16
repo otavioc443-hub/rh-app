@@ -8,6 +8,7 @@ import * as htmlToImage from "html-to-image";
 
 type Colab = {
   id?: string;
+  user_id?: string | null;
   nome?: string | null;
   email?: string | null;
   cargo?: string | null;
@@ -16,6 +17,7 @@ type Colab = {
   data_demissao?: string | null;
   email_superior_direto?: string | null;
   superior_direto?: string | null;
+  avatar_url?: string | null;
 };
 
 type Node = {
@@ -26,6 +28,26 @@ type Node = {
 
 function normEmail(v?: string | null) {
   return (v ?? "").trim().toLowerCase();
+}
+function normText(v?: string | null) {
+  return (v ?? "").trim().toLowerCase();
+}
+function roleScore(cargo?: string | null) {
+  const c = normText(cargo);
+  if (!c) return 99;
+  if (/\b(ceo|presidente|founder|fundador)\b/.test(c)) return 0;
+  if (/\b(vice|vp)\b/.test(c)) return 1;
+  if (/\b(diretor|diretora|c-level|cto|cfo|coo|cio|cmo|chro)\b/.test(c)) return 2;
+  if (/\b(gerente|manager|head)\b/.test(c)) return 3;
+  if (/\b(coordenador|coordenadora|supervisor|supervisora|lider|líder)\b/.test(c)) return 4;
+  if (/\b(analista|especialista)\b/.test(c)) return 5;
+  if (/\b(assistente|auxiliar|estagiario|estagiária|trainee)\b/.test(c)) return 6;
+  return 7;
+}
+function compareNodeSeniority(a: Node, b: Node) {
+  const byRole = roleScore(a.c.cargo) - roleScore(b.c.cargo);
+  if (byRole !== 0) return byRole;
+  return (a.c.nome ?? "").localeCompare(b.c.nome ?? "");
 }
 
 function initials(nome?: string | null) {
@@ -61,7 +83,14 @@ function buildTree(colabs: Colab[]) {
     n.children.forEach(sortRec);
   };
 
-  roots.sort((a, b) => (a.c.nome ?? "").localeCompare(b.c.nome ?? ""));
+  roots.sort(compareNodeSeniority);
+  if (roots.length > 1) {
+    const top = roots[0];
+    for (let i = 1; i < roots.length; i += 1) {
+      top.children.push(roots[i]);
+    }
+    roots.splice(1);
+  }
   roots.forEach(sortRec);
 
   return roots;
@@ -124,10 +153,18 @@ function StatusPill({ active }: { active: boolean }) {
 
 function PersonCard({ node }: { node: Node }) {
   const active = !node.c.data_demissao;
+  const avatarUrl = (node.c.avatar_url ?? "").trim();
 
   return (
     <div className="oc-card">
-      <div className="oc-avatar">{initials(node.c.nome)}</div>
+      <div className="oc-avatar">
+        {avatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={avatarUrl} alt={node.c.nome ?? "Colaborador"} className="h-full w-full rounded-full object-cover" />
+        ) : (
+          initials(node.c.nome)
+        )}
+      </div>
 
       <div className="oc-name" title={node.c.nome ?? ""}>
         {node.c.nome ?? "—"}
@@ -184,7 +221,7 @@ export default function Page() {
 
     const { data, error } = await supabase
       .from("colaboradores")
-      .select("id,nome,email,cargo,departamento,empresa,data_demissao,superior_direto,email_superior_direto")
+      .select("*")
       .order("nome", { ascending: true });
 
     if (error) {
@@ -194,7 +231,60 @@ export default function Page() {
       return;
     }
 
-    setColabs((data ?? []) as Colab[]);
+    const rows = (data ?? []) as Record<string, unknown>[];
+    const normalized: Colab[] = rows.map((r) => ({
+      id: typeof r.id === "string" ? r.id : undefined,
+      user_id: typeof r.user_id === "string" ? r.user_id : null,
+      nome: typeof r.nome === "string" ? r.nome : null,
+      email: typeof r.email === "string" ? r.email : null,
+      cargo: typeof r.cargo === "string" ? r.cargo : null,
+      departamento: typeof r.departamento === "string" ? r.departamento : null,
+      empresa: typeof r.empresa === "string" ? r.empresa : null,
+      data_demissao: typeof r.data_demissao === "string" ? r.data_demissao : null,
+      superior_direto: typeof r.superior_direto === "string" ? r.superior_direto : null,
+      email_superior_direto:
+        typeof r.email_superior_direto === "string" ? r.email_superior_direto : null,
+      avatar_url: null,
+    }));
+
+    const userIds = Array.from(
+      new Set(normalized.map((r) => (typeof r.user_id === "string" ? r.user_id : "")).filter(Boolean))
+    );
+    const emails = Array.from(new Set(normalized.map((r) => normEmail(r.email)).filter(Boolean)));
+
+    const avatarByUserId = new Map<string, string>();
+    const avatarByEmail = new Map<string, string>();
+
+    if (userIds.length) {
+      const profById = await supabase.from("profiles").select("id,avatar_url").in("id", userIds);
+      if (!profById.error) {
+        for (const p of (profById.data ?? []) as Array<{ id: string; avatar_url: string | null }>) {
+          const url = (p.avatar_url ?? "").trim();
+          if (url) avatarByUserId.set(String(p.id), url);
+        }
+      }
+    }
+
+    if (emails.length) {
+      const profByEmail = await supabase.from("profiles").select("email,avatar_url").in("email", emails);
+      if (!profByEmail.error) {
+        for (const p of (profByEmail.data ?? []) as Array<{ email: string | null; avatar_url: string | null }>) {
+          const email = normEmail(p.email);
+          const url = (p.avatar_url ?? "").trim();
+          if (email && url) avatarByEmail.set(email, url);
+        }
+      }
+    }
+
+    setColabs(
+      normalized.map((r) => ({
+        ...r,
+        avatar_url:
+          (r.user_id ? avatarByUserId.get(r.user_id) : undefined) ??
+          avatarByEmail.get(normEmail(r.email)) ??
+          null,
+      }))
+    );
     setLoading(false);
   }
 
