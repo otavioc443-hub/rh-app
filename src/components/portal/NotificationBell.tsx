@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Bell } from "lucide-react";
+import { Megaphone } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import type { NotificationRow } from "@/lib/absence";
 
@@ -200,7 +200,7 @@ export default function NotificationBell() {
         className={`relative inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 ${newIndicator ? "animate-pulse ring-2 ring-emerald-300" : ""}`}
         aria-label="Notificacoes"
       >
-        <Bell size={18} />
+        <Megaphone size={18} />
         {unreadCount > 0 ? (
           <span className="absolute -right-1 -top-1 min-w-5 rounded-full bg-rose-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
             {unreadCount > 99 ? "99+" : unreadCount}
