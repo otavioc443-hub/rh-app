@@ -22,16 +22,19 @@ import {
   UserCog,
   Calendar,
   Cake,
+  Target,
   MonitorCheck,
   GitBranch,
   Wallet,
+  Wrench,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { isRouteHidden } from "@/lib/featureVisibility";
 
-type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "financeiro" | "admin";
+type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "financeiro" | "pd" | "admin";
 
-type NavChild = { label: string; icon?: LucideIcon; href: string; exact?: boolean };
+type NavChild = { label: string; icon?: LucideIcon; href: string; exact?: boolean; roles?: Role[] };
 type NavItem = {
   label: string;
   icon: LucideIcon;
@@ -72,6 +75,7 @@ export default function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [hiddenRoutes, setHiddenRoutes] = useState<Set<string>>(new Set());
 
   const nav = useMemo<NavItem[]>(
     () => [
@@ -79,16 +83,16 @@ export default function Sidebar({
         label: "Home",
         icon: Home,
         href: "/home",
-        roles: ["colaborador", "coordenador", "gestor", "rh", "admin"],
+        roles: ["colaborador", "coordenador", "gestor", "rh", "financeiro", "pd", "admin"],
       },
 
       {
         label: "Institucional",
         icon: Building2,
-        roles: ["colaborador", "coordenador", "gestor", "rh", "admin"],
+        roles: ["colaborador", "coordenador", "gestor", "rh", "financeiro", "pd", "admin"],
         children: [
           { label: "Visão Geral", icon: LayoutDashboard, href: "/institucional", exact: true },
-          { label: "Organograma", icon: GitBranch, href: "/institucional/organograma" },
+          { label: "Organograma", icon: GitBranch, href: "/institucional/organograma", roles: ["gestor", "financeiro", "admin"] },
         ],
       },
 
@@ -99,6 +103,7 @@ export default function Sidebar({
         children: [
           { label: "Meus dados", icon: UserRound, href: "/meu-perfil/meus-dados" },
           { label: "Projetos", icon: ClipboardList, href: "/meu-perfil/projetos" },
+          { label: "Nota fiscal", icon: Wallet, href: "/meu-perfil/nota-fiscal" },
           { label: "Linha do tempo", icon: GitBranch, href: "/meu-perfil/linha-do-tempo" },
           { label: "Feedbacks", icon: MessageSquareText, href: "/meu-perfil/feedback" },
           { label: "PDI", icon: LineChart, href: "/meu-perfil/pdi" },
@@ -148,7 +153,29 @@ export default function Sidebar({
         roles: ["financeiro", "admin"],
         children: [
           { label: "Painel Financeiro", icon: LayoutDashboard, href: "/financeiro", exact: true },
+          { label: "Custos indiretos", icon: Layers, href: "/financeiro/custos-indiretos" },
           { label: "Solicitacoes", icon: ClipboardList, href: "/financeiro/solicitacoes" },
+          { label: "Notas fiscais", icon: Wallet, href: "/financeiro/notas-fiscais" },
+          { label: "Remessas", icon: Wallet, href: "/financeiro/remessas" },
+        ],
+      },
+
+      {
+        label: "Metas",
+        icon: Target,
+        href: "/metas",
+        exact: true,
+        roles: ["colaborador", "coordenador", "gestor", "rh", "financeiro", "pd", "admin"],
+      },
+
+      {
+        label: "P&D",
+        icon: Wrench,
+        roles: ["colaborador", "coordenador", "gestor", "rh", "financeiro", "pd", "admin"],
+        children: [
+          { label: "Painel P&D", icon: LayoutDashboard, href: "/p-d", exact: true },
+          { label: "Chamados", icon: ClipboardList, href: "/p-d/chamados" },
+          { label: "Projetos", icon: Layers, href: "/p-d/projetos" },
         ],
       },
 
@@ -168,6 +195,7 @@ export default function Sidebar({
         children: [
           { label: "Painel RH", icon: LayoutDashboard, href: "/rh", exact: true },
           { label: "Dashboard RH", icon: LineChart, href: "/rh/dashboard" },
+          { label: "Demografia", icon: Users, href: "/rh/demografia" },
           { label: "Solicitacoes", icon: ClipboardList, href: "/rh/solicitacoes" },
           { label: "Colaboradores", icon: Users, href: "/rh/colaboradores" },
           { label: "Adicionar Colaborador", icon: UserPlus, href: "/rh/adicionar-colaborador" },
@@ -185,6 +213,7 @@ export default function Sidebar({
         children: [
           { label: "Acompanhamento", icon: ClipboardList, href: "/diretoria/projetos", exact: true },
           { label: "Novo projeto", icon: Briefcase, href: "/diretoria/projetos/novo" },
+          { label: "Medicoes/Boletins", icon: ClipboardList, href: "/diretoria/medicoes" },
           { label: "Aditivos/Contratos", icon: ClipboardList, href: "/diretoria/contratos" },
           { label: "Clientes", icon: Building2, href: "/diretoria/clientes" },
         ],
@@ -198,6 +227,7 @@ export default function Sidebar({
           { label: "Painel Admin", icon: LayoutDashboard, href: "/admin", exact: true },
           { label: "Cadastro de empresas", icon: Building2, href: "/admin/empresas" },
           { label: "Configuracao SLA", icon: CalendarClock, href: "/admin/sla" },
+          { label: "Visibilidade", icon: Layers, href: "/admin/funcionalidades" },
           { label: "Sessões", icon: MonitorCheck, href: "/admin/sessoes" },
           { label: "Permissões", icon: UserCog, href: "/admin/permissoes" },
         ],
@@ -206,7 +236,56 @@ export default function Sidebar({
     []
   );
 
-  const navByRole = useMemo(() => nav.filter((item) => !item.roles || item.roles.includes(role)), [nav, role]);
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadHiddenRoutes() {
+      const { data, error } = await supabase
+        .from("portal_feature_visibility")
+        .select("route_path,hidden")
+        .eq("hidden", true);
+      if (!mounted || error) return;
+
+      const routes = new Set<string>();
+      for (const row of data ?? []) {
+        const route = typeof row.route_path === "string" ? row.route_path.trim() : "";
+        if (route) routes.add(route);
+      }
+      setHiddenRoutes(routes);
+    }
+
+    void loadHiddenRoutes();
+    const onVisibilityUpdated = () => {
+      void loadHiddenRoutes();
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("portal-feature-visibility-updated", onVisibilityUpdated);
+    }
+    return () => {
+      mounted = false;
+      if (typeof window !== "undefined") {
+        window.removeEventListener("portal-feature-visibility-updated", onVisibilityUpdated);
+      }
+    };
+  }, [role]);
+
+  const navByRole = useMemo(() => {
+    return nav
+      .filter((item) => !item.roles || item.roles.includes(role))
+      .map((item) => {
+        if (item.children?.length) {
+          const children = item.children.filter((c) => {
+            if (isRouteHidden(c.href, hiddenRoutes)) return false;
+            return !c.roles || c.roles.includes(role);
+          });
+          return { ...item, children };
+        }
+
+        if (item.href && isRouteHidden(item.href, hiddenRoutes)) return null;
+        return item;
+      })
+      .filter((item): item is NavItem => !!item);
+  }, [hiddenRoutes, nav, role]);
 
   const isActive = (href?: string, exact?: boolean) => {
     if (!href) return false;
@@ -217,7 +296,8 @@ export default function Sidebar({
   const computeInitialOpen = () => {
     const open: Record<string, boolean> = {};
     for (const item of navByRole) {
-      if (item.children?.some((c) => isActive(c.href, c.exact))) open[item.label] = true;
+      const visibleChildren = item.children ?? [];
+      if (visibleChildren.some((c) => isActive(c.href, c.exact))) open[item.label] = true;
     }
     return open;
   };
@@ -303,8 +383,11 @@ export default function Sidebar({
             );
           }
 
+          const visibleChildren = item.children ?? [];
+          if (!visibleChildren.length) return null;
+
           const groupOpen = !!openGroups[item.label];
-          const anyChildActive = item.children.some((c) => isActive(c.href, c.exact));
+          const anyChildActive = visibleChildren.some((c) => isActive(c.href, c.exact));
 
           return (
             <div key={item.label} className="mb-2">
@@ -323,7 +406,7 @@ export default function Sidebar({
 
               {groupOpen && (
                 <div className="mt-1 space-y-1 pl-2">
-                  {item.children.map((child) => {
+                  {visibleChildren.map((child) => {
                     const ChildIcon = child.icon;
                     const active = isActive(child.href, child.exact);
 
@@ -360,5 +443,6 @@ export default function Sidebar({
     </aside>
   );
 }
+
 
 
