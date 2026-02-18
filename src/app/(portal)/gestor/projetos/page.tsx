@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCcw } from "lucide-react";
@@ -58,11 +58,24 @@ type Deliverable = {
   description: string | null;
   due_date: string | null;
   assigned_to: string | null;
-  status: "pending" | "in_progress" | "sent" | "approved";
+  status: "pending" | "in_progress" | "sent" | "approved" | "approved_with_comments";
+  approval_comment: string | null;
   document_url: string | null;
   document_path: string | null;
   document_file_name: string | null;
   submitted_by: string | null;
+};
+
+type DeliverableTimelineRow = {
+  id: string;
+  deliverable_id: string;
+  project_id: string;
+  event_type: string;
+  status_from: string | null;
+  status_to: string | null;
+  comment: string | null;
+  actor_user_id: string | null;
+  created_at: string;
 };
 
 type Contribution = {
@@ -97,6 +110,30 @@ type ProjectMemberDirectoryRow = {
   avatar_url: string | null;
 };
 
+type DeletedDeliverableItem = {
+  id: string;
+  source_module: "projects" | "pd_projects";
+  project_id: string | null;
+  deliverable_ref_id: string;
+  title: string | null;
+  description: string | null;
+  due_date: string | null;
+  status: string | null;
+  deleted_by: string | null;
+  deleted_at: string;
+};
+
+type DeletedTeamItem = {
+  id: string;
+  source_module: "projects" | "pd_projects";
+  event_kind: "team_deleted" | "member_removed";
+  project_id: string | null;
+  team_name: string | null;
+  user_id: string | null;
+  deleted_by: string | null;
+  deleted_at: string;
+};
+
 function isEmailLike(value: string) {
   return value.includes("@");
 }
@@ -118,6 +155,62 @@ function projectTypeLabel(value: ProjectType | null | undefined) {
   return found?.label ?? "-";
 }
 
+function downloadTextFile(filename: string, text: string, mime = "text/plain;charset=utf-8") {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function normalizeCsvHeader(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+function parseCsvLine(line: string, delimiter: "," | ";") {
+  const out: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (ch === '"') {
+      const next = line[i + 1];
+      if (inQuotes && next === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (!inQuotes && ch === delimiter) {
+      out.push(current.trim());
+      current = "";
+      continue;
+    }
+    current += ch;
+  }
+  out.push(current.trim());
+  return out;
+}
+
+function normalizeCsvDate(value: string) {
+  const v = value.trim();
+  if (!v) return null;
+  const m1 = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v);
+  if (m1) return `${m1[1]}-${m1[2]}-${m1[3]}`;
+  const m2 = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v);
+  if (m2) return `${m2[3]}-${m2[2]}-${m2[1]}`;
+  return null;
+}
+
 export default function GestorProjetosPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -131,6 +224,9 @@ export default function GestorProjetosPage() {
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [contributions, setContributions] = useState<Contribution[]>([]);
+  const [deliverableTimeline, setDeliverableTimeline] = useState<DeliverableTimelineRow[]>([]);
+  const [deletedDeliverables, setDeletedDeliverables] = useState<DeletedDeliverableItem[]>([]);
+  const [deletedTeamItems, setDeletedTeamItems] = useState<DeletedTeamItem[]>([]);
   const [profilesById, setProfilesById] = useState<Record<string, Profile>>({});
   const [directoryById, setDirectoryById] = useState<Record<string, ProjectMemberDirectoryRow>>({});
 
@@ -143,6 +239,10 @@ export default function GestorProjetosPage() {
   const [docTitle, setDocTitle] = useState("");
   const [docDescription, setDocDescription] = useState("");
   const [docDueDate, setDocDueDate] = useState("");
+  const [deliverableSearch, setDeliverableSearch] = useState("");
+  const [deliverableStatusFilter, setDeliverableStatusFilter] = useState<"all" | Deliverable["status"]>("all");
+  const [deliverableDateFilter, setDeliverableDateFilter] = useState("");
+  const [deliverableSelectFilter, setDeliverableSelectFilter] = useState("");
 
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [teamMembers, setTeamMembers] = useState<ProjectTeamMember[]>([]);
@@ -173,7 +273,7 @@ export default function GestorProjetosPage() {
   const personCargo = useCallback((userId: string) => {
     const d = directoryById[userId];
     const cargo = (d?.cargo ?? "").trim();
-    return cargo || "Cargo não informado";
+    return cargo || "Cargo nao informado";
   }, [directoryById]);
 
   const personAvatar = useCallback((userId: string) => {
@@ -316,15 +416,30 @@ export default function GestorProjetosPage() {
         setMembers([]);
         setDeliverables([]);
         setContributions([]);
+        setDeliverableTimeline([]);
+        setDeletedDeliverables([]);
+        setDeletedTeamItems([]);
         setProfilesById({});
         setSelectedProjectId("");
         return;
       }
 
-      const [projRes, memRes, delRes] = await Promise.all([
+      const [projRes, memRes, delRes, deletedRes, deletedTeamsRes] = await Promise.all([
         supabase.from("projects").select("id,name,description,status,start_date,end_date,budget_total,owner_user_id,client_id,project_type,project_scopes,created_at").in("id", ids).order("created_at", { ascending: false }),
         supabase.from("project_members").select("id,project_id,user_id,member_role").in("project_id", ids),
-        supabase.from("project_deliverables").select("id,project_id,title,description,due_date,assigned_to,status,document_url,document_path,document_file_name,submitted_by").in("project_id", ids).order("created_at", { ascending: false }),
+        supabase.from("project_deliverables").select("id,project_id,title,description,due_date,assigned_to,status,approval_comment,document_url,document_path,document_file_name,submitted_by").in("project_id", ids).order("created_at", { ascending: false }),
+        supabase
+          .from("project_deliverable_deleted_items")
+          .select("id,source_module,project_id,deliverable_ref_id,title,description,due_date,status,deleted_by,deleted_at")
+          .eq("source_module", "projects")
+          .in("project_id", ids)
+          .order("deleted_at", { ascending: false }),
+        supabase
+          .from("project_team_deleted_items")
+          .select("id,source_module,event_kind,project_id,team_name,user_id,deleted_by,deleted_at")
+          .eq("source_module", "projects")
+          .in("project_id", ids)
+          .order("deleted_at", { ascending: false }),
       ]);
       if (projRes.error) throw new Error(projRes.error.message);
       if (memRes.error) throw new Error(memRes.error.message);
@@ -333,6 +448,8 @@ export default function GestorProjetosPage() {
       const nextProjects = (projRes.data ?? []) as Project[];
       const nextMembers = (memRes.data ?? []) as ProjectMember[];
       const nextDeliverables = (delRes.data ?? []) as Deliverable[];
+      setDeletedDeliverables((deletedRes.data ?? []) as DeletedDeliverableItem[]);
+      setDeletedTeamItems((deletedTeamsRes.data ?? []) as DeletedTeamItem[]);
       setProjects(nextProjects);
       setMembers(nextMembers);
       setDeliverables(nextDeliverables);
@@ -355,18 +472,33 @@ export default function GestorProjetosPage() {
       });
 
       let nextContributions: Contribution[] = [];
+      let nextTimeline: DeliverableTimelineRow[] = [];
       if (nextDeliverables.length > 0) {
         const deliverableIds = nextDeliverables.map((d) => d.id);
-        const contribRes = await supabase
-          .from("deliverable_contributions")
-          .select("id,deliverable_id,user_id,contribution_note,created_at")
-          .in("deliverable_id", deliverableIds)
-          .order("created_at", { ascending: false });
+        const [contribRes, timelineRes] = await Promise.all([
+          supabase
+            .from("deliverable_contributions")
+            .select("id,deliverable_id,user_id,contribution_note,created_at")
+            .in("deliverable_id", deliverableIds)
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("project_deliverable_timeline")
+            .select("id,deliverable_id,project_id,event_type,status_from,status_to,comment,actor_user_id,created_at")
+            .in("deliverable_id", deliverableIds)
+            .order("created_at", { ascending: false }),
+        ]);
         if (contribRes.error) throw new Error(contribRes.error.message);
         nextContributions = (contribRes.data ?? []) as Contribution[];
         setContributions(nextContributions);
+        if (!timelineRes.error) {
+          nextTimeline = (timelineRes.data ?? []) as DeliverableTimelineRow[];
+          setDeliverableTimeline(nextTimeline);
+        } else {
+          setDeliverableTimeline([]);
+        }
       } else {
         setContributions([]);
+        setDeliverableTimeline([]);
       }
 
       const userIds = Array.from(
@@ -375,7 +507,11 @@ export default function GestorProjetosPage() {
           ...nextMembers.map((m) => m.user_id),
           ...nextDeliverables.map((d) => d.assigned_to).filter(Boolean),
           ...nextDeliverables.map((d) => d.submitted_by).filter(Boolean),
+          ...((deletedRes.data ?? []) as DeletedDeliverableItem[]).map((d) => d.deleted_by).filter(Boolean),
+          ...((deletedTeamsRes.data ?? []) as DeletedTeamItem[]).map((d) => d.deleted_by).filter(Boolean),
+          ...((deletedTeamsRes.data ?? []) as DeletedTeamItem[]).map((d) => d.user_id).filter(Boolean),
           ...nextContributions.map((c) => c.user_id),
+          ...nextTimeline.map((t) => t.actor_user_id).filter(Boolean),
         ].filter(Boolean) as string[])
       );
       if (userIds.length > 0) {
@@ -466,6 +602,32 @@ export default function GestorProjetosPage() {
   const selectedDeliverables = useMemo(
     () => deliverables.filter((d) => d.project_id === selectedProjectId),
     [deliverables, selectedProjectId]
+  );
+  const filteredSelectedDeliverables = useMemo(() => {
+    const search = deliverableSearch.trim().toLowerCase();
+    return selectedDeliverables.filter((d) => {
+      const bySelect = deliverableSelectFilter ? d.id === deliverableSelectFilter : true;
+      const byStatus = deliverableStatusFilter === "all" ? true : d.status === deliverableStatusFilter;
+      const byDate = deliverableDateFilter ? (d.due_date ?? "") === deliverableDateFilter : true;
+      const bySearch = search
+        ? `${d.title} ${d.description ?? ""}`.toLowerCase().includes(search)
+        : true;
+      return bySelect && byStatus && byDate && bySearch;
+    });
+  }, [selectedDeliverables, deliverableSelectFilter, deliverableStatusFilter, deliverableDateFilter, deliverableSearch]);
+  const selectedDeletedDeliverables = useMemo(
+    () =>
+      deletedDeliverables
+        .filter((d) => d.project_id === selectedProjectId && d.source_module === "projects")
+        .sort((a, b) => +new Date(b.deleted_at) - +new Date(a.deleted_at)),
+    [deletedDeliverables, selectedProjectId]
+  );
+  const selectedDeletedTeamItems = useMemo(
+    () =>
+      deletedTeamItems
+        .filter((d) => d.project_id === selectedProjectId && d.source_module === "projects")
+        .sort((a, b) => +new Date(b.deleted_at) - +new Date(a.deleted_at)),
+    [deletedTeamItems, selectedProjectId]
   );
 
   async function loadTeams(projectId: string) {
@@ -594,7 +756,7 @@ export default function GestorProjetosPage() {
     setSaving(true);
     setMsg("");
     try {
-      const res = await supabase.from("project_deliverables").insert({
+      const payload = {
         project_id: selectedProjectId,
         title: docTitle.trim(),
         description: docDescription.trim() || null,
@@ -602,8 +764,15 @@ export default function GestorProjetosPage() {
         // Gestor cria o entregavel; direcionamento de responsavel e' do Coordenador.
         assigned_to: null,
         status: "pending",
-      });
+      };
+      const res = await supabase.from("project_deliverables").insert(payload).select("id").single();
       if (res.error) throw new Error(res.error.message);
+      await logDeliverableEvent({
+        deliverableId: String(res.data.id),
+        projectId: selectedProjectId,
+        eventType: "created",
+        statusTo: "pending",
+      });
       setDocTitle("");
       setDocDescription("");
       setDocDueDate("");
@@ -620,8 +789,16 @@ export default function GestorProjetosPage() {
     setSaving(true);
     setMsg("");
     try {
+      const current = deliverables.find((x) => x.id === id) ?? null;
       const res = await supabase.from("project_deliverables").update({ status }).eq("id", id);
       if (res.error) throw new Error(res.error.message);
+      await logDeliverableEvent({
+        deliverableId: id,
+        projectId: current?.project_id ?? selectedProjectId,
+        eventType: "status_changed",
+        statusFrom: current?.status ?? null,
+        statusTo: status,
+      });
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao atualizar status.");
@@ -634,8 +811,15 @@ export default function GestorProjetosPage() {
     setSaving(true);
     setMsg("");
     try {
+      const current = deliverables.find((x) => x.id === id) ?? null;
       const res = await supabase.from("project_deliverables").update({ document_url: link.trim() || null }).eq("id", id);
       if (res.error) throw new Error(res.error.message);
+      await logDeliverableEvent({
+        deliverableId: id,
+        projectId: current?.project_id ?? selectedProjectId,
+        eventType: "document_link_updated",
+        comment: link.trim() ? "Link atualizado." : "Link removido.",
+      });
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao atualizar documento.");
@@ -644,10 +828,11 @@ export default function GestorProjetosPage() {
     }
   }
 
-  async function saveDeliverableEdits(deliverableId: string) {
+    async function saveDeliverableEdits(deliverableId: string) {
     setSaving(true);
     setMsg("");
     try {
+      const current = deliverables.find((x) => x.id === deliverableId) ?? null;
       const payload = {
         title: (editTitleByDeliverableId[deliverableId] ?? "").trim() || null,
         description: (editDescByDeliverableId[deliverableId] ?? "").trim() || null,
@@ -655,12 +840,144 @@ export default function GestorProjetosPage() {
       };
       const res = await supabase.from("project_deliverables").update(payload).eq("id", deliverableId);
       if (res.error) throw new Error(res.error.message);
-      setMsg("Entregável atualizado.");
+      await logDeliverableEvent({
+        deliverableId,
+        projectId: current?.project_id ?? selectedProjectId,
+        eventType: "edited",
+        comment: "Entregavel atualizado (titulo/descricao/prazo).",
+      });
+      setMsg("Entregavel atualizado.");
       await load();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao atualizar entregável.");
+      setMsg(e instanceof Error ? e.message : "Erro ao atualizar entregavel.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function deleteDeliverable(deliverableId: string) {
+    if (!confirm("Excluir este entregavel? Esta acao nao pode ser desfeita.")) return;
+    setSaving(true);
+    setMsg("");
+    try {
+      const res = await supabase.from("project_deliverables").delete().eq("id", deliverableId);
+      if (res.error) throw new Error(res.error.message);
+      setEditOpenByDeliverableId((prev) => {
+        const next = { ...prev };
+        delete next[deliverableId];
+        return next;
+      });
+      setMsg("Entregavel excluido.");
+      await load();
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao excluir entregavel.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function importDeliverablesFromCsv(file: File) {
+    if (!selectedProjectId) return setMsg("Selecione um projeto.");
+    setSaving(true);
+    setMsg("");
+    try {
+      const raw = await file.text();
+      const lines = raw
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
+      if (lines.length < 2) throw new Error("CSV vazio ou sem linhas de dados.");
+
+      const delimiter: "," | ";" =
+        (lines[0].match(/;/g)?.length ?? 0) > (lines[0].match(/,/g)?.length ?? 0) ? ";" : ",";
+      const headers = parseCsvLine(lines[0], delimiter).map(normalizeCsvHeader);
+
+      const titleIdx = headers.findIndex((h) =>
+        ["titulo_entregavel", "titulo", "entregavel", "title"].includes(h)
+      );
+      const dueIdx = headers.findIndex((h) =>
+        ["previsao_entrega", "prazo", "due_date", "data_previsao", "data_entrega"].includes(h)
+      );
+      const descIdx = headers.findIndex((h) =>
+        ["descricao", "description", "detalhes"].includes(h)
+      );
+      if (titleIdx < 0) {
+        throw new Error("CSV invalido: cabecalho deve conter a coluna de titulo do entregavel.");
+      }
+
+      const rows = lines
+        .slice(1)
+        .map((line) => parseCsvLine(line, delimiter))
+        .map((cols) => {
+          const title = (cols[titleIdx] ?? "").trim();
+          const dueDate = dueIdx >= 0 ? normalizeCsvDate(cols[dueIdx] ?? "") : null;
+          const description = descIdx >= 0 ? (cols[descIdx] ?? "").trim() : "";
+          return { title, dueDate, description };
+        })
+        .filter((r) => r.title.length > 0);
+
+      if (rows.length === 0) {
+        throw new Error("Nenhuma linha valida encontrada. Preencha ao menos o titulo do entregavel.");
+      }
+
+      const payload = rows.map((r) => ({
+        project_id: selectedProjectId,
+        title: r.title,
+        description: r.description || null,
+        due_date: r.dueDate,
+        assigned_to: null,
+        status: "pending" as const,
+      }));
+
+      const ins = await supabase
+        .from("project_deliverables")
+        .insert(payload)
+        .select("id,project_id");
+      if (ins.error) throw new Error(ins.error.message);
+
+      const created = (ins.data ?? []) as Array<{ id: string; project_id: string }>;
+      if (created.length > 0) {
+        await supabase.from("project_deliverable_timeline").insert(
+          created.map((r) => ({
+            deliverable_id: r.id,
+            project_id: r.project_id,
+            event_type: "created",
+            status_to: "pending",
+            comment: "Entregavel criado via importacao CSV.",
+            actor_user_id: meId || null,
+          }))
+        );
+      }
+
+      setMsg(`${created.length} entregavel(eis) importado(s) com sucesso.`);
+      await load();
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao importar CSV de entregaveis.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function logDeliverableEvent(params: {
+    deliverableId: string;
+    projectId: string;
+    eventType: string;
+    statusFrom?: string | null;
+    statusTo?: string | null;
+    comment?: string | null;
+  }) {
+    try {
+      await supabase.from("project_deliverable_timeline").insert({
+        deliverable_id: params.deliverableId,
+        project_id: params.projectId,
+        event_type: params.eventType,
+        status_from: params.statusFrom ?? null,
+        status_to: params.statusTo ?? null,
+        comment: params.comment ?? null,
+        actor_user_id: meId || null,
+      });
+    } catch {
+      // nao bloqueia o fluxo principal
     }
   }
 
@@ -729,7 +1046,7 @@ export default function GestorProjetosPage() {
       });
       if (res.error) {
         if ((res.error as { code?: string })?.code === "23505") {
-          throw new Error("Este colaborador já está nesta equipe.");
+          throw new Error("Este colaborador ja esta nesta equipe.");
         }
         throw new Error(res.error.message);
       }
@@ -937,7 +1254,7 @@ export default function GestorProjetosPage() {
           <div className="pt-3 border-t border-slate-100 space-y-3">
             <h3 className="text-sm font-semibold text-slate-900">Equipes do projeto</h3>
             <p className="text-xs text-slate-500">
-              Crie equipes nomeadas (ex: Civil, Elétrica) e distribua os membros do projeto.
+              Crie equipes nomeadas (ex: Civil, Eletrica) e distribua os membros do projeto.
             </p>
 
             <div className="grid gap-2 md:grid-cols-3">
@@ -1079,9 +1396,31 @@ export default function GestorProjetosPage() {
               </div>
             ) : (
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                Nenhuma equipe criada ainda (ou SQL de equipes ainda não foi aplicado).
+                Nenhuma equipe criada ainda (ou SQL de equipes ainda nao foi aplicado).
               </div>
             )}
+
+            <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <summary className="cursor-pointer text-xs font-semibold text-slate-700">
+                Historico de equipe excluida/removida ({selectedDeletedTeamItems.length})
+              </summary>
+              <div className="mt-2 space-y-2">
+                {selectedDeletedTeamItems.length ? (
+                  selectedDeletedTeamItems.map((item) => (
+                    <div key={item.id} className="rounded-lg border border-slate-200 bg-white p-2 text-xs text-slate-700">
+                      <p className="font-semibold">
+                        {item.event_kind === "team_deleted" ? "Equipe excluida" : "Colaborador removido"}
+                      </p>
+                      <p>Equipe: {item.team_name ?? "-"}</p>
+                      {item.user_id ? <p>Colaborador: {personLabel(item.user_id)}</p> : null}
+                      <p>Data: {new Date(item.deleted_at).toLocaleString("pt-BR")}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-slate-500">Nenhum historico de exclusao neste projeto.</p>
+                )}
+              </div>
+            </details>
           </div>
         </section>
 
@@ -1092,28 +1431,110 @@ export default function GestorProjetosPage() {
             <input type="date" value={docDueDate} onChange={(e) => setDocDueDate(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm" />
             <input value={docDescription} onChange={(e) => setDocDescription(e.target.value)} placeholder="Descricao" className="h-11 rounded-xl border border-slate-200 px-3 text-sm md:col-span-2" />
           </div>
-          <button type="button" onClick={() => void addDeliverable()} disabled={!selectedProjectId || saving} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60">
-            Adicionar entregavel
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => void addDeliverable()} disabled={!selectedProjectId || saving} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60">
+              Adicionar entregavel
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                downloadTextFile(
+                  "modelo_entregaveis_gestor.csv",
+                  "titulo_entregavel,previsao_entrega,descricao\nPlano de execucao,28/02/2026,Descricao do documento",
+                  "text/csv;charset=utf-8"
+                )
+              }
+              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800"
+            >
+              Baixar modelo CSV
+            </button>
+            <label className="cursor-pointer rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800">
+              Importar CSV
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] ?? null;
+                  if (file) void importDeliverablesFromCsv(file);
+                  e.currentTarget.value = "";
+                }}
+              />
+            </label>
+          </div>
+
+          <div className="grid gap-2 md:grid-cols-4">
+            <input
+              value={deliverableSearch}
+              onChange={(e) => setDeliverableSearch(e.target.value)}
+              placeholder="Buscar por titulo ou descricao..."
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm md:col-span-2"
+            />
+            <select
+              value={deliverableStatusFilter}
+              onChange={(e) => setDeliverableStatusFilter(e.target.value as "all" | Deliverable["status"])}
+              className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
+            >
+              <option value="all">Todos status</option>
+              <option value="pending">Pendente</option>
+              <option value="in_progress">Em andamento</option>
+              <option value="sent">Enviado</option>
+              <option value="approved">Aprovado</option>
+              <option value="approved_with_comments">Aprovado com comentarios</option>
+            </select>
+            <input
+              type="date"
+              value={deliverableDateFilter}
+              onChange={(e) => setDeliverableDateFilter(e.target.value)}
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+            />
+            <select
+              value={deliverableSelectFilter}
+              onChange={(e) => setDeliverableSelectFilter(e.target.value)}
+              className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm md:col-span-4"
+            >
+              <option value="">Selecionar item (lista suspensa)</option>
+              {selectedDeliverables.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.title} {d.due_date ? `- ${d.due_date}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
 
           <div className="space-y-3">
-            {selectedDeliverables.length === 0 ? <p className="text-sm text-slate-500">Nenhum entregavel.</p> : null}
-            {selectedDeliverables.map((d) => {
+            {filteredSelectedDeliverables.length === 0 ? <p className="text-sm text-slate-500">Nenhum entregavel para o filtro selecionado.</p> : null}
+            {filteredSelectedDeliverables.map((d) => {
               const contribs = contributions.filter((c) => c.deliverable_id === d.id);
+              const timeline = deliverableTimeline.filter((t) => t.deliverable_id === d.id).slice(0, 8);
               return (
                 <div key={d.id} className="rounded-xl border border-slate-200 p-3 space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-slate-900">{d.title}</p>
-                    <select value={d.status} onChange={(e) => void updateDeliverableStatus(d.id, e.target.value as Deliverable["status"])} className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs">
-                      <option value="pending">Pendente</option>
-                      <option value="in_progress">Em andamento</option>
-                      <option value="sent">Enviado</option>
-                      <option value="approved">Aprovado</option>
-                    </select>
+                    <div className="flex items-center gap-2">
+                      <select value={d.status} onChange={(e) => void updateDeliverableStatus(d.id, e.target.value as Deliverable["status"])} className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs">
+                        <option value="pending">Pendente</option>
+                        <option value="in_progress">Em andamento</option>
+                        <option value="sent">Enviado</option>
+                        <option value="approved">Aprovado</option>
+                        <option value="approved_with_comments">Aprovado com comentarios</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => void deleteDeliverable(d.id)}
+                        disabled={saving}
+                        className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-800 disabled:opacity-60"
+                      >
+                        Excluir
+                      </button>
+                    </div>
                   </div>
                   <p className="text-xs text-slate-500">
                     Responsavel: {d.assigned_to ? personLabel(d.assigned_to) : "Nao definido"}
                   </p>
+                  {d.status === "approved_with_comments" ? (
+                    <p className="text-xs text-amber-700">Comentario: {d.approval_comment ?? "-"}</p>
+                  ) : null}
                   {d.document_path ? (
                     <button
                       type="button"
@@ -1143,13 +1564,13 @@ export default function GestorProjetosPage() {
                       setEditOpenByDeliverableId((prev) => ({ ...prev, [d.id]: open }));
                     }}
                   >
-                    <summary className="cursor-pointer text-xs font-semibold text-slate-700">Editar entregável</summary>
+                    <summary className="cursor-pointer text-xs font-semibold text-slate-700">Editar entregavel</summary>
                     <div className="mt-3 grid gap-2 md:grid-cols-2">
                       <input
                         value={editTitleByDeliverableId[d.id] ?? d.title}
                         onChange={(e) => setEditTitleByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))}
                         className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-xs"
-                        placeholder="Título"
+                        placeholder="Titulo"
                       />
                       <input
                         type="date"
@@ -1161,7 +1582,7 @@ export default function GestorProjetosPage() {
                         value={editDescByDeliverableId[d.id] ?? (d.description ?? "")}
                         onChange={(e) => setEditDescByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))}
                         className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-xs md:col-span-2"
-                        placeholder="Descrição"
+                        placeholder="Descricao"
                       />
                       <button
                         type="button"
@@ -1169,7 +1590,7 @@ export default function GestorProjetosPage() {
                         disabled={saving}
                         className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 disabled:opacity-60 md:col-span-2"
                       >
-                        Salvar alterações
+                        Salvar alteracoes
                       </button>
                     </div>
                   </details>
@@ -1188,10 +1609,48 @@ export default function GestorProjetosPage() {
                       {personLabel(c.user_id)} - {c.contribution_note ?? "Contribuicao registrada"}
                   </p>
                 ))}
+
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-semibold text-slate-700">Linha do tempo do documento</p>
+                  <div className="mt-2 space-y-1">
+                    {timeline.length ? (
+                      timeline.map((t) => (
+                        <p key={t.id} className="text-xs text-slate-600">
+                          {new Date(t.created_at).toLocaleString()} - {t.event_type}
+                          {t.status_from || t.status_to ? ` (${t.status_from ?? "-"} -> ${t.status_to ?? "-"})` : ""}
+                          {t.comment ? ` - ${t.comment}` : ""}
+                          {t.actor_user_id ? ` - ${personLabel(t.actor_user_id)}` : ""}
+                        </p>
+                      ))
+                    ) : (
+                      <p className="text-xs text-slate-500">Sem eventos registrados.</p>
+                    )}
+                  </div>
+                </div>
               </div>
             );
-          })}
+            })}
           </div>
+
+          <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <summary className="cursor-pointer text-xs font-semibold text-slate-700">
+              Itens excluidos ({selectedDeletedDeliverables.length})
+            </summary>
+            <div className="mt-2 space-y-2">
+              {selectedDeletedDeliverables.length ? (
+                selectedDeletedDeliverables.map((d) => (
+                  <div key={d.id} className="rounded-lg border border-slate-200 bg-white p-2 text-xs text-slate-700">
+                    <p className="font-semibold">{d.title ?? `Entregavel ${d.deliverable_ref_id.slice(0, 8)}`}</p>
+                    <p>Excluido em: {new Date(d.deleted_at).toLocaleString("pt-BR")}</p>
+                    <p>Prazo: {d.due_date ?? "-"}</p>
+                    <p>Status anterior: {d.status ?? "-"}</p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-slate-500">Nenhum item excluido neste projeto.</p>
+              )}
+            </div>
+          </details>
         </section>
       </div>
 
@@ -1199,6 +1658,7 @@ export default function GestorProjetosPage() {
     </div>
   );
 }
+
 
 
 

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { RefreshCcw } from "lucide-react";
@@ -45,7 +45,8 @@ type Deliverable = {
   description: string | null;
   due_date: string | null;
   assigned_to: string | null;
-  status: "pending" | "in_progress" | "sent" | "approved";
+  status: "pending" | "in_progress" | "sent" | "approved" | "approved_with_comments";
+  approval_comment: string | null;
   document_url: string | null;
   document_path: string | null;
   document_file_name: string | null;
@@ -71,6 +72,39 @@ type ProjectMemberDirectoryRow = {
   display_name: string;
   cargo: string | null;
   avatar_url: string | null;
+};
+
+type DeliverableAssignee = {
+  id: string;
+  deliverable_id: string;
+  project_id: string;
+  user_id: string;
+  contribution_unit: "hours" | "percent" | "points";
+  contribution_value: number | null;
+};
+
+type DeliverableTimelineRow = {
+  id: string;
+  deliverable_id: string;
+  project_id: string;
+  event_type: string;
+  status_from: string | null;
+  status_to: string | null;
+  comment: string | null;
+  actor_user_id: string | null;
+  actor_role: string | null;
+  created_at: string;
+};
+
+type DeletedTeamItem = {
+  id: string;
+  source_module: "projects" | "pd_projects";
+  event_kind: "team_deleted" | "member_removed";
+  project_id: string | null;
+  team_name: string | null;
+  user_id: string | null;
+  deleted_by: string | null;
+  deleted_at: string;
 };
 
 function isEmailLike(value: string) {
@@ -101,21 +135,29 @@ export default function CoordenadorProjetosPage() {
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [contributions, setContributions] = useState<Contribution[]>([]);
+  const [deliverableAssignees, setDeliverableAssignees] = useState<DeliverableAssignee[]>([]);
+  const [deliverableTimeline, setDeliverableTimeline] = useState<DeliverableTimelineRow[]>([]);
+  const [deletedTeamItems, setDeletedTeamItems] = useState<DeletedTeamItem[]>([]);
   const [profilesById, setProfilesById] = useState<Record<string, Profile>>({});
   const [directoryById, setDirectoryById] = useState<Record<string, ProjectMemberDirectoryRow>>({});
   const [selectedProjectId, setSelectedProjectId] = useState("");
 
   const [selectedDeliverableId, setSelectedDeliverableId] = useState("");
+  const [deliverableSearch, setDeliverableSearch] = useState("");
+  const [deliverableStatusFilter, setDeliverableStatusFilter] = useState<"all" | Deliverable["status"]>("all");
+  const [deliverableDateFilter, setDeliverableDateFilter] = useState("");
+  const [deliverableSelectFilter, setDeliverableSelectFilter] = useState("");
   const [dirDescription, setDirDescription] = useState("");
   const [dirDueDate, setDirDueDate] = useState("");
   const [dirAssignedTo, setDirAssignedTo] = useState("");
 
   const [contribTextByDeliverable, setContribTextByDeliverable] = useState<Record<string, string>>({});
   const [docLinkByDeliverable, setDocLinkByDeliverable] = useState<Record<string, string>>({});
+  const [statusCommentByDeliverableId, setStatusCommentByDeliverableId] = useState<Record<string, string>>({});
+  const [newAssigneeByDeliverableId, setNewAssigneeByDeliverableId] = useState<Record<string, string>>({});
 
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [teamMembers, setTeamMembers] = useState<ProjectTeamMember[]>([]);
-  const [newTeamName, setNewTeamName] = useState("");
   const [assignTeamId, setAssignTeamId] = useState("");
   const [assignUserId, setAssignUserId] = useState("");
 
@@ -164,6 +206,8 @@ export default function CoordenadorProjetosPage() {
         setMembers([]);
         setDeliverables([]);
         setContributions([]);
+        setDeliverableAssignees([]);
+        setDeliverableTimeline([]);
         setProfilesById({});
         setSelectedProjectId("");
         return;
@@ -174,7 +218,7 @@ export default function CoordenadorProjetosPage() {
         supabase.from("project_members").select("id,project_id,user_id,member_role").in("project_id", projectIds),
         supabase
           .from("project_deliverables")
-          .select("id,project_id,title,description,due_date,assigned_to,status,document_url,document_path,document_file_name,submitted_by")
+          .select("id,project_id,title,description,due_date,assigned_to,status,approval_comment,document_url,document_path,document_file_name,submitted_by")
           .in("project_id", projectIds)
           .order("created_at", { ascending: false }),
       ]);
@@ -208,19 +252,52 @@ export default function CoordenadorProjetosPage() {
         for (const d of nextDeliverables) if (typeof next[d.id] !== "string") next[d.id] = d.due_date ?? "";
         return next;
       });
+      setStatusCommentByDeliverableId((prev) => {
+        const next = { ...prev };
+        for (const d of nextDeliverables) if (typeof next[d.id] !== "string") next[d.id] = d.approval_comment ?? "";
+        return next;
+      });
 
       let nextContributions: Contribution[] = [];
+      let nextAssignees: DeliverableAssignee[] = [];
+      let nextTimeline: DeliverableTimelineRow[] = [];
       if (nextDeliverables.length > 0) {
-        const contribRes = await supabase
-          .from("deliverable_contributions")
-          .select("id,deliverable_id,user_id,contribution_note,created_at")
-          .in("deliverable_id", nextDeliverables.map((d) => d.id))
-          .order("created_at", { ascending: false });
+        const deliverableIds = nextDeliverables.map((d) => d.id);
+        const [contribRes, assigneesRes, timelineRes] = await Promise.all([
+          supabase
+            .from("deliverable_contributions")
+            .select("id,deliverable_id,user_id,contribution_note,created_at")
+            .in("deliverable_id", deliverableIds)
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("project_deliverable_assignees")
+            .select("id,deliverable_id,project_id,user_id,contribution_unit,contribution_value")
+            .in("deliverable_id", deliverableIds),
+          supabase
+            .from("project_deliverable_timeline")
+            .select("id,deliverable_id,project_id,event_type,status_from,status_to,comment,actor_user_id,actor_role,created_at")
+            .in("deliverable_id", deliverableIds)
+            .order("created_at", { ascending: false }),
+        ]);
         if (contribRes.error) throw new Error(contribRes.error.message);
         nextContributions = (contribRes.data ?? []) as Contribution[];
         setContributions(nextContributions);
+        if (!assigneesRes.error) {
+          nextAssignees = (assigneesRes.data ?? []) as DeliverableAssignee[];
+          setDeliverableAssignees(nextAssignees);
+        } else {
+          setDeliverableAssignees([]);
+        }
+        if (!timelineRes.error) {
+          nextTimeline = (timelineRes.data ?? []) as DeliverableTimelineRow[];
+          setDeliverableTimeline(nextTimeline);
+        } else {
+          setDeliverableTimeline([]);
+        }
       } else {
         setContributions([]);
+        setDeliverableAssignees([]);
+        setDeliverableTimeline([]);
       }
 
       const userIds = Array.from(
@@ -229,6 +306,8 @@ export default function CoordenadorProjetosPage() {
           ...nextDeliverables.map((d) => d.assigned_to).filter(Boolean),
           ...nextDeliverables.map((d) => d.submitted_by).filter(Boolean),
           ...nextContributions.map((c) => c.user_id),
+          ...nextAssignees.map((a) => a.user_id),
+          ...nextTimeline.map((t) => t.actor_user_id).filter(Boolean),
         ].filter(Boolean) as string[])
       );
       if (userIds.length > 0) {
@@ -259,27 +338,44 @@ export default function CoordenadorProjetosPage() {
     if (!projectId) {
       setTeams([]);
       setTeamMembers([]);
+      setDeletedTeamItems([]);
       return;
     }
     try {
-      const [tRes, tmRes] = await Promise.all([
+      const [tRes, tmRes, deletedRes] = await Promise.all([
         supabase.from("project_teams").select("id,project_id,name,created_at").eq("project_id", projectId).order("name", { ascending: true }),
         supabase.from("project_team_members").select("id,team_id,project_id,user_id,created_at").eq("project_id", projectId),
+        supabase
+          .from("project_team_deleted_items")
+          .select("id,source_module,event_kind,project_id,team_name,user_id,deleted_by,deleted_at")
+          .eq("source_module", "projects")
+          .eq("project_id", projectId)
+          .order("deleted_at", { ascending: false }),
       ]);
       if (tRes.error) throw tRes.error;
       if (tmRes.error) throw tmRes.error;
       setTeams((tRes.data ?? []) as ProjectTeam[]);
       setTeamMembers((tmRes.data ?? []) as ProjectTeamMember[]);
+      setDeletedTeamItems((deletedRes.data ?? []) as DeletedTeamItem[]);
       setAssignTeamId((prev) => (prev && (tRes.data ?? []).some((t) => t.id === prev) ? prev : String((tRes.data ?? [])[0]?.id ?? "")));
     } catch {
       setTeams([]);
       setTeamMembers([]);
+      setDeletedTeamItems([]);
     }
   }
 
   useEffect(() => {
     void loadTeams(selectedProjectId);
   }, [selectedProjectId]);
+
+  const selectedDeletedTeamItems = useMemo(
+    () =>
+      deletedTeamItems
+        .filter((d) => d.project_id === selectedProjectId && d.source_module === "projects")
+        .sort((a, b) => +new Date(b.deleted_at) - +new Date(a.deleted_at)),
+    [deletedTeamItems, selectedProjectId]
+  );
 
   useEffect(() => {
     void loadMemberDirectory(selectedProjectId);
@@ -294,6 +390,18 @@ export default function CoordenadorProjetosPage() {
     () => deliverables.filter((d) => d.project_id === selectedProjectId),
     [deliverables, selectedProjectId]
   );
+  const filteredProjectDeliverables = useMemo(() => {
+    const search = deliverableSearch.trim().toLowerCase();
+    return projectDeliverables.filter((d) => {
+      const bySelect = deliverableSelectFilter ? d.id === deliverableSelectFilter : true;
+      const byStatus = deliverableStatusFilter === "all" ? true : d.status === deliverableStatusFilter;
+      const byDate = deliverableDateFilter ? (d.due_date ?? "") === deliverableDateFilter : true;
+      const bySearch = search
+        ? `${d.title} ${d.description ?? ""}`.toLowerCase().includes(search)
+        : true;
+      return bySelect && byStatus && byDate && bySearch;
+    });
+  }, [projectDeliverables, deliverableSearch, deliverableSelectFilter, deliverableStatusFilter, deliverableDateFilter]);
 
   // Ao trocar de projeto (ou recarregar), garanta que o select aponte para um
   // entregavel valido do projeto atual, para evitar "select vazio".
@@ -357,7 +465,7 @@ export default function CoordenadorProjetosPage() {
   const personCargo = (userId: string) => {
     const d = directoryById[userId];
     const cargo = (d?.cargo ?? "").trim();
-    return cargo || "Cargo não informado";
+    return cargo || "Cargo nao informado";
   };
 
   const personAvatar = (userId: string) => {
@@ -389,6 +497,9 @@ export default function CoordenadorProjetosPage() {
     setSaving(true);
     setMsg("");
     try {
+      const previous = selectedDeliverable;
+      const nextStatus =
+        selectedDeliverable?.status === "pending" ? "in_progress" : selectedDeliverable?.status;
       const res = await supabase
         .from("project_deliverables")
         .update({
@@ -396,10 +507,18 @@ export default function CoordenadorProjetosPage() {
           assigned_to: dirAssignedTo,
           due_date: dirDueDate || null,
           description: dirDescription.trim() || null,
-          status: selectedDeliverable?.status === "pending" ? "in_progress" : selectedDeliverable?.status,
+          status: nextStatus,
         })
         .eq("id", selectedDeliverableId);
       if (res.error) throw new Error(res.error.message);
+      await logDeliverableEvent({
+        deliverableId: selectedDeliverableId,
+        projectId: selectedProjectId,
+        eventType: "directed",
+        statusFrom: previous?.status ?? null,
+        statusTo: nextStatus ?? null,
+        comment: `Responsavel: ${personLabel(dirAssignedTo)}`,
+      });
 
       setMsg("Documento direcionado para a equipe.");
       await load();
@@ -425,6 +544,14 @@ export default function CoordenadorProjetosPage() {
         })
         .eq("id", deliverable.id);
       if (res.error) throw new Error(res.error.message);
+      await logDeliverableEvent({
+        deliverableId: deliverable.id,
+        projectId: deliverable.project_id,
+        eventType: "document_updated",
+        statusFrom: deliverable.status,
+        statusTo: link ? "sent" : deliverable.status,
+        comment: link ? "Documento enviado/atualizado." : "Documento limpo.",
+      });
       setMsg("Documento enviado/atualizado.");
       await load();
     } catch (e: unknown) {
@@ -438,8 +565,24 @@ export default function CoordenadorProjetosPage() {
     setSaving(true);
     setMsg("");
     try {
-      const res = await supabase.from("project_deliverables").update({ status }).eq("id", deliverableId);
+      const current = deliverables.find((x) => x.id === deliverableId) ?? null;
+      const approvalComment =
+        status === "approved_with_comments"
+          ? (statusCommentByDeliverableId[deliverableId] ?? "").trim() || null
+          : current?.approval_comment ?? null;
+      const res = await supabase
+        .from("project_deliverables")
+        .update({ status, approval_comment: approvalComment })
+        .eq("id", deliverableId);
       if (res.error) throw new Error(res.error.message);
+      await logDeliverableEvent({
+        deliverableId,
+        projectId: current?.project_id ?? selectedProjectId,
+        eventType: "status_changed",
+        statusFrom: current?.status ?? null,
+        statusTo: status,
+        comment: status === "approved_with_comments" ? approvalComment : null,
+      });
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao atualizar status.");
@@ -452,6 +595,7 @@ export default function CoordenadorProjetosPage() {
     setSaving(true);
     setMsg("");
     try {
+      const current = deliverables.find((x) => x.id === deliverableId) ?? null;
       const payload = {
         title: (editTitleByDeliverableId[deliverableId] ?? "").trim() || null,
         description: (editDescByDeliverableId[deliverableId] ?? "").trim() || null,
@@ -459,10 +603,16 @@ export default function CoordenadorProjetosPage() {
       };
       const res = await supabase.from("project_deliverables").update(payload).eq("id", deliverableId);
       if (res.error) throw new Error(res.error.message);
-      setMsg("Entregável atualizado.");
+      await logDeliverableEvent({
+        deliverableId,
+        projectId: current?.project_id ?? selectedProjectId,
+        eventType: "edited",
+        comment: "Entregavel atualizado (titulo/descricao/prazo).",
+      });
+      setMsg("Entregavel atualizado.");
       await load();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao atualizar entregável.");
+      setMsg(e instanceof Error ? e.message : "Erro ao atualizar entregavel.");
     } finally {
       setSaving(false);
     }
@@ -484,25 +634,6 @@ export default function CoordenadorProjetosPage() {
       window.open(json.signedUrl, "_blank", "noreferrer");
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao abrir arquivo.");
-    }
-  }
-
-  async function createTeam() {
-    if (!selectedProjectId) return setMsg("Selecione um projeto.");
-    const name = newTeamName.trim();
-    if (!name) return setMsg("Informe o nome da equipe.");
-    setSaving(true);
-    setMsg("");
-    try {
-      const res = await supabase.from("project_teams").insert({ project_id: selectedProjectId, name, created_by: meId || null });
-      if (res.error) throw new Error(res.error.message);
-      setNewTeamName("");
-      setMsg("Equipe criada.");
-      await loadTeams(selectedProjectId);
-    } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao criar equipe.");
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -557,11 +688,92 @@ export default function CoordenadorProjetosPage() {
         contribution_note: note,
       });
       if (res.error) throw new Error(res.error.message);
+      const current = deliverables.find((x) => x.id === deliverableId) ?? null;
+      await logDeliverableEvent({
+        deliverableId,
+        projectId: current?.project_id ?? selectedProjectId,
+        eventType: "contribution_added",
+        comment: note,
+      });
       setContribTextByDeliverable((prev) => ({ ...prev, [deliverableId]: "" }));
       setMsg("Contribuicao registrada.");
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao registrar contribuicao.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function logDeliverableEvent(params: {
+    deliverableId: string;
+    projectId: string;
+    eventType: string;
+    statusFrom?: string | null;
+    statusTo?: string | null;
+    comment?: string | null;
+  }) {
+    try {
+      await supabase.from("project_deliverable_timeline").insert({
+        deliverable_id: params.deliverableId,
+        project_id: params.projectId,
+        event_type: params.eventType,
+        status_from: params.statusFrom ?? null,
+        status_to: params.statusTo ?? null,
+        comment: params.comment ?? null,
+        actor_user_id: meId || null,
+      });
+    } catch {
+      // nao bloqueia o fluxo principal
+    }
+  }
+
+  async function addAssignee(deliverable: Deliverable) {
+    const userId = (newAssigneeByDeliverableId[deliverable.id] ?? "").trim();
+    if (!userId) return setMsg("Selecione uma pessoa para atribuir.");
+    setSaving(true);
+    setMsg("");
+    try {
+      const res = await supabase.from("project_deliverable_assignees").insert({
+        deliverable_id: deliverable.id,
+        project_id: deliverable.project_id,
+        user_id: userId,
+        contribution_unit: "hours",
+        contribution_value: null,
+        created_by: meId || null,
+      });
+      if (res.error) throw new Error(res.error.message);
+      await logDeliverableEvent({
+        deliverableId: deliverable.id,
+        projectId: deliverable.project_id,
+        eventType: "assignee_added",
+        comment: personLabel(userId),
+      });
+      setNewAssigneeByDeliverableId((prev) => ({ ...prev, [deliverable.id]: "" }));
+      await load();
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao adicionar pessoa no documento.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeAssignee(deliverable: Deliverable, assignee: DeliverableAssignee) {
+    if (!confirm("Remover esta pessoa do documento?")) return;
+    setSaving(true);
+    setMsg("");
+    try {
+      const res = await supabase.from("project_deliverable_assignees").delete().eq("id", assignee.id);
+      if (res.error) throw new Error(res.error.message);
+      await logDeliverableEvent({
+        deliverableId: deliverable.id,
+        projectId: deliverable.project_id,
+        eventType: "assignee_removed",
+        comment: personLabel(assignee.user_id),
+      });
+      await load();
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao remover pessoa do documento.");
     } finally {
       setSaving(false);
     }
@@ -711,24 +923,7 @@ export default function CoordenadorProjetosPage() {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
         <h2 className="text-sm font-semibold text-slate-900">Equipes do projeto</h2>
-        <p className="text-xs text-slate-500">Crie equipes (Civil, Elétrica, etc) e distribua os membros do projeto.</p>
-
-        <div className="grid gap-2 md:grid-cols-3">
-          <input
-            value={newTeamName}
-            onChange={(e) => setNewTeamName(e.target.value)}
-            placeholder="Nome da equipe (ex: Civil)"
-            className="h-11 rounded-xl border border-slate-200 px-3 text-sm md:col-span-2"
-          />
-          <button
-            type="button"
-            onClick={() => void createTeam()}
-            disabled={saving || !selectedProjectId}
-            className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60"
-          >
-            Criar equipe
-          </button>
-        </div>
+        <p className="text-xs text-slate-500">Adicione membros em equipes ja criadas pelo gestor.</p>
 
         {teams.length ? (
           <div className="grid gap-2 md:grid-cols-3">
@@ -766,7 +961,7 @@ export default function CoordenadorProjetosPage() {
           </div>
         ) : (
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-            Nenhuma equipe criada ainda (ou SQL de equipes ainda não foi aplicado).
+            Nenhuma equipe criada ainda (ou SQL de equipes ainda nao foi aplicado).
           </div>
         )}
 
@@ -806,13 +1001,75 @@ export default function CoordenadorProjetosPage() {
             })}
           </div>
         ) : null}
+
+        <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <summary className="cursor-pointer text-xs font-semibold text-slate-700">
+            Historico de equipe excluida/removida ({selectedDeletedTeamItems.length})
+          </summary>
+          <div className="mt-2 space-y-2">
+            {selectedDeletedTeamItems.length ? (
+              selectedDeletedTeamItems.map((item) => (
+                <div key={item.id} className="rounded-lg border border-slate-200 bg-white p-2 text-xs text-slate-700">
+                  <p className="font-semibold">
+                    {item.event_kind === "team_deleted" ? "Equipe excluida" : "Colaborador removido"}
+                  </p>
+                  <p>Equipe: {item.team_name ?? "-"}</p>
+                  {item.user_id ? <p>Colaborador: {personLabel(item.user_id)}</p> : null}
+                  <p>Data: {new Date(item.deleted_at).toLocaleString("pt-BR")}</p>
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-slate-500">Nenhum historico de exclusao neste projeto.</p>
+            )}
+          </div>
+        </details>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 space-y-3">
         <h2 className="text-sm font-semibold text-slate-900">Campo de envio de documentos</h2>
-        {projectDeliverables.length === 0 ? <p className="text-sm text-slate-500">Sem documentos no projeto.</p> : null}
-        {projectDeliverables.map((d) => {
+        <div className="grid gap-2 md:grid-cols-4">
+          <input
+            value={deliverableSearch}
+            onChange={(e) => setDeliverableSearch(e.target.value)}
+            placeholder="Buscar por titulo ou descricao..."
+            className="h-10 rounded-lg border border-slate-200 px-3 text-sm md:col-span-2"
+          />
+          <select
+            value={deliverableStatusFilter}
+            onChange={(e) => setDeliverableStatusFilter(e.target.value as "all" | Deliverable["status"])}
+            className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
+          >
+            <option value="all">Todos status</option>
+            <option value="pending">Pendente</option>
+            <option value="in_progress">Em andamento</option>
+            <option value="sent">Enviado</option>
+            <option value="approved">Aprovado</option>
+            <option value="approved_with_comments">Aprovado com comentarios</option>
+          </select>
+          <input
+            type="date"
+            value={deliverableDateFilter}
+            onChange={(e) => setDeliverableDateFilter(e.target.value)}
+            className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+          />
+          <select
+            value={deliverableSelectFilter}
+            onChange={(e) => setDeliverableSelectFilter(e.target.value)}
+            className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm md:col-span-4"
+          >
+            <option value="">Selecionar item (lista suspensa)</option>
+            {projectDeliverables.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.title} {d.due_date ? `- ${d.due_date}` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+        {filteredProjectDeliverables.length === 0 ? <p className="text-sm text-slate-500">Sem documentos para o filtro selecionado.</p> : null}
+        {filteredProjectDeliverables.map((d) => {
           const list = contributions.filter((c) => c.deliverable_id === d.id);
+          const assignees = deliverableAssignees.filter((a) => a.deliverable_id === d.id);
+          const timeline = deliverableTimeline.filter((t) => t.deliverable_id === d.id).slice(0, 8);
           return (
             <div key={d.id} className="rounded-xl border border-slate-200 p-3 space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -822,11 +1079,15 @@ export default function CoordenadorProjetosPage() {
                   <option value="in_progress">Em andamento</option>
                   <option value="sent">Enviado</option>
                   <option value="approved">Aprovado</option>
+                  <option value="approved_with_comments">Aprovado com comentarios</option>
                 </select>
               </div>
               <p className="text-xs text-slate-500">
                 Responsavel: {d.assigned_to ? personLabel(d.assigned_to) : "Nao definido"}
               </p>
+              {d.status === "approved_with_comments" ? (
+                <p className="text-xs text-amber-700">Comentario: {d.approval_comment ?? "-"}</p>
+              ) : null}
               {d.document_path ? (
                 <button
                   type="button"
@@ -838,14 +1099,30 @@ export default function CoordenadorProjetosPage() {
               ) : null}
 
               {d.status === "sent" ? (
-                <button
-                  type="button"
-                  onClick={() => void setStatus(d.id, "approved")}
-                  disabled={saving}
-                  className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
-                >
-                  Aprovar
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void setStatus(d.id, "approved")}
+                    disabled={saving}
+                    className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                  >
+                    Aprovar
+                  </button>
+                  <input
+                    value={statusCommentByDeliverableId[d.id] ?? ""}
+                    onChange={(e) => setStatusCommentByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                    placeholder="Comentario da aprovacao"
+                    className="h-9 min-w-[220px] rounded-lg border border-slate-200 px-2 text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void setStatus(d.id, "approved_with_comments")}
+                    disabled={saving}
+                    className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 disabled:opacity-60"
+                  >
+                    Aprovar com comentarios
+                  </button>
+                </div>
               ) : null}
 
               <details
@@ -856,13 +1133,13 @@ export default function CoordenadorProjetosPage() {
                   setEditOpenByDeliverableId((prev) => ({ ...prev, [d.id]: open }));
                 }}
               >
-                <summary className="cursor-pointer text-xs font-semibold text-slate-700">Editar entregável</summary>
+                <summary className="cursor-pointer text-xs font-semibold text-slate-700">Editar entregavel</summary>
                 <div className="mt-3 grid gap-2 md:grid-cols-2">
                   <input
                     value={editTitleByDeliverableId[d.id] ?? d.title}
                     onChange={(e) => setEditTitleByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))}
                     className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-xs"
-                    placeholder="Título"
+                    placeholder="Titulo"
                   />
                   <input
                     type="date"
@@ -874,7 +1151,7 @@ export default function CoordenadorProjetosPage() {
                     value={editDescByDeliverableId[d.id] ?? (d.description ?? "")}
                     onChange={(e) => setEditDescByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))}
                     className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-xs md:col-span-2"
-                    placeholder="Descrição"
+                    placeholder="Descricao"
                   />
                   <button
                     type="button"
@@ -882,7 +1159,7 @@ export default function CoordenadorProjetosPage() {
                     disabled={saving}
                     className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 disabled:opacity-60 md:col-span-2"
                   >
-                    Salvar alterações
+                    Salvar alteracoes
                   </button>
                 </div>
               </details>
@@ -911,12 +1188,75 @@ export default function CoordenadorProjetosPage() {
                 </button>
               </div>
 
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="text-xs font-semibold text-slate-700">Pessoas atribuidas</div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <select
+                    value={newAssigneeByDeliverableId[d.id] ?? ""}
+                    onChange={(e) => setNewAssigneeByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                    className="h-9 min-w-[220px] rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                  >
+                    <option value="">Selecionar pessoa...</option>
+                    {projectMembers.map((m) => (
+                      <option key={m.id} value={m.user_id}>
+                        {personLabel(m.user_id)}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => void addAssignee(d)}
+                    disabled={saving}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800"
+                  >
+                    Atribuir
+                  </button>
+                </div>
+                <div className="mt-2 space-y-1">
+                  {assignees.length ? (
+                    assignees.map((a) => (
+                      <div key={a.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5">
+                        <span className="text-xs text-slate-700">{personLabel(a.user_id)}</span>
+                        <button
+                          type="button"
+                          onClick={() => void removeAssignee(d, a)}
+                          disabled={saving}
+                          className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-xs text-slate-500">Nenhuma pessoa adicional atribuida.</div>
+                  )}
+                </div>
+              </div>
+
               <p className="text-xs text-slate-500">Contribuidores ({list.length})</p>
               {list.map((c) => (
                 <p key={c.id} className="text-xs text-slate-600">
                   {personLabel(c.user_id)} - {c.contribution_note ?? "Contribuicao"}
                 </p>
               ))}
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs font-semibold text-slate-700">Linha do tempo do documento</p>
+                <div className="mt-2 space-y-1">
+                  {timeline.length ? (
+                    timeline.map((t) => (
+                      <p key={t.id} className="text-xs text-slate-600">
+                        {new Date(t.created_at).toLocaleString()} - {t.event_type}
+                        {t.status_from || t.status_to ? ` (${t.status_from ?? "-"} -> ${t.status_to ?? "-"})` : ""}
+                        {t.comment ? ` - ${t.comment}` : ""}
+                        {t.actor_user_id ? ` - ${personLabel(t.actor_user_id)}` : ""}
+                      </p>
+                    ))
+                  ) : (
+                    <p className="text-xs text-slate-500">Sem eventos registrados.</p>
+                  )}
+                </div>
+              </div>
             </div>
           );
         })}
@@ -926,3 +1266,5 @@ export default function CoordenadorProjetosPage() {
     </div>
   );
 }
+
+

@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import Sidebar from "@/components/portal/Sidebar";
 import NotificationBell from "@/components/portal/NotificationBell";
+import { isRouteHidden } from "@/lib/featureVisibility";
 
-type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "financeiro" | "admin";
+type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "financeiro" | "pd" | "admin";
 
-const ROLE_SET = new Set<Role>(["colaborador", "coordenador", "gestor", "rh", "financeiro", "admin"]);
+const ROLE_SET = new Set<Role>(["colaborador", "coordenador", "gestor", "rh", "financeiro", "pd", "admin"]);
 function coerceRole(v: unknown): Role | null {
   if (!v) return null;
   const s = String(v) as Role;
@@ -56,6 +57,7 @@ function withTimeout<T>(p: Promise<T>, ms = 7000): Promise<T> {
 
 export default function PortalShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
 
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<Role | null>(null);
@@ -66,6 +68,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
   const [fullName, setFullName] = useState<string | null>(null);
   const [jobTitle, setJobTitle] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [hiddenRoutes, setHiddenRoutes] = useState<Set<string>>(new Set());
 
   const inFlight = useRef(false);
   const alive = useRef(true);
@@ -139,7 +142,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         }
 
         if (!r) {
-          setFatalError("Perfil sem funcao (role). Defina role = colaborador/coordenador/gestor/rh/admin.");
+          setFatalError("Perfil sem funcao (role). Defina role = colaborador/coordenador/gestor/rh/financeiro/pd/admin.");
           return;
         }
 
@@ -230,6 +233,49 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       }
     };
   }, [router]);
+
+  useEffect(() => {
+    if (!role) return;
+    let mounted = true;
+
+    async function loadHiddenRoutes() {
+      const { data, error } = await supabase
+        .from("portal_feature_visibility")
+        .select("route_path,hidden")
+        .eq("hidden", true);
+      if (!mounted || error) return;
+
+      const routes = new Set<string>();
+      for (const row of data ?? []) {
+        const route = typeof row.route_path === "string" ? row.route_path.trim() : "";
+        if (route) routes.add(route);
+      }
+      setHiddenRoutes(routes);
+    }
+
+    void loadHiddenRoutes();
+    const onVisibilityUpdated = () => {
+      void loadHiddenRoutes();
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("portal-feature-visibility-updated", onVisibilityUpdated);
+    }
+    return () => {
+      mounted = false;
+      if (typeof window !== "undefined") {
+        window.removeEventListener("portal-feature-visibility-updated", onVisibilityUpdated);
+      }
+    };
+  }, [role]);
+
+  useEffect(() => {
+    if (!pathname || !role) return;
+    if (pathname === "/unauthorized") return;
+    if (pathname === "/admin/funcionalidades") return;
+    if (isRouteHidden(pathname, hiddenRoutes)) {
+      router.replace("/unauthorized");
+    }
+  }, [hiddenRoutes, pathname, role, router]);
 
   if (loading) {
     return (

@@ -1,5 +1,5 @@
 // src/lib/absence.ts
-export type Role = "colaborador" | "gestor" | "rh" | "admin";
+export type Role = "colaborador" | "gestor" | "rh" | "financeiro" | "pd" | "admin";
 
 export type Profile = {
   id: string;

@@ -1,5 +1,5 @@
 import SectorOverviewDashboard from "@/components/portal/SectorOverviewDashboard";
 
-export default function RhPage() {
-  return <SectorOverviewDashboard sector="rh" />;
+export default function PdPage() {
+  return <SectorOverviewDashboard sector="pd" />;
 }

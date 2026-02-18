@@ -58,6 +58,15 @@ function csvEscape(v: unknown) {
   return needs ? `"${out}"` : out;
 }
 
+function htmlEscape(v: unknown) {
+  return String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function downloadTextFile(filename: string, text: string, mime = "text/plain;charset=utf-8") {
   const blob = new Blob([text], { type: mime });
   const url = URL.createObjectURL(blob);
@@ -116,11 +125,13 @@ function Kpi({
   value,
   subtitle,
   icon: Icon,
+  iconSize = 18,
 }: {
   title: string;
   value: string;
   subtitle: string;
   icon: React.ComponentType<{ size?: number }>;
+  iconSize?: number;
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -131,7 +142,7 @@ function Kpi({
           <div className="mt-1 text-xs text-slate-500">{subtitle}</div>
         </div>
         <div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-900 text-white">
-          <Icon size={18} />
+          <Icon size={iconSize} />
         </div>
       </div>
     </div>
@@ -153,6 +164,8 @@ export default function RhDashboardPage() {
   const [colabs, setColabs] = useState<ColaboradorRow[]>([]);
   const [absences, setAbsences] = useState<AbsenceRow[]>([]);
   const [extras, setExtras] = useState<ExtraPaymentRow[]>([]);
+  const [companyName, setCompanyName] = useState("Empresa");
+  const [companyLogoUrl, setCompanyLogoUrl] = useState("/logo.png");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -164,6 +177,34 @@ export default function RhDashboardPage() {
         setMsg("Periodo invalido.");
         setLoading(false);
         return;
+      }
+
+      const authRes = await supabase.auth.getUser();
+      const uid = authRes.data.user?.id ?? null;
+      if (uid) {
+        const profileRes = await supabase
+          .from("profiles")
+          .select("company_id")
+          .eq("id", uid)
+          .maybeSingle<{ company_id: string | null }>();
+        const cid = !profileRes.error ? profileRes.data?.company_id ?? null : null;
+        if (cid) {
+          const companyRes = await supabase
+            .from("company")
+            .select("name,logo_url")
+            .eq("id", cid)
+            .maybeSingle<{ name: string | null; logo_url: string | null }>();
+          if (!companyRes.error && companyRes.data) {
+            setCompanyName((companyRes.data.name ?? "Empresa").trim() || "Empresa");
+            setCompanyLogoUrl((companyRes.data.logo_url ?? "").trim() || "/logo.png");
+          } else {
+            setCompanyName("Empresa");
+            setCompanyLogoUrl("/logo.png");
+          }
+        } else {
+          setCompanyName("Empresa");
+          setCompanyLogoUrl("/logo.png");
+        }
       }
 
       const [colRes, absRes, extraRes] = await Promise.all([
@@ -396,6 +437,8 @@ export default function RhDashboardPage() {
           <title>Dashboard RH</title>
           <style>
             body{font-family:Arial,sans-serif;padding:24px;color:#0f172a}
+            .header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+            .header img{height:40px;max-width:180px;object-fit:contain}
             h1{margin:0 0 8px 0;font-size:20px}
             p{margin:0 0 12px 0;font-size:12px;color:#475569}
             table{width:100%;border-collapse:collapse;margin-top:12px}
@@ -404,6 +447,13 @@ export default function RhDashboardPage() {
           </style>
         </head>
         <body>
+          <div class="header">
+            <img src="${htmlEscape(companyLogoUrl)}" alt="Logo ${htmlEscape(companyName)}" />
+            <div>
+              <div style="font-size:13px;font-weight:700">${htmlEscape(companyName)}</div>
+              <div style="font-size:11px;color:#64748b">Relatorio RH</div>
+            </div>
+          </div>
           <h1>Dashboard RH</h1>
           <p>Periodo: ${fromDate} ate ${toDate} | Departamento: ${departmentFilter} | Contrato: ${contractFilter}</p>
           <table>
@@ -549,6 +599,7 @@ export default function RhDashboardPage() {
           value={fmtMoney(costs.monthlySalary)}
           subtitle="ativos no filtro"
           icon={DollarSign}
+          iconSize={16}
         />
         <Kpi
           title="Extras periodo"

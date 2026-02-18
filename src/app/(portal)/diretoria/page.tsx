@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import SectorOverviewDashboard from "@/components/portal/SectorOverviewDashboard";
 
 export default function DiretoriaPage() {
-  redirect("/diretoria/projetos");
+  return <SectorOverviewDashboard sector="diretoria" />;
 }

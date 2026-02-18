@@ -3,11 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "financeiro" | "admin";
+type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "financeiro" | "pd" | "admin";
 type ProfileRow = { role: Role | null; active: boolean | null };
 type CurrentRoleResult = string | null;
 
-const ROLE_SET = new Set<Role>(["colaborador", "coordenador", "gestor", "rh", "financeiro", "admin"]);
+const ROLE_SET = new Set<Role>(["colaborador", "coordenador", "gestor", "rh", "financeiro", "pd", "admin"]);
 
 function coerceRole(v: unknown): Role | null {
   if (!v) return null;
@@ -141,7 +141,7 @@ export function useUserRole() {
 
         // Se vier role null, já avisa
         if (!cached.role) {
-          setError("Seu perfil está sem role. Defina role = colaborador/gestor/rh/admin.");
+          setError("Seu perfil está sem role. Defina role = colaborador/coordenador/gestor/rh/financeiro/pd/admin.");
         }
       } catch (e: unknown) {
         if (!mounted.current) return;

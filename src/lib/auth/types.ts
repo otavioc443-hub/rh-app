@@ -1,4 +1,4 @@
-export type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "admin";
+export type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "financeiro" | "pd" | "admin";
 
 export type AuthState = {
   loading: boolean;

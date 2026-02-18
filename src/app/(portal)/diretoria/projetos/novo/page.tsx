@@ -14,6 +14,7 @@ type ProjectType =
   | "eletrico"
   | "hidraulico"
   | "outro";
+type ProjectStage = "ofertas" | "desenvolvimento" | "as_built";
 
 type ProjectClientRow = {
   id: string;
@@ -47,6 +48,7 @@ export default function DiretoriaNovoProjetoPage() {
   const [newProjectClientId, setNewProjectClientId] = useState("");
   const [newProjectType, setNewProjectType] = useState<ProjectType | "">("");
   const [newProjectScopes, setNewProjectScopes] = useState<ProjectType[]>([]);
+  const [newProjectStage, setNewProjectStage] = useState<ProjectStage>("ofertas");
 
   useEffect(() => {
     void load();
@@ -90,21 +92,49 @@ export default function DiretoriaNovoProjetoPage() {
       const budget = newProjectBudgetTotal.trim() ? Number(newProjectBudgetTotal.replace(",", ".")) : NaN;
       const budget_total = Number.isFinite(budget) && budget > 0 ? budget : null;
 
-      const { data, error } = await supabase
+      const insertPayload = {
+        name: newProjectName.trim(),
+        description: newProjectDesc.trim() || null,
+        start_date: newProjectStart || null,
+        end_date: newProjectEnd || null,
+        budget_total,
+        client_id: newProjectClientId,
+        project_type: newProjectType,
+        project_scopes: newProjectScopes,
+        project_stage: newProjectStage,
+        status: newProjectStage === "ofertas" ? "paused" : newProjectStage === "as_built" ? "done" : "active",
+        owner_user_id: meId,
+      };
+
+      let data: { id: string } | null = null;
+      let error: { message?: string } | null = null;
+
+      const insertWithStage = await supabase
         .from("projects")
-        .insert({
-          name: newProjectName.trim(),
-          description: newProjectDesc.trim() || null,
-          start_date: newProjectStart || null,
-          end_date: newProjectEnd || null,
-          budget_total,
-          client_id: newProjectClientId,
-          project_type: newProjectType,
-          project_scopes: newProjectScopes,
-          owner_user_id: meId,
-        })
+        .insert(insertPayload)
         .select("id")
         .single<{ id: string }>();
+      if (insertWithStage.error) {
+        const fallbackPayload = {
+          name: insertPayload.name,
+          description: insertPayload.description,
+          start_date: insertPayload.start_date,
+          end_date: insertPayload.end_date,
+          budget_total: insertPayload.budget_total,
+          client_id: insertPayload.client_id,
+          project_type: insertPayload.project_type,
+          project_scopes: insertPayload.project_scopes,
+          status: insertPayload.status,
+          owner_user_id: insertPayload.owner_user_id,
+        };
+        const fallbackInsert = await supabase.from("projects").insert(fallbackPayload).select("id").single<{ id: string }>();
+        data = fallbackInsert.data;
+        error = fallbackInsert.error;
+      } else {
+        data = insertWithStage.data;
+        error = insertWithStage.error;
+      }
+
       if (error || !data) throw new Error(error?.message ?? "Falha ao criar projeto.");
 
       const memberInsert = await supabase.from("project_members").insert({
@@ -123,6 +153,7 @@ export default function DiretoriaNovoProjetoPage() {
       setNewProjectClientId("");
       setNewProjectType("");
       setNewProjectScopes([]);
+      setNewProjectStage("ofertas");
       setMsg("Projeto criado com sucesso.");
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao criar projeto.");
@@ -181,6 +212,15 @@ export default function DiretoriaNovoProjetoPage() {
               </option>
             ))}
           </select>
+          <select
+            value={newProjectStage}
+            onChange={(e) => setNewProjectStage(e.target.value as ProjectStage)}
+            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+          >
+            <option value="ofertas">Etapa inicial: Ofertas</option>
+            <option value="desenvolvimento">Etapa inicial: Desenvolvimento</option>
+            <option value="as_built">Etapa inicial: As Built</option>
+          </select>
           <input
             value={newProjectBudgetTotal}
             onChange={(e) => setNewProjectBudgetTotal(e.target.value)}
@@ -237,4 +277,3 @@ export default function DiretoriaNovoProjetoPage() {
     </div>
   );
 }
-

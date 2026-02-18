@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { RefreshCcw, Save } from "lucide-react";
@@ -13,13 +13,26 @@ type Deliverable = {
   title: string;
   due_date: string | null;
   assigned_to: string | null;
-  status: "pending" | "in_progress" | "sent" | "approved";
+  status: "pending" | "in_progress" | "sent" | "approved" | "approved_with_comments";
+  approval_comment: string | null;
   document_url: string | null;
   document_path: string | null;
   document_file_name: string | null;
   description: string | null;
   submitted_by: string | null;
   submitted_at: string | null;
+};
+
+type DeliverableTimelineRow = {
+  id: string;
+  deliverable_id: string;
+  project_id: string;
+  event_type: string;
+  status_from: string | null;
+  status_to: string | null;
+  comment: string | null;
+  actor_user_id: string | null;
+  created_at: string;
 };
 
 type Contribution = { id: string; deliverable_id: string; user_id: string; contribution_note: string | null; created_at: string };
@@ -50,6 +63,7 @@ function statusLabel(v: string) {
   if (v === "in_progress") return "Em andamento";
   if (v === "sent") return "Enviado";
   if (v === "approved") return "Aprovado";
+  if (v === "approved_with_comments") return "Aprovado com comentarios";
   return v || "-";
 }
 
@@ -69,6 +83,7 @@ export default function MeuPerfilProjetosPage() {
 
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [contributions, setContributions] = useState<Contribution[]>([]);
+  const [deliverableTimeline, setDeliverableTimeline] = useState<DeliverableTimelineRow[]>([]);
 
   const [docLinkByDeliverable, setDocLinkByDeliverable] = useState<Record<string, string>>({});
   const [contribTextByDeliverable, setContribTextByDeliverable] = useState<Record<string, string>>({});
@@ -105,7 +120,7 @@ export default function MeuPerfilProjetosPage() {
   const personCargo = (userId: string) => {
     const d = directoryById[userId];
     const cargo = (d?.cargo ?? "").trim();
-    return cargo || "Cargo não informado";
+    return cargo || "Cargo nÃ£o informado";
   };
 
   const myRoleInSelectedProject = useMemo(() => {
@@ -118,7 +133,7 @@ export default function MeuPerfilProjetosPage() {
     setMsg("");
     try {
       const { data: authData, error: authErr } = await supabase.auth.getUser();
-      if (authErr || !authData?.user) throw new Error("Não autenticado.");
+      if (authErr || !authData?.user) throw new Error("NÃ£o autenticado.");
       const userId = authData.user.id;
       setMeId(userId);
 
@@ -192,13 +207,14 @@ export default function MeuPerfilProjetosPage() {
         setDeliverables([]);
         setContributions([]);
         setFilesByDeliverableId({});
+        setDeliverableTimeline([]);
         return;
       }
       setMsg("");
       try {
         const delRes = await supabase
           .from("project_deliverables")
-          .select("id,project_id,title,due_date,assigned_to,status,document_url,document_path,document_file_name,description,submitted_by,submitted_at")
+          .select("id,project_id,title,due_date,assigned_to,status,approval_comment,document_url,document_path,document_file_name,description,submitted_by,submitted_at")
           .eq("project_id", selectedProjectId)
           .eq("assigned_to", meId)
           .order("created_at", { ascending: false });
@@ -244,7 +260,7 @@ export default function MeuPerfilProjetosPage() {
         setDeliverables([]);
         setContributions([]);
         setFilesByDeliverableId({});
-        setMsg(e instanceof Error ? e.message : "Erro ao carregar documentos atribuídos.");
+        setMsg(e instanceof Error ? e.message : "Erro ao carregar documentos atribuÃ­dos.");
       }
     }
     void loadAssignedDocs();
@@ -331,8 +347,16 @@ export default function MeuPerfilProjetosPage() {
       const json = (await res.json()) as { ok?: boolean; error?: string };
       if (!res.ok) throw new Error(json.error || `Erro no upload (status ${res.status})`);
 
+      await logDeliverableEvent({
+        deliverableId: deliverable.id,
+        projectId: deliverable.project_id,
+        eventType: "file_uploaded",
+        statusFrom: deliverable.status,
+        statusTo: "sent",
+        comment: "Arquivo enviado.",
+      });
       setFileByDeliverable((prev) => ({ ...prev, [deliverable.id]: null }));
-      setMsg("Arquivo enviado. Aguardando aprovação.");
+      setMsg("Arquivo enviado. Aguardando aprovaÃ§Ã£o.");
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao enviar arquivo.");
@@ -366,6 +390,14 @@ export default function MeuPerfilProjetosPage() {
         })
         .eq("id", deliverable.id);
       if (res.error) throw new Error(res.error.message);
+      await logDeliverableEvent({
+        deliverableId: deliverable.id,
+        projectId: deliverable.project_id,
+        eventType: "document_updated",
+        statusFrom: deliverable.status,
+        statusTo: "sent",
+        comment: "Link enviado/atualizado.",
+      });
       setMsg("Documento enviado/atualizado.");
       await load();
     } catch (e: unknown) {
@@ -377,7 +409,7 @@ export default function MeuPerfilProjetosPage() {
 
   async function addContribution(deliverableId: string) {
     const note = (contribTextByDeliverable[deliverableId] ?? "").trim();
-    if (!note) return setMsg("Informe a contribuição.");
+    if (!note) return setMsg("Informe a contribuiÃ§Ã£o.");
     setSaving(true);
     setMsg("");
     try {
@@ -387,13 +419,43 @@ export default function MeuPerfilProjetosPage() {
         contribution_note: note,
       });
       if (res.error) throw new Error(res.error.message);
+      const current = deliverables.find((x) => x.id === deliverableId) ?? null;
+      await logDeliverableEvent({
+        deliverableId,
+        projectId: current?.project_id ?? selectedProjectId,
+        eventType: "contribution_added",
+        comment: note,
+      });
       setContribTextByDeliverable((prev) => ({ ...prev, [deliverableId]: "" }));
-      setMsg("Contribuição registrada.");
+      setMsg("ContribuiÃ§Ã£o registrada.");
       await load();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao registrar contribuição.");
+      setMsg(e instanceof Error ? e.message : "Erro ao registrar contribuiÃ§Ã£o.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function logDeliverableEvent(params: {
+    deliverableId: string;
+    projectId: string;
+    eventType: string;
+    statusFrom?: string | null;
+    statusTo?: string | null;
+    comment?: string | null;
+  }) {
+    try {
+      await supabase.from("project_deliverable_timeline").insert({
+        deliverable_id: params.deliverableId,
+        project_id: params.projectId,
+        event_type: params.eventType,
+        status_from: params.statusFrom ?? null,
+        status_to: params.statusTo ?? null,
+        comment: params.comment ?? null,
+        actor_user_id: meId || null,
+      });
+    } catch {
+      // nao bloqueia fluxo principal
     }
   }
 
@@ -412,7 +474,7 @@ export default function MeuPerfilProjetosPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Meus projetos</h1>
-          <p className="mt-1 text-sm text-slate-600">Veja projetos que você participa e atualize documentos atribuídos a você.</p>
+          <p className="mt-1 text-sm text-slate-600">Veja projetos que vocÃª participa e atualize documentos atribuÃ­dos a vocÃª.</p>
         </div>
         <button
           type="button"
@@ -449,9 +511,9 @@ export default function MeuPerfilProjetosPage() {
                 <div className="text-sm font-semibold text-slate-900">{selectedProject.name}</div>
                 <div className="mt-1 text-xs text-slate-500">
                   {myRoleInSelectedProject ? `Seu papel: ${myRoleInSelectedProject}` : null}
-                  {!myRoleInSelectedProject && isAdmin ? "Visão Admin (você não está como membro deste projeto)" : ""}
-                  {selectedProject.start_date ? ` • Início: ${selectedProject.start_date}` : ""}
-                  {selectedProject.end_date ? ` • Fim: ${selectedProject.end_date}` : ""}
+                  {!myRoleInSelectedProject && isAdmin ? "VisÃ£o Admin (vocÃª nÃ£o estÃ¡ como membro deste projeto)" : ""}
+                  {selectedProject.start_date ? ` Ã¢â‚¬Â¢ InÃ­cio: ${selectedProject.start_date}` : ""}
+                  {selectedProject.end_date ? ` Ã¢â‚¬Â¢ Fim: ${selectedProject.end_date}` : ""}
                 </div>
               </div>
               <button
@@ -466,14 +528,14 @@ export default function MeuPerfilProjetosPage() {
                 {teamOpen ? "Ocultar equipe" : "Ver equipe"}
               </button>
             </div>
-            <div className="mt-1 text-sm text-slate-600">{selectedProject.description ?? "Sem descrição"}</div>
+            <div className="mt-1 text-sm text-slate-600">{selectedProject.description ?? "Sem descriÃ§Ã£o"}</div>
           </div>
         ) : null}
 
         {teamOpen ? (
           <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
             <div className="text-sm font-semibold text-slate-900">Equipe do projeto</div>
-            <div className="mt-1 text-sm text-slate-600">Membros e equipes nomeadas (Civil, Elétrica, etc).</div>
+            <div className="mt-1 text-sm text-slate-600">Membros e equipes nomeadas (Civil, ElÃ©trica, etc).</div>
 
             {teamLoading ? (
               <div className="mt-3 h-24 w-full animate-pulse rounded-2xl bg-slate-100" />
@@ -528,7 +590,7 @@ export default function MeuPerfilProjetosPage() {
                       })
                     ) : (
                       <div className="text-sm text-slate-700">
-                        Nenhuma equipe criada ainda (ou SQL de equipes ainda não foi aplicado).
+                        Nenhuma equipe criada ainda (ou SQL de equipes ainda nÃ£o foi aplicado).
                       </div>
                     )}
                   </div>
@@ -540,13 +602,14 @@ export default function MeuPerfilProjetosPage() {
       </div>
 
       <div className="rounded-3xl border border-slate-200 bg-white p-5">
-        <h2 className="text-base font-semibold text-slate-900">Documentos atribuídos a você</h2>
-        <p className="mt-1 text-sm text-slate-600">Atualize o link do documento e registre sua contribuição.</p>
+        <h2 className="text-base font-semibold text-slate-900">Documentos atribuÃ­dos a vocÃª</h2>
+        <p className="mt-1 text-sm text-slate-600">Atualize o link do documento e registre sua contribuiÃ§Ã£o.</p>
 
         <div className="mt-4 space-y-4">
           {projectDeliverablesAssignedToMe.length ? (
             projectDeliverablesAssignedToMe.map((d) => {
               const myContribs = contributions.filter((c) => c.deliverable_id === d.id && c.user_id === meId);
+              const timeline = deliverableTimeline.filter((t) => t.deliverable_id === d.id).slice(0, 8);
               return (
                 <div key={d.id} className="rounded-2xl border border-slate-200 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -554,8 +617,11 @@ export default function MeuPerfilProjetosPage() {
                       <div className="truncate text-sm font-semibold text-slate-900">{d.title}</div>
                       <div className="mt-1 text-xs text-slate-500">
                         Status: <span className="font-semibold text-slate-700">{statusLabel(d.status)}</span>
-                        {d.due_date ? ` • Prazo: ${d.due_date}` : ""}
+                        {d.due_date ? ` Ã¢â‚¬Â¢ Prazo: ${d.due_date}` : ""}
                       </div>
+                      {d.status === "approved_with_comments" ? (
+                        <div className="mt-1 text-xs text-amber-700">Comentario da aprovacao: {d.approval_comment ?? "-"}</div>
+                      ) : null}
                       {d.description ? <div className="mt-2 text-sm text-slate-600">{d.description}</div> : null}
                     </div>
                   </div>
@@ -579,7 +645,7 @@ export default function MeuPerfilProjetosPage() {
 
                   <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-xs font-semibold text-slate-700">Arquivo do entregável</div>
+                      <div className="text-xs font-semibold text-slate-700">Arquivo do entregÃ¡vel</div>
                       {d.document_path ? (
                         <button
                           type="button"
@@ -613,12 +679,12 @@ export default function MeuPerfilProjetosPage() {
 
                     {(filesByDeliverableId[d.id] ?? []).length ? (
                       <div className="mt-3 space-y-2">
-                        <div className="text-[11px] font-semibold text-slate-700">Últimas versões</div>
+                        <div className="text-[11px] font-semibold text-slate-700">Ãšltimas versÃµes</div>
                         {(filesByDeliverableId[d.id] ?? []).slice(0, 3).map((f) => (
                           <div key={f.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
                             <div className="min-w-0">
                               <div className="truncate text-xs font-semibold text-slate-800">
-                                v{f.version} • {f.file_name ?? "Arquivo"} • {new Date(f.created_at).toLocaleString()}
+                                v{f.version} Ã¢â‚¬Â¢ {f.file_name ?? "Arquivo"} Ã¢â‚¬Â¢ {new Date(f.created_at).toLocaleString()}
                               </div>
                             </div>
                             <button
@@ -640,7 +706,7 @@ export default function MeuPerfilProjetosPage() {
                     <input
                       value={contribTextByDeliverable[d.id] ?? ""}
                       onChange={(e) => setContribTextByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))}
-                      placeholder="Descreva sua contribuição"
+                      placeholder="Descreva sua contribuiÃ§Ã£o"
                       className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900 md:col-span-2"
                     />
                     <button
@@ -649,13 +715,13 @@ export default function MeuPerfilProjetosPage() {
                       disabled={saving}
                       className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
                     >
-                      Registrar contribuição
+                      Registrar contribuiÃ§Ã£o
                     </button>
                   </div>
 
                   {myContribs.length ? (
                     <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                      <div className="text-xs font-semibold text-slate-700">Minhas contribuições recentes</div>
+                      <div className="text-xs font-semibold text-slate-700">Minhas contribuiÃ§Ãµes recentes</div>
                       <div className="mt-2 space-y-1 text-xs text-slate-600">
                         {myContribs.slice(0, 3).map((c) => (
                           <div key={c.id} className="flex items-start justify-between gap-3">
@@ -666,20 +732,39 @@ export default function MeuPerfilProjetosPage() {
                       </div>
                     </div>
                   ) : null}
+
+                  <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-xs font-semibold text-slate-700">Linha do tempo do documento</div>
+                    <div className="mt-2 space-y-1 text-xs text-slate-600">
+                      {timeline.length ? (
+                        timeline.map((t) => (
+                          <div key={t.id}>
+                            {new Date(t.created_at).toLocaleString()} - {t.event_type}
+                            {t.status_from || t.status_to ? ` (${t.status_from ?? "-"} -> ${t.status_to ?? "-"})` : ""}
+                            {t.comment ? ` - ${t.comment}` : ""}
+                            {t.actor_user_id ? ` - ${personLabel(t.actor_user_id)}` : ""}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-slate-500">Sem eventos registrados.</div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               );
             })
           ) : (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-              Nenhum documento atribuído a você neste projeto.
+              Nenhum documento atribuÃ­do a vocÃª neste projeto.
             </div>
           )}
         </div>
       </div>
 
       <div className="text-xs text-slate-500">
-        Dica: se você não está vendo um projeto, confirme se você está cadastrado como membro em <code>project_members</code>.
+        Dica: se vocÃª nÃ£o estÃ¡ vendo um projeto, confirme se vocÃª estÃ¡ cadastrado como membro em <code>project_members</code>.
       </div>
     </div>
   );
 }
+

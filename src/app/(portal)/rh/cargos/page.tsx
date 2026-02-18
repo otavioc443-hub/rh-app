@@ -5,7 +5,7 @@ import { Briefcase, Plus, Pencil, Trash2, Save, X, Search, RefreshCcw } from "lu
 import { supabase } from "@/lib/supabaseClient";
 import { PageHeader, Card, CardBody } from "@/components/ui/PageShell";
 
-type PortalRole = "colaborador" | "coordenador" | "gestor" | "rh" | "admin";
+type PortalRole = "colaborador" | "coordenador" | "gestor" | "rh" | "financeiro" | "pd" | "admin";
 
 type CargoRow = {
   id: string;
@@ -30,6 +30,8 @@ const PORTAL_ROLE_OPTIONS: Array<{ value: PortalRole; label: string }> = [
   { value: "coordenador", label: "Coordenador" },
   { value: "gestor", label: "Gestor" },
   { value: "rh", label: "RH" },
+  { value: "financeiro", label: "Financeiro" },
+  { value: "pd", label: "P&D" },
   { value: "admin", label: "Admin" },
 ];
 

@@ -19,6 +19,9 @@ function needsAdmin(pathname: string) {
 function needsRH(pathname: string) {
   return pathname === "/rh" || pathname.startsWith("/rh/");
 }
+function needsOrganograma(pathname: string) {
+  return pathname === "/institucional/organograma" || pathname.startsWith("/institucional/organograma/");
+}
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -63,7 +66,7 @@ export async function proxy(req: NextRequest) {
   }
 
   // ✅ checa role apenas quando necessário
-  if (needsRH(pathname) || needsAdmin(pathname)) {
+  if (needsRH(pathname) || needsAdmin(pathname) || needsOrganograma(pathname)) {
     const { data: prof, error } = await supabase
       .from("profiles")
       .select("role, active")
@@ -85,6 +88,12 @@ export async function proxy(req: NextRequest) {
     }
 
     if (needsRH(pathname) && !(role === "rh" || role === "admin")) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/unauthorized";
+      return NextResponse.redirect(url);
+    }
+
+    if (needsOrganograma(pathname) && !(role === "gestor" || role === "financeiro" || role === "admin")) {
       const url = req.nextUrl.clone();
       url.pathname = "/unauthorized";
       return NextResponse.redirect(url);
