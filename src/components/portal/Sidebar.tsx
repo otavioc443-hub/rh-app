@@ -227,6 +227,7 @@ export default function Sidebar({
           { label: "Painel Admin", icon: LayoutDashboard, href: "/admin", exact: true },
           { label: "Cadastro de empresas", icon: Building2, href: "/admin/empresas" },
           { label: "Configuracao SLA", icon: CalendarClock, href: "/admin/sla" },
+          { label: "Notificacoes", icon: MessageSquareText, href: "/admin/notificacoes" },
           { label: "Visibilidade", icon: Layers, href: "/admin/funcionalidades" },
           { label: "Sessões", icon: MonitorCheck, href: "/admin/sessoes" },
           { label: "Permissões", icon: UserCog, href: "/admin/permissoes" },

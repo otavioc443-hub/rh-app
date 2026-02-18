@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Download, RefreshCcw, Save } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 type ProjectStatus = "active" | "paused" | "done";
 type ProjectStage = "ofertas" | "desenvolvimento" | "as_built" | "pausado" | "cancelado";
@@ -41,6 +42,7 @@ type ProjectClientRow = {
 type MemberRow = {
   id: string;
   project_id: string;
+  user_id: string;
 };
 
 type DeliverableRow = {
@@ -48,7 +50,9 @@ type DeliverableRow = {
   project_id: string;
   title: string | null;
   due_date: string | null;
-  status: "pending" | "in_progress" | "sent" | "approved";
+  assigned_to: string | null;
+  status: "pending" | "in_progress" | "sent" | "approved" | "approved_with_comments";
+  created_at: string | null;
 };
 
 type ExtraPaymentRow = {
@@ -57,6 +61,7 @@ type ExtraPaymentRow = {
   amount: number;
   status: "pending" | "approved" | "rejected" | "paid";
   reference_month: string | null;
+  created_at: string | null;
 };
 
 type ProjectTimelineRow = {
@@ -98,8 +103,26 @@ type ProjectSummary = {
   extrasPaid: number;
 };
 
+type IndirectCostRow = {
+  id: string;
+  project_id: string;
+  amount: number;
+  created_at: string | null;
+};
+
+type ProjectAllocationRow = {
+  project_id: string;
+  user_id: string;
+  allocation_pct: number | null;
+};
+
 function fmtMoney(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function fmtPct(value: number) {
+  if (!Number.isFinite(value)) return "0%";
+  return `${value.toFixed(1)}%`;
 }
 
 function projectTypeLabel(value: ProjectType | null | undefined) {
@@ -119,6 +142,29 @@ function statusLabel(value: ProjectStatus) {
   if (value === "paused") return "Pausado";
   if (value === "active") return "Ativo";
   return "Concluido";
+}
+
+function deliverableEventLabel(eventType: string) {
+  if (eventType === "returned_for_rework") return "Retornou para ajuste";
+  if (eventType === "status_changed") return "Mudanca de status";
+  if (eventType === "created") return "Criado";
+  if (eventType === "contribution_added") return "Contribuicao registrada";
+  if (eventType === "assignee_added") return "Responsavel adicionado";
+  if (eventType === "assignee_removed") return "Responsavel removido";
+  if (eventType === "document_uploaded") return "Documento enviado";
+  if (eventType === "document_linked") return "Link de documento atualizado";
+  return eventType;
+}
+
+function deliverableStatusLabel(value?: string | null) {
+  if (value === "pending") return "Pendente";
+  if (value === "in_progress") return "Em andamento";
+  if (value === "sent") return "Enviado";
+  if (value === "approved") return "Aprovado";
+  if (value === "approved_with_comments") return "Aprovado com comentarios";
+  if (value === "blocked") return "Bloqueado";
+  if (value === "cancelled") return "Cancelado";
+  return value ?? "-";
 }
 
 function stageFromStatus(status: ProjectStatus): ProjectStage {
@@ -190,14 +236,27 @@ function riskLevel(project: ProjectRow, summary: ProjectSummary) {
 }
 
 export default function DiretoriaProjetosPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const assigneeFilter = useMemo(() => {
+    const raw = searchParams.get("assignee");
+    return raw ? raw.trim() : "";
+  }, [searchParams]);
+
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
 
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [clients, setClients] = useState<ProjectClientRow[]>([]);
   const [clientsById, setClientsById] = useState<Record<string, string>>({});
+  const [memberRows, setMemberRows] = useState<MemberRow[]>([]);
   const [summaryByProjectId, setSummaryByProjectId] = useState<Record<string, ProjectSummary>>({});
+  const [deliverableRows, setDeliverableRows] = useState<DeliverableRow[]>([]);
   const [extrasRows, setExtrasRows] = useState<ExtraPaymentRow[]>([]);
+  const [indirectCostRows, setIndirectCostRows] = useState<IndirectCostRow[]>([]);
+  const [allocationRows, setAllocationRows] = useState<ProjectAllocationRow[]>([]);
+  const [userNameById, setUserNameById] = useState<Record<string, string>>({});
   const [timelineRows, setTimelineRows] = useState<ProjectTimelineRow[]>([]);
   const [deliverableTimelineRows, setDeliverableTimelineRows] = useState<DeliverableTimelineRow[]>([]);
   const [deletedDeliverableRows, setDeletedDeliverableRows] = useState<DeletedDeliverableRow[]>([]);
@@ -208,9 +267,17 @@ export default function DiretoriaProjetosPage() {
   const [typeFilter, setTypeFilter] = useState<"all" | ProjectType>("all");
   const [clientFilter, setClientFilter] = useState<"all" | string>("all");
   const [projectFilter, setProjectFilter] = useState<"all" | string>("all");
+  const [rankingWindow, setRankingWindow] = useState<"30" | "90" | "365" | "all">("90");
   const [stageDraftByProject, setStageDraftByProject] = useState<Record<string, ProjectStage>>({});
   const [stageNoteByProject, setStageNoteByProject] = useState<Record<string, string>>({});
   const [savingProjectId, setSavingProjectId] = useState<string | null>(null);
+
+  function clearAssigneeFilter() {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("assignee");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname);
+  }
 
   async function load() {
     setLoading(true);
@@ -244,16 +311,22 @@ export default function DiretoriaProjetosPage() {
 
       const projectIds = projectRows.map((p) => p.id);
 
-      const [clientsRes, memberRes, deliverableRes, extrasRes] = await Promise.all([
+      const [clientsRes, memberRes, deliverableRes, extrasRes, indirectRes, allocationRes] = await Promise.all([
         supabase.from("project_clients").select("id,name").eq("active", true).order("name", { ascending: true }),
         projectIds.length
-          ? supabase.from("project_members").select("id,project_id").in("project_id", projectIds)
+          ? supabase.from("project_members").select("id,project_id,user_id").in("project_id", projectIds)
           : Promise.resolve({ data: [], error: null }),
         projectIds.length
-          ? supabase.from("project_deliverables").select("id,project_id,title,due_date,status").in("project_id", projectIds)
+          ? supabase.from("project_deliverables").select("id,project_id,title,due_date,assigned_to,status,created_at").in("project_id", projectIds)
           : Promise.resolve({ data: [], error: null }),
         projectIds.length
-          ? supabase.from("project_extra_payments").select("id,project_id,amount,status,reference_month").in("project_id", projectIds)
+          ? supabase.from("project_extra_payments").select("id,project_id,amount,status,reference_month,created_at").in("project_id", projectIds)
+          : Promise.resolve({ data: [], error: null }),
+        projectIds.length
+          ? supabase.from("project_indirect_costs").select("id,project_id,amount,created_at").in("project_id", projectIds)
+          : Promise.resolve({ data: [], error: null }),
+        projectIds.length
+          ? supabase.from("project_member_allocations").select("project_id,user_id,allocation_pct").in("project_id", projectIds)
           : Promise.resolve({ data: [], error: null }),
       ]);
 
@@ -261,6 +334,8 @@ export default function DiretoriaProjetosPage() {
       if (memberRes.error) throw memberRes.error;
       if (deliverableRes.error) throw deliverableRes.error;
       if (extrasRes.error) throw extrasRes.error;
+      if (indirectRes.error) throw indirectRes.error;
+      if (allocationRes.error) throw allocationRes.error;
 
       const clientsRows = (clientsRes.data ?? []) as ProjectClientRow[];
       setClients(clientsRows);
@@ -269,9 +344,33 @@ export default function DiretoriaProjetosPage() {
       setClientsById(clientMap);
 
       const members = (memberRes.data ?? []) as MemberRow[];
+      setMemberRows(members);
       const deliverables = (deliverableRes.data ?? []) as DeliverableRow[];
+      setDeliverableRows(deliverables);
       const extras = (extrasRes.data ?? []) as ExtraPaymentRow[];
       setExtrasRows(extras);
+      setIndirectCostRows((indirectRes.data ?? []) as IndirectCostRow[]);
+      setAllocationRows((allocationRes.data ?? []) as ProjectAllocationRow[]);
+
+      const userIds = Array.from(
+        new Set(
+          [...members.map((m) => m.user_id), ...deliverables.map((d) => d.assigned_to).filter(Boolean) as string[]].filter(Boolean)
+        )
+      );
+      if (userIds.length) {
+        const profileRes = await supabase.from("profiles").select("id,full_name,email").in("id", userIds);
+        if (!profileRes.error) {
+          const map: Record<string, string> = {};
+          for (const p of (profileRes.data ?? []) as Array<{ id: string; full_name: string | null; email: string | null }>) {
+            map[p.id] = (p.full_name ?? "").trim() || (p.email ?? "").trim() || `Colaborador ${p.id.slice(0, 8)}`;
+          }
+          setUserNameById(map);
+        } else {
+          setUserNameById({});
+        }
+      } else {
+        setUserNameById({});
+      }
 
       if (projectIds.length) {
         const [dTimelineRes, deletedRes] = await Promise.all([
@@ -327,7 +426,7 @@ export default function DiretoriaProjetosPage() {
         const pe = extras.filter((e) => e.project_id === p.id);
 
         const deliverablesTotal = pd.length;
-        const approved = pd.filter((d) => d.status === "approved").length;
+        const approved = pd.filter((d) => d.status === "approved" || d.status === "approved_with_comments").length;
         const progressPct = deliverablesTotal ? Math.round((approved / deliverablesTotal) * 100) : 0;
         const extrasPending = pe.filter((e) => e.status === "pending").reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
         const extrasApproved = pe.filter((e) => e.status === "approved").reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
@@ -348,8 +447,13 @@ export default function DiretoriaProjetosPage() {
       setProjects([]);
       setClients([]);
       setClientsById({});
+      setMemberRows([]);
       setSummaryByProjectId({});
+      setDeliverableRows([]);
       setExtrasRows([]);
+      setIndirectCostRows([]);
+      setAllocationRows([]);
+      setUserNameById({});
       setTimelineRows([]);
       setDeliverableTimelineRows([]);
       setDeletedDeliverableRows([]);
@@ -386,9 +490,11 @@ export default function DiretoriaProjetosPage() {
       .map((t) => ({
         id: `doc-${t.id}`,
         ts: t.created_at,
-        title: `${t.deliverable_id} (${t.event_type})`,
+        title: `${t.deliverable_id} (${deliverableEventLabel(t.event_type)})`,
         description: [
-          t.status_from || t.status_to ? `Status: ${t.status_from ?? "-"} -> ${t.status_to ?? "-"}` : "",
+          t.status_from || t.status_to
+            ? `Status: ${deliverableStatusLabel(t.status_from)} -> ${deliverableStatusLabel(t.status_to)}`
+            : "",
           t.comment ?? "",
         ]
           .filter(Boolean)
@@ -421,6 +527,10 @@ export default function DiretoriaProjetosPage() {
   const filtered = useMemo(() => {
     return projects.filter((p) => {
       const stage = p.project_stage ?? stageFromStatus(p.status);
+      if (assigneeFilter) {
+        const hasAssignee = deliverableRows.some((d) => d.project_id === p.id && d.assigned_to === assigneeFilter);
+        if (!hasAssignee) return false;
+      }
       if (projectFilter !== "all" && p.id !== projectFilter) return false;
       if (statusFilter !== "all" && p.status !== statusFilter) return false;
       if (stageFilter !== "all" && stage !== stageFilter) return false;
@@ -428,7 +538,7 @@ export default function DiretoriaProjetosPage() {
       if (clientFilter !== "all" && p.client_id !== clientFilter) return false;
       return true;
     });
-  }, [projects, projectFilter, statusFilter, stageFilter, typeFilter, clientFilter]);
+  }, [projects, assigneeFilter, deliverableRows, projectFilter, statusFilter, stageFilter, typeFilter, clientFilter]);
 
   const stats = useMemo(() => {
     const total = projects.length;
@@ -450,6 +560,166 @@ export default function DiretoriaProjetosPage() {
     }) === "alto").length;
     return { total, active, paused, done, budget, avgProgress, riskHigh };
   }, [projects, summaryByProjectId]);
+
+  const rankingCutoffIso = useMemo(() => {
+    if (rankingWindow === "all") return null;
+    const days = Number(rankingWindow);
+    if (!Number.isFinite(days) || days <= 0) return null;
+    const d = new Date();
+    d.setDate(d.getDate() - days);
+    return d.toISOString();
+  }, [rankingWindow]);
+
+  const isInRankingWindow = (value?: string | null) => {
+    if (!rankingCutoffIso) return true;
+    if (!value) return false;
+    const ts = new Date(value).getTime();
+    if (Number.isNaN(ts)) return false;
+    return ts >= new Date(rankingCutoffIso).getTime();
+  };
+
+  const projectEfficiencyRows = useMemo(() => {
+    const filteredIds = new Set(filtered.map((p) => p.id));
+    const windowDeliverables = deliverableRows.filter((d) =>
+      filteredIds.has(d.project_id) && isInRankingWindow(d.created_at ?? d.due_date)
+    );
+
+    const directByProject = new Map<string, number>();
+    for (const e of extrasRows) {
+      if (!filteredIds.has(e.project_id)) continue;
+      if (!isInRankingWindow(e.created_at ?? e.reference_month)) continue;
+      if (e.status === "rejected") continue;
+      directByProject.set(e.project_id, (directByProject.get(e.project_id) ?? 0) + (Number(e.amount) || 0));
+    }
+
+    const indirectByProject = new Map<string, number>();
+    for (const i of indirectCostRows) {
+      if (!filteredIds.has(i.project_id)) continue;
+      if (!isInRankingWindow(i.created_at)) continue;
+      indirectByProject.set(i.project_id, (indirectByProject.get(i.project_id) ?? 0) + (Number(i.amount) || 0));
+    }
+
+    const rows = filtered.map((p) => {
+      const scoped = windowDeliverables.filter((d) => d.project_id === p.id);
+      const approvedCount = scoped.filter((d) => d.status === "approved").length;
+      const productivityPct = scoped.length ? Math.round((approvedCount / scoped.length) * 100) : 0;
+      const revenue = Number(p.budget_total) || 0;
+      const direct = directByProject.get(p.id) ?? 0;
+      const indirect = indirectByProject.get(p.id) ?? 0;
+      const profit = revenue - direct - indirect;
+      const marginPct = revenue > 0 ? (profit / revenue) * 100 : 0;
+      const profitabilityScore = Math.max(0, Math.min(100, marginPct));
+      const index = Math.round(productivityPct * 0.5 + profitabilityScore * 0.5);
+      return {
+        projectId: p.id,
+        projectName: p.name,
+        productivityPct,
+        marginPct,
+        index,
+        revenue,
+        direct,
+        indirect,
+        profit,
+      };
+    });
+
+    rows.sort((a, b) => b.index - a.index || b.marginPct - a.marginPct);
+    return rows;
+  }, [filtered, deliverableRows, extrasRows, indirectCostRows, rankingCutoffIso]);
+
+  const collaboratorEfficiencyRows = useMemo(() => {
+    const filteredIds = new Set(filtered.map((p) => p.id));
+    const windowDeliverables = deliverableRows.filter((d) =>
+      filteredIds.has(d.project_id) && isInRankingWindow(d.created_at ?? d.due_date)
+    );
+    const directByProject = new Map<string, number>();
+    for (const e of extrasRows) {
+      if (!filteredIds.has(e.project_id)) continue;
+      if (!isInRankingWindow(e.created_at ?? e.reference_month)) continue;
+      if (e.status === "rejected") continue;
+      directByProject.set(e.project_id, (directByProject.get(e.project_id) ?? 0) + (Number(e.amount) || 0));
+    }
+    const indirectByProject = new Map<string, number>();
+    for (const i of indirectCostRows) {
+      if (!filteredIds.has(i.project_id)) continue;
+      if (!isInRankingWindow(i.created_at)) continue;
+      indirectByProject.set(i.project_id, (indirectByProject.get(i.project_id) ?? 0) + (Number(i.amount) || 0));
+    }
+
+    const membersByProject = new Map<string, string[]>();
+    for (const m of memberRows) {
+      if (!filteredIds.has(m.project_id)) continue;
+      const list = membersByProject.get(m.project_id) ?? [];
+      list.push(m.user_id);
+      membersByProject.set(m.project_id, list);
+    }
+
+    const allocationsByProject = new Map<string, ProjectAllocationRow[]>();
+    for (const a of allocationRows) {
+      if (!filteredIds.has(a.project_id)) continue;
+      const list = allocationsByProject.get(a.project_id) ?? [];
+      list.push(a);
+      allocationsByProject.set(a.project_id, list);
+    }
+
+    const metricsByUser = new Map<string, { revenue: number; cost: number; assigned: number; approved: number }>();
+    const ensure = (uid: string) => {
+      const row = metricsByUser.get(uid) ?? { revenue: 0, cost: 0, assigned: 0, approved: 0 };
+      metricsByUser.set(uid, row);
+      return row;
+    };
+
+    for (const d of windowDeliverables) {
+      if (!d.assigned_to) continue;
+      const row = ensure(d.assigned_to);
+      row.assigned += 1;
+      if (d.status === "approved") row.approved += 1;
+    }
+
+    for (const p of filtered) {
+      const revenue = Number(p.budget_total) || 0;
+      const cost = (directByProject.get(p.id) ?? 0) + (indirectByProject.get(p.id) ?? 0);
+      const allocs = allocationsByProject.get(p.id) ?? [];
+      if (allocs.length > 0) {
+        for (const a of allocs) {
+          const pct = Math.max(0, Number(a.allocation_pct) || 0) / 100;
+          if (pct <= 0) continue;
+          const row = ensure(a.user_id);
+          row.revenue += revenue * pct;
+          row.cost += cost * pct;
+        }
+      } else {
+        const members = membersByProject.get(p.id) ?? [];
+        if (!members.length) continue;
+        const split = 1 / members.length;
+        for (const uid of members) {
+          const row = ensure(uid);
+          row.revenue += revenue * split;
+          row.cost += cost * split;
+        }
+      }
+    }
+
+    const rows = Array.from(metricsByUser.entries()).map(([uid, m]) => {
+      const productivityPct = m.assigned > 0 ? Math.round((m.approved / m.assigned) * 100) : 0;
+      const marginPct = m.revenue > 0 ? ((m.revenue - m.cost) / m.revenue) * 100 : 0;
+      const profitabilityScore = Math.max(0, Math.min(100, marginPct));
+      const index = Math.round(productivityPct * 0.5 + profitabilityScore * 0.5);
+      return {
+        userId: uid,
+        userName: userNameById[uid] ?? `Colaborador ${uid.slice(0, 8)}`,
+        productivityPct,
+        marginPct,
+        index,
+        assigned: m.assigned,
+        approved: m.approved,
+        revenue: m.revenue,
+        cost: m.cost,
+      };
+    });
+    rows.sort((a, b) => b.index - a.index || b.productivityPct - a.productivityPct);
+    return rows;
+  }, [filtered, extrasRows, indirectCostRows, allocationRows, deliverableRows, memberRows, userNameById, rankingCutoffIso]);
 
   const monthly = useMemo(() => {
     const months = lastMonths(6);
@@ -735,6 +1005,18 @@ export default function DiretoriaProjetosPage() {
             </select>
           </label>
         </div>
+        {assigneeFilter ? (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
+            <span>Filtro ativo por colaborador: <b>{assigneeFilter.slice(0, 8)}</b></span>
+            <button
+              type="button"
+              onClick={clearAssigneeFilter}
+              className="rounded-lg border border-indigo-200 bg-white px-2 py-1 font-semibold text-indigo-700 hover:bg-indigo-100"
+            >
+              Limpar filtro
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {showProjectInfo ? (
@@ -887,6 +1169,92 @@ export default function DiretoriaProjetosPage() {
       </div>
 
       {msg ? <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">{msg}</div> : null}
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-slate-900">Indice de produtividade e lucratividade</p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-slate-500">Criterio: 50% produtividade + 50% margem operacional</p>
+            <select
+              value={rankingWindow}
+              onChange={(e) => setRankingWindow(e.target.value as "30" | "90" | "365" | "all")}
+              className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs text-slate-900"
+            >
+              <option value="30">Ultimos 30 dias</option>
+              <option value="90">Ultimos 90 dias</option>
+              <option value="365">Ultimos 365 dias</option>
+              <option value="all">Historico</option>
+            </select>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs font-semibold text-slate-700">Por projeto</p>
+            <div className="mt-2 overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="text-slate-600">
+                  <tr>
+                    <th className="py-2 pr-2">Projeto</th>
+                    <th className="py-2 pr-2">Indice</th>
+                    <th className="py-2 pr-2">Prod.</th>
+                    <th className="py-2 pr-2">Margem</th>
+                    <th className="py-2 pr-2">Lucro</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {projectEfficiencyRows.slice(0, 15).map((row) => (
+                    <tr key={row.projectId} className="border-t border-slate-200">
+                      <td className="py-2 pr-2 font-semibold text-slate-900">{row.projectName}</td>
+                      <td className="py-2 pr-2">{row.index}%</td>
+                      <td className="py-2 pr-2">{row.productivityPct}%</td>
+                      <td className="py-2 pr-2">{fmtPct(row.marginPct)}</td>
+                      <td className="py-2 pr-2">{fmtMoney(row.profit)}</td>
+                    </tr>
+                  ))}
+                  {!projectEfficiencyRows.length ? (
+                    <tr>
+                      <td className="py-2 text-slate-500" colSpan={5}>Sem dados para o filtro atual.</td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs font-semibold text-slate-700">Por colaborador</p>
+            <div className="mt-2 overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="text-slate-600">
+                  <tr>
+                    <th className="py-2 pr-2">Colaborador</th>
+                    <th className="py-2 pr-2">Indice</th>
+                    <th className="py-2 pr-2">Prod.</th>
+                    <th className="py-2 pr-2">Margem</th>
+                    <th className="py-2 pr-2">Aprov.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {collaboratorEfficiencyRows.slice(0, 20).map((row) => (
+                    <tr key={row.userId} className="border-t border-slate-200">
+                      <td className="py-2 pr-2 font-semibold text-slate-900">{row.userName}</td>
+                      <td className="py-2 pr-2">{row.index}%</td>
+                      <td className="py-2 pr-2">{row.productivityPct}%</td>
+                      <td className="py-2 pr-2">{fmtPct(row.marginPct)}</td>
+                      <td className="py-2 pr-2">{row.approved}/{row.assigned}</td>
+                    </tr>
+                  ))}
+                  {!collaboratorEfficiencyRows.length ? (
+                    <tr>
+                      <td className="py-2 text-slate-500" colSpan={5}>Sem dados para o filtro atual.</td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
         <p className="text-sm font-semibold text-slate-900">Comparativo mensal (ultimos 6 meses)</p>

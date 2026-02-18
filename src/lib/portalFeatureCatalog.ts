@@ -56,6 +56,7 @@ export const PORTAL_FEATURE_CATALOG: PortalFeatureCatalogItem[] = [
   { feature_key: "admin_painel", label: "Admin - Painel", area: "Admin", route_path: "/admin" },
   { feature_key: "admin_empresas", label: "Admin - Cadastro de empresas", area: "Admin", route_path: "/admin/empresas" },
   { feature_key: "admin_sla", label: "Admin - Configuracao SLA", area: "Admin", route_path: "/admin/sla" },
+  { feature_key: "admin_notificacoes", label: "Admin - Notificacoes", area: "Admin", route_path: "/admin/notificacoes" },
   { feature_key: "admin_funcionalidades", label: "Admin - Visibilidade", area: "Admin", route_path: "/admin/funcionalidades" },
   { feature_key: "admin_sessoes", label: "Admin - Sessoes", area: "Admin", route_path: "/admin/sessoes" },
   { feature_key: "admin_permissoes", label: "Admin - Permissoes", area: "Admin", route_path: "/admin/permissoes" },

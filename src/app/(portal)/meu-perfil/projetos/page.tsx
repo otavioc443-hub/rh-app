@@ -67,6 +67,18 @@ function statusLabel(v: string) {
   return v || "-";
 }
 
+function deliverableEventLabel(eventType: string) {
+  if (eventType === "returned_for_rework") return "Retornou para ajuste";
+  if (eventType === "status_changed") return "Mudanca de status";
+  if (eventType === "created") return "Criado";
+  if (eventType === "contribution_added") return "Contribuicao registrada";
+  if (eventType === "assignee_added") return "Responsavel adicionado";
+  if (eventType === "assignee_removed") return "Responsavel removido";
+  if (eventType === "document_uploaded") return "Documento enviado";
+  if (eventType === "document_linked") return "Link de documento atualizado";
+  return eventType;
+}
+
 function isEmailLike(value: string) {
   return value.includes("@");
 }
@@ -380,16 +392,25 @@ export default function MeuPerfilProjetosPage() {
     setSaving(true);
     setMsg("");
     try {
-      const res = await supabase
-        .from("project_deliverables")
-        .update({
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token ?? null;
+      const response = await fetch("/api/projects/deliverables/link", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          deliverable_id: deliverable.id,
           document_url: link,
-          status: "sent",
-          submitted_by: meId,
-          submitted_at: new Date().toISOString(),
-        })
-        .eq("id", deliverable.id);
-      if (res.error) throw new Error(res.error.message);
+        }),
+      });
+      const json = (await response.json()) as { ok?: boolean; error?: string };
+      if (!response.ok || !json.ok) {
+        throw new Error(json.error || "Nao foi possivel salvar o link do documento.");
+      }
+
       await logDeliverableEvent({
         deliverableId: deliverable.id,
         projectId: deliverable.project_id,
@@ -739,8 +760,10 @@ export default function MeuPerfilProjetosPage() {
                       {timeline.length ? (
                         timeline.map((t) => (
                           <div key={t.id}>
-                            {new Date(t.created_at).toLocaleString()} - {t.event_type}
-                            {t.status_from || t.status_to ? ` (${t.status_from ?? "-"} -> ${t.status_to ?? "-"})` : ""}
+                            {new Date(t.created_at).toLocaleString()} - {deliverableEventLabel(t.event_type)}
+                            {t.status_from || t.status_to
+                              ? ` (${statusLabel(t.status_from ?? "-")} -> ${statusLabel(t.status_to ?? "-")})`
+                              : ""}
                             {t.comment ? ` - ${t.comment}` : ""}
                             {t.actor_user_id ? ` - ${personLabel(t.actor_user_id)}` : ""}
                           </div>

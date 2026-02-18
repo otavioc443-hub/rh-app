@@ -60,6 +60,33 @@ function memberRoleLabel(role: MemberRole) {
   return "Colaborador";
 }
 
+function getDeliverableStatusEventType(statusFrom?: string | null, statusTo?: string | null) {
+  const from = statusFrom ?? "";
+  const to = statusTo ?? "";
+  if ((from === "sent" || from === "approved_with_comments") && (to === "pending" || to === "in_progress")) {
+    return "returned_for_rework";
+  }
+  return "status_changed";
+}
+
+function deliverableEventLabel(eventType: string) {
+  if (eventType === "returned_for_rework") return "Retornou para ajuste";
+  if (eventType === "status_changed") return "Mudanca de status";
+  if (eventType === "created") return "Criado";
+  return eventType;
+}
+
+function deliverableStatusLabel(value?: string | null) {
+  if (value === "pending") return "Pendente";
+  if (value === "in_progress") return "Em andamento";
+  if (value === "sent") return "Enviado";
+  if (value === "approved") return "Aprovado";
+  if (value === "approved_with_comments") return "Aprovado com comentarios";
+  if (value === "blocked") return "Bloqueado";
+  if (value === "cancelled") return "Cancelado";
+  return value ?? "-";
+}
+
 function downloadTextFile(filename: string, text: string, mime = "text/plain;charset=utf-8") {
   const blob = new Blob([text], { type: mime });
   const url = URL.createObjectURL(blob);
@@ -557,7 +584,7 @@ export default function PdProjetosPage() {
       await supabase.from("pd_project_deliverable_timeline").insert({
         deliverable_id: row.id,
         project_id: row.project_id,
-        event_type: "status_changed",
+        event_type: getDeliverableStatusEventType(row.status, next),
         status_from: row.status,
         status_to: next,
         comment: next === "approved_with_comments" ? comment : null,
@@ -974,8 +1001,10 @@ export default function PdProjetosPage() {
                             {itemTimeline.length ? (
                               itemTimeline.map((t) => (
                                 <p key={t.id} className="text-xs text-slate-600">
-                                  {new Date(t.created_at).toLocaleString("pt-BR")} - {t.event_type}
-                                  {t.status_from || t.status_to ? ` (${t.status_from ?? "-"} -> ${t.status_to ?? "-"})` : ""}
+                                  {new Date(t.created_at).toLocaleString("pt-BR")} - {deliverableEventLabel(t.event_type)}
+                                  {t.status_from || t.status_to
+                                    ? ` (${deliverableStatusLabel(t.status_from)} -> ${deliverableStatusLabel(t.status_to)})`
+                                    : ""}
                                   {t.comment ? ` - ${t.comment}` : ""}
                                 </p>
                               ))

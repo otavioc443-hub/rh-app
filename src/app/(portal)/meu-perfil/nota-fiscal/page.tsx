@@ -25,7 +25,7 @@ type InvoiceRow = {
 type AllocationRow = {
   project_id: string;
   allocation_pct: number;
-  projects: { id: string; name: string } | null;
+  projects: { id: string; name: string }[] | { id: string; name: string } | null;
 };
 
 type ProfileRow = {
@@ -199,7 +199,9 @@ export default function MeuPerfilNotaFiscalPage() {
       }
 
       const allocationData = ((allocationRes.data ?? []) as AllocationRow[]).map((row) => ({
-        project_name: row.projects?.name ?? row.project_id,
+        project_name: Array.isArray(row.projects)
+          ? (row.projects[0]?.name ?? row.project_id)
+          : (row.projects?.name ?? row.project_id),
         allocation_pct: Number(row.allocation_pct ?? 0),
       }));
       setAllocations(allocationData);

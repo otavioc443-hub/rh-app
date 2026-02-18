@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCcw } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { PersonChip } from "@/components/people/PersonChip";
 
@@ -155,6 +156,41 @@ function projectTypeLabel(value: ProjectType | null | undefined) {
   return found?.label ?? "-";
 }
 
+function getDeliverableStatusEventType(statusFrom?: string | null, statusTo?: string | null) {
+  const from = statusFrom ?? "";
+  const to = statusTo ?? "";
+  if ((from === "sent" || from === "approved_with_comments") && (to === "pending" || to === "in_progress")) {
+    return "returned_for_rework";
+  }
+  return "status_changed";
+}
+
+function deliverableEventLabel(eventType: string) {
+  if (eventType === "returned_for_rework") return "Retornou para ajuste";
+  if (eventType === "status_changed") return "Mudanca de status";
+  if (eventType === "created") return "Criado";
+  if (eventType === "contribution_added") return "Contribuicao registrada";
+  if (eventType === "assignee_added") return "Responsavel adicionado";
+  if (eventType === "assignee_removed") return "Responsavel removido";
+  if (eventType === "document_uploaded") return "Documento enviado";
+  if (eventType === "document_linked") return "Link de documento atualizado";
+  if (eventType === "document_link_updated") return "Link de documento atualizado";
+  if (eventType === "document_updated") return "Documento enviado/atualizado";
+  if (eventType === "file_uploaded") return "Arquivo enviado";
+  return eventType;
+}
+
+function deliverableStatusLabel(value?: string | null) {
+  if (value === "pending") return "Pendente";
+  if (value === "in_progress") return "Em andamento";
+  if (value === "sent") return "Enviado";
+  if (value === "approved") return "Aprovado";
+  if (value === "approved_with_comments") return "Aprovado com comentarios";
+  if (value === "blocked") return "Bloqueado";
+  if (value === "cancelled") return "Cancelado";
+  return value ?? "-";
+}
+
 function downloadTextFile(filename: string, text: string, mime = "text/plain;charset=utf-8") {
   const blob = new Blob([text], { type: mime });
   const url = URL.createObjectURL(blob);
@@ -212,6 +248,14 @@ function normalizeCsvDate(value: string) {
 }
 
 export default function GestorProjetosPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const assigneeFilter = useMemo(() => {
+    const raw = searchParams.get("assignee");
+    return raw ? raw.trim() : "";
+  }, [searchParams]);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
@@ -255,6 +299,7 @@ export default function GestorProjetosPage() {
   const [editTitleByDeliverableId, setEditTitleByDeliverableId] = useState<Record<string, string>>({});
   const [editDescByDeliverableId, setEditDescByDeliverableId] = useState<Record<string, string>>({});
   const [editDueByDeliverableId, setEditDueByDeliverableId] = useState<Record<string, string>>({});
+  const [docLinkByDeliverable, setDocLinkByDeliverable] = useState<Record<string, string>>({});
 
   const personLabel = useCallback((userId: string) => {
     const d = directoryById[userId];
@@ -281,6 +326,14 @@ export default function GestorProjetosPage() {
     const url = typeof d?.avatar_url === "string" ? d.avatar_url.trim() : "";
     return url || null;
   }, [directoryById]);
+  const assigneeLabel = useMemo(() => (assigneeFilter ? personLabel(assigneeFilter) : ""), [assigneeFilter, personLabel]);
+
+  function clearAssigneeFilter() {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("assignee");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname);
+  }
 
   function safeNameFromProfile(u: Profile) {
     const full = (u.full_name ?? "").trim();
@@ -453,6 +506,9 @@ export default function GestorProjetosPage() {
       setProjects(nextProjects);
       setMembers(nextMembers);
       setDeliverables(nextDeliverables);
+      setDocLinkByDeliverable(
+        Object.fromEntries(nextDeliverables.map((d) => [d.id, d.document_url ?? ""]))
+      );
       setSelectedProjectId((prev) => (prev && nextProjects.some((p) => p.id === prev) ? prev : nextProjects[0]?.id ?? ""));
 
       setEditTitleByDeliverableId((prev) => {
@@ -606,15 +662,16 @@ export default function GestorProjetosPage() {
   const filteredSelectedDeliverables = useMemo(() => {
     const search = deliverableSearch.trim().toLowerCase();
     return selectedDeliverables.filter((d) => {
+      const byAssignee = assigneeFilter ? d.assigned_to === assigneeFilter : true;
       const bySelect = deliverableSelectFilter ? d.id === deliverableSelectFilter : true;
       const byStatus = deliverableStatusFilter === "all" ? true : d.status === deliverableStatusFilter;
       const byDate = deliverableDateFilter ? (d.due_date ?? "") === deliverableDateFilter : true;
       const bySearch = search
         ? `${d.title} ${d.description ?? ""}`.toLowerCase().includes(search)
         : true;
-      return bySelect && byStatus && byDate && bySearch;
+      return byAssignee && bySelect && byStatus && byDate && bySearch;
     });
-  }, [selectedDeliverables, deliverableSelectFilter, deliverableStatusFilter, deliverableDateFilter, deliverableSearch]);
+  }, [selectedDeliverables, assigneeFilter, deliverableSelectFilter, deliverableStatusFilter, deliverableDateFilter, deliverableSearch]);
   const selectedDeletedDeliverables = useMemo(
     () =>
       deletedDeliverables
@@ -662,8 +719,10 @@ export default function GestorProjetosPage() {
     for (const p of projects) {
       const docs = deliverables.filter((d) => d.project_id === p.id);
       const totalDocs = docs.length;
-      const approvedDocs = docs.filter((d) => d.status === "approved").length;
-      const sentDocs = docs.filter((d) => d.status === "sent" || d.status === "approved").length;
+      const approvedDocs = docs.filter((d) => d.status === "approved" || d.status === "approved_with_comments").length;
+      const sentDocs = docs.filter(
+        (d) => d.status === "sent" || d.status === "approved" || d.status === "approved_with_comments"
+      ).length;
       const docIds = docs.map((d) => d.id);
       const contributorCount = new Set(
         contributions.filter((c) => docIds.includes(c.deliverable_id)).map((c) => c.user_id)
@@ -685,45 +744,11 @@ export default function GestorProjetosPage() {
     [projects, selectedProjectId]
   );
 
-  const [projectStatusInput, setProjectStatusInput] = useState<Project["status"]>("active");
-  useEffect(() => {
-    if (!selectedProject) {
-      setProjectStatusInput("active");
-      return;
-    }
-    setProjectStatusInput(selectedProject.status);
-  }, [selectedProjectId, selectedProject]);
-
-  const canEditProject = useMemo(() => {
-    if (!selectedProject) return false;
-    return isAdmin || selectedProject.owner_user_id === meId;
-  }, [selectedProject, isAdmin, meId]);
-
   const clientNameById = useMemo(() => {
     const map: Record<string, string> = {};
     for (const c of clients) map[c.id] = c.name;
     return map;
   }, [clients]);
-
-  async function saveProjectStatus() {
-    if (!selectedProject) return;
-    if (!canEditProject) return setMsg("Sem permissao para editar este projeto.");
-    setSaving(true);
-    setMsg("");
-    try {
-      const res = await supabase
-        .from("projects")
-        .update({ status: projectStatusInput })
-        .eq("id", selectedProject.id);
-      if (res.error) throw new Error(res.error.message);
-      setMsg("Status do projeto atualizado.");
-      await load();
-    } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao atualizar status do projeto.");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   async function addMember() {
     if (!selectedProjectId) return setMsg("Selecione um projeto.");
@@ -790,13 +815,28 @@ export default function GestorProjetosPage() {
     setMsg("");
     try {
       const current = deliverables.find((x) => x.id === id) ?? null;
+      const currentStatus = current?.status ?? null;
+      const needsAutoSentStep =
+        currentStatus === "in_progress" && (status === "approved" || status === "approved_with_comments");
+      if (needsAutoSentStep) {
+        const sentRes = await supabase.from("project_deliverables").update({ status: "sent" }).eq("id", id);
+        if (sentRes.error) throw new Error(sentRes.error.message);
+        await logDeliverableEvent({
+          deliverableId: id,
+          projectId: current?.project_id ?? selectedProjectId,
+          eventType: getDeliverableStatusEventType(currentStatus, "sent"),
+          statusFrom: currentStatus,
+          statusTo: "sent",
+        });
+      }
+      const fromStatus = needsAutoSentStep ? "sent" : currentStatus;
       const res = await supabase.from("project_deliverables").update({ status }).eq("id", id);
       if (res.error) throw new Error(res.error.message);
       await logDeliverableEvent({
         deliverableId: id,
         projectId: current?.project_id ?? selectedProjectId,
-        eventType: "status_changed",
-        statusFrom: current?.status ?? null,
+        eventType: getDeliverableStatusEventType(fromStatus, status),
+        statusFrom: fromStatus,
         statusTo: status,
       });
       await load();
@@ -812,13 +852,34 @@ export default function GestorProjetosPage() {
     setMsg("");
     try {
       const current = deliverables.find((x) => x.id === id) ?? null;
-      const res = await supabase.from("project_deliverables").update({ document_url: link.trim() || null }).eq("id", id);
-      if (res.error) throw new Error(res.error.message);
+      const nextLink = link.trim();
+      const currentLink = (current?.document_url ?? "").trim();
+      if (nextLink === currentLink) return;
+
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token ?? null;
+      const response = await fetch("/api/projects/deliverables/link", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          deliverable_id: id,
+          document_url: nextLink,
+        }),
+      });
+      const json = (await response.json()) as { ok?: boolean; error?: string };
+      if (!response.ok || !json.ok) {
+        throw new Error(json.error || "Nao foi possivel atualizar o link do documento.");
+      }
+
       await logDeliverableEvent({
         deliverableId: id,
         projectId: current?.project_id ?? selectedProjectId,
         eventType: "document_link_updated",
-        comment: link.trim() ? "Link atualizado." : "Link removido.",
+        comment: nextLink ? "Link atualizado." : "Link removido.",
       });
       await load();
     } catch (e: unknown) {
@@ -1183,26 +1244,16 @@ export default function GestorProjetosPage() {
                   </p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    value={projectStatusInput}
-                    onChange={(e) => setProjectStatusInput(e.target.value as Project["status"])}
-                    disabled={!canEditProject || saving}
-                    className="h-10 rounded-xl border border-white/20 bg-white/10 px-3 text-sm text-white disabled:opacity-60"
-                    title={canEditProject ? "Status executivo do projeto" : "Apenas o dono do projeto ou Admin pode editar"}
-                  >
-                    <option value="active" className="text-slate-900">Ativo</option>
-                    <option value="paused" className="text-slate-900">Pausado</option>
-                    <option value="done" className="text-slate-900">Concluido</option>
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => void saveProjectStatus()}
-                    disabled={!canEditProject || saving}
-                    className="rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                    title={canEditProject ? "Salvar status do projeto" : "Apenas o dono do projeto ou Admin pode editar"}
-                  >
-                    Salvar status
-                  </button>
+                  <span className="inline-flex rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold text-white">
+                    {selectedProject.status === "active"
+                      ? "Ativo"
+                      : selectedProject.status === "paused"
+                        ? "Pausado"
+                        : "Concluido"}
+                  </span>
+                  <span className="text-xs text-slate-300">
+                    Apenas Diretoria pode alterar status/etapa.
+                  </span>
                 </div>
               </div>
             </div>
@@ -1426,6 +1477,18 @@ export default function GestorProjetosPage() {
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
           <h2 className="text-sm font-semibold text-slate-900">Lista de documentos entregaveis</h2>
+          {assigneeFilter ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
+              <span>Filtro ativo por colaborador: <b>{assigneeLabel || assigneeFilter.slice(0, 8)}</b></span>
+              <button
+                type="button"
+                onClick={clearAssigneeFilter}
+                className="rounded-lg border border-indigo-200 bg-white px-2 py-1 font-semibold text-indigo-700 hover:bg-indigo-100"
+              >
+                Limpar filtro
+              </button>
+            </div>
+          ) : null}
           <div className="grid gap-3 md:grid-cols-2">
             <input value={docTitle} onChange={(e) => setDocTitle(e.target.value)} placeholder="Titulo do entregavel" className="h-11 rounded-xl border border-slate-200 px-3 text-sm" />
             <input type="date" value={docDueDate} onChange={(e) => setDocDueDate(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm" />
@@ -1544,6 +1607,16 @@ export default function GestorProjetosPage() {
                       Abrir arquivo enviado
                     </button>
                   ) : null}
+                  {d.document_url ? (
+                    <a
+                      href={d.document_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+                    >
+                      Abrir link informado
+                    </a>
+                  ) : null}
 
                   {d.status === "sent" ? (
                     <button
@@ -1597,11 +1670,19 @@ export default function GestorProjetosPage() {
 
                   <div className="flex flex-wrap gap-2">
                     <input
-                      defaultValue={d.document_url ?? ""}
+                      value={docLinkByDeliverable[d.id] ?? ""}
+                      onChange={(e) => setDocLinkByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))}
                       placeholder="Link do documento"
                       className="h-9 flex-1 min-w-[220px] rounded-lg border border-slate-200 px-2 text-xs"
-                      onBlur={(e) => void updateDocumentLink(d.id, e.target.value)}
                     />
+                    <button
+                      type="button"
+                      onClick={() => void updateDocumentLink(d.id, docLinkByDeliverable[d.id] ?? "")}
+                      disabled={saving}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800 disabled:opacity-60"
+                    >
+                      Enviar documento
+                    </button>
                   </div>
                   <p className="text-xs text-slate-500">Contribuicoes: {contribs.length}</p>
                 {contribs.map((c) => (
@@ -1616,8 +1697,10 @@ export default function GestorProjetosPage() {
                     {timeline.length ? (
                       timeline.map((t) => (
                         <p key={t.id} className="text-xs text-slate-600">
-                          {new Date(t.created_at).toLocaleString()} - {t.event_type}
-                          {t.status_from || t.status_to ? ` (${t.status_from ?? "-"} -> ${t.status_to ?? "-"})` : ""}
+                          {new Date(t.created_at).toLocaleString()} - {deliverableEventLabel(t.event_type)}
+                          {t.status_from || t.status_to
+                            ? ` (${deliverableStatusLabel(t.status_from)} -> ${deliverableStatusLabel(t.status_to)})`
+                            : ""}
                           {t.comment ? ` - ${t.comment}` : ""}
                           {t.actor_user_id ? ` - ${personLabel(t.actor_user_id)}` : ""}
                         </p>

@@ -27,7 +27,7 @@ export async function POST(req: Request) {
 
     const workerId = `manual:${requester.userId}`;
     const result = await processNextInvoiceJob(workerId);
-    return NextResponse.json({ ok: true, ...result });
+    return NextResponse.json(result);
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro inesperado";
     return NextResponse.json({ error: message }, { status: 500 });

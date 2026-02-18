@@ -32,6 +32,12 @@ type DeliverableRow = {
   project_id: string;
   status: DeliverableStatus;
   due_date: string | null;
+  assigned_to: string | null;
+  review_due_at?: string | null;
+  approved_at?: string | null;
+  approved_on_time?: boolean | null;
+  approved_without_rework?: boolean | null;
+  rework_count?: number | null;
 };
 
 type PdDeliverableRow = {
@@ -39,6 +45,12 @@ type PdDeliverableRow = {
   project_id: string;
   status: DeliverableStatus;
   due_date: string | null;
+  assigned_to: string | null;
+  review_due_at?: string | null;
+  approved_at?: string | null;
+  approved_on_time?: boolean | null;
+  approved_without_rework?: boolean | null;
+  rework_count?: number | null;
 };
 
 type ProjectStatus = "planning" | "active" | "paused" | "done" | "cancelled";
@@ -47,6 +59,7 @@ type ProjectRow = {
   id: string;
   status: ProjectStatus;
   owner_user_id: string;
+  budget_total?: number | null;
 };
 
 type PdProjectRow = {
@@ -77,7 +90,55 @@ type Stat = {
   label: string;
   value: string;
   hint: string;
+  lines?: Array<{ text: string; href?: string }>;
   tone?: "neutral" | "good" | "warn" | "danger";
+};
+
+type RankingItem = {
+  uid: string;
+  name: string;
+  avatarUrl: string | null;
+  finalScore: number;
+  productivityPct: number;
+  qualityPct: number;
+  totalDocs: number;
+  cleanApprovedDocs: number;
+  reworkDocs: number;
+  href: string;
+};
+
+type ExtraPaymentRow = {
+  id: string;
+  project_id: string;
+  user_id: string;
+  amount: number;
+  status: "pending" | "approved" | "rejected" | "paid";
+};
+
+type IndirectCostRow = {
+  id: string;
+  project_id: string;
+  amount: number;
+};
+
+type DeliverableAssigneeRow = {
+  deliverable_id: string;
+  user_id: string;
+  contribution_value: number | null;
+};
+
+type DeliverableTimelineRow = {
+  deliverable_id: string;
+  event_type: string | null;
+  status_from: DeliverableStatus | null;
+  status_to: DeliverableStatus | null;
+  created_at: string;
+};
+
+type ProjectAllocationRow = {
+  project_id: string;
+  user_id: string;
+  allocation_pct: number;
 };
 
 type LinkItem = {
@@ -137,11 +198,34 @@ function hoursDiff(fromIso: string, toIso: string) {
   return Math.max(0, (to - from) / (1000 * 60 * 60));
 }
 
+function fmtMoney(value: number) {
+  return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function fmtPct(value: number) {
+  return `${Math.round(value)}%`;
+}
+
+function endOfDayIso(dateYmd: string) {
+  return `${dateYmd}T23:59:59.999Z`;
+}
+
 function toneClass(tone: Stat["tone"]) {
   if (tone === "good") return "border-emerald-200 bg-emerald-50/70";
   if (tone === "warn") return "border-amber-200 bg-amber-50/70";
   if (tone === "danger") return "border-rose-200 bg-rose-50/70";
   return "border-slate-200 bg-white";
+}
+
+function initialsFromName(name: string) {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return "??";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
+}
+
+function isEmailLike(value: string) {
+  return value.includes("@");
 }
 
 const DASHBOARD_CONFIG: Record<SectorKey, { title: string; subtitle: string; links: LinkItem[] }> = {
@@ -271,19 +355,33 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
   const [stats, setStats] = useState<Stat[]>([]);
+  const [rankingItems, setRankingItems] = useState<RankingItem[]>([]);
+  const [rankingWindowDays, setRankingWindowDays] = useState<"30" | "90" | "365" | "all">("30");
 
   async function load() {
     setLoading(true);
     setMsg("");
+    setRankingItems([]);
 
     try {
       const now = new Date();
       const nowIso = now.toISOString();
       const todayIso = nowIso.slice(0, 10);
+      const rankingStartIso =
+        rankingWindowDays === "all"
+          ? null
+          : new Date(now.getTime() - Number(rankingWindowDays) * 24 * 60 * 60 * 1000).toISOString();
+      const returnsStartIso = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
       const { data: authData, error: authErr } = await supabase.auth.getUser();
       if (authErr || !authData.user) throw new Error("Sessao invalida.");
       const userId = authData.user.id;
+      let currentRole: string | null = null;
+      try {
+        const profileRes = await supabase.from("profiles").select("role").eq("id", userId).maybeSingle<{ role: string | null }>();
+        if (!profileRes.error) currentRole = profileRes.data?.role ?? null;
+      } catch {}
+      const isAdmin = currentRole === "admin";
 
       let slaHours = 72;
       try {
@@ -314,6 +412,7 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
       } catch {}
 
       let projectIds: string[] = [];
+      let scopedProjects: ProjectRow[] = [];
       let projectCountActive = 0;
       let projectCountPaused = 0;
       let projectCountDone = 0;
@@ -324,7 +423,9 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
         try {
           const [pr, dr] = await Promise.all([
             supabase.from("pd_projects").select("id,status"),
-            supabase.from("pd_project_deliverables").select("id,project_id,status,due_date"),
+            supabase
+              .from("pd_project_deliverables")
+              .select("id,project_id,status,due_date,assigned_to,review_due_at,approved_at,approved_on_time,approved_without_rework,rework_count"),
           ]);
           const projects = (pr.data ?? []) as PdProjectRow[];
           const filteredProjects = projects;
@@ -341,13 +442,15 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
       } else {
         try {
           const [pr, mr] = await Promise.all([
-            supabase.from("projects").select("id,status,owner_user_id"),
+            supabase.from("projects").select("id,status,owner_user_id,budget_total"),
             supabase.from("project_members").select("project_id,user_id,member_role").eq("user_id", userId),
           ]);
           const projects = (pr.data ?? []) as ProjectRow[];
           const memberships = (mr.data ?? []) as Array<{ project_id: string; user_id: string; member_role: string }>;
 
-          if (sector === "gestor" || sector === "coordenador") {
+          if (isAdmin) {
+            projectIds = projects.map((p) => p.id);
+          } else if (sector === "gestor" || sector === "coordenador") {
             const ids = new Set(memberships.map((m) => m.project_id));
             if (sector === "gestor") {
               for (const p of projects) if (p.owner_user_id === userId) ids.add(p.id);
@@ -359,6 +462,7 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
 
           const set = new Set(projectIds);
           const scoped = projects.filter((p) => set.has(p.id));
+          scopedProjects = scoped;
           projectCountActive = scoped.filter((p) => p.status === "active").length;
           projectCountPaused = scoped.filter((p) => p.status === "paused").length;
           projectCountDone = scoped.filter((p) => p.status === "done").length;
@@ -366,10 +470,21 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
           if (projectIds.length > 0) {
             const dr = await supabase
               .from("project_deliverables")
-              .select("id,project_id,status,due_date")
+              .select("id,project_id,status,due_date,assigned_to,review_due_at,approved_at,approved_on_time,approved_without_rework,rework_count")
               .in("project_id", projectIds);
             if (!dr.error) deliverables = (dr.data ?? []) as DeliverableRow[];
           }
+        } catch {}
+      }
+
+      let extraPayments: ExtraPaymentRow[] = [];
+      if ((sector === "gestor" || sector === "diretoria") && projectIds.length > 0) {
+        try {
+          const ep = await supabase
+            .from("project_extra_payments")
+            .select("id,project_id,user_id,amount,status")
+            .in("project_id", projectIds);
+          if (!ep.error) extraPayments = (ep.data ?? []) as ExtraPaymentRow[];
         } catch {}
       }
 
@@ -404,6 +519,8 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
       let extraValue = "0";
       let extraHint = "Sem leitura";
       let extraTone: Stat["tone"] = "neutral";
+      const dynamicStats: Stat[] = [];
+      const nextRankingItems: RankingItem[] = [];
 
       if (sector === "coordenador") {
         extraLabel = "Entregas da coordenação";
@@ -413,23 +530,6 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
         extraValue = String(mine);
         extraHint = "Itens em atraso no escopo acompanhado";
         extraTone = mine > 0 ? "warn" : "good";
-      }
-
-      if (sector === "gestor") {
-        extraLabel = "Pagamentos extras pendentes";
-        let pending = 0;
-        try {
-          const pr = projectIds.length
-            ? await supabase
-                .from("project_extra_payments")
-                .select("id,status,project_id")
-                .in("project_id", projectIds)
-            : { data: [], error: null };
-          if (!pr.error) pending = ((pr.data ?? []) as Array<{ status: string }>).filter((x) => x.status === "pending").length;
-        } catch {}
-        extraValue = String(pending);
-        extraHint = "Aguardando decisão do gestor";
-        extraTone = pending > 0 ? "warn" : "good";
       }
 
       if (sector === "pd") {
@@ -442,6 +542,18 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
         extraValue = String(blocked);
         extraHint = "Demandas internas bloqueadas no fluxo";
         extraTone = blocked > 0 ? "warn" : "good";
+      }
+
+      if (sector === "gestor") {
+        const budgetTotal = scopedProjects.reduce((acc, p) => acc + (Number(p.budget_total) || 0), 0);
+        const directCost = extraPayments
+          .filter((x) => x.status === "approved" || x.status === "paid")
+          .reduce((acc, x) => acc + (Number(x.amount) || 0), 0);
+        const pendingExtras = extraPayments.filter((x) => x.status === "pending").length;
+        extraLabel = "Custo operacional consolidado";
+        extraValue = fmtMoney(budgetTotal + directCost);
+        extraHint = `Escopo + custos diretos de execucao. Pendencias financeiras: ${pendingExtras}.`;
+        extraTone = pendingExtras > 0 ? "warn" : "neutral";
       }
 
       if (sector === "rh") {
@@ -482,6 +594,274 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
         extraValue = String(contracts);
         extraHint = "Contratos/aditivos aguardando decisão";
         extraTone = contracts > 0 ? "warn" : "good";
+      }
+
+      if ((sector === "coordenador" || sector === "gestor" || sector === "diretoria") && projectIds.length > 0) {
+        const scopedDeliverablesAll = (deliverables as DeliverableRow[]).filter((d) => projectIds.includes(d.project_id));
+        const scopedDeliverables = scopedDeliverablesAll.filter((d) => {
+          if (!rankingStartIso) return true;
+          if (d.approved_at) return d.approved_at >= rankingStartIso;
+          if (d.due_date) return d.due_date >= rankingStartIso.slice(0, 10);
+          return true;
+        });
+        const deliverableIds = scopedDeliverablesAll.map((d) => d.id);
+        const assigneeMap = new Map<string, string[]>();
+        const timelineByDeliverable = new Map<string, DeliverableTimelineRow[]>();
+        const participantIds = new Set<string>();
+        for (const p of scopedProjects) participantIds.add(p.owner_user_id);
+        try {
+          const membersRes = await supabase.from("project_members").select("user_id").in("project_id", projectIds);
+          if (!membersRes.error) {
+            for (const m of (membersRes.data ?? []) as Array<{ user_id: string }>) {
+              participantIds.add(m.user_id);
+            }
+          }
+        } catch {}
+
+        if (deliverableIds.length > 0) {
+          try {
+            const [asg, tl] = await Promise.all([
+              supabase
+                .from("project_deliverable_assignees")
+                .select("deliverable_id,user_id,contribution_value")
+                .in("deliverable_id", deliverableIds),
+              supabase
+                .from("project_deliverable_timeline")
+                .select("deliverable_id,event_type,status_from,status_to,created_at")
+                .in("deliverable_id", deliverableIds)
+                .order("created_at", { ascending: true }),
+            ]);
+            if (!asg.error) {
+              for (const row of (asg.data ?? []) as DeliverableAssigneeRow[]) {
+                const prev = assigneeMap.get(row.deliverable_id) ?? [];
+                prev.push(row.user_id);
+                assigneeMap.set(row.deliverable_id, prev);
+              }
+            }
+            if (!tl.error) {
+              for (const row of (tl.data ?? []) as DeliverableTimelineRow[]) {
+                const prev = timelineByDeliverable.get(row.deliverable_id) ?? [];
+                prev.push(row);
+                timelineByDeliverable.set(row.deliverable_id, prev);
+              }
+            }
+          } catch {}
+        }
+
+        type RankAgg = {
+          docs: number;
+          quality: number;
+          productivity: number;
+          cleanApprovedDocs: number;
+          reworkDocs: number;
+        };
+        const rankByUser = new Map<string, RankAgg>();
+        for (const d of scopedDeliverables) {
+          const assignedUsers = [...new Set([...(assigneeMap.get(d.id) ?? []), ...(d.assigned_to ? [d.assigned_to] : [])])];
+          if (!assignedUsers.length) continue;
+          const split = 1 / assignedUsers.length;
+          const timeline = timelineByDeliverable.get(d.id) ?? [];
+          const hasReturnForFix = timeline.some(
+            (e) =>
+              e.event_type === "returned_for_rework" ||
+              ((e.status_to === "pending" || e.status_to === "in_progress") &&
+                (e.status_from === "sent" || e.status_from === "approved_with_comments"))
+          );
+          const hadApprovalWithComments =
+            d.status === "approved_with_comments" || timeline.some((e) => e.status_to === "approved_with_comments");
+          const approvedAt = d.approved_at ?? [...timeline].reverse().find((e) => e.status_to === "approved")?.created_at ?? null;
+          const qualityOk =
+            (d.approved_without_rework ?? null) !== null
+              ? !!d.approved_without_rework
+              : d.status === "approved" && !hasReturnForFix && !hadApprovalWithComments;
+          const onTime =
+            (d.approved_on_time ?? null) !== null
+              ? !!d.approved_on_time
+              : (!d.due_date || (!!approvedAt && approvedAt <= endOfDayIso(d.due_date)));
+          const productiveOk = qualityOk && onTime;
+          const q = qualityOk ? 1 : 0;
+          const p = productiveOk ? 1 : 0;
+          const reworkDocs = (d.rework_count ?? 0) > 0 || hasReturnForFix ? 1 : 0;
+          for (const uid of assignedUsers) {
+            const prev = rankByUser.get(uid) ?? {
+              docs: 0,
+              quality: 0,
+              productivity: 0,
+              cleanApprovedDocs: 0,
+              reworkDocs: 0,
+            };
+            prev.docs += split;
+            prev.quality += q * split;
+            prev.productivity += p * split;
+            prev.cleanApprovedDocs += q * split;
+            prev.reworkDocs += reworkDocs * split;
+            rankByUser.set(uid, prev);
+          }
+        }
+        for (const uid of participantIds) {
+          if (!rankByUser.has(uid)) {
+            rankByUser.set(uid, { docs: 0, quality: 0, productivity: 0, cleanApprovedDocs: 0, reworkDocs: 0 });
+          }
+        }
+
+        const rankedUsers = Array.from(rankByUser.entries())
+          .map(([uid, agg]) => {
+            const docs = Math.max(agg.docs, 1);
+            const qualityPct = (agg.quality / docs) * 100;
+            const productivityPct = (agg.productivity / docs) * 100;
+            const finalScore = (qualityPct + productivityPct) / 2;
+            return {
+              uid,
+              docs,
+              qualityPct,
+              productivityPct,
+              finalScore,
+              cleanApprovedDocs: agg.cleanApprovedDocs,
+              reworkDocs: agg.reworkDocs,
+            };
+          })
+          .sort((a, b) => b.finalScore - a.finalScore);
+
+        const profileById: Record<string, { name: string; avatarUrl: string | null }> = {};
+        try {
+          const ids = rankedUsers.map((x) => x.uid);
+          if (ids.length) {
+            const pr = await supabase.from("profiles").select("id,full_name,email,avatar_url").in("id", ids);
+            if (!pr.error) {
+              for (const p of (pr.data ?? []) as Array<{ id: string; full_name: string | null; email: string | null; avatar_url?: string | null }>) {
+                const full = (p.full_name ?? "").trim();
+                const safeName = full && !isEmailLike(full) ? full : `Colaborador ${p.id.slice(0, 8)}`;
+                profileById[p.id] = {
+                  name: safeName,
+                  avatarUrl: p.avatar_url ?? null,
+                };
+              }
+            }
+          }
+        } catch {}
+
+        const rankingRoute =
+          sector === "coordenador" ? "/coordenador/projetos" : sector === "gestor" ? "/gestor/projetos" : "/diretoria/projetos";
+        for (const r of rankedUsers) {
+          const profile = profileById[r.uid];
+          nextRankingItems.push({
+            uid: r.uid,
+            name: profile?.name ?? r.uid.slice(0, 8),
+            avatarUrl: profile?.avatarUrl ?? null,
+            finalScore: r.finalScore,
+            productivityPct: r.productivityPct,
+            qualityPct: r.qualityPct,
+            totalDocs: Math.round(r.docs),
+            cleanApprovedDocs: Math.round(r.cleanApprovedDocs),
+            reworkDocs: Math.round(r.reworkDocs),
+            href: `${rankingRoute}?assignee=${encodeURIComponent(r.uid)}`,
+          });
+        }
+
+        const reviewedDeliverables = scopedDeliverablesAll.filter((d) => !!d.approved_at);
+        const approvalsOnTime = reviewedDeliverables.filter((d) => !!d.approved_on_time).length;
+        const approvalSlaRate = reviewedDeliverables.length
+          ? Math.round((approvalsOnTime / reviewedDeliverables.length) * 100)
+          : 100;
+        dynamicStats.push({
+          label: "SLA de aprovacao",
+          value: `${approvalSlaRate}%`,
+          hint: `${approvalsOnTime}/${reviewedDeliverables.length} aprovados dentro do prazo de revisao`,
+          tone: toneFromPercent(approvalSlaRate, { goodMin: 90, warnMin: 75 }),
+        });
+
+        const returnsLast7 = Array.from(timelineByDeliverable.values())
+          .flat()
+          .filter((e) => e.event_type === "returned_for_rework" && e.created_at >= returnsStartIso).length;
+        const atRiskDeliverables = scopedDeliverablesAll.filter((d) => {
+          if (d.status === "approved" || d.status === "approved_with_comments" || d.status === "cancelled") return false;
+          if (!d.due_date) return false;
+          const dueTs = new Date(endOfDayIso(d.due_date)).getTime();
+          const nowTs = now.getTime();
+          const diffDays = (dueTs - nowTs) / (1000 * 60 * 60 * 24);
+          return diffDays >= 0 && diffDays <= 2;
+        }).length;
+        dynamicStats.push({
+          label: "Alertas operacionais",
+          value: String(returnsLast7 + atRiskDeliverables),
+          hint: `${returnsLast7} retornos para ajuste (7d) | ${atRiskDeliverables} entregaveis em risco (<=2 dias)`,
+          tone: toneFromCount(returnsLast7 + atRiskDeliverables, 1, 5),
+        });
+
+        if (sector === "diretoria") {
+          let indirectCosts: IndirectCostRow[] = [];
+          let allocations: ProjectAllocationRow[] = [];
+          try {
+            const [indRes, allocRes] = await Promise.all([
+              supabase.from("project_indirect_costs").select("id,project_id,amount").in("project_id", projectIds),
+              supabase.from("project_member_allocations").select("project_id,user_id,allocation_pct").in("project_id", projectIds),
+            ]);
+            if (!indRes.error) indirectCosts = (indRes.data ?? []) as IndirectCostRow[];
+            if (!allocRes.error) allocations = (allocRes.data ?? []) as ProjectAllocationRow[];
+          } catch {}
+
+          const budgetByProject = new Map(scopedProjects.map((p) => [p.id, Number(p.budget_total) || 0]));
+          const directByProject = new Map<string, number>();
+          for (const ep of extraPayments) {
+            if (ep.status === "rejected") continue;
+            directByProject.set(ep.project_id, (directByProject.get(ep.project_id) ?? 0) + (Number(ep.amount) || 0));
+          }
+          const indirectByProject = new Map<string, number>();
+          for (const ic of indirectCosts) {
+            indirectByProject.set(ic.project_id, (indirectByProject.get(ic.project_id) ?? 0) + (Number(ic.amount) || 0));
+          }
+
+          let revenueTotal = 0;
+          let directTotal = 0;
+          let indirectTotal = 0;
+          for (const pid of projectIds) {
+            revenueTotal += budgetByProject.get(pid) ?? 0;
+            directTotal += directByProject.get(pid) ?? 0;
+            indirectTotal += indirectByProject.get(pid) ?? 0;
+          }
+          const marginPct = revenueTotal > 0 ? ((revenueTotal - directTotal - indirectTotal) / revenueTotal) * 100 : 0;
+
+          dynamicStats.push({
+            label: "Margem operacional do portfolio",
+            value: fmtPct(marginPct),
+            hint: `Receita ${fmtMoney(revenueTotal)} | Diretos ${fmtMoney(directTotal)} | Indiretos ${fmtMoney(indirectTotal)}`,
+            tone: toneFromPercent(marginPct, { goodMin: 30, warnMin: 15 }),
+          });
+
+          const collabProfit = new Map<string, { revenue: number; cost: number }>();
+          for (const a of allocations) {
+            const pct = Math.max(0, Number(a.allocation_pct) || 0) / 100;
+            if (pct <= 0) continue;
+            const rev = (budgetByProject.get(a.project_id) ?? 0) * pct;
+            const cst = ((directByProject.get(a.project_id) ?? 0) + (indirectByProject.get(a.project_id) ?? 0)) * pct;
+            const prev = collabProfit.get(a.user_id) ?? { revenue: 0, cost: 0 };
+            prev.revenue += rev;
+            prev.cost += cst;
+            collabProfit.set(a.user_id, prev);
+          }
+
+          const collabIndex = Array.from(rankByUser.entries()).map(([uid, agg]) => {
+            const docs = Math.max(agg.docs, 1);
+            const productivityPct = (agg.productivity / docs) * 100;
+            const p = collabProfit.get(uid);
+            const margin = p && p.revenue > 0 ? ((p.revenue - p.cost) / p.revenue) * 100 : 0;
+            const idx = p ? productivityPct * 0.5 + margin * 0.5 : productivityPct;
+            return { uid, idx, productivityPct, margin };
+          });
+
+          collabIndex.sort((a, b) => b.idx - a.idx);
+          const bestCollab = collabIndex[0];
+          if (bestCollab) {
+            dynamicStats.push({
+              label: "Top performer (produtividade + margem)",
+              value: fmtPct(bestCollab.idx),
+              hint: `${profileById[bestCollab.uid]?.name ?? bestCollab.uid.slice(0, 8)} | Prod ${fmtPct(
+                bestCollab.productivityPct
+              )} | Lucr ${fmtPct(bestCollab.margin)}`,
+              tone: toneFromPercent(bestCollab.idx, { goodMin: 75, warnMin: 60 }),
+            });
+          }
+        }
       }
 
       const resolvedTickets = tickets.filter((t) => isResolvedStatus(t.status));
@@ -559,9 +939,12 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
           hint: extraHint,
           tone: extraTone,
         },
+        ...dynamicStats,
       ]);
+      setRankingItems(nextRankingItems);
     } catch (e: unknown) {
       setStats([]);
+      setRankingItems([]);
       setMsg(e instanceof Error ? e.message : "Erro ao carregar painel.");
     } finally {
       setLoading(false);
@@ -571,7 +954,7 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
   useEffect(() => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sector]);
+  }, [sector, rankingWindowDays]);
 
   const hasStats = useMemo(() => stats.length > 0, [stats]);
 
@@ -604,6 +987,19 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{s.label}</p>
                 <p className="mt-2 text-3xl font-semibold text-slate-900">{s.value}</p>
                 {s.hint ? <p className="mt-1 text-sm text-slate-600">{s.hint}</p> : null}
+                {s.lines?.length ? (
+                  <div className="mt-2 space-y-1 text-xs text-slate-700">
+                    {s.lines.map((line) => (
+                      line.href ? (
+                        <Link key={line.text} href={line.href} className="block hover:underline">
+                          {line.text}
+                        </Link>
+                      ) : (
+                        <p key={line.text}>{line.text}</p>
+                      )
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ))
           : Array.from({ length: 6 }).map((_, i) => (
@@ -628,7 +1024,82 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
             </Link>
           ))}
         </div>
+        {sector === "coordenador" || sector === "gestor" || sector === "diretoria" ? (
+          <details className="mt-4 rounded-xl border border-slate-200">
+            <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-slate-900">
+              Ranking de colaboradores (produtividade + qualidade)
+            </summary>
+            <div className="space-y-2 border-t border-slate-200 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="px-1 text-xs text-slate-500">Janela do ranking</p>
+                <select
+                  value={rankingWindowDays}
+                  onChange={(e) => setRankingWindowDays(e.target.value as "30" | "90" | "365" | "all")}
+                  className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700"
+                >
+                  <option value="30">Ultimos 30 dias</option>
+                  <option value="90">Ultimos 90 dias</option>
+                  <option value="365">Ultimos 12 meses</option>
+                  <option value="all">Todo o historico</option>
+                </select>
+              </div>
+              <p className="px-1 text-xs text-slate-500">
+                Critério: aprovado no prazo, sem retorno para ajuste e sem aprovação com comentários.
+              </p>
+              {rankingItems.length ? (
+                rankingItems.map((item, index) => (
+                  <Link
+                    key={item.uid}
+                    href={item.href}
+                    className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 hover:bg-slate-50"
+                  >
+                    <div className="flex items-center gap-3">
+                      {item.avatarUrl ? (
+                        <img
+                          src={item.avatarUrl}
+                          alt={item.name}
+                          className="h-9 w-9 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700">
+                          {initialsFromName(item.name)}
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {index + 1}. {item.name}
+                        </p>
+                        <p className="text-xs text-slate-600">
+                          P: {fmtPct(item.productivityPct)} | Q: {fmtPct(item.qualityPct)}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Sem retrabalho: {item.cleanApprovedDocs}/{item.totalDocs} | Retrabalho: {item.reworkDocs}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-sm font-semibold text-slate-900">{fmtPct(item.finalScore)}</p>
+                  </Link>
+                ))
+              ) : (
+                <div className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-200 text-xs font-semibold text-slate-700">
+                      00
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">1. Sem dados</p>
+                      <p className="text-xs text-slate-600">P: 0% | Q: 0%</p>
+                      <p className="text-xs text-slate-500">Sem retrabalho: 0/0 | Retrabalho: 0</p>
+                    </div>
+                  </div>
+                  <p className="text-sm font-semibold text-slate-900">0%</p>
+                </div>
+              )}
+            </div>
+          </details>
+        ) : null}
       </div>
     </div>
   );
 }
+

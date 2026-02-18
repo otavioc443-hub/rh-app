@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { RefreshCcw } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { PersonChip } from "@/components/people/PersonChip";
 
@@ -124,7 +125,50 @@ function projectTypeLabel(value: ProjectType | null | undefined) {
   return "-";
 }
 
+function getDeliverableStatusEventType(statusFrom?: string | null, statusTo?: string | null) {
+  const from = statusFrom ?? "";
+  const to = statusTo ?? "";
+  if ((from === "sent" || from === "approved_with_comments") && (to === "pending" || to === "in_progress")) {
+    return "returned_for_rework";
+  }
+  return "status_changed";
+}
+
+function deliverableEventLabel(eventType: string) {
+  if (eventType === "returned_for_rework") return "Retornou para ajuste";
+  if (eventType === "status_changed") return "Mudanca de status";
+  if (eventType === "created") return "Criado";
+  if (eventType === "contribution_added") return "Contribuicao registrada";
+  if (eventType === "assignee_added") return "Responsavel adicionado";
+  if (eventType === "assignee_removed") return "Responsavel removido";
+  if (eventType === "document_uploaded") return "Documento enviado";
+  if (eventType === "document_linked") return "Link de documento atualizado";
+  if (eventType === "document_link_updated") return "Link de documento atualizado";
+  if (eventType === "document_updated") return "Documento enviado/atualizado";
+  if (eventType === "file_uploaded") return "Arquivo enviado";
+  return eventType;
+}
+
+function deliverableStatusLabel(value?: string | null) {
+  if (value === "pending") return "Pendente";
+  if (value === "in_progress") return "Em andamento";
+  if (value === "sent") return "Enviado";
+  if (value === "approved") return "Aprovado";
+  if (value === "approved_with_comments") return "Aprovado com comentarios";
+  if (value === "blocked") return "Bloqueado";
+  if (value === "cancelled") return "Cancelado";
+  return value ?? "-";
+}
+
 export default function CoordenadorProjetosPage() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const assigneeFilter = useMemo(() => {
+    const raw = searchParams.get("assignee");
+    return raw ? raw.trim() : "";
+  }, [searchParams]);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
@@ -393,15 +437,19 @@ export default function CoordenadorProjetosPage() {
   const filteredProjectDeliverables = useMemo(() => {
     const search = deliverableSearch.trim().toLowerCase();
     return projectDeliverables.filter((d) => {
+      const hasExtraAssignee = assigneeFilter
+        ? deliverableAssignees.some((a) => a.deliverable_id === d.id && a.user_id === assigneeFilter)
+        : false;
+      const byAssignee = assigneeFilter ? (d.assigned_to === assigneeFilter || hasExtraAssignee) : true;
       const bySelect = deliverableSelectFilter ? d.id === deliverableSelectFilter : true;
       const byStatus = deliverableStatusFilter === "all" ? true : d.status === deliverableStatusFilter;
       const byDate = deliverableDateFilter ? (d.due_date ?? "") === deliverableDateFilter : true;
       const bySearch = search
         ? `${d.title} ${d.description ?? ""}`.toLowerCase().includes(search)
         : true;
-      return bySelect && byStatus && byDate && bySearch;
+      return byAssignee && bySelect && byStatus && byDate && bySearch;
     });
-  }, [projectDeliverables, deliverableSearch, deliverableSelectFilter, deliverableStatusFilter, deliverableDateFilter]);
+  }, [projectDeliverables, deliverableAssignees, assigneeFilter, deliverableSearch, deliverableSelectFilter, deliverableStatusFilter, deliverableDateFilter]);
 
   // Ao trocar de projeto (ou recarregar), garanta que o select aponte para um
   // entregavel valido do projeto atual, para evitar "select vazio".
@@ -433,8 +481,12 @@ export default function CoordenadorProjetosPage() {
 
   const progress = useMemo(() => {
     const total = projectDeliverables.length;
-    const sent = projectDeliverables.filter((d) => d.status === "sent" || d.status === "approved").length;
-    const approved = projectDeliverables.filter((d) => d.status === "approved").length;
+    const sent = projectDeliverables.filter(
+      (d) => d.status === "sent" || d.status === "approved" || d.status === "approved_with_comments"
+    ).length;
+    const approved = projectDeliverables.filter(
+      (d) => d.status === "approved" || d.status === "approved_with_comments"
+    ).length;
     return {
       total,
       sentPct: total ? Math.round((sent / total) * 100) : 0,
@@ -473,6 +525,13 @@ export default function CoordenadorProjetosPage() {
     const url = typeof d?.avatar_url === "string" ? d.avatar_url.trim() : "";
     return url || null;
   };
+
+  function clearAssigneeFilter() {
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("assignee");
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname);
+  }
 
   async function loadMemberDirectory(projectId: string) {
     if (!projectId) {
@@ -534,16 +593,25 @@ export default function CoordenadorProjetosPage() {
     setSaving(true);
     setMsg("");
     try {
-      const res = await supabase
-        .from("project_deliverables")
-        .update({
-          document_url: link || null,
-          status: link ? "sent" : deliverable.status,
-          submitted_by: link ? meId : deliverable.submitted_by,
-          submitted_at: link ? new Date().toISOString() : null,
-        })
-        .eq("id", deliverable.id);
-      if (res.error) throw new Error(res.error.message);
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token ?? null;
+      const response = await fetch("/api/projects/deliverables/link", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          deliverable_id: deliverable.id,
+          document_url: link,
+        }),
+      });
+      const json = (await response.json()) as { ok?: boolean; error?: string };
+      if (!response.ok || !json.ok) {
+        throw new Error(json.error || "Nao foi possivel atualizar o documento.");
+      }
+
       await logDeliverableEvent({
         deliverableId: deliverable.id,
         projectId: deliverable.project_id,
@@ -566,10 +634,25 @@ export default function CoordenadorProjetosPage() {
     setMsg("");
     try {
       const current = deliverables.find((x) => x.id === deliverableId) ?? null;
+      const currentStatus = current?.status ?? null;
+      const needsAutoSentStep =
+        currentStatus === "in_progress" && (status === "approved" || status === "approved_with_comments");
       const approvalComment =
         status === "approved_with_comments"
           ? (statusCommentByDeliverableId[deliverableId] ?? "").trim() || null
           : current?.approval_comment ?? null;
+      if (needsAutoSentStep) {
+        const sentRes = await supabase.from("project_deliverables").update({ status: "sent" }).eq("id", deliverableId);
+        if (sentRes.error) throw new Error(sentRes.error.message);
+        await logDeliverableEvent({
+          deliverableId,
+          projectId: current?.project_id ?? selectedProjectId,
+          eventType: getDeliverableStatusEventType(currentStatus, "sent"),
+          statusFrom: currentStatus,
+          statusTo: "sent",
+        });
+      }
+      const fromStatus = needsAutoSentStep ? "sent" : currentStatus;
       const res = await supabase
         .from("project_deliverables")
         .update({ status, approval_comment: approvalComment })
@@ -578,8 +661,8 @@ export default function CoordenadorProjetosPage() {
       await logDeliverableEvent({
         deliverableId,
         projectId: current?.project_id ?? selectedProjectId,
-        eventType: "status_changed",
-        statusFrom: current?.status ?? null,
+        eventType: getDeliverableStatusEventType(fromStatus, status),
+        statusFrom: fromStatus,
         statusTo: status,
         comment: status === "approved_with_comments" ? approvalComment : null,
       });
@@ -1027,6 +1110,18 @@ export default function CoordenadorProjetosPage() {
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 space-y-3">
         <h2 className="text-sm font-semibold text-slate-900">Campo de envio de documentos</h2>
+        {assigneeFilter ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
+            <span>Filtro ativo por colaborador: <b>{personLabel(assigneeFilter)}</b></span>
+            <button
+              type="button"
+              onClick={clearAssigneeFilter}
+              className="rounded-lg border border-indigo-200 bg-white px-2 py-1 font-semibold text-indigo-700 hover:bg-indigo-100"
+            >
+              Limpar filtro
+            </button>
+          </div>
+        ) : null}
         <div className="grid gap-2 md:grid-cols-4">
           <input
             value={deliverableSearch}
@@ -1096,6 +1191,16 @@ export default function CoordenadorProjetosPage() {
                 >
                   Abrir arquivo enviado
                 </button>
+              ) : null}
+              {d.document_url ? (
+                <a
+                  href={d.document_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+                >
+                  Abrir link informado
+                </a>
               ) : null}
 
               {d.status === "sent" ? (
@@ -1246,8 +1351,10 @@ export default function CoordenadorProjetosPage() {
                   {timeline.length ? (
                     timeline.map((t) => (
                       <p key={t.id} className="text-xs text-slate-600">
-                        {new Date(t.created_at).toLocaleString()} - {t.event_type}
-                        {t.status_from || t.status_to ? ` (${t.status_from ?? "-"} -> ${t.status_to ?? "-"})` : ""}
+                        {new Date(t.created_at).toLocaleString()} - {deliverableEventLabel(t.event_type)}
+                        {t.status_from || t.status_to
+                          ? ` (${deliverableStatusLabel(t.status_from)} -> ${deliverableStatusLabel(t.status_to)})`
+                          : ""}
                         {t.comment ? ` - ${t.comment}` : ""}
                         {t.actor_user_id ? ` - ${personLabel(t.actor_user_id)}` : ""}
                       </p>
