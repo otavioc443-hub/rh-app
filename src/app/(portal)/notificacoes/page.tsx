@@ -12,6 +12,7 @@ export default function NotificacoesPage() {
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<FilterMode>("all");
+  const [userId, setUserId] = useState<string | null>(null);
 
   const unreadCount = useMemo(() => items.filter((x) => !x.read_at).length, [items]);
   const visibleItems = useMemo(
@@ -22,11 +23,16 @@ export default function NotificacoesPage() {
   async function load() {
     setLoading(true);
     setMsg("");
-    const { data, error } = await supabase
+    const { data: sessionData } = await supabase.auth.getSession();
+    const currentUserId = sessionData.session?.user?.id ?? null;
+    setUserId(currentUserId);
+    let query = supabase
       .from("notifications")
       .select("id,to_user_id,title,body,link,type,read_at,created_at")
       .order("created_at", { ascending: false })
       .limit(120);
+    if (currentUserId) query = query.eq("to_user_id", currentUserId);
+    const { data, error } = await query;
 
     if (error) {
       setMsg(error.message);
@@ -43,21 +49,29 @@ export default function NotificacoesPage() {
   }, []);
 
   async function markRead(id: string) {
-    const { error } = await supabase.from("notifications").update({ read_at: new Date().toISOString() }).eq("id", id);
+    const now = new Date().toISOString();
+    let query = supabase
+      .from("notifications")
+      .update({ read_at: now })
+      .eq("id", id);
+    if (userId) query = query.eq("to_user_id", userId);
+    const { error } = await query;
     if (!error) {
-      setItems((prev) => prev.map((x) => (x.id === id ? { ...x, read_at: new Date().toISOString() } : x)));
+      setItems((prev) => prev.map((x) => (x.id === id ? { ...x, read_at: now } : x)));
     }
   }
 
   async function markAllRead() {
     const unreadIds = items.filter((x) => !x.read_at).map((x) => x.id);
     if (!unreadIds.length) return;
-    const { error } = await supabase
+    const now = new Date().toISOString();
+    let query = supabase
       .from("notifications")
-      .update({ read_at: new Date().toISOString() })
+      .update({ read_at: now })
       .in("id", unreadIds);
+    if (userId) query = query.eq("to_user_id", userId);
+    const { error } = await query;
     if (!error) {
-      const now = new Date().toISOString();
       setItems((prev) => prev.map((x) => (x.read_at ? x : { ...x, read_at: now })));
     }
   }

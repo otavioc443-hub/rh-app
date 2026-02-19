@@ -132,7 +132,7 @@ export default function MeuPerfilProjetosPage() {
   const personCargo = (userId: string) => {
     const d = directoryById[userId];
     const cargo = (d?.cargo ?? "").trim();
-    return cargo || "Cargo nÃ£o informado";
+    return cargo || "Cargo nao informado";
   };
 
   const myRoleInSelectedProject = useMemo(() => {
@@ -145,7 +145,7 @@ export default function MeuPerfilProjetosPage() {
     setMsg("");
     try {
       const { data: authData, error: authErr } = await supabase.auth.getUser();
-      if (authErr || !authData?.user) throw new Error("NÃ£o autenticado.");
+      if (authErr || !authData?.user) throw new Error("Nao autenticado.");
       const userId = authData.user.id;
       setMeId(userId);
 
@@ -272,7 +272,7 @@ export default function MeuPerfilProjetosPage() {
         setDeliverables([]);
         setContributions([]);
         setFilesByDeliverableId({});
-        setMsg(e instanceof Error ? e.message : "Erro ao carregar documentos atribuÃ­dos.");
+        setMsg(e instanceof Error ? e.message : "Erro ao carregar documentos atribuidos.");
       }
     }
     void loadAssignedDocs();
@@ -368,7 +368,7 @@ export default function MeuPerfilProjetosPage() {
         comment: "Arquivo enviado.",
       });
       setFileByDeliverable((prev) => ({ ...prev, [deliverable.id]: null }));
-      setMsg("Arquivo enviado. Aguardando aprovaÃ§Ã£o.");
+      setMsg("Arquivo enviado. Aguardando aprovacao.");
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao enviar arquivo.");
@@ -430,7 +430,7 @@ export default function MeuPerfilProjetosPage() {
 
   async function addContribution(deliverableId: string) {
     const note = (contribTextByDeliverable[deliverableId] ?? "").trim();
-    if (!note) return setMsg("Informe a contribuiÃ§Ã£o.");
+    if (!note) return setMsg("Informe a contribuicao.");
     setSaving(true);
     setMsg("");
     try {
@@ -448,10 +448,10 @@ export default function MeuPerfilProjetosPage() {
         comment: note,
       });
       setContribTextByDeliverable((prev) => ({ ...prev, [deliverableId]: "" }));
-      setMsg("ContribuiÃ§Ã£o registrada.");
+      setMsg("Contribuicao registrada.");
       await load();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao registrar contribuiÃ§Ã£o.");
+      setMsg(e instanceof Error ? e.message : "Erro ao registrar contribuicao.");
     } finally {
       setSaving(false);
     }
@@ -495,7 +495,7 @@ export default function MeuPerfilProjetosPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">Meus projetos</h1>
-          <p className="mt-1 text-sm text-slate-600">Veja projetos que vocÃª participa e atualize documentos atribuÃ­dos a vocÃª.</p>
+          <p className="mt-1 text-sm text-slate-600">Veja projetos que voce participa e atualize documentos atribuidos a voce.</p>
         </div>
         <button
           type="button"
@@ -532,9 +532,9 @@ export default function MeuPerfilProjetosPage() {
                 <div className="text-sm font-semibold text-slate-900">{selectedProject.name}</div>
                 <div className="mt-1 text-xs text-slate-500">
                   {myRoleInSelectedProject ? `Seu papel: ${myRoleInSelectedProject}` : null}
-                  {!myRoleInSelectedProject && isAdmin ? "VisÃ£o Admin (vocÃª nÃ£o estÃ¡ como membro deste projeto)" : ""}
-                  {selectedProject.start_date ? ` Ã¢â‚¬Â¢ InÃ­cio: ${selectedProject.start_date}` : ""}
-                  {selectedProject.end_date ? ` Ã¢â‚¬Â¢ Fim: ${selectedProject.end_date}` : ""}
+                  {!myRoleInSelectedProject && isAdmin ? "Visao Admin (voce nao esta como membro deste projeto)" : ""}
+                  {selectedProject.start_date ? ` - Inicio: ${selectedProject.start_date}` : ""}
+                  {selectedProject.end_date ? ` - Fim: ${selectedProject.end_date}` : ""}
                 </div>
               </div>
               <button
@@ -549,14 +549,14 @@ export default function MeuPerfilProjetosPage() {
                 {teamOpen ? "Ocultar equipe" : "Ver equipe"}
               </button>
             </div>
-            <div className="mt-1 text-sm text-slate-600">{selectedProject.description ?? "Sem descriÃ§Ã£o"}</div>
+            <div className="mt-1 text-sm text-slate-600">{selectedProject.description ?? "Sem descricao"}</div>
           </div>
         ) : null}
 
         {teamOpen ? (
           <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
             <div className="text-sm font-semibold text-slate-900">Equipe do projeto</div>
-            <div className="mt-1 text-sm text-slate-600">Membros e equipes nomeadas (Civil, ElÃ©trica, etc).</div>
+            <div className="mt-1 text-sm text-slate-600">Membros e equipes nomeadas (Civil, Eletrica, etc).</div>
 
             {teamLoading ? (
               <div className="mt-3 h-24 w-full animate-pulse rounded-2xl bg-slate-100" />
@@ -611,7 +611,7 @@ export default function MeuPerfilProjetosPage() {
                       })
                     ) : (
                       <div className="text-sm text-slate-700">
-                        Nenhuma equipe criada ainda (ou SQL de equipes ainda nÃ£o foi aplicado).
+                        Nenhuma equipe criada ainda (ou SQL de equipes ainda nao foi aplicado).
                       </div>
                     )}
                   </div>
@@ -623,8 +623,8 @@ export default function MeuPerfilProjetosPage() {
       </div>
 
       <div className="rounded-3xl border border-slate-200 bg-white p-5">
-        <h2 className="text-base font-semibold text-slate-900">Documentos atribuÃ­dos a vocÃª</h2>
-        <p className="mt-1 text-sm text-slate-600">Atualize o link do documento e registre sua contribuiÃ§Ã£o.</p>
+        <h2 className="text-base font-semibold text-slate-900">Documentos atribuidos a voce</h2>
+        <p className="mt-1 text-sm text-slate-600">Atualize o link do documento e registre sua contribuicao.</p>
 
         <div className="mt-4 space-y-4">
           {projectDeliverablesAssignedToMe.length ? (
@@ -638,7 +638,7 @@ export default function MeuPerfilProjetosPage() {
                       <div className="truncate text-sm font-semibold text-slate-900">{d.title}</div>
                       <div className="mt-1 text-xs text-slate-500">
                         Status: <span className="font-semibold text-slate-700">{statusLabel(d.status)}</span>
-                        {d.due_date ? ` Ã¢â‚¬Â¢ Prazo: ${d.due_date}` : ""}
+                        {d.due_date ? ` - Prazo: ${d.due_date}` : ""}
                       </div>
                       {d.status === "approved_with_comments" ? (
                         <div className="mt-1 text-xs text-amber-700">Comentario da aprovacao: {d.approval_comment ?? "-"}</div>
@@ -666,7 +666,7 @@ export default function MeuPerfilProjetosPage() {
 
                   <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-xs font-semibold text-slate-700">Arquivo do entregÃ¡vel</div>
+                      <div className="text-xs font-semibold text-slate-700">Arquivo do entregavel</div>
                       {d.document_path ? (
                         <button
                           type="button"
@@ -700,12 +700,12 @@ export default function MeuPerfilProjetosPage() {
 
                     {(filesByDeliverableId[d.id] ?? []).length ? (
                       <div className="mt-3 space-y-2">
-                        <div className="text-[11px] font-semibold text-slate-700">Ãšltimas versÃµes</div>
+                        <div className="text-[11px] font-semibold text-slate-700">Ultimas versoes</div>
                         {(filesByDeliverableId[d.id] ?? []).slice(0, 3).map((f) => (
                           <div key={f.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
                             <div className="min-w-0">
                               <div className="truncate text-xs font-semibold text-slate-800">
-                                v{f.version} Ã¢â‚¬Â¢ {f.file_name ?? "Arquivo"} Ã¢â‚¬Â¢ {new Date(f.created_at).toLocaleString()}
+                                v{f.version} - {f.file_name ?? "Arquivo"} - {new Date(f.created_at).toLocaleString()}
                               </div>
                             </div>
                             <button
@@ -727,7 +727,7 @@ export default function MeuPerfilProjetosPage() {
                     <input
                       value={contribTextByDeliverable[d.id] ?? ""}
                       onChange={(e) => setContribTextByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))}
-                      placeholder="Descreva sua contribuiÃ§Ã£o"
+                      placeholder="Descreva sua contribuicao"
                       className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900 md:col-span-2"
                     />
                     <button
@@ -736,13 +736,13 @@ export default function MeuPerfilProjetosPage() {
                       disabled={saving}
                       className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
                     >
-                      Registrar contribuiÃ§Ã£o
+                      Registrar contribuicao
                     </button>
                   </div>
 
                   {myContribs.length ? (
                     <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                      <div className="text-xs font-semibold text-slate-700">Minhas contribuiÃ§Ãµes recentes</div>
+                      <div className="text-xs font-semibold text-slate-700">Minhas contribuicoes recentes</div>
                       <div className="mt-2 space-y-1 text-xs text-slate-600">
                         {myContribs.slice(0, 3).map((c) => (
                           <div key={c.id} className="flex items-start justify-between gap-3">
@@ -778,14 +778,14 @@ export default function MeuPerfilProjetosPage() {
             })
           ) : (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-              Nenhum documento atribuÃ­do a vocÃª neste projeto.
+              Nenhum documento atribuido a voce neste projeto.
             </div>
           )}
         </div>
       </div>
 
       <div className="text-xs text-slate-500">
-        Dica: se vocÃª nÃ£o estÃ¡ vendo um projeto, confirme se vocÃª estÃ¡ cadastrado como membro em <code>project_members</code>.
+        Dica: se voce nao esta vendo um projeto, confirme se voce esta cadastrado como membro em <code>project_members</code>.
       </div>
     </div>
   );

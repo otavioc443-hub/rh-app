@@ -19,6 +19,16 @@ type RuleDraft = NotificationRuleRow;
 
 const RULES: Array<{ key: string; label: string; description: string }> = [
   {
+    key: "project_updated",
+    label: "Projeto: dados alterados",
+    description: "Dispara quando dados principais do projeto sao alterados.",
+  },
+  {
+    key: "deliverable_updated",
+    label: "Projeto: entregavel alterado",
+    description: "Dispara quando um entregavel tem status ou dados do documento alterados.",
+  },
+  {
     key: "deliverable_approved",
     label: "Projeto: documento aprovado",
     description: "Dispara quando status do entregavel muda para aprovado.",
@@ -34,6 +44,11 @@ const RULES: Array<{ key: string; label: string; description: string }> = [
     description: "Dispara quando status do entregavel P&D muda para aprovado.",
   },
   {
+    key: "pd_deliverable_updated",
+    label: "P&D: entregavel alterado",
+    description: "Dispara quando um entregavel P&D tem status ou dados alterados.",
+  },
+  {
     key: "pd_deliverable_approved_with_comments",
     label: "P&D: entregavel aprovado com comentarios",
     description: "Dispara quando status do entregavel P&D muda para aprovado com comentarios.",
@@ -42,6 +57,7 @@ const RULES: Array<{ key: string; label: string; description: string }> = [
 
 const NOTIFICATION_LINK_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "", label: "Sem link" },
+  { value: "/notificacoes", label: "Central - Notificacoes" },
   { value: "/meu-perfil/projetos", label: "Meu Perfil - Projetos" },
   { value: "/coordenador/projetos", label: "Coordenador - Projetos" },
   { value: "/gestor/projetos", label: "Gestor - Projetos" },
@@ -52,6 +68,8 @@ const NOTIFICATION_LINK_OPTIONS: Array<{ value: string; label: string }> = [
 ];
 
 function emptyDraft(eventKey: string): RuleDraft {
+  const notifyActorByDefault =
+    eventKey === "project_updated" || eventKey === "deliverable_updated" || eventKey === "pd_deliverable_updated";
   return {
     event_key: eventKey,
     enabled: true,
@@ -59,7 +77,7 @@ function emptyDraft(eventKey: string): RuleDraft {
     notify_project_owner: true,
     notify_project_managers: true,
     notify_project_coordinators: true,
-    notify_actor: false,
+    notify_actor: notifyActorByDefault,
     link_default: null,
   };
 }
