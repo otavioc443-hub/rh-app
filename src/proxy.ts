@@ -14,7 +14,10 @@ function isPublicPath(pathname: string) {
 }
 
 function needsAdmin(pathname: string) {
-  return pathname === "/admin" || pathname.startsWith("/admin/") || pathname === "/diretoria" || pathname.startsWith("/diretoria/") || pathname === "/ceo" || pathname.startsWith("/ceo/");
+  return pathname === "/admin" || pathname.startsWith("/admin/") || pathname === "/ceo" || pathname.startsWith("/ceo/");
+}
+function needsDiretoria(pathname: string) {
+  return pathname === "/diretoria" || pathname.startsWith("/diretoria/");
 }
 function needsRH(pathname: string) {
   return pathname === "/rh" || pathname.startsWith("/rh/");
@@ -66,7 +69,7 @@ export async function proxy(req: NextRequest) {
   }
 
   // ✅ checa role apenas quando necessário
-  if (needsRH(pathname) || needsAdmin(pathname) || needsOrganograma(pathname)) {
+  if (needsRH(pathname) || needsAdmin(pathname) || needsDiretoria(pathname) || needsOrganograma(pathname)) {
     const { data: prof, error } = await supabase
       .from("profiles")
       .select("role, active")
@@ -82,6 +85,12 @@ export async function proxy(req: NextRequest) {
     const role = prof.role as string | null;
 
     if (needsAdmin(pathname) && role !== "admin") {
+      const url = req.nextUrl.clone();
+      url.pathname = "/unauthorized";
+      return NextResponse.redirect(url);
+    }
+
+    if (needsDiretoria(pathname) && !(role === "diretoria" || role === "admin")) {
       const url = req.nextUrl.clone();
       url.pathname = "/unauthorized";
       return NextResponse.redirect(url);

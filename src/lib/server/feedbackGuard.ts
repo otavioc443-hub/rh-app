@@ -1,7 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getServerSupabase } from "@/lib/server/supabaseServer";
 
-export type AppRole = "colaborador" | "coordenador" | "gestor" | "rh" | "admin";
+export type AppRole = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "admin";
 
 export type GuardResult =
   | {
@@ -36,7 +36,8 @@ export async function requireRoles(allowed: AppRole[]): Promise<GuardResult> {
     return { ok: false, status: 403, error: "Perfil sem permissao." };
   }
 
-  if (!allowed.includes(profile.role)) {
+  const roleAllowed = allowed.includes(profile.role);
+  if (!roleAllowed) {
     return { ok: false, status: 403, error: "Acesso negado." };
   }
 
@@ -50,4 +51,3 @@ export async function requireRoles(allowed: AppRole[]): Promise<GuardResult> {
     departmentId: profile.department_id,
   };
 }
-

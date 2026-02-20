@@ -97,7 +97,11 @@ export async function POST(req: Request) {
       .eq("id", actor.id)
       .maybeSingle<{ role: string | null; active: boolean | null }>();
 
-    if (actorErr || !actorProfile?.active || actorProfile.role !== "admin") {
+    if (
+      actorErr ||
+      !actorProfile?.active ||
+      !["diretoria", "admin"].includes(String(actorProfile.role ?? ""))
+    ) {
       return NextResponse.json({ error: "Apenas Diretoria/Admin pode registrar." }, { status: 403 });
     }
 

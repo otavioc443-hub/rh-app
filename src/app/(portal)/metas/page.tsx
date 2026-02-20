@@ -5,7 +5,7 @@ import { RefreshCcw, Target } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserRole } from "@/hooks/useUserRole";
 
-type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "financeiro" | "pd" | "admin";
+type Role = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "financeiro" | "pd" | "admin";
 type GoalStatus = "draft" | "active" | "in_progress" | "completed" | "blocked" | "cancelled";
 type GoalPriority = "low" | "medium" | "high" | "critical";
 
@@ -73,6 +73,7 @@ type DeletedGoalRow = {
 const TARGETS_BY_ROLE: Partial<Record<Role, Role[]>> = {
   coordenador: ["colaborador"],
   gestor: ["coordenador"],
+  diretoria: ["gestor", "rh", "financeiro"],
   admin: ["financeiro", "admin", "rh", "gestor"],
 };
 

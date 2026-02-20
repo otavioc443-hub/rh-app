@@ -278,6 +278,7 @@ export default function GestorProjetosPage() {
 
   const [memberUserId, setMemberUserId] = useState("");
   const [memberRole, setMemberRole] = useState<"coordenador" | "colaborador">("coordenador");
+  const [memberRoleByMemberId, setMemberRoleByMemberId] = useState<Record<string, "coordenador" | "colaborador">>({});
   const [companyUsers, setCompanyUsers] = useState<Profile[]>([]);
 
   const [docTitle, setDocTitle] = useState("");
@@ -300,6 +301,11 @@ export default function GestorProjetosPage() {
   const [editDescByDeliverableId, setEditDescByDeliverableId] = useState<Record<string, string>>({});
   const [editDueByDeliverableId, setEditDueByDeliverableId] = useState<Record<string, string>>({});
   const [docLinkByDeliverable, setDocLinkByDeliverable] = useState<Record<string, string>>({});
+  const [timelineExpandedByDeliverableId, setTimelineExpandedByDeliverableId] = useState<Record<string, boolean>>({});
+  const [statusDraftByDeliverableId, setStatusDraftByDeliverableId] = useState<
+    Record<string, Deliverable["status"]>
+  >({});
+  const [statusCommentByDeliverableId, setStatusCommentByDeliverableId] = useState<Record<string, string>>({});
 
   const personLabel = useCallback((userId: string) => {
     const d = directoryById[userId];
@@ -505,10 +511,27 @@ export default function GestorProjetosPage() {
       setDeletedTeamItems((deletedTeamsRes.data ?? []) as DeletedTeamItem[]);
       setProjects(nextProjects);
       setMembers(nextMembers);
+      setMemberRoleByMemberId((prev) => {
+        const next = { ...prev };
+        for (const m of nextMembers) {
+          if (m.member_role === "coordenador" || m.member_role === "colaborador") {
+            next[m.id] = next[m.id] ?? m.member_role;
+          }
+        }
+        return next;
+      });
       setDeliverables(nextDeliverables);
       setDocLinkByDeliverable(
         Object.fromEntries(nextDeliverables.map((d) => [d.id, d.document_url ?? ""]))
       );
+      setStatusDraftByDeliverableId(
+        Object.fromEntries(nextDeliverables.map((d) => [d.id, d.status])) as Record<string, Deliverable["status"]>
+      );
+      setStatusCommentByDeliverableId((prev) => {
+        const next: Record<string, string> = {};
+        for (const d of nextDeliverables) next[d.id] = prev[d.id] ?? d.approval_comment ?? "";
+        return next;
+      });
       setSelectedProjectId((prev) => (prev && nextProjects.some((p) => p.id === prev) ? prev : nextProjects[0]?.id ?? ""));
 
       setEditTitleByDeliverableId((prev) => {
@@ -810,7 +833,11 @@ export default function GestorProjetosPage() {
     }
   }
 
-  async function updateDeliverableStatus(id: string, status: Deliverable["status"]) {
+  async function updateDeliverableStatus(
+    id: string,
+    status: Deliverable["status"],
+    timelineComment?: string | null
+  ) {
     setSaving(true);
     setMsg("");
     try {
@@ -838,6 +865,7 @@ export default function GestorProjetosPage() {
         eventType: getDeliverableStatusEventType(fromStatus, status),
         statusFrom: fromStatus,
         statusTo: status,
+        comment: timelineComment ?? null,
       });
       await load();
     } catch (e: unknown) {
@@ -914,6 +942,100 @@ export default function GestorProjetosPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function updateMemberRole(projectMemberId: string) {
+    const member = members.find((m) => m.id === projectMemberId) ?? null;
+    if (!member) return setMsg("Membro nao encontrado.");
+    if (member.member_role === "gestor") return setMsg("O papel de gestor nao pode ser alterado nesta tela.");
+    const nextRole = memberRoleByMemberId[projectMemberId] ?? (member.member_role as "coordenador" | "colaborador");
+    if (nextRole === member.member_role) return setMsg("Nenhuma alteracao de funcao para salvar.");
+    setSaving(true);
+    setMsg("");
+    try {
+      const res = await supabase
+        .from("project_members")
+        .update({ member_role: nextRole })
+        .eq("id", projectMemberId);
+      if (res.error) throw new Error(res.error.message);
+      let syncCount = 0;
+      if (nextRole === "colaborador" && selectedProjectId) {
+        const projectDeliverables = deliverables.filter((d) => d.project_id === selectedProjectId);
+        const deliverableIds = projectDeliverables.map((d) => d.id);
+        if (deliverableIds.length > 0) {
+          const existingRes = await supabase
+            .from("project_deliverable_assignees")
+            .select("deliverable_id")
+            .eq("user_id", member.user_id)
+            .in("deliverable_id", deliverableIds);
+          if (existingRes.error) throw new Error(existingRes.error.message);
+          const alreadyAssigned = new Set(
+            ((existingRes.data ?? []) as Array<{ deliverable_id: string }>).map((r) => r.deliverable_id)
+          );
+          const missingIds = deliverableIds.filter((id) => {
+            if (alreadyAssigned.has(id)) return false;
+            const del = projectDeliverables.find((d) => d.id === id);
+            return del?.assigned_to !== member.user_id;
+          });
+          if (missingIds.length > 0) {
+            const payload = missingIds.map((id) => ({
+              deliverable_id: id,
+              project_id: selectedProjectId,
+              user_id: member.user_id,
+              contribution_unit: "hours" as const,
+              contribution_value: null,
+              created_by: meId || null,
+            }));
+            const ins = await supabase.from("project_deliverable_assignees").insert(payload);
+            if (ins.error) throw new Error(ins.error.message);
+            syncCount = missingIds.length;
+          }
+        }
+      }
+      setMsg(
+        syncCount > 0
+          ? `Funcao do membro atualizada. ${syncCount} entregavel(is) sincronizado(s) como pessoa atribuida.`
+          : "Funcao do membro atualizada."
+      );
+      await load();
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao atualizar funcao do membro.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeMember(projectMemberId: string) {
+    const member = members.find((m) => m.id === projectMemberId) ?? null;
+    if (!member) return setMsg("Membro nao encontrado.");
+    if (member.member_role === "gestor") return setMsg("O gestor do projeto nao pode ser removido nesta tela.");
+    if (member.user_id === meId) return setMsg("Voce nao pode remover o proprio acesso.");
+    if (!confirm(`Remover ${personLabel(member.user_id)} deste projeto?`)) return;
+    setSaving(true);
+    setMsg("");
+    try {
+      const res = await supabase.from("project_members").delete().eq("id", projectMemberId);
+      if (res.error) throw new Error(res.error.message);
+      setMsg("Membro removido do projeto.");
+      await load();
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao remover membro.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveDraftStatus(deliverableId: string, draftStatus: Deliverable["status"]) {
+    const current = deliverables.find((x) => x.id === deliverableId) ?? null;
+    if (!current) return;
+    const nextStatus = draftStatus;
+    const comment = (statusCommentByDeliverableId[deliverableId] ?? "").trim() || null;
+    if (nextStatus === current.status) {
+      setMsg("Selecione um status diferente para salvar.");
+      return;
+    }
+    await updateDeliverableStatus(deliverableId, nextStatus, comment);
+    setStatusCommentByDeliverableId((prev) => ({ ...prev, [deliverableId]: "" }));
   }
 
   async function deleteDeliverable(deliverableId: string) {
@@ -1297,7 +1419,46 @@ export default function GestorProjetosPage() {
             {selectedMembers.length === 0 ? <p className="text-sm text-slate-500">Nenhum membro.</p> : null}
             {selectedMembers.map((m) => (
               <div key={m.id} className="rounded-xl border border-slate-200 p-3 text-sm">
-                <PersonChip name={personLabel(m.user_id)} subtitle={personCargo(m.user_id)} avatarUrl={personAvatar(m.user_id)} />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <PersonChip name={personLabel(m.user_id)} subtitle={personCargo(m.user_id)} avatarUrl={personAvatar(m.user_id)} />
+                  {m.member_role === "gestor" ? (
+                    <span className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600">
+                      Gestor (fixo)
+                    </span>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={memberRoleByMemberId[m.id] ?? (m.member_role as "coordenador" | "colaborador")}
+                        onChange={(e) =>
+                          setMemberRoleByMemberId((prev) => ({
+                            ...prev,
+                            [m.id]: e.target.value as "coordenador" | "colaborador",
+                          }))
+                        }
+                        className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                      >
+                        <option value="coordenador">Coordenador</option>
+                        <option value="colaborador">Colaborador</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => void updateMemberRole(m.id)}
+                        disabled={saving}
+                        className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-60"
+                      >
+                        Salvar funcao
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void removeMember(m.id)}
+                        disabled={saving}
+                        className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 disabled:opacity-60"
+                      >
+                        Remover
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -1569,19 +1730,40 @@ export default function GestorProjetosPage() {
             {filteredSelectedDeliverables.length === 0 ? <p className="text-sm text-slate-500">Nenhum entregavel para o filtro selecionado.</p> : null}
             {filteredSelectedDeliverables.map((d) => {
               const contribs = contributions.filter((c) => c.deliverable_id === d.id);
-              const timeline = deliverableTimeline.filter((t) => t.deliverable_id === d.id).slice(0, 8);
+              const timelineAll = deliverableTimeline.filter((t) => t.deliverable_id === d.id);
+              const timelineExpanded = timelineExpandedByDeliverableId[d.id] === true;
+              const timeline = timelineExpanded ? timelineAll : timelineAll.slice(0, 3);
+              const timelineHasMore = timelineAll.length > 3;
+              const draftStatus = statusDraftByDeliverableId[d.id] ?? d.status;
               return (
                 <div key={d.id} className="rounded-xl border border-slate-200 p-3 space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-slate-900">{d.title}</p>
                     <div className="flex items-center gap-2">
-                      <select value={d.status} onChange={(e) => void updateDeliverableStatus(d.id, e.target.value as Deliverable["status"])} className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs">
+                      <select
+                        value={draftStatus}
+                        onChange={(e) =>
+                          setStatusDraftByDeliverableId((prev) => ({
+                            ...prev,
+                            [d.id]: e.target.value as Deliverable["status"],
+                          }))
+                        }
+                        className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                      >
                         <option value="pending">Pendente</option>
                         <option value="in_progress">Em andamento</option>
                         <option value="sent">Enviado</option>
                         <option value="approved">Aprovado</option>
                         <option value="approved_with_comments">Aprovado com comentarios</option>
                       </select>
+                      <button
+                        type="button"
+                        onClick={() => void saveDraftStatus(d.id, draftStatus)}
+                        disabled={saving}
+                        className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-800 disabled:opacity-60"
+                      >
+                        Salvar status
+                      </button>
                       <button
                         type="button"
                         onClick={() => void deleteDeliverable(d.id)}
@@ -1592,6 +1774,14 @@ export default function GestorProjetosPage() {
                       </button>
                     </div>
                   </div>
+                  <input
+                    value={statusCommentByDeliverableId[d.id] ?? ""}
+                    onChange={(e) =>
+                      setStatusCommentByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))
+                    }
+                    placeholder="Comentario da mudanca de status"
+                    className="h-9 w-full rounded-lg border border-slate-200 px-2 text-xs"
+                  />
                   <p className="text-xs text-slate-500">
                     Responsavel: {d.assigned_to ? personLabel(d.assigned_to) : "Nao definido"}
                   </p>
@@ -1621,7 +1811,13 @@ export default function GestorProjetosPage() {
                   {d.status === "sent" ? (
                     <button
                       type="button"
-                      onClick={() => void updateDeliverableStatus(d.id, "approved")}
+                      onClick={() =>
+                        void updateDeliverableStatus(
+                          d.id,
+                          "approved",
+                          (statusCommentByDeliverableId[d.id] ?? "").trim() || null
+                        )
+                      }
                       disabled={saving}
                       className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
                     >
@@ -1709,6 +1905,22 @@ export default function GestorProjetosPage() {
                       <p className="text-xs text-slate-500">Sem eventos registrados.</p>
                     )}
                   </div>
+                  {timelineHasMore || timelineExpanded ? (
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setTimelineExpandedByDeliverableId((prev) => ({
+                            ...prev,
+                            [d.id]: !timelineExpanded,
+                          }))
+                        }
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700"
+                      >
+                        {timelineExpanded ? "Ver menos" : `Ver mais (${timelineAll.length - 3})`}
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             );

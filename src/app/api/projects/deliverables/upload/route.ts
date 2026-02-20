@@ -106,12 +106,27 @@ export async function POST(req: Request) {
 
     const { data: del, error: delErr } = await supabaseAdmin
       .from("project_deliverables")
-      .select("id, project_id, assigned_to")
+      .select("id, project_id, assigned_to, status, submitted_by, submitted_at")
       .eq("id", deliverableId)
-      .maybeSingle<{ id: string; project_id: string; assigned_to: string | null }>();
+      .maybeSingle<{
+        id: string;
+        project_id: string;
+        assigned_to: string | null;
+        status: string;
+        submitted_by: string | null;
+        submitted_at: string | null;
+      }>();
     if (delErr || !del) return NextResponse.json({ error: "Entregavel nao encontrado" }, { status: 404 });
 
     const projectId = del.project_id;
+
+    const { data: extraAssignee } = await supabaseAdmin
+      .from("project_deliverable_assignees")
+      .select("id")
+      .eq("deliverable_id", deliverableId)
+      .eq("user_id", user.id)
+      .maybeSingle<{ id: string }>();
+    const isAdditionalAssignee = !!extraAssignee?.id;
 
     // Permissao:
     // - admin/rh: sempre
@@ -121,7 +136,7 @@ export async function POST(req: Request) {
 
     if (effectiveRole === "admin" || effectiveRole === "rh") {
       allowed = true;
-    } else if (del.assigned_to && del.assigned_to === user.id) {
+    } else if ((del.assigned_to && del.assigned_to === user.id) || isAdditionalAssignee) {
       allowed = true;
     } else if (effectiveRole === "gestor" || effectiveRole === "coordenador") {
       const [{ data: pr }, { data: pm }] = await Promise.all([
@@ -138,6 +153,17 @@ export async function POST(req: Request) {
     }
 
     if (!allowed) return NextResponse.json({ error: "Sem permissao para enviar este documento" }, { status: 403 });
+
+    if (
+      effectiveRole === "colaborador" &&
+      (del.assigned_to === user.id || isAdditionalAssignee) &&
+      !["pending", "in_progress"].includes(del.status)
+    ) {
+      return NextResponse.json(
+        { error: "Entregavel bloqueado para edicao. Aguarde reencaminhamento do coordenador." },
+        { status: 400 }
+      );
+    }
 
     const baseName = safeFileName(file.name);
     const path = `${projectId}/${deliverableId}/${Date.now()}-${Math.random().toString(16).slice(2)}-${baseName}`;
@@ -172,6 +198,7 @@ export async function POST(req: Request) {
     });
 
     // Atualiza o entregavel com o ultimo arquivo enviado
+    const collaboratorAutoSend = effectiveRole === "colaborador";
     await supabaseAdmin
       .from("project_deliverables")
       .update({
@@ -179,9 +206,9 @@ export async function POST(req: Request) {
         document_file_name: file.name || null,
         document_content_type: file.type || null,
         document_size: file.size || null,
-        status: "sent",
-        submitted_by: user.id,
-        submitted_at: new Date().toISOString(),
+        status: collaboratorAutoSend ? del.status : "sent",
+        submitted_by: collaboratorAutoSend ? del.submitted_by : user.id,
+        submitted_at: collaboratorAutoSend ? del.submitted_at : new Date().toISOString(),
       })
       .eq("id", deliverableId);
 
@@ -194,4 +221,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

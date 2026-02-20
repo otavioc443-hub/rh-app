@@ -21,7 +21,7 @@ async function requireRole(req: Request, allowedRoles: Role[]) {
 
   const { data: profile, error: profileErr } = await supabaseAdmin
     .from("profiles")
-    .select("role, active")
+    .select("role, active, company_id")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -38,7 +38,7 @@ async function requireRole(req: Request, allowedRoles: Role[]) {
     return { ok: false as const, status: 403, error: "Acesso negado." };
   }
 
-  return { ok: true as const, userId: user.id, role };
+  return { ok: true as const, userId: user.id, role, companyId: profile.company_id as string | null };
 }
 
 // --------- GET: lista empresas ----------
@@ -46,10 +46,12 @@ export async function GET(req: Request) {
   const guard = await requireRole(req, ["admin", "rh"]);
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
-  const { data, error } = await supabaseAdmin
+  const baseQuery = supabaseAdmin
     .from("companies")
     .select("id, name, logo_url, primary_color, created_at")
     .order("name", { ascending: true });
+  const { data, error } =
+    guard.role === "admin" ? await baseQuery : guard.companyId ? await baseQuery.eq("id", guard.companyId) : await baseQuery;
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
   return NextResponse.json({ companies: data ?? [] });
@@ -65,8 +67,33 @@ export async function POST(req: Request) {
     const name = String(body.name || "").trim();
     const logo_url = body.logo_url ? String(body.logo_url).trim() : null;
     const primary_color = body.primary_color ? String(body.primary_color).trim() : "#111827";
+    const tenantAdminUserId = body.tenant_admin_user_id ? String(body.tenant_admin_user_id).trim() : "";
 
     if (!name) return NextResponse.json({ error: "Nome é obrigatório." }, { status: 400 });
+
+    if (tenantAdminUserId) {
+      const { data: createdByAdmin, error: createErr } = await supabaseAdmin
+        .from("companies")
+        .insert({ name, logo_url, primary_color })
+        .select("id, name, logo_url, primary_color, created_at")
+        .maybeSingle();
+      if (createErr || !createdByAdmin?.id) {
+        return NextResponse.json({ error: createErr?.message ?? "Falha ao criar empresa." }, { status: 400 });
+      }
+
+      const { error: profileErr } = await supabaseAdmin.from("profiles").upsert(
+        {
+          id: tenantAdminUserId,
+          role: "admin",
+          active: true,
+          company_id: createdByAdmin.id,
+        },
+        { onConflict: "id" }
+      );
+      if (profileErr) return NextResponse.json({ error: profileErr.message }, { status: 400 });
+
+      return NextResponse.json({ ok: true, company: createdByAdmin });
+    }
 
     const { data, error } = await supabaseAdmin
       .from("companies")
@@ -97,12 +124,11 @@ export async function PUT(req: Request) {
     if (!id) return NextResponse.json({ error: "id é obrigatório." }, { status: 400 });
     if (!name) return NextResponse.json({ error: "Nome é obrigatório." }, { status: 400 });
 
-    const { data, error } = await supabaseAdmin
+    const updateQuery = supabaseAdmin
       .from("companies")
       .update({ name, logo_url, primary_color })
-      .eq("id", id)
-      .select("id, name, logo_url, primary_color, created_at")
-      .maybeSingle();
+      .eq("id", id);
+    const { data, error } = await updateQuery.select("id, name, logo_url, primary_color, created_at").maybeSingle();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
     return NextResponse.json({ ok: true, company: data });

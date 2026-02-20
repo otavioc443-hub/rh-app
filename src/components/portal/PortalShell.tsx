@@ -7,12 +7,13 @@ import Sidebar from "@/components/portal/Sidebar";
 import NotificationBell from "@/components/portal/NotificationBell";
 import { isRouteHidden } from "@/lib/featureVisibility";
 
-type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "financeiro" | "pd" | "admin";
+type Role = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "financeiro" | "pd" | "admin";
 
-const ROLE_SET = new Set<Role>(["colaborador", "coordenador", "gestor", "rh", "financeiro", "pd", "admin"]);
+const ROLE_SET = new Set<Role>(["colaborador", "coordenador", "gestor", "diretoria", "rh", "financeiro", "pd", "admin"]);
 function coerceRole(v: unknown): Role | null {
   if (!v) return null;
-  const s = String(v) as Role;
+  const raw = String(v).trim().toLowerCase();
+  const s = raw as Role;
   return ROLE_SET.has(s) ? s : null;
 }
 
@@ -142,7 +143,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         }
 
         if (!r) {
-          setFatalError("Perfil sem funcao (role). Defina role = colaborador/coordenador/gestor/rh/financeiro/pd/admin.");
+          setFatalError("Perfil sem funcao (role). Defina role = colaborador/coordenador/gestor/diretoria/rh/financeiro/pd/admin.");
           return;
         }
 

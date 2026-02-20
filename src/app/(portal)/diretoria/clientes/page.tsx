@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Building2, RefreshCcw, Save } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
 type ClientRow = {
   id: string;
+  company_id: string | null;
   name: string;
   legal_name: string | null;
   document: string | null;
@@ -17,14 +18,21 @@ type ClientRow = {
   created_at: string;
 };
 
+type CompanyRow = {
+  id: string;
+  name: string;
+};
+
 export default function DiretoriaClientesPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
 
   const [clients, setClients] = useState<ClientRow[]>([]);
+  const [companies, setCompanies] = useState<CompanyRow[]>([]);
   const [editingId, setEditingId] = useState<string>("");
 
+  const [companyId, setCompanyId] = useState("");
   const [name, setName] = useState("");
   const [legalName, setLegalName] = useState("");
   const [document, setDocument] = useState("");
@@ -34,19 +42,49 @@ export default function DiretoriaClientesPage() {
   const [notes, setNotes] = useState("");
   const [active, setActive] = useState(true);
 
+  const companyNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of companies) map.set(c.id, c.name);
+    return map;
+  }, [companies]);
+
   async function load() {
     setLoading(true);
     setMsg("");
     try {
-      const clientRes = await supabase
-        .from("project_clients")
-        .select("id,name,legal_name,document,contact_name,contact_email,contact_phone,notes,active,created_at")
-        .order("created_at", { ascending: false });
+      const [{ data: userData, error: userErr }, companyRes, clientRes] = await Promise.all([
+        supabase.auth.getUser(),
+        supabase.from("companies").select("id,name").order("name", { ascending: true }),
+        supabase
+          .from("project_clients")
+          .select("id,company_id,name,legal_name,document,contact_name,contact_email,contact_phone,notes,active,created_at")
+          .order("created_at", { ascending: false }),
+      ]);
+
+      if (userErr) throw userErr;
+      if (companyRes.error) throw companyRes.error;
       if (clientRes.error) throw clientRes.error;
+
+      const companyRows = (companyRes.data ?? []) as CompanyRow[];
+      setCompanies(companyRows);
       setClients((clientRes.data ?? []) as ClientRow[]);
+
+      if (!editingId) {
+        const meId = userData.user?.id ?? "";
+        if (meId) {
+          const profRes = await supabase.from("profiles").select("company_id").eq("id", meId).maybeSingle<{ company_id: string | null }>();
+          if (profRes.error) throw profRes.error;
+
+          const preferredCompanyId = (profRes.data?.company_id ?? "") || companyRows[0]?.id || "";
+          setCompanyId((prev) => prev || preferredCompanyId);
+        } else if (companyRows[0]?.id) {
+          setCompanyId((prev) => prev || companyRows[0].id);
+        }
+      }
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao carregar clientes.");
       setClients([]);
+      setCompanies([]);
     } finally {
       setLoading(false);
     }
@@ -70,6 +108,7 @@ export default function DiretoriaClientesPage() {
 
   function startEdit(row: ClientRow) {
     setEditingId(row.id);
+    setCompanyId(row.company_id ?? "");
     setName(row.name ?? "");
     setLegalName(row.legal_name ?? "");
     setDocument(row.document ?? "");
@@ -81,14 +120,20 @@ export default function DiretoriaClientesPage() {
   }
 
   async function saveClient() {
+    if (!companyId) {
+      setMsg("Selecione a empresa do cliente.");
+      return;
+    }
     if (!name.trim()) {
       setMsg("Informe o nome do cliente.");
       return;
     }
+
     setSaving(true);
     setMsg("");
     try {
       const payload = {
+        company_id: companyId,
         name: name.trim(),
         legal_name: legalName.trim() || null,
         document: document.trim() || null,
@@ -98,6 +143,7 @@ export default function DiretoriaClientesPage() {
         notes: notes.trim() || null,
         active,
       };
+
       if (editingId) {
         const res = await supabase.from("project_clients").update(payload).eq("id", editingId);
         if (res.error) throw res.error;
@@ -107,6 +153,7 @@ export default function DiretoriaClientesPage() {
         if (res.error) throw res.error;
         setMsg("Cliente cadastrado.");
       }
+
       startNew();
       await load();
     } catch (e: unknown) {
@@ -126,9 +173,7 @@ export default function DiretoriaClientesPage() {
             </div>
             <div>
               <h1 className="text-xl font-semibold text-slate-900">Diretoria - Clientes</h1>
-              <p className="mt-1 text-sm text-slate-600">
-                Cadastro central de clientes para seleção no módulo de projetos.
-              </p>
+              <p className="mt-1 text-sm text-slate-600">Cadastro central de clientes para selecao no modulo de projetos.</p>
             </div>
           </div>
           <button
@@ -149,11 +194,23 @@ export default function DiretoriaClientesPage() {
         <p className="text-sm font-semibold text-slate-900">{editingId ? "Editar cliente" : "Novo cliente"}</p>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <label className="grid gap-1 text-xs font-semibold text-slate-700">
+            Empresa
+            <select value={companyId} onChange={(e) => setCompanyId(e.target.value)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm">
+              <option value="">Selecione a empresa...</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div />
+          <label className="grid gap-1 text-xs font-semibold text-slate-700">
             Nome fantasia
             <input value={name} onChange={(e) => setName(e.target.value)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm" />
           </label>
           <label className="grid gap-1 text-xs font-semibold text-slate-700">
-            Razão social
+            Razao social
             <input value={legalName} onChange={(e) => setLegalName(e.target.value)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm" />
           </label>
           <label className="grid gap-1 text-xs font-semibold text-slate-700">
@@ -173,7 +230,7 @@ export default function DiretoriaClientesPage() {
             <input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm" />
           </label>
           <label className="grid gap-1 text-xs font-semibold text-slate-700 md:col-span-2">
-            Observações
+            Observacoes
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="min-h-[90px] rounded-xl border border-slate-200 p-3 text-sm" />
           </label>
         </div>
@@ -193,11 +250,7 @@ export default function DiretoriaClientesPage() {
             <Save size={16} />
             {saving ? "Salvando..." : "Salvar cliente"}
           </button>
-          <button
-            type="button"
-            onClick={startNew}
-            className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
-          >
+          <button type="button" onClick={startNew} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50">
             Limpar
           </button>
         </div>
@@ -209,21 +262,25 @@ export default function DiretoriaClientesPage() {
           <table className="min-w-[980px] w-full text-left text-sm">
             <thead className="bg-slate-50 text-slate-700">
               <tr>
+                <th className="p-3">Empresa</th>
                 <th className="p-3">Cliente</th>
                 <th className="p-3">Documento</th>
                 <th className="p-3">Contato</th>
                 <th className="p-3">Status</th>
-                <th className="p-3 text-right">Ação</th>
+                <th className="p-3 text-right">Acao</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
                 <tr>
-                  <td className="p-3 text-slate-500" colSpan={5}>Carregando...</td>
+                  <td className="p-3 text-slate-500" colSpan={6}>
+                    Carregando...
+                  </td>
                 </tr>
               ) : clients.length ? (
                 clients.map((c) => (
                   <tr key={c.id} className="border-t">
+                    <td className="p-3">{(c.company_id && companyNameById.get(c.company_id)) || "-"}</td>
                     <td className="p-3">
                       <div className="font-semibold text-slate-900">{c.name}</div>
                       <div className="text-xs text-slate-500">{c.legal_name || "-"}</div>
@@ -244,7 +301,9 @@ export default function DiretoriaClientesPage() {
                 ))
               ) : (
                 <tr>
-                  <td className="p-3 text-slate-500" colSpan={5}>Nenhum cliente cadastrado.</td>
+                  <td className="p-3 text-slate-500" colSpan={6}>
+                    Nenhum cliente cadastrado.
+                  </td>
                 </tr>
               )}
             </tbody>
@@ -254,3 +313,4 @@ export default function DiretoriaClientesPage() {
     </div>
   );
 }
+

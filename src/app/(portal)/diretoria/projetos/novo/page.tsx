@@ -22,6 +22,11 @@ type ProjectClientRow = {
   name: string;
 };
 
+type CompanyRow = {
+  id: string;
+  name: string;
+};
+
 type ManagerRow = {
   id: string;
   full_name: string | null;
@@ -118,6 +123,8 @@ export default function DiretoriaNovoProjetoPage() {
 
   const [clients, setClients] = useState<ProjectClientRow[]>([]);
   const [managers, setManagers] = useState<ManagerRow[]>([]);
+  const [companies, setCompanies] = useState<CompanyRow[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState("");
   const [existingProjects, setExistingProjects] = useState<ExistingProjectRow[]>([]);
   const [draftByProjectId, setDraftByProjectId] = useState<Record<string, ProjectDraft>>({});
 
@@ -133,14 +140,57 @@ export default function DiretoriaNovoProjetoPage() {
   const [newProjectManagerId, setNewProjectManagerId] = useState("");
 
   useEffect(() => {
-    void load();
+    void loadCompaniesAndInitial();
   }, []);
+
+  useEffect(() => {
+    void load();
+  }, [selectedCompanyId]);
 
   const managersById = useMemo(() => {
     const map: Record<string, string> = {};
     for (const m of managers) map[m.id] = managerLabel(m);
     return map;
   }, [managers]);
+
+  async function loadCompaniesAndInitial() {
+    setLoading(true);
+    setMsg("");
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token ?? "";
+      const companiesRes = await fetch("/api/admin/company", {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      let nextCompanies: CompanyRow[] = [];
+      if (companiesRes.ok) {
+        const companiesJson = (await companiesRes.json()) as { companies?: CompanyRow[]; error?: string };
+        nextCompanies = companiesJson.companies ?? [];
+      } else {
+        // Fallback para role diretoria: usa escopo retornado pela API de negocio.
+        const formRes = await fetch("/api/diretoria/project-form-options", {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        const formJson = (await formRes.json()) as { company_id?: string | null; error?: string };
+        if (!formRes.ok) throw new Error(formJson.error || "Erro ao carregar escopo da diretoria.");
+        if (formJson.company_id) nextCompanies = [{ id: formJson.company_id, name: "Empresa vinculada" }];
+      }
+
+      setCompanies(nextCompanies);
+      if (nextCompanies.length > 0) {
+        setSelectedCompanyId((prev) => prev || nextCompanies[0].id);
+      } else {
+        setSelectedCompanyId("");
+        setMsg("Nenhuma empresa encontrada para seu perfil.");
+      }
+    } catch (e: unknown) {
+      setCompanies([]);
+      setSelectedCompanyId("");
+      setMsg(e instanceof Error ? e.message : "Erro ao carregar empresas.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -150,22 +200,125 @@ export default function DiretoriaNovoProjetoPage() {
       if (authErr || !authData?.user) throw new Error("Nao autenticado.");
       setMeId(authData.user.id);
 
-      const [clientsRes, managersRes, projectsRes] = await Promise.all([
-        supabase.from("project_clients").select("id,name").eq("active", true).order("name", { ascending: true }),
-        supabase.from("profiles").select("id,full_name,email").eq("active", true).eq("role", "gestor").order("full_name", { ascending: true }),
-        supabase
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token ?? "";
+      const companyQuery = selectedCompanyId ? `?company_id=${encodeURIComponent(selectedCompanyId)}` : "";
+
+      const isMissingColumnError = (text: string) => {
+        const s = (text || "").toLowerCase();
+        return s.includes("does not exist") || s.includes("schema cache") || s.includes("column");
+      };
+
+      let formOptions: { clients?: ProjectClientRow[]; managers?: ManagerRow[] } = {};
+      let formOptionsWarn = "";
+      try {
+        const formOptionsRes = await fetch(`/api/diretoria/project-form-options${companyQuery}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
+        const formOptionsJson = (await formOptionsRes.json()) as {
+          clients?: ProjectClientRow[];
+          managers?: ManagerRow[];
+          error?: string;
+        };
+        if (formOptionsRes.ok) {
+          formOptions = formOptionsJson;
+        } else {
+          formOptionsWarn = formOptionsJson.error || "Falha ao carregar opcoes pela API.";
+        }
+      } catch (err: unknown) {
+        formOptionsWarn = err instanceof Error ? err.message : "Falha ao carregar opcoes pela API.";
+      }
+
+      let projectsRes: {
+        data: ExistingProjectRow[] | null;
+        error: { message: string } | null;
+      } = { data: null, error: null };
+      {
+        const base = supabase
           .from("projects")
           .select("id,name,description,start_date,end_date,budget_total,client_id,project_type,project_scopes,project_stage,status,owner_user_id,created_at")
-          .order("created_at", { ascending: false }),
-      ]);
+          .order("created_at", { ascending: false });
 
-      if (clientsRes.error) throw clientsRes.error;
-      if (managersRes.error) throw managersRes.error;
-      if (projectsRes.error) throw projectsRes.error;
+        const scoped = selectedCompanyId ? await base.eq("company_id", selectedCompanyId) : await base;
+        if (scoped.error && isMissingColumnError(scoped.error.message)) {
+          const fallback = await supabase
+            .from("projects")
+            .select("id,name,description,start_date,end_date,budget_total,client_id,project_type,project_scopes,project_stage,status,owner_user_id,created_at")
+            .order("created_at", { ascending: false });
+          projectsRes = {
+            data: (fallback.data ?? null) as ExistingProjectRow[] | null,
+            error: fallback.error ? { message: fallback.error.message } : null,
+          };
+        } else {
+          projectsRes = {
+            data: (scoped.data ?? null) as ExistingProjectRow[] | null,
+            error: scoped.error ? { message: scoped.error.message } : null,
+          };
+        }
+      }
 
-      const nextClients = (clientsRes.data ?? []) as ProjectClientRow[];
-      const nextManagers = (managersRes.data ?? []) as ManagerRow[];
+      if (projectsRes.error) throw new Error(projectsRes.error.message);
+
+      let nextClients = formOptions.clients ?? [];
       const nextProjects = (projectsRes.data ?? []) as ExistingProjectRow[];
+
+      const managerMap = new Map<string, ManagerRow>();
+      for (const m of formOptions.managers ?? []) {
+        if (!m.id) continue;
+        managerMap.set(m.id, { id: m.id, full_name: m.full_name ?? null, email: m.email ?? null });
+      }
+
+      // Fallback defensivo: quando a API de opcoes retorna vazio, carrega direto das tabelas.
+      if (nextClients.length === 0) {
+        const clientsFallback = await supabase
+          .from("project_clients")
+          .select("id,name,active")
+          .eq("active", true)
+          .order("name", { ascending: true });
+        if (!clientsFallback.error) {
+          nextClients = ((clientsFallback.data ?? []) as Array<{ id: string; name: string; active?: boolean | null }>).map((c) => ({
+            id: c.id,
+            name: c.name,
+          }));
+        }
+      }
+
+      if (managerMap.size === 0) {
+        const [colabFallback, profilesFallback] = await Promise.all([
+          supabase.from("colaboradores").select("user_id,nome,email,cargo").not("user_id", "is", null).order("nome", { ascending: true }),
+          supabase.from("profiles").select("id,full_name,active").eq("active", true).order("full_name", { ascending: true }),
+        ]);
+
+        if (!profilesFallback.error) {
+          for (const p of (profilesFallback.data ?? []) as Array<{ id: string; full_name: string | null }>) {
+            if (!p.id) continue;
+            managerMap.set(p.id, { id: p.id, full_name: p.full_name ?? null, email: null });
+          }
+        }
+
+        if (!colabFallback.error) {
+          for (const c of (colabFallback.data ?? []) as Array<{ user_id: string | null; nome: string | null; email: string | null }>) {
+            const uid = (c.user_id ?? "").trim();
+            if (!uid) continue;
+            const prev = managerMap.get(uid);
+            managerMap.set(uid, {
+              id: uid,
+              full_name: (c.nome ?? "").trim() || prev?.full_name || null,
+              email: (c.email ?? "").trim() || prev?.email || null,
+            });
+          }
+        }
+      }
+
+      for (const p of nextProjects) {
+        const uid = (p.owner_user_id ?? "").trim();
+        if (!uid || managerMap.has(uid)) continue;
+        managerMap.set(uid, { id: uid, full_name: null, email: null });
+      }
+
+      const nextManagers = Array.from(managerMap.values()).sort((a, b) =>
+        managerLabel(a).localeCompare(managerLabel(b), "pt-BR", { sensitivity: "base" })
+      );
 
       setClients(nextClients);
       setManagers(nextManagers);
@@ -179,6 +332,10 @@ export default function DiretoriaNovoProjetoPage() {
 
       if (!newProjectManagerId && nextManagers.length > 0) {
         setNewProjectManagerId(nextManagers[0].id);
+      }
+
+      if (formOptionsWarn) {
+        setMsg(`Aviso: ${formOptionsWarn}`);
       }
     } catch (e: unknown) {
       setClients([]);
@@ -242,6 +399,7 @@ export default function DiretoriaNovoProjetoPage() {
         project_stage: newProjectStage,
         status: statusFromStage(newProjectStage),
         owner_user_id: newProjectManagerId,
+        company_id: selectedCompanyId || null,
       };
 
       let projectId: string | null = null;
@@ -260,6 +418,7 @@ export default function DiretoriaNovoProjetoPage() {
             project_scopes: payload.project_scopes,
             status: payload.status,
             owner_user_id: payload.owner_user_id,
+            company_id: payload.company_id,
           })
           .select("id")
           .single<{ id: string }>();
@@ -359,85 +518,144 @@ export default function DiretoriaNovoProjetoPage() {
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
         <h2 className="text-sm font-semibold text-slate-900">Cadastro de projeto</h2>
+        <p className="mt-1 text-xs text-slate-600">
+          Preencha os campos principais: <b>Empresa</b>, <b>Nome do projeto</b>, <b>Gestor responsavel</b>,{" "}
+          <b>Cliente</b>, <b>Tipo principal</b>, <b>Data de inicio</b> e <b>Previsao de termino</b>.
+        </p>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
-          <input
-            value={newProjectName}
-            onChange={(e) => setNewProjectName(e.target.value)}
-            placeholder="Nome do projeto"
-            className="h-10 rounded-xl border border-slate-200 px-3 text-sm"
-          />
-          <select
-            value={newProjectManagerId}
-            onChange={(e) => setNewProjectManagerId(e.target.value)}
-            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-          >
-            <option value="">Selecione o gestor responsavel...</option>
-            {managers.map((m) => (
-              <option key={m.id} value={m.id}>
-                {managerLabel(m)}
-              </option>
-            ))}
-          </select>
-          <select
-            value={newProjectClientId}
-            onChange={(e) => setNewProjectClientId(e.target.value)}
-            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-          >
-            <option value="">Selecione o cliente...</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={newProjectType}
-            onChange={(e) => setNewProjectType(e.target.value as ProjectType | "")}
-            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-          >
-            <option value="">Tipo principal do projeto...</option>
-            {PROJECT_TYPE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-          <select
-            value={newProjectStage}
-            onChange={(e) => setNewProjectStage(e.target.value as ProjectStage)}
-            className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-          >
-            <option value="ofertas">Etapa inicial: Ofertas</option>
-            <option value="desenvolvimento">Etapa inicial: Desenvolvimento</option>
-            <option value="as_built">Etapa inicial: As Built</option>
-            <option value="pausado">Etapa inicial: Pausado</option>
-            <option value="cancelado">Etapa inicial: Cancelado</option>
-          </select>
-          <input
-            value={newProjectBudgetTotal}
-            onChange={(e) => setNewProjectBudgetTotal(e.target.value)}
-            placeholder="Orcamento (opcional) - ex: 250000"
-            inputMode="decimal"
-            className="h-10 rounded-xl border border-slate-200 px-3 text-sm"
-          />
-          <input
-            type="date"
-            value={newProjectStart}
-            onChange={(e) => setNewProjectStart(e.target.value)}
-            className="h-10 rounded-xl border border-slate-200 px-3 text-sm"
-          />
-          <input
-            type="date"
-            value={newProjectEnd}
-            onChange={(e) => setNewProjectEnd(e.target.value)}
-            className="h-10 rounded-xl border border-slate-200 px-3 text-sm"
-          />
-          <input
-            value={newProjectDesc}
-            onChange={(e) => setNewProjectDesc(e.target.value)}
-            placeholder="Descricao (opcional)"
-            className="h-10 rounded-xl border border-slate-200 px-3 text-sm md:col-span-2"
-          />
+          <div className="md:col-span-2">
+            <select
+              value={selectedCompanyId}
+              onChange={(e) => setSelectedCompanyId(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+            >
+              <option value="">Selecione a empresa...</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">
+              Empresa onde o projeto sera criado. Se ficar em branco, o admin opera em escopo global.
+            </p>
+          </div>
+
+          <div>
+            <input
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              placeholder="Nome do projeto"
+              className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm"
+            />
+            <p className="mt-1 text-xs text-slate-500">Informe um nome curto e objetivo.</p>
+          </div>
+
+          <div>
+            <select
+              value={newProjectManagerId}
+              onChange={(e) => setNewProjectManagerId(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+            >
+              <option value="">Selecione o gestor responsavel...</option>
+              {managers.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {managerLabel(m)}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">Selecione quem vai conduzir o projeto.</p>
+          </div>
+
+          <div>
+            <select
+              value={newProjectClientId}
+              onChange={(e) => setNewProjectClientId(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+            >
+              <option value="">Selecione o cliente...</option>
+              {clients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">Cliente contratante do projeto.</p>
+          </div>
+
+          <div>
+            <select
+              value={newProjectType}
+              onChange={(e) => setNewProjectType(e.target.value as ProjectType | "")}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+            >
+              <option value="">Tipo principal do projeto...</option>
+              {PROJECT_TYPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">Disciplina principal para classificar o projeto.</p>
+          </div>
+
+          <div>
+            <select
+              value={newProjectStage}
+              onChange={(e) => setNewProjectStage(e.target.value as ProjectStage)}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+            >
+              <option value="ofertas">Etapa inicial: Ofertas</option>
+              <option value="desenvolvimento">Etapa inicial: Desenvolvimento</option>
+              <option value="as_built">Etapa inicial: As Built</option>
+              <option value="pausado">Etapa inicial: Pausado</option>
+              <option value="cancelado">Etapa inicial: Cancelado</option>
+            </select>
+            <p className="mt-1 text-xs text-slate-500">Etapa atual em que o projeto comeca.</p>
+          </div>
+
+          <div>
+            <input
+              value={newProjectBudgetTotal}
+              onChange={(e) => setNewProjectBudgetTotal(e.target.value)}
+              placeholder="Orcamento (opcional) - ex: 250000"
+              inputMode="decimal"
+              className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm"
+            />
+            <p className="mt-1 text-xs text-slate-500">Valor previsto total do contrato (opcional).</p>
+          </div>
+
+          <div>
+            <input
+              type="date"
+              value={newProjectStart}
+              onChange={(e) => setNewProjectStart(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm"
+            />
+            <p className="mt-1 text-xs text-slate-500">Data de inicio planejada.</p>
+          </div>
+
+          <div>
+            <input
+              type="date"
+              value={newProjectEnd}
+              onChange={(e) => setNewProjectEnd(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm"
+            />
+            <p className="mt-1 text-xs text-slate-500">Previsao de termino do projeto.</p>
+          </div>
+
+          <div className="md:col-span-2">
+            <input
+              value={newProjectDesc}
+              onChange={(e) => setNewProjectDesc(e.target.value)}
+              placeholder="Descricao (opcional)"
+              className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm"
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              Resumo do escopo e objetivo principal (opcional).
+            </p>
+          </div>
           <div className="rounded-xl border border-slate-200 p-3 md:col-span-2">
             <p className="text-xs font-semibold text-slate-700">Escopos/disciplinas</p>
             <div className="mt-2 flex flex-wrap gap-2">

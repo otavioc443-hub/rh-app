@@ -98,10 +98,18 @@ export async function POST(req: Request) {
       }>();
     if (delErr || !del) return NextResponse.json({ error: "Entregavel nao encontrado" }, { status: 404 });
 
+    const { data: extraAssignee } = await supabaseAdmin
+      .from("project_deliverable_assignees")
+      .select("id")
+      .eq("deliverable_id", deliverableId)
+      .eq("user_id", user.id)
+      .maybeSingle<{ id: string }>();
+    const isAdditionalAssignee = !!extraAssignee?.id;
+
     let allowed = false;
     if (effectiveRole === "admin" || effectiveRole === "rh") {
       allowed = true;
-    } else if (del.assigned_to && del.assigned_to === user.id) {
+    } else if ((del.assigned_to && del.assigned_to === user.id) || isAdditionalAssignee) {
       allowed = true;
     } else if (effectiveRole === "gestor" || effectiveRole === "coordenador") {
       const [{ data: pr }, { data: pm }] = await Promise.all([
@@ -119,12 +127,24 @@ export async function POST(req: Request) {
 
     if (!allowed) return NextResponse.json({ error: "Sem permissao para alterar este documento" }, { status: 403 });
 
-    const nextStatus = link ? "sent" : del.status;
+    if (
+      effectiveRole === "colaborador" &&
+      (del.assigned_to === user.id || isAdditionalAssignee) &&
+      !["pending", "in_progress"].includes(del.status)
+    ) {
+      return NextResponse.json(
+        { error: "Entregavel bloqueado para edicao. Aguarde reencaminhamento do coordenador." },
+        { status: 400 }
+      );
+    }
+
+    const collaboratorAutoSend = effectiveRole === "colaborador";
+    const nextStatus = link && !collaboratorAutoSend ? "sent" : del.status;
     const updatePayload = {
       document_url: link || null,
       status: nextStatus,
-      submitted_by: link ? user.id : del.submitted_by,
-      submitted_at: link ? new Date().toISOString() : del.submitted_at,
+      submitted_by: link && !collaboratorAutoSend ? user.id : del.submitted_by,
+      submitted_at: link && !collaboratorAutoSend ? new Date().toISOString() : del.submitted_at,
     };
 
     const { data: updated, error: upErr } = await supabaseAdmin
@@ -143,4 +163,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

@@ -108,6 +108,30 @@ type DeletedTeamItem = {
   deleted_at: string;
 };
 
+type AssigneeReason =
+  | "atribuicao_inicial"
+  | "reencaminhamento"
+  | "redistribuicao_carga"
+  | "especialidade_tecnica"
+  | "substituicao_responsavel"
+  | "ajuste_escopo"
+  | "prioridade_urgente";
+
+const ASSIGNEE_REASON_OPTIONS: Array<{ value: AssigneeReason; label: string }> = [
+  { value: "atribuicao_inicial", label: "Atribuicao inicial" },
+  { value: "reencaminhamento", label: "Reencaminhamento" },
+  { value: "redistribuicao_carga", label: "Redistribuicao de carga" },
+  { value: "especialidade_tecnica", label: "Especialidade tecnica" },
+  { value: "substituicao_responsavel", label: "Substituicao de responsavel" },
+  { value: "ajuste_escopo", label: "Ajuste de escopo" },
+  { value: "prioridade_urgente", label: "Prioridade urgente" },
+];
+
+function assigneeReasonLabel(reason: AssigneeReason) {
+  const found = ASSIGNEE_REASON_OPTIONS.find((o) => o.value === reason);
+  return found?.label ?? "Atribuicao inicial";
+}
+
 function isEmailLike(value: string) {
   return value.includes("@");
 }
@@ -137,6 +161,8 @@ function getDeliverableStatusEventType(statusFrom?: string | null, statusTo?: st
 function deliverableEventLabel(eventType: string) {
   if (eventType === "returned_for_rework") return "Retornou para ajuste";
   if (eventType === "status_changed") return "Mudanca de status";
+  if (eventType === "directed") return "Direcionado";
+  if (eventType === "assignment_cancelled") return "Atribuicao cancelada";
   if (eventType === "created") return "Criado";
   if (eventType === "contribution_added") return "Contribuicao registrada";
   if (eventType === "assignee_added") return "Responsavel adicionado";
@@ -158,6 +184,10 @@ function deliverableStatusLabel(value?: string | null) {
   if (value === "blocked") return "Bloqueado";
   if (value === "cancelled") return "Cancelado";
   return value ?? "-";
+}
+
+function isLeadershipRole(role?: string | null) {
+  return role === "gestor" || role === "coordenador" || role === "admin";
 }
 
 export default function CoordenadorProjetosPage() {
@@ -197,8 +227,18 @@ export default function CoordenadorProjetosPage() {
 
   const [contribTextByDeliverable, setContribTextByDeliverable] = useState<Record<string, string>>({});
   const [docLinkByDeliverable, setDocLinkByDeliverable] = useState<Record<string, string>>({});
+  const [statusDraftByDeliverableId, setStatusDraftByDeliverableId] = useState<
+    Record<string, Deliverable["status"]>
+  >({});
   const [statusCommentByDeliverableId, setStatusCommentByDeliverableId] = useState<Record<string, string>>({});
   const [newAssigneeByDeliverableId, setNewAssigneeByDeliverableId] = useState<Record<string, string>>({});
+  const [pendingAssigneesByDeliverableId, setPendingAssigneesByDeliverableId] = useState<Record<string, string[]>>({});
+  const [assigneeReasonByDeliverableId, setAssigneeReasonByDeliverableId] = useState<Record<string, AssigneeReason>>({});
+  const [assigneeCommentByDeliverableId, setAssigneeCommentByDeliverableId] = useState<Record<string, string>>({});
+  const [timelineFilterByDeliverableId, setTimelineFilterByDeliverableId] = useState<
+    Record<string, "all" | "leadership" | "rework">
+  >({});
+  const [timelineExpandedByDeliverableId, setTimelineExpandedByDeliverableId] = useState<Record<string, boolean>>({});
 
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [teamMembers, setTeamMembers] = useState<ProjectTeamMember[]>([]);
@@ -276,6 +316,9 @@ export default function CoordenadorProjetosPage() {
       setProjects(nextProjects);
       setMembers(nextMembers);
       setDeliverables(nextDeliverables);
+      setStatusDraftByDeliverableId(
+        Object.fromEntries(nextDeliverables.map((d) => [d.id, d.status])) as Record<string, Deliverable["status"]>
+      );
       setSelectedProjectId((prev) => (prev && nextProjects.some((p) => p.id === prev) ? prev : nextProjects[0]?.id ?? ""));
       setDocLinkByDeliverable(
         Object.fromEntries(nextDeliverables.map((d) => [d.id, d.document_url ?? ""]))
@@ -429,6 +472,9 @@ export default function CoordenadorProjetosPage() {
     () => members.filter((m) => m.project_id === selectedProjectId),
     [members, selectedProjectId]
   );
+  function canBeDeliverableResponsible(userId: string) {
+    return projectMembers.some((m) => m.user_id === userId);
+  }
 
   const projectDeliverables = useMemo(
     () => deliverables.filter((d) => d.project_id === selectedProjectId),
@@ -629,7 +675,11 @@ export default function CoordenadorProjetosPage() {
     }
   }
 
-  async function setStatus(deliverableId: string, status: Deliverable["status"]) {
+  async function setStatus(
+    deliverableId: string,
+    status: Deliverable["status"],
+    timelineCommentOverride?: string | null
+  ) {
     setSaving(true);
     setMsg("");
     try {
@@ -637,10 +687,8 @@ export default function CoordenadorProjetosPage() {
       const currentStatus = current?.status ?? null;
       const needsAutoSentStep =
         currentStatus === "in_progress" && (status === "approved" || status === "approved_with_comments");
-      const approvalComment =
-        status === "approved_with_comments"
-          ? (statusCommentByDeliverableId[deliverableId] ?? "").trim() || null
-          : current?.approval_comment ?? null;
+      const timelineComment = (timelineCommentOverride ?? statusCommentByDeliverableId[deliverableId] ?? "").trim() || null;
+      const approvalComment = status === "approved_with_comments" ? timelineComment : current?.approval_comment ?? null;
       if (needsAutoSentStep) {
         const sentRes = await supabase.from("project_deliverables").update({ status: "sent" }).eq("id", deliverableId);
         if (sentRes.error) throw new Error(sentRes.error.message);
@@ -664,7 +712,7 @@ export default function CoordenadorProjetosPage() {
         eventType: getDeliverableStatusEventType(fromStatus, status),
         statusFrom: fromStatus,
         statusTo: status,
-        comment: status === "approved_with_comments" ? approvalComment : null,
+        comment: timelineComment,
       });
       await load();
     } catch (e: unknown) {
@@ -699,6 +747,19 @@ export default function CoordenadorProjetosPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function saveDraftStatus(deliverableId: string, draftStatus: Deliverable["status"]) {
+    const current = deliverables.find((x) => x.id === deliverableId) ?? null;
+    if (!current) return;
+    const nextStatus = draftStatus;
+    const comment = (statusCommentByDeliverableId[deliverableId] ?? "").trim() || null;
+    if (nextStatus === current.status) {
+      setMsg("Selecione um status diferente para salvar.");
+      return;
+    }
+    await setStatus(deliverableId, nextStatus, comment);
+    setStatusCommentByDeliverableId((prev) => ({ ...prev, [deliverableId]: "" }));
   }
 
   async function openDeliverableFile(deliverableId: string) {
@@ -811,31 +872,145 @@ export default function CoordenadorProjetosPage() {
     }
   }
 
-  async function addAssignee(deliverable: Deliverable) {
-    const userId = (newAssigneeByDeliverableId[deliverable.id] ?? "").trim();
-    if (!userId) return setMsg("Selecione uma pessoa para atribuir.");
+  async function saveAssigneeAssignments(deliverable: Deliverable) {
+    const queuedUserIds = pendingAssigneesByDeliverableId[deliverable.id] ?? [];
+    const reason = assigneeReasonByDeliverableId[deliverable.id] ?? "atribuicao_inicial";
+    const comment = (assigneeCommentByDeliverableId[deliverable.id] ?? "").trim();
+    const timelineRows = deliverableTimeline.filter((t) => t.deliverable_id === deliverable.id);
+    const wasReturnedForRework = timelineRows.some(
+      (t) =>
+        t.event_type === "returned_for_rework" ||
+        ((t.status_from === "sent" || t.status_from === "approved" || t.status_from === "approved_with_comments") &&
+          (t.status_to === "in_progress" || t.status_to === "pending"))
+    );
+    const needsReassignmentContext =
+      wasReturnedForRework && (deliverable.status === "in_progress" || deliverable.status === "pending");
+    if (needsReassignmentContext && !comment) {
+      return setMsg("Informe o comentario para o colaborador no reencaminhamento.");
+    }
+    if (!queuedUserIds.length && !needsReassignmentContext) {
+      return setMsg("Adicione ao menos uma pessoa na lista antes de salvar.");
+    }
+    const alreadyAssigned = new Set<string>([
+      ...(deliverable.assigned_to ? [deliverable.assigned_to] : []),
+      ...deliverableAssignees
+        .filter((a) => a.deliverable_id === deliverable.id)
+        .map((a) => a.user_id),
+    ]);
+    const newUserIds = queuedUserIds.filter((id) => !alreadyAssigned.has(id));
+    if (!newUserIds.length && !needsReassignmentContext) {
+      return setMsg("As pessoas da lista ja estao atribuidas neste entregavel.");
+    }
     setSaving(true);
     setMsg("");
     try {
-      const res = await supabase.from("project_deliverable_assignees").insert({
-        deliverable_id: deliverable.id,
-        project_id: deliverable.project_id,
-        user_id: userId,
-        contribution_unit: "hours",
-        contribution_value: null,
-        created_by: meId || null,
-      });
-      if (res.error) throw new Error(res.error.message);
+      if (newUserIds.length) {
+        const payload = newUserIds.map((userId) => ({
+          deliverable_id: deliverable.id,
+          project_id: deliverable.project_id,
+          user_id: userId,
+          contribution_unit: "hours" as const,
+          contribution_value: null,
+          created_by: meId || null,
+        }));
+        const res = await supabase.from("project_deliverable_assignees").insert(payload);
+        if (res.error) throw new Error(res.error.message);
+      }
+      const reasonLabel = assigneeReasonLabel(reason);
+      const names =
+        newUserIds.length > 0
+          ? newUserIds.map((id) => personLabel(id)).join(", ")
+          : deliverable.assigned_to
+            ? personLabel(deliverable.assigned_to)
+            : "Responsavel atual";
+      const timelineComment = needsReassignmentContext
+        ? `Flag: Reencaminhamento. Motivo: ${reasonLabel}. Colaboradores: ${names}. Comentario: ${comment}`
+        : comment
+          ? `Motivo: ${reasonLabel}. Colaboradores: ${names}. Comentario: ${comment}`
+          : `Motivo: ${reasonLabel}. Colaboradores: ${names}`;
       await logDeliverableEvent({
         deliverableId: deliverable.id,
         projectId: deliverable.project_id,
         eventType: "assignee_added",
-        comment: personLabel(userId),
+        comment: timelineComment,
       });
       setNewAssigneeByDeliverableId((prev) => ({ ...prev, [deliverable.id]: "" }));
+      setPendingAssigneesByDeliverableId((prev) => ({ ...prev, [deliverable.id]: [] }));
+      setAssigneeReasonByDeliverableId((prev) => ({ ...prev, [deliverable.id]: "atribuicao_inicial" }));
+      setAssigneeCommentByDeliverableId((prev) => ({ ...prev, [deliverable.id]: "" }));
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao adicionar pessoa no documento.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function queueAssignee(deliverableId: string) {
+    const userId = (newAssigneeByDeliverableId[deliverableId] ?? "").trim();
+    if (!userId) {
+      setMsg("Selecione uma pessoa para adicionar na lista.");
+      return;
+    }
+    setPendingAssigneesByDeliverableId((prev) => {
+      const current = prev[deliverableId] ?? [];
+      if (current.includes(userId)) return prev;
+      return { ...prev, [deliverableId]: [...current, userId] };
+    });
+    setNewAssigneeByDeliverableId((prev) => ({ ...prev, [deliverableId]: "" }));
+    setMsg("");
+  }
+
+  function removeQueuedAssignee(deliverableId: string, userId: string) {
+    setPendingAssigneesByDeliverableId((prev) => ({
+      ...prev,
+      [deliverableId]: (prev[deliverableId] ?? []).filter((id) => id !== userId),
+    }));
+  }
+
+  async function cancelAssignmentAndUnlock(deliverable: Deliverable) {
+    const extraAssignees = deliverableAssignees
+      .filter((a) => a.deliverable_id === deliverable.id)
+      .map((a) => a.user_id);
+    const hasAnyAssignee = !!deliverable.assigned_to || extraAssignees.length > 0;
+    if (!hasAnyAssignee) return setMsg("Este entregavel nao possui responsaveis atribuidos.");
+    if (!confirm("Cancelar atribuicao atual e liberar edicao sem exigir novo envio?")) return;
+    setSaving(true);
+    setMsg("");
+    try {
+      const removedUsers = Array.from(
+        new Set([deliverable.assigned_to, ...extraAssignees].filter(Boolean) as string[])
+      );
+      const nextStatus: Deliverable["status"] =
+        deliverable.status === "pending" || deliverable.status === "in_progress" ? "in_progress" : "in_progress";
+      const deleteRes = await supabase
+        .from("project_deliverable_assignees")
+        .delete()
+        .eq("deliverable_id", deliverable.id);
+      if (deleteRes.error) throw new Error(deleteRes.error.message);
+      const res = await supabase
+        .from("project_deliverables")
+        .update({
+          assigned_to: null,
+          status: nextStatus,
+          submitted_by: null,
+          submitted_at: null,
+        })
+        .eq("id", deliverable.id);
+      if (res.error) throw new Error(res.error.message);
+
+      await logDeliverableEvent({
+        deliverableId: deliverable.id,
+        projectId: deliverable.project_id,
+        eventType: "assignment_cancelled",
+        statusFrom: deliverable.status,
+        statusTo: nextStatus,
+        comment: `Liberado para ajustes sem novo envio. Responsaveis removidos: ${removedUsers.map((u) => personLabel(u)).join(", ") || "-"}.`,
+      });
+      setMsg("Atribuicoes canceladas. Entregavel ficou sem responsavel.");
+      await load();
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao cancelar atribuicao.");
     } finally {
       setSaving(false);
     }
@@ -987,7 +1162,7 @@ export default function CoordenadorProjetosPage() {
               <option value="">Selecione o responsavel...</option>
               {projectMembers.map((m) => (
                 <option key={m.id} value={m.user_id}>
-                  {personLabel(m.user_id)}
+                  {personLabel(m.user_id)} ({m.member_role})
                 </option>
               ))}
             </select>
@@ -1164,22 +1339,93 @@ export default function CoordenadorProjetosPage() {
         {filteredProjectDeliverables.map((d) => {
           const list = contributions.filter((c) => c.deliverable_id === d.id);
           const assignees = deliverableAssignees.filter((a) => a.deliverable_id === d.id);
-          const timeline = deliverableTimeline.filter((t) => t.deliverable_id === d.id).slice(0, 8);
+          const allResponsibleIds = Array.from(
+            new Set([...(d.assigned_to ? [d.assigned_to] : []), ...assignees.map((a) => a.user_id)])
+          );
+          const allResponsibleNames = allResponsibleIds.map((id) => personLabel(id));
+          const timelineFilter = timelineFilterByDeliverableId[d.id] ?? "all";
+          const timelineAll = deliverableTimeline
+            .filter((t) => t.deliverable_id === d.id)
+            .filter((t) => {
+              if (timelineFilter === "leadership") return isLeadershipRole(t.actor_role);
+              if (timelineFilter === "rework") {
+                return (
+                  t.event_type === "returned_for_rework" ||
+                  ((t.status_from === "sent" || t.status_from === "approved" || t.status_from === "approved_with_comments") &&
+                    (t.status_to === "in_progress" || t.status_to === "pending"))
+                );
+              }
+              return true;
+            })
+          const timelineExpanded = timelineExpandedByDeliverableId[d.id] === true;
+          const timeline = timelineExpanded ? timelineAll : timelineAll.slice(0, 3);
+          const timelineHasMore = timelineAll.length > 3;
+          const queuedAssignees = pendingAssigneesByDeliverableId[d.id] ?? [];
+          const draftStatus = statusDraftByDeliverableId[d.id] ?? d.status;
+          const hadReworkReturn = deliverableTimeline.some(
+            (t) =>
+              t.deliverable_id === d.id &&
+              (t.event_type === "returned_for_rework" ||
+                ((t.status_from === "sent" || t.status_from === "approved" || t.status_from === "approved_with_comments") &&
+                  (t.status_to === "in_progress" || t.status_to === "pending")))
+          );
+          const requiresReassignmentReason =
+            hadReworkReturn && (d.status === "in_progress" || d.status === "pending");
+          const assigneeReason: AssigneeReason = assigneeReasonByDeliverableId[d.id] ?? "atribuicao_inicial";
+          const saveAssignmentsDisabled =
+            saving ||
+            (queuedAssignees.length === 0 &&
+              !(requiresReassignmentReason && (assigneeCommentByDeliverableId[d.id] ?? "").trim()));
           return (
             <div key={d.id} className="rounded-xl border border-slate-200 p-3 space-y-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold text-slate-900">{d.title}</p>
-                <select value={d.status} onChange={(e) => void setStatus(d.id, e.target.value as Deliverable["status"])} className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs">
-                  <option value="pending">Pendente</option>
-                  <option value="in_progress">Em andamento</option>
-                  <option value="sent">Enviado</option>
-                  <option value="approved">Aprovado</option>
-                  <option value="approved_with_comments">Aprovado com comentarios</option>
-                </select>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    value={draftStatus}
+                    onChange={(e) =>
+                      setStatusDraftByDeliverableId((prev) => ({
+                        ...prev,
+                        [d.id]: e.target.value as Deliverable["status"],
+                      }))
+                    }
+                    className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                  >
+                    <option value="pending">Pendente</option>
+                    <option value="in_progress">Em andamento</option>
+                    <option value="sent">Enviado</option>
+                    <option value="approved">Aprovado</option>
+                    <option value="approved_with_comments">Aprovado com comentarios</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => void saveDraftStatus(d.id, draftStatus)}
+                    disabled={saving}
+                    className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-800 disabled:opacity-60"
+                  >
+                    Salvar status
+                  </button>
+                </div>
               </div>
+              <input
+                value={statusCommentByDeliverableId[d.id] ?? ""}
+                onChange={(e) => setStatusCommentByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                placeholder="Comentario da mudanca de status"
+                className="h-9 w-full rounded-lg border border-slate-200 px-2 text-xs"
+              />
               <p className="text-xs text-slate-500">
-                Responsavel: {d.assigned_to ? personLabel(d.assigned_to) : "Nao definido"}
+                Responsavel: {allResponsibleNames.length ? allResponsibleNames.join(", ") : "Nao definido"}
               </p>
+              {allResponsibleIds.length ? (
+                <button
+                  type="button"
+                  onClick={() => void cancelAssignmentAndUnlock(d)}
+                  disabled={saving}
+                  className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 disabled:opacity-60"
+                >
+                  Cancelar atribuicao e liberar ajustes
+                </button>
+              ) : null}
               {d.status === "approved_with_comments" ? (
                 <p className="text-xs text-amber-700">Comentario: {d.approval_comment ?? "-"}</p>
               ) : null}
@@ -1304,17 +1550,101 @@ export default function CoordenadorProjetosPage() {
                     <option value="">Selecionar pessoa...</option>
                     {projectMembers.map((m) => (
                       <option key={m.id} value={m.user_id}>
-                        {personLabel(m.user_id)}
+                        {personLabel(m.user_id)} ({m.member_role})
                       </option>
                     ))}
                   </select>
                   <button
                     type="button"
-                    onClick={() => void addAssignee(d)}
-                    disabled={saving}
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800"
+                    onClick={() => queueAssignee(d.id)}
+                    disabled={saving || !(newAssigneeByDeliverableId[d.id] ?? "").trim()}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 disabled:opacity-60"
                   >
-                    Atribuir
+                    Adicionar
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  Se houver novas pessoas na lista, salva normalmente. Se nao houver, registra o reencaminhamento para o responsavel atual.
+                </p>
+                {queuedAssignees.length ? (
+                  <div className="mt-2 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-slate-700">Lista para salvar ({queuedAssignees.length})</p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPendingAssigneesByDeliverableId((prev) => ({
+                            ...prev,
+                            [d.id]: [],
+                          }))
+                        }
+                        disabled={saving}
+                        className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-60"
+                      >
+                        Limpar lista
+                      </button>
+                    </div>
+                    {queuedAssignees.map((userId) => (
+                      <div
+                        key={userId}
+                        className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5"
+                      >
+                        <span className="text-xs text-slate-700">{personLabel(userId)}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeQueuedAssignee(d.id, userId)}
+                          disabled={saving}
+                          className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 disabled:opacity-60"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="mt-2 grid gap-2 md:grid-cols-3">
+                  <select
+                    value={assigneeReason}
+                    onChange={(e) =>
+                      setAssigneeReasonByDeliverableId((prev) => ({
+                        ...prev,
+                        [d.id]: e.target.value as AssigneeReason,
+                      }))
+                    }
+                    className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                  >
+                    {ASSIGNEE_REASON_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        Motivo: {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    value={assigneeCommentByDeliverableId[d.id] ?? ""}
+                    onChange={(e) =>
+                      setAssigneeCommentByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))
+                    }
+                    placeholder={
+                      requiresReassignmentReason
+                        ? "Comentario ao colaborador (obrigatorio no reencaminhamento)"
+                        : "Comentario ao colaborador (opcional)"
+                    }
+                    className="h-9 rounded-lg border border-slate-200 px-2 text-xs md:col-span-2"
+                  />
+                </div>
+                {requiresReassignmentReason ? (
+                  <p className="mt-1 text-xs text-amber-700">
+                    Este documento voltou para ajuste. A flag de reencaminhamento sera registrada automaticamente; selecione o motivo complementar e informe comentario.
+                  </p>
+                ) : null}
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => void saveAssigneeAssignments(d)}
+                    disabled={saveAssignmentsDisabled}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 disabled:opacity-60"
+                  >
+                    Salvar atribuicoes
                   </button>
                 </div>
                 <div className="mt-2 space-y-1">
@@ -1346,16 +1676,36 @@ export default function CoordenadorProjetosPage() {
               ))}
 
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <p className="text-xs font-semibold text-slate-700">Linha do tempo do documento</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-slate-700">Linha do tempo do documento</p>
+                  <select
+                    value={timelineFilter}
+                    onChange={(e) =>
+                      setTimelineFilterByDeliverableId((prev) => ({
+                        ...prev,
+                        [d.id]: e.target.value as "all" | "leadership" | "rework",
+                      }))
+                    }
+                    className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                  >
+                    <option value="all">Todos</option>
+                    <option value="leadership">Apenas lideranca</option>
+                    <option value="rework">Apenas reencaminhamento</option>
+                  </select>
+                </div>
                 <div className="mt-2 space-y-1">
                   {timeline.length ? (
                     timeline.map((t) => (
-                      <p key={t.id} className="text-xs text-slate-600">
+                      <p
+                        key={t.id}
+                        className={`text-xs ${isLeadershipRole(t.actor_role) && t.comment ? "font-semibold text-indigo-700" : "text-slate-600"}`}
+                      >
                         {new Date(t.created_at).toLocaleString()} - {deliverableEventLabel(t.event_type)}
                         {t.status_from || t.status_to
                           ? ` (${deliverableStatusLabel(t.status_from)} -> ${deliverableStatusLabel(t.status_to)})`
                           : ""}
                         {t.comment ? ` - ${t.comment}` : ""}
+                        {isLeadershipRole(t.actor_role) && t.comment ? " [Comentario da lideranca]" : ""}
                         {t.actor_user_id ? ` - ${personLabel(t.actor_user_id)}` : ""}
                       </p>
                     ))
@@ -1363,6 +1713,22 @@ export default function CoordenadorProjetosPage() {
                     <p className="text-xs text-slate-500">Sem eventos registrados.</p>
                   )}
                 </div>
+                {timelineHasMore || timelineExpanded ? (
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setTimelineExpandedByDeliverableId((prev) => ({
+                          ...prev,
+                          [d.id]: !timelineExpanded,
+                        }))
+                      }
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700"
+                    >
+                      {timelineExpanded ? "Ver menos" : `Ver mais (${timelineAll.length - 3})`}
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </div>
           );

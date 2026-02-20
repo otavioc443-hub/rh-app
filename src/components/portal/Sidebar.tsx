@@ -27,12 +27,13 @@ import {
   GitBranch,
   Wallet,
   Wrench,
+  Trash2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { isRouteHidden } from "@/lib/featureVisibility";
 
-type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "financeiro" | "pd" | "admin";
+type Role = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "financeiro" | "pd" | "admin";
 
 type NavChild = { label: string; icon?: LucideIcon; href: string; exact?: boolean; roles?: Role[] };
 type NavItem = {
@@ -83,13 +84,13 @@ export default function Sidebar({
         label: "Home",
         icon: Home,
         href: "/home",
-        roles: ["colaborador", "coordenador", "gestor", "rh", "financeiro", "pd", "admin"],
+        roles: ["colaborador", "coordenador", "gestor", "diretoria", "rh", "financeiro", "pd", "admin"],
       },
 
       {
         label: "Institucional",
         icon: Building2,
-        roles: ["colaborador", "coordenador", "gestor", "rh", "financeiro", "pd", "admin"],
+        roles: ["colaborador", "coordenador", "gestor", "diretoria", "rh", "financeiro", "pd", "admin"],
         children: [
           { label: "Visão Geral", icon: LayoutDashboard, href: "/institucional", exact: true },
           { label: "Organograma", icon: GitBranch, href: "/institucional/organograma", roles: ["gestor", "financeiro", "admin"] },
@@ -182,7 +183,7 @@ export default function Sidebar({
       {
         label: "CEO",
         icon: Shield,
-        roles: ["admin"],
+        roles: ["diretoria", "admin"],
         children: [
           { label: "Aprovar aditivos", icon: ClipboardList, href: "/ceo/aditivos-contratuais", exact: true },
         ],
@@ -229,6 +230,7 @@ export default function Sidebar({
           { label: "Configuracao SLA", icon: CalendarClock, href: "/admin/sla" },
           { label: "Notificacoes", icon: MessageSquareText, href: "/admin/notificacoes" },
           { label: "Visibilidade", icon: Layers, href: "/admin/funcionalidades" },
+          { label: "Limpeza de dados", icon: Trash2, href: "/admin/limpeza-dados" },
           { label: "Sessões", icon: MonitorCheck, href: "/admin/sessoes" },
           { label: "Permissões", icon: UserCog, href: "/admin/permissoes" },
         ],
@@ -444,6 +446,8 @@ export default function Sidebar({
     </aside>
   );
 }
+
+
 
 
 

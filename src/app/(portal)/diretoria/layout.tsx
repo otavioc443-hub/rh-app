@@ -10,7 +10,7 @@ export default function DiretoriaLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (loading) return;
-    const allowed = active && role === "admin";
+    const allowed = active && (role === "admin" || role === "diretoria");
     if (!allowed) router.replace("/unauthorized");
   }, [loading, active, role, router]);
 

@@ -5,7 +5,7 @@ import { Briefcase, Plus, Pencil, Trash2, Save, X, Search, RefreshCcw } from "lu
 import { supabase } from "@/lib/supabaseClient";
 import { PageHeader, Card, CardBody } from "@/components/ui/PageShell";
 
-type PortalRole = "colaborador" | "coordenador" | "gestor" | "rh" | "financeiro" | "pd" | "admin";
+type PortalRole = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "financeiro" | "pd" | "admin";
 
 type CargoRow = {
   id: string;
@@ -25,14 +25,15 @@ function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
 }
 
-const PORTAL_ROLE_OPTIONS: Array<{ value: PortalRole; label: string }> = [
-  { value: "colaborador", label: "Colaborador" },
-  { value: "coordenador", label: "Coordenador" },
-  { value: "gestor", label: "Gestor" },
-  { value: "rh", label: "RH" },
-  { value: "financeiro", label: "Financeiro" },
-  { value: "pd", label: "P&D" },
-  { value: "admin", label: "Admin" },
+const PORTAL_ROLE_OPTIONS: Array<{ key: string; value: PortalRole; label: string }> = [
+  { key: "colaborador", value: "colaborador", label: "Colaborador" },
+  { key: "coordenador", value: "coordenador", label: "Coordenador" },
+  { key: "gestor", value: "gestor", label: "Gestor" },
+  { key: "diretoria", value: "diretoria", label: "Diretoria" },
+  { key: "rh", value: "rh", label: "RH" },
+  { key: "financeiro", value: "financeiro", label: "Financeiro" },
+  { key: "pd", value: "pd", label: "P&D" },
+  { key: "admin", value: "admin", label: "Admin" },
 ];
 
 function portalRoleLabel(v: PortalRole | null | undefined) {
@@ -245,8 +246,8 @@ export default function CargosPage() {
                     className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-300"
                   >
                     <option value="">-- Nao altera o acesso --</option>
-                    {PORTAL_ROLE_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
+                    {PORTAL_ROLE_OPTIONS.map((o, idx) => (
+                      <option key={o.key ?? `${o.value}-${idx}`} value={o.value}>
                         {o.label}
                       </option>
                     ))}
@@ -352,8 +353,8 @@ export default function CargosPage() {
 	                              className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-300"
 	                            >
 	                              <option value="">-- Nao altera o acesso --</option>
-	                              {PORTAL_ROLE_OPTIONS.map((o) => (
-	                                <option key={o.value} value={o.value}>
+	                              {PORTAL_ROLE_OPTIONS.map((o, idx) => (
+	                                <option key={o.key ?? `${o.value}-${idx}`} value={o.value}>
 	                                  {o.label}
 	                                </option>
 	                              ))}

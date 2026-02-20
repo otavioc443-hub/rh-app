@@ -32,6 +32,7 @@ type DeliverableTimelineRow = {
   status_to: string | null;
   comment: string | null;
   actor_user_id: string | null;
+  actor_role: string | null;
   created_at: string;
 };
 
@@ -58,6 +59,21 @@ type DeliverableFileRow = {
   created_at: string;
 };
 
+type DeliverableAssignee = {
+  id: string;
+  deliverable_id: string;
+  project_id: string;
+  user_id: string;
+  contribution_unit: "hours" | "percent" | "points" | null;
+  contribution_value: number | null;
+};
+
+type Profile = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+};
+
 function statusLabel(v: string) {
   if (v === "pending") return "Pendente";
   if (v === "in_progress") return "Em andamento";
@@ -70,6 +86,7 @@ function statusLabel(v: string) {
 function deliverableEventLabel(eventType: string) {
   if (eventType === "returned_for_rework") return "Retornou para ajuste";
   if (eventType === "status_changed") return "Mudanca de status";
+  if (eventType === "assignment_cancelled") return "Atribuicao cancelada";
   if (eventType === "created") return "Criado";
   if (eventType === "contribution_added") return "Contribuicao registrada";
   if (eventType === "assignee_added") return "Responsavel adicionado";
@@ -81,6 +98,45 @@ function deliverableEventLabel(eventType: string) {
 
 function isEmailLike(value: string) {
   return value.includes("@");
+}
+
+function canCollaboratorEditDeliverable(status: Deliverable["status"]) {
+  return status === "pending" || status === "in_progress";
+}
+
+function isLeadershipRole(role?: string | null) {
+  return role === "gestor" || role === "coordenador" || role === "admin";
+}
+
+function parseReworkComment(raw?: string | null) {
+  const text = (raw ?? "").trim();
+  if (!text || !/Motivo:\s*Reencaminhamento/i.test(text)) return null;
+  const commentMatch = /Comentario:\s*(.+)$/i.exec(text);
+  return {
+    reason: "Reencaminhamento",
+    note: commentMatch?.[1]?.trim() ?? "",
+    raw: text,
+  };
+}
+
+function formatDateBR(value?: string | null) {
+  const raw = (value ?? "").trim();
+  if (!raw) return "-";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const [year, month, day] = raw.split("-");
+    return `${day}/${month}/${year}`;
+  }
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toLocaleDateString("pt-BR");
+}
+
+function formatDateTimeBR(value?: string | null) {
+  const raw = (value ?? "").trim();
+  if (!raw) return "-";
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw;
+  return parsed.toLocaleString("pt-BR", { hour12: false });
 }
 
 export default function MeuPerfilProjetosPage() {
@@ -96,11 +152,18 @@ export default function MeuPerfilProjetosPage() {
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [contributions, setContributions] = useState<Contribution[]>([]);
   const [deliverableTimeline, setDeliverableTimeline] = useState<DeliverableTimelineRow[]>([]);
+  const [deliverableAssignees, setDeliverableAssignees] = useState<DeliverableAssignee[]>([]);
+  const [profilesById, setProfilesById] = useState<Record<string, Profile>>({});
 
   const [docLinkByDeliverable, setDocLinkByDeliverable] = useState<Record<string, string>>({});
   const [contribTextByDeliverable, setContribTextByDeliverable] = useState<Record<string, string>>({});
+  const [contribHoursByDeliverable, setContribHoursByDeliverable] = useState<Record<string, string>>({});
   const [fileByDeliverable, setFileByDeliverable] = useState<Record<string, File | null>>({});
   const [filesByDeliverableId, setFilesByDeliverableId] = useState<Record<string, DeliverableFileRow[]>>({});
+  const [timelineFilterByDeliverableId, setTimelineFilterByDeliverableId] = useState<
+    Record<string, "all" | "leadership" | "rework">
+  >({});
+  const [timelineExpandedByDeliverableId, setTimelineExpandedByDeliverableId] = useState<Record<string, boolean>>({});
 
   const [teamOpen, setTeamOpen] = useState(false);
   const [teamLoading, setTeamLoading] = useState(false);
@@ -114,13 +177,25 @@ export default function MeuPerfilProjetosPage() {
   // - Colaborador ve apenas projetos em que participa (query filtrada por memberships).
   // - Admin ve todos os projetos.
   const selectedProject = useMemo(() => projects.find((p) => p.id === selectedProjectId) ?? null, [projects, selectedProjectId]);
-  const projectDeliverablesAssignedToMe = useMemo(() => deliverables.filter((d) => d.assigned_to === meId), [deliverables, meId]);
+  const projectDeliverablesAssignedToMe = useMemo(() => {
+    const extraAssigneeDeliverableIds = new Set(
+      deliverableAssignees.filter((a) => a.user_id === meId).map((a) => a.deliverable_id)
+    );
+    return deliverables.filter(
+      (d) =>
+        (d.assigned_to === meId || extraAssigneeDeliverableIds.has(d.id)) &&
+        canCollaboratorEditDeliverable(d.status)
+    );
+  }, [deliverables, deliverableAssignees, meId]);
 
   const personLabel = (userId: string) => {
     const d = directoryById[userId];
     const name = (d?.display_name ?? "").trim();
     if (name && !isEmailLike(name)) return name;
-    return `Colaborador ${userId.slice(0, 8)}`;
+    const p = profilesById[userId];
+    const n = (p?.full_name ?? "").trim();
+    if (n && !isEmailLike(n)) return n;
+    return `Usuario ${userId.slice(0, 8)}`;
   };
 
   const personAvatar = (userId: string) => {
@@ -139,6 +214,28 @@ export default function MeuPerfilProjetosPage() {
     const row = members.find((m) => m.user_id === meId && m.project_id === selectedProjectId) ?? null;
     return row?.member_role ?? null;
   }, [members, meId, selectedProjectId]);
+
+  const myParticipationHoursInProject = useMemo(() => {
+    return deliverableAssignees
+      .filter(
+        (a) =>
+          a.project_id === selectedProjectId &&
+          a.user_id === meId &&
+          (a.contribution_unit === "hours" || a.contribution_unit == null)
+      )
+      .reduce((sum, a) => sum + Number(a.contribution_value ?? 0), 0);
+  }, [deliverableAssignees, selectedProjectId, meId]);
+
+  const totalParticipationHoursInProject = useMemo(() => {
+    return deliverableAssignees
+      .filter((a) => a.project_id === selectedProjectId && (a.contribution_unit === "hours" || a.contribution_unit == null))
+      .reduce((sum, a) => sum + Number(a.contribution_value ?? 0), 0);
+  }, [deliverableAssignees, selectedProjectId]);
+
+  const myParticipationPercentInProject = useMemo(() => {
+    if (totalParticipationHoursInProject <= 0) return 0;
+    return (myParticipationHoursInProject / totalParticipationHoursInProject) * 100;
+  }, [myParticipationHoursInProject, totalParticipationHoursInProject]);
 
   async function load() {
     setLoading(true);
@@ -220,18 +317,59 @@ export default function MeuPerfilProjetosPage() {
         setContributions([]);
         setFilesByDeliverableId({});
         setDeliverableTimeline([]);
+        setDeliverableAssignees([]);
+        setProfilesById({});
         return;
       }
       setMsg("");
       try {
-        const delRes = await supabase
-          .from("project_deliverables")
-          .select("id,project_id,title,due_date,assigned_to,status,approval_comment,document_url,document_path,document_file_name,description,submitted_by,submitted_at")
-          .eq("project_id", selectedProjectId)
-          .eq("assigned_to", meId)
-          .order("created_at", { ascending: false });
-        if (delRes.error) throw new Error(delRes.error.message);
-        const dels = (delRes.data ?? []) as Deliverable[];
+        const dirRes = await supabase.rpc("project_member_directory", { p_project_id: selectedProjectId });
+        if (!dirRes.error) {
+          const rows = (dirRes.data ?? []) as ProjectMemberDirectoryRow[];
+          const map: Record<string, ProjectMemberDirectoryRow> = {};
+          for (const r of rows) map[String(r.user_id)] = r;
+          setDirectoryById(map);
+        } else {
+          setDirectoryById({});
+        }
+
+        const [delPrimaryRes, myAssigneeRowsRes] = await Promise.all([
+          supabase
+            .from("project_deliverables")
+            .select("id,project_id,title,due_date,assigned_to,status,approval_comment,document_url,document_path,document_file_name,description,submitted_by,submitted_at")
+            .eq("project_id", selectedProjectId)
+            .eq("assigned_to", meId)
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("project_deliverable_assignees")
+            .select("deliverable_id")
+            .eq("project_id", selectedProjectId)
+            .eq("user_id", meId),
+        ]);
+        if (delPrimaryRes.error) throw new Error(delPrimaryRes.error.message);
+        if (myAssigneeRowsRes.error) throw new Error(myAssigneeRowsRes.error.message);
+
+        const primaryDeliverables = (delPrimaryRes.data ?? []) as Deliverable[];
+        const extraDeliverableIds = Array.from(
+          new Set((myAssigneeRowsRes.data ?? []).map((r) => String(r.deliverable_id)).filter(Boolean))
+        );
+
+        let extraDeliverables: Deliverable[] = [];
+        if (extraDeliverableIds.length > 0) {
+          const delExtraRes = await supabase
+            .from("project_deliverables")
+            .select("id,project_id,title,due_date,assigned_to,status,approval_comment,document_url,document_path,document_file_name,description,submitted_by,submitted_at")
+            .eq("project_id", selectedProjectId)
+            .in("id", extraDeliverableIds)
+            .order("created_at", { ascending: false });
+          if (delExtraRes.error) throw new Error(delExtraRes.error.message);
+          extraDeliverables = (delExtraRes.data ?? []) as Deliverable[];
+        }
+
+        const mergedDeliverablesById = new Map<string, Deliverable>();
+        for (const d of primaryDeliverables) mergedDeliverablesById.set(d.id, d);
+        for (const d of extraDeliverables) mergedDeliverablesById.set(d.id, d);
+        const dels = Array.from(mergedDeliverablesById.values());
         setDeliverables(dels);
 
         setDocLinkByDeliverable((prev) => {
@@ -257,21 +395,65 @@ export default function MeuPerfilProjetosPage() {
             setFilesByDeliverableId({});
           }
 
-          const cRes = await supabase
-            .from("deliverable_contributions")
-            .select("id,deliverable_id,user_id,contribution_note,created_at")
-            .in("deliverable_id", deliverableIds)
-            .order("created_at", { ascending: false });
+          const [cRes, timelineRes, assigneesRes] = await Promise.all([
+            supabase
+              .from("deliverable_contributions")
+              .select("id,deliverable_id,user_id,contribution_note,created_at")
+              .in("deliverable_id", deliverableIds)
+              .order("created_at", { ascending: false }),
+            supabase
+              .from("project_deliverable_timeline")
+              .select("id,deliverable_id,project_id,event_type,status_from,status_to,comment,actor_user_id,actor_role,created_at")
+              .in("deliverable_id", deliverableIds)
+              .order("created_at", { ascending: false }),
+            supabase
+              .from("project_deliverable_assignees")
+              .select("id,deliverable_id,project_id,user_id,contribution_unit,contribution_value")
+              .in("deliverable_id", deliverableIds),
+          ]);
           if (cRes.error) throw new Error(cRes.error.message);
+          if (timelineRes.error) throw new Error(timelineRes.error.message);
+          if (assigneesRes.error) throw new Error(assigneesRes.error.message);
           setContributions((cRes.data ?? []) as Contribution[]);
+          const nextTimeline = (timelineRes.data ?? []) as DeliverableTimelineRow[];
+          const nextAssignees = (assigneesRes.data ?? []) as DeliverableAssignee[];
+          setDeliverableTimeline(nextTimeline);
+          setDeliverableAssignees(nextAssignees);
+
+          const userIds = Array.from(
+            new Set([
+              ...dels.map((x) => x.assigned_to).filter(Boolean),
+              ...nextAssignees.map((x) => x.user_id),
+              ...((cRes.data ?? []) as Contribution[]).map((x) => x.user_id),
+              ...nextTimeline.map((x) => x.actor_user_id).filter(Boolean),
+            ].filter(Boolean) as string[])
+          );
+          if (userIds.length) {
+            const profRes = await supabase.from("profiles").select("id,full_name,email").in("id", userIds);
+            if (!profRes.error) {
+              const map: Record<string, Profile> = {};
+              for (const p of (profRes.data ?? []) as Profile[]) map[p.id] = p;
+              setProfilesById(map);
+            } else {
+              setProfilesById({});
+            }
+          } else {
+            setProfilesById({});
+          }
         } else {
           setContributions([]);
           setFilesByDeliverableId({});
+          setDeliverableTimeline([]);
+          setDeliverableAssignees([]);
+          setProfilesById({});
         }
       } catch (e: unknown) {
         setDeliverables([]);
         setContributions([]);
         setFilesByDeliverableId({});
+        setDeliverableTimeline([]);
+        setDeliverableAssignees([]);
+        setProfilesById({});
         setMsg(e instanceof Error ? e.message : "Erro ao carregar documentos atribuidos.");
       }
     }
@@ -337,6 +519,9 @@ export default function MeuPerfilProjetosPage() {
   }
 
   async function uploadDeliverableFile(deliverable: Deliverable) {
+    if (!canCollaboratorEditDeliverable(deliverable.status)) {
+      return setMsg("Este entregavel esta bloqueado para edicao. Aguarde reencaminhamento do coordenador.");
+    }
     const f = fileByDeliverable[deliverable.id] ?? null;
     if (!f) return setMsg("Selecione um arquivo para enviar.");
 
@@ -364,11 +549,11 @@ export default function MeuPerfilProjetosPage() {
         projectId: deliverable.project_id,
         eventType: "file_uploaded",
         statusFrom: deliverable.status,
-        statusTo: "sent",
-        comment: "Arquivo enviado.",
+        statusTo: deliverable.status,
+        comment: "Arquivo anexado.",
       });
       setFileByDeliverable((prev) => ({ ...prev, [deliverable.id]: null }));
-      setMsg("Arquivo enviado. Aguardando aprovacao.");
+      setMsg("Arquivo anexado. Registre a contribuicao para enviar o entregavel.");
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao enviar arquivo.");
@@ -387,6 +572,9 @@ export default function MeuPerfilProjetosPage() {
   }, [selectedProjectId]);
 
   async function saveDocument(deliverable: Deliverable) {
+    if (!canCollaboratorEditDeliverable(deliverable.status)) {
+      return setMsg("Este entregavel esta bloqueado para edicao. Aguarde reencaminhamento do coordenador.");
+    }
     const link = (docLinkByDeliverable[deliverable.id] ?? "").trim();
     if (!link) return setMsg("Informe o link do documento.");
     setSaving(true);
@@ -416,10 +604,10 @@ export default function MeuPerfilProjetosPage() {
         projectId: deliverable.project_id,
         eventType: "document_updated",
         statusFrom: deliverable.status,
-        statusTo: "sent",
-        comment: "Link enviado/atualizado.",
+        statusTo: deliverable.status,
+        comment: "Link atualizado.",
       });
-      setMsg("Documento enviado/atualizado.");
+      setMsg("Link salvo. Registre a contribuicao para enviar o entregavel.");
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao enviar documento.");
@@ -429,26 +617,76 @@ export default function MeuPerfilProjetosPage() {
   }
 
   async function addContribution(deliverableId: string) {
+    const currentDeliverable = deliverables.find((x) => x.id === deliverableId) ?? null;
+    if (currentDeliverable && !canCollaboratorEditDeliverable(currentDeliverable.status)) {
+      return setMsg("Este entregavel esta bloqueado para edicao. Aguarde reencaminhamento do coordenador.");
+    }
+    const rawHours = (contribHoursByDeliverable[deliverableId] ?? "").replace(",", ".").trim();
+    const hours = Number(rawHours);
+    if (!Number.isFinite(hours) || hours <= 0) return setMsg("Informe horas validas de contribuicao.");
     const note = (contribTextByDeliverable[deliverableId] ?? "").trim();
-    if (!note) return setMsg("Informe a contribuicao.");
     setSaving(true);
     setMsg("");
     try {
+      const contributionText = note ? `${hours}h - ${note}` : `${hours}h`;
       const res = await supabase.from("deliverable_contributions").insert({
         deliverable_id: deliverableId,
         user_id: meId,
-        contribution_note: note,
+        contribution_note: contributionText,
       });
       if (res.error) throw new Error(res.error.message);
-      const current = deliverables.find((x) => x.id === deliverableId) ?? null;
+
+      // Acumula participacao em horas no registro de atribuicao do entregavel.
+      const assigneeRes = await supabase
+        .from("project_deliverable_assignees")
+        .select("id,project_id,contribution_unit,contribution_value")
+        .eq("deliverable_id", deliverableId)
+        .eq("user_id", meId)
+        .limit(1)
+        .maybeSingle();
+
+      if (!assigneeRes.error && assigneeRes.data?.id) {
+        const nextValue = Number(assigneeRes.data.contribution_value ?? 0) + hours;
+        const upd = await supabase
+          .from("project_deliverable_assignees")
+          .update({
+            contribution_unit: "hours",
+            contribution_value: nextValue,
+          })
+          .eq("id", assigneeRes.data.id);
+        if (upd.error) throw new Error(upd.error.message);
+      } else {
+        const ins = await supabase.from("project_deliverable_assignees").insert({
+          deliverable_id: deliverableId,
+          project_id: currentDeliverable?.project_id ?? selectedProjectId,
+          user_id: meId,
+          contribution_unit: "hours",
+          contribution_value: hours,
+        });
+        if (ins.error) throw new Error(ins.error.message);
+      }
+
+      const statusUpdate = await supabase
+        .from("project_deliverables")
+        .update({
+          status: "sent",
+          submitted_by: meId,
+          submitted_at: new Date().toISOString(),
+        })
+        .eq("id", deliverableId);
+      if (statusUpdate.error) throw new Error(statusUpdate.error.message);
+
       await logDeliverableEvent({
         deliverableId,
-        projectId: current?.project_id ?? selectedProjectId,
+        projectId: currentDeliverable?.project_id ?? selectedProjectId,
         eventType: "contribution_added",
-        comment: note,
+        statusFrom: currentDeliverable?.status ?? null,
+        statusTo: "sent",
+        comment: contributionText,
       });
       setContribTextByDeliverable((prev) => ({ ...prev, [deliverableId]: "" }));
-      setMsg("Contribuicao registrada.");
+      setContribHoursByDeliverable((prev) => ({ ...prev, [deliverableId]: "" }));
+      setMsg("Contribuicao registrada e entregavel enviado.");
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao registrar contribuicao.");
@@ -533,8 +771,8 @@ export default function MeuPerfilProjetosPage() {
                 <div className="mt-1 text-xs text-slate-500">
                   {myRoleInSelectedProject ? `Seu papel: ${myRoleInSelectedProject}` : null}
                   {!myRoleInSelectedProject && isAdmin ? "Visao Admin (voce nao esta como membro deste projeto)" : ""}
-                  {selectedProject.start_date ? ` - Inicio: ${selectedProject.start_date}` : ""}
-                  {selectedProject.end_date ? ` - Fim: ${selectedProject.end_date}` : ""}
+                  {selectedProject.start_date ? ` - Inicio: ${formatDateBR(selectedProject.start_date)}` : ""}
+                  {selectedProject.end_date ? ` - Fim: ${formatDateBR(selectedProject.end_date)}` : ""}
                 </div>
               </div>
               <button
@@ -627,10 +865,42 @@ export default function MeuPerfilProjetosPage() {
         <p className="mt-1 text-sm text-slate-600">Atualize o link do documento e registre sua contribuicao.</p>
 
         <div className="mt-4 space-y-4">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+            Participacao individual no projeto:{" "}
+            <span className="font-semibold">{myParticipationHoursInProject.toFixed(1)}h</span>
+            {" "}({myParticipationPercentInProject.toFixed(1)}%)
+          </div>
           {projectDeliverablesAssignedToMe.length ? (
             projectDeliverablesAssignedToMe.map((d) => {
               const myContribs = contributions.filter((c) => c.deliverable_id === d.id && c.user_id === meId);
-              const timeline = deliverableTimeline.filter((t) => t.deliverable_id === d.id).slice(0, 8);
+              const timelineFilter = timelineFilterByDeliverableId[d.id] ?? "all";
+              const timelineAll = deliverableTimeline
+                .filter((t) => t.deliverable_id === d.id)
+                .filter((t) => {
+                  if (timelineFilter === "leadership") return isLeadershipRole(t.actor_role);
+                  if (timelineFilter === "rework") {
+                    return (
+                      t.event_type === "returned_for_rework" ||
+                      ((t.status_from === "sent" || t.status_from === "approved" || t.status_from === "approved_with_comments") &&
+                        (t.status_to === "in_progress" || t.status_to === "pending"))
+                    );
+                  }
+                  return true;
+                });
+              const timelineExpanded = timelineExpandedByDeliverableId[d.id] === true;
+              const timeline = timelineExpanded ? timelineAll : timelineAll.slice(0, 3);
+              const timelineHasMore = timelineAll.length > 3;
+              const allAssignees = Array.from(
+                new Set([
+                  ...(d.assigned_to ? [d.assigned_to] : []),
+                  ...deliverableAssignees.filter((a) => a.deliverable_id === d.id).map((a) => a.user_id),
+                ])
+              );
+              const latestReworkAssignment = deliverableTimeline
+                .filter((t) => t.deliverable_id === d.id && t.event_type === "assignee_added")
+                .map((t) => ({ row: t, parsed: parseReworkComment(t.comment) }))
+                .find((x) => x.parsed);
+              const canEdit = canCollaboratorEditDeliverable(d.status);
               return (
                 <div key={d.id} className="rounded-2xl border border-slate-200 p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -638,31 +908,67 @@ export default function MeuPerfilProjetosPage() {
                       <div className="truncate text-sm font-semibold text-slate-900">{d.title}</div>
                       <div className="mt-1 text-xs text-slate-500">
                         Status: <span className="font-semibold text-slate-700">{statusLabel(d.status)}</span>
-                        {d.due_date ? ` - Prazo: ${d.due_date}` : ""}
+                        {d.due_date ? ` - Prazo: ${formatDateBR(d.due_date)}` : ""}
                       </div>
                       {d.status === "approved_with_comments" ? (
                         <div className="mt-1 text-xs text-amber-700">Comentario da aprovacao: {d.approval_comment ?? "-"}</div>
                       ) : null}
                       {d.description ? <div className="mt-2 text-sm text-slate-600">{d.description}</div> : null}
+                      {latestReworkAssignment?.parsed ? (
+                        <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                          <div className="font-semibold">
+                            Motivo: {latestReworkAssignment.parsed.reason}
+                            {latestReworkAssignment.row.actor_user_id
+                              ? ` - por ${personLabel(latestReworkAssignment.row.actor_user_id)}`
+                              : ""}
+                          </div>
+                          <div>{latestReworkAssignment.parsed.note || latestReworkAssignment.parsed.raw}</div>
+                        </div>
+                      ) : null}
                     </div>
                   </div>
 
-                  <div className="mt-3 grid gap-3 md:grid-cols-3">
-                    <input
-                      value={docLinkByDeliverable[d.id] ?? ""}
-                      onChange={(e) => setDocLinkByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))}
-                      placeholder="Link do documento"
-                      className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900 md:col-span-2"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void saveDocument(d)}
-                      disabled={saving}
-                      className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
-                    >
-                      <Save size={16} /> Salvar/Enviar
-                    </button>
+                  <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="text-xs font-semibold text-slate-700">Pessoas atribuidas neste entregavel</div>
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {allAssignees.length ? (
+                        allAssignees.map((uid) => (
+                          <span
+                            key={uid}
+                            className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
+                          >
+                            {personLabel(uid)}
+                            {uid === meId ? " (voce)" : ""}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-slate-500">Sem outras atribuicoes.</span>
+                      )}
+                    </div>
                   </div>
+
+                  {canEdit ? (
+                    <div className="mt-3 grid gap-3 md:grid-cols-3">
+                      <input
+                        value={docLinkByDeliverable[d.id] ?? ""}
+                        onChange={(e) => setDocLinkByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                        placeholder="Link do documento"
+                        className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900 md:col-span-2"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void saveDocument(d)}
+                        disabled={saving}
+                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                      >
+                        <Save size={16} /> Salvar/Enviar
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                      Entregavel enviado. A edicao fica bloqueada ate reencaminhamento pelo coordenador.
+                    </div>
+                  )}
 
                   <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -678,25 +984,27 @@ export default function MeuPerfilProjetosPage() {
                       ) : null}
                     </div>
 
-                    <div className="mt-2 grid gap-2 md:grid-cols-3">
-                      <input
-                        type="file"
-                        accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/png,image/jpeg,image/webp"
-                        className="block w-full text-sm md:col-span-2"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0] ?? null;
-                          setFileByDeliverable((prev) => ({ ...prev, [d.id]: f }));
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => void uploadDeliverableFile(d)}
-                        disabled={saving}
-                        className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
-                      >
-                        Enviar arquivo
-                      </button>
-                    </div>
+                    {canEdit ? (
+                      <div className="mt-2 grid gap-2 md:grid-cols-3">
+                        <input
+                          type="file"
+                          accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/png,image/jpeg,image/webp"
+                          className="block w-full text-sm md:col-span-2"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0] ?? null;
+                            setFileByDeliverable((prev) => ({ ...prev, [d.id]: f }));
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void uploadDeliverableFile(d)}
+                          disabled={saving}
+                          className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+                        >
+                          Enviar arquivo
+                        </button>
+                      </div>
+                    ) : null}
 
                     {(filesByDeliverableId[d.id] ?? []).length ? (
                       <div className="mt-3 space-y-2">
@@ -705,7 +1013,7 @@ export default function MeuPerfilProjetosPage() {
                           <div key={f.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
                             <div className="min-w-0">
                               <div className="truncate text-xs font-semibold text-slate-800">
-                                v{f.version} - {f.file_name ?? "Arquivo"} - {new Date(f.created_at).toLocaleString()}
+                                v{f.version} - {f.file_name ?? "Arquivo"} - {formatDateTimeBR(f.created_at)}
                               </div>
                             </div>
                             <button
@@ -723,22 +1031,35 @@ export default function MeuPerfilProjetosPage() {
                     )}
                   </div>
 
-                  <div className="mt-3 grid gap-3 md:grid-cols-3">
-                    <input
-                      value={contribTextByDeliverable[d.id] ?? ""}
-                      onChange={(e) => setContribTextByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))}
-                      placeholder="Descreva sua contribuicao"
-                      className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900 md:col-span-2"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void addContribution(d.id)}
-                      disabled={saving}
-                      className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
-                    >
-                      Registrar contribuicao
-                    </button>
-                  </div>
+                  {canEdit ? (
+                    <div className="mt-3 grid gap-3 md:grid-cols-3">
+                      <input
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                        value={contribHoursByDeliverable[d.id] ?? ""}
+                        onChange={(e) =>
+                          setContribHoursByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))
+                        }
+                        placeholder="Horas (ex.: 2.5)"
+                        className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                      />
+                      <input
+                        value={contribTextByDeliverable[d.id] ?? ""}
+                        onChange={(e) => setContribTextByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                        placeholder="Descricao da contribuicao (opcional)"
+                        className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void addContribution(d.id)}
+                        disabled={saving}
+                        className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        Registrar contribuicao
+                      </button>
+                    </div>
+                  ) : null}
 
                   {myContribs.length ? (
                     <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
@@ -747,7 +1068,7 @@ export default function MeuPerfilProjetosPage() {
                         {myContribs.slice(0, 3).map((c) => (
                           <div key={c.id} className="flex items-start justify-between gap-3">
                             <span className="min-w-0">{c.contribution_note ?? "-"}</span>
-                            <span className="shrink-0 text-slate-500">{new Date(c.created_at).toLocaleString()}</span>
+                            <span className="shrink-0 text-slate-500">{formatDateTimeBR(c.created_at)}</span>
                           </div>
                         ))}
                       </div>
@@ -755,16 +1076,36 @@ export default function MeuPerfilProjetosPage() {
                   ) : null}
 
                   <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="text-xs font-semibold text-slate-700">Linha do tempo do documento</div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-xs font-semibold text-slate-700">Linha do tempo do documento</div>
+                      <select
+                        value={timelineFilter}
+                        onChange={(e) =>
+                          setTimelineFilterByDeliverableId((prev) => ({
+                            ...prev,
+                            [d.id]: e.target.value as "all" | "leadership" | "rework",
+                          }))
+                        }
+                        className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                      >
+                        <option value="all">Todos</option>
+                        <option value="leadership">Apenas lideranca</option>
+                        <option value="rework">Apenas reencaminhamento</option>
+                      </select>
+                    </div>
                     <div className="mt-2 space-y-1 text-xs text-slate-600">
                       {timeline.length ? (
                         timeline.map((t) => (
-                          <div key={t.id}>
-                            {new Date(t.created_at).toLocaleString()} - {deliverableEventLabel(t.event_type)}
+                          <div
+                            key={t.id}
+                            className={isLeadershipRole(t.actor_role) && t.comment ? "font-semibold text-indigo-700" : undefined}
+                          >
+                            {formatDateTimeBR(t.created_at)} - {deliverableEventLabel(t.event_type)}
                             {t.status_from || t.status_to
                               ? ` (${statusLabel(t.status_from ?? "-")} -> ${statusLabel(t.status_to ?? "-")})`
                               : ""}
                             {t.comment ? ` - ${t.comment}` : ""}
+                            {isLeadershipRole(t.actor_role) && t.comment ? " [Comentario da lideranca]" : ""}
                             {t.actor_user_id ? ` - ${personLabel(t.actor_user_id)}` : ""}
                           </div>
                         ))
@@ -772,6 +1113,22 @@ export default function MeuPerfilProjetosPage() {
                         <div className="text-slate-500">Sem eventos registrados.</div>
                       )}
                     </div>
+                    {timelineHasMore || timelineExpanded ? (
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setTimelineExpandedByDeliverableId((prev) => ({
+                              ...prev,
+                              [d.id]: !timelineExpanded,
+                            }))
+                          }
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700"
+                        >
+                          {timelineExpanded ? "Ver menos" : `Ver mais (${timelineAll.length - 3})`}
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               );
