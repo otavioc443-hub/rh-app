@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCcw, Save } from "lucide-react";
+import { AlertTriangle, RefreshCcw, Save } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { PersonChip } from "@/components/people/PersonChip";
 
@@ -89,6 +89,8 @@ function deliverableEventLabel(eventType: string) {
   if (eventType === "assignment_cancelled") return "Atribuicao cancelada";
   if (eventType === "created") return "Criado";
   if (eventType === "contribution_added") return "Contribuicao registrada";
+  if (eventType === "contribution_approved") return "Contribuicao aprovada (interna)";
+  if (eventType === "contribution_returned") return "Contribuicao retornada para ajuste (interna)";
   if (eventType === "assignee_added") return "Responsavel adicionado";
   if (eventType === "assignee_removed") return "Responsavel removido";
   if (eventType === "document_uploaded") return "Documento enviado";
@@ -137,6 +139,28 @@ function formatDateTimeBR(value?: string | null) {
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return raw;
   return parsed.toLocaleString("pt-BR", { hour12: false });
+}
+
+function parseDueDate(value?: string | null) {
+  const raw = (value ?? "").trim();
+  if (!raw) return null;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+  if (iso) {
+    const dt = new Date(`${iso[1]}-${iso[2]}-${iso[3]}T00:00:00`);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  const br = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(raw);
+  if (br) {
+    const dt = new Date(`${br[3]}-${br[2]}-${br[1]}T00:00:00`);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  const brDash = /^(\d{2})-(\d{2})-(\d{4})/.exec(raw);
+  if (brDash) {
+    const dt = new Date(`${brDash[3]}-${brDash[2]}-${brDash[1]}T00:00:00`);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  const dt = new Date(raw);
+  return Number.isNaN(dt.getTime()) ? null : new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
 }
 
 export default function MeuPerfilProjetosPage() {
@@ -666,27 +690,15 @@ export default function MeuPerfilProjetosPage() {
         if (ins.error) throw new Error(ins.error.message);
       }
 
-      const statusUpdate = await supabase
-        .from("project_deliverables")
-        .update({
-          status: "sent",
-          submitted_by: meId,
-          submitted_at: new Date().toISOString(),
-        })
-        .eq("id", deliverableId);
-      if (statusUpdate.error) throw new Error(statusUpdate.error.message);
-
       await logDeliverableEvent({
         deliverableId,
         projectId: currentDeliverable?.project_id ?? selectedProjectId,
         eventType: "contribution_added",
-        statusFrom: currentDeliverable?.status ?? null,
-        statusTo: "sent",
         comment: contributionText,
       });
       setContribTextByDeliverable((prev) => ({ ...prev, [deliverableId]: "" }));
       setContribHoursByDeliverable((prev) => ({ ...prev, [deliverableId]: "" }));
-      setMsg("Contribuicao registrada e entregavel enviado.");
+      setMsg("Contribuicao registrada com sucesso.");
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao registrar contribuicao.");
@@ -874,9 +886,8 @@ export default function MeuPerfilProjetosPage() {
             projectDeliverablesAssignedToMe.map((d) => {
               const myContribs = contributions.filter((c) => c.deliverable_id === d.id && c.user_id === meId);
               const timelineFilter = timelineFilterByDeliverableId[d.id] ?? "all";
-              const timelineAll = deliverableTimeline
-                .filter((t) => t.deliverable_id === d.id)
-                .filter((t) => {
+              const rawTimelineAll = deliverableTimeline.filter((t) => t.deliverable_id === d.id);
+              const timelineAll = rawTimelineAll.filter((t) => {
                   if (timelineFilter === "leadership") return isLeadershipRole(t.actor_role);
                   if (timelineFilter === "rework") {
                     return (
@@ -890,6 +901,21 @@ export default function MeuPerfilProjetosPage() {
               const timelineExpanded = timelineExpandedByDeliverableId[d.id] === true;
               const timeline = timelineExpanded ? timelineAll : timelineAll.slice(0, 3);
               const timelineHasMore = timelineAll.length > 3;
+              const latestInternalContributionEvent =
+                rawTimelineAll.find((t) =>
+                  t.event_type === "contribution_added" ||
+                  t.event_type === "contribution_approved" ||
+                  t.event_type === "contribution_returned"
+                ) ?? null;
+              const overdueAwaitingInternalApproval = (() => {
+                const dueDate = parseDueDate(d.due_date);
+                if (!dueDate) return false;
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const isPastDue = dueDate <= today;
+                if (!isPastDue) return false;
+                return latestInternalContributionEvent?.event_type !== "contribution_approved";
+              })();
               const allAssignees = Array.from(
                 new Set([
                   ...(d.assigned_to ? [d.assigned_to] : []),
@@ -902,7 +928,17 @@ export default function MeuPerfilProjetosPage() {
                 .find((x) => x.parsed);
               const canEdit = canCollaboratorEditDeliverable(d.status);
               return (
-                <div key={d.id} className="rounded-2xl border border-slate-200 p-4">
+                <div
+                  key={d.id}
+                  className={`rounded-2xl border p-4 ${
+                    overdueAwaitingInternalApproval ? "border-2 border-rose-400 bg-rose-100/40" : "border-slate-200"
+                  }`}
+                >
+                  {overdueAwaitingInternalApproval ? (
+                    <div className="mb-2 rounded-lg border border-rose-300 bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-800">
+                      Entregavel atrasado: envie contribuicao e aguarde validacao interna.
+                    </div>
+                  ) : null}
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold text-slate-900">{d.title}</div>
@@ -914,6 +950,12 @@ export default function MeuPerfilProjetosPage() {
                         <div className="mt-1 text-xs text-amber-700">Comentario da aprovacao: {d.approval_comment ?? "-"}</div>
                       ) : null}
                       {d.description ? <div className="mt-2 text-sm text-slate-600">{d.description}</div> : null}
+                      {overdueAwaitingInternalApproval ? (
+                        <div className="mt-2 inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-100 px-2 py-1 text-[11px] font-semibold text-rose-800">
+                          <AlertTriangle size={13} />
+                          Atrasado (interno)
+                        </div>
+                      ) : null}
                       {latestReworkAssignment?.parsed ? (
                         <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
                           <div className="font-semibold">

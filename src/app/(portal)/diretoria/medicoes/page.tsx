@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCcw, Save } from "lucide-react";
+import { ReceiptText, RefreshCcw, Save } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import DiretoriaPageHeader from "@/components/portal/DiretoriaPageHeader";
 
 type ProjectRow = { id: string; name: string; status: "active" | "paused" | "done" };
 
@@ -215,14 +216,11 @@ export default function DiretoriaMedicoesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-900">Diretoria - Medicoes e boletins</h1>
-            <p className="mt-1 text-sm text-slate-600">
-              Gere medicao/boletim para faturamento ao cliente e acompanhe previsao e pagamento.
-            </p>
-          </div>
+      <DiretoriaPageHeader
+        icon={ReceiptText}
+        title="Diretoria - Medicoes e boletins"
+        subtitle="Gere medicao/boletim para faturamento ao cliente e acompanhe previsao e pagamento."
+        action={
           <button
             type="button"
             onClick={() => void load()}
@@ -231,8 +229,8 @@ export default function DiretoriaMedicoesPage() {
           >
             <RefreshCcw size={16} className={loading ? "animate-spin" : ""} /> Atualizar
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {msg ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-800">{msg}</div>
@@ -425,4 +423,3 @@ export default function DiretoriaMedicoesPage() {
     </div>
   );
 }
-

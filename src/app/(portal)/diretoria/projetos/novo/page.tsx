@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { FolderPlus } from "lucide-react";
+import DiretoriaPageHeader from "@/components/portal/DiretoriaPageHeader";
 
 type ProjectType =
   | "hv"
@@ -60,6 +62,7 @@ type ProjectDraft = {
   project_scopes: ProjectType[];
   project_stage: ProjectStage;
   owner_user_id: string;
+  secondary_manager_user_id: string;
 };
 
 const PROJECT_TYPE_OPTIONS: Array<{ value: ProjectType; label: string }> = [
@@ -98,13 +101,35 @@ function stageLabel(stage: ProjectStage | null | undefined) {
   return "-";
 }
 
+function formatCurrencyInput(raw: string) {
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return "";
+  const value = Number(digits) / 100;
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+  }).format(value);
+}
+
+function parseCurrencyInput(raw: string): number | null {
+  const normalized = raw.replace(/\s/g, "").replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
+  if (!normalized) return null;
+  const n = Number(normalized);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return n;
+}
+
 function buildDraftFromProject(project: ExistingProjectRow): ProjectDraft {
   return {
     name: project.name ?? "",
     description: project.description ?? "",
     start_date: project.start_date ?? "",
     end_date: project.end_date ?? "",
-    budget_total: project.budget_total != null ? String(project.budget_total) : "",
+    budget_total:
+      project.budget_total != null
+        ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2 }).format(project.budget_total)
+        : "",
     client_id: project.client_id ?? "",
     project_type: project.project_type ?? "",
     project_scopes: ((project.project_scopes ?? []) as ProjectType[]).filter((v) =>
@@ -112,6 +137,7 @@ function buildDraftFromProject(project: ExistingProjectRow): ProjectDraft {
     ),
     project_stage: project.project_stage ?? "ofertas",
     owner_user_id: project.owner_user_id,
+    secondary_manager_user_id: "",
   };
 }
 
@@ -120,12 +146,14 @@ export default function DiretoriaNovoProjetoPage() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [meId, setMeId] = useState("");
+  const [companyReady, setCompanyReady] = useState(false);
 
   const [clients, setClients] = useState<ProjectClientRow[]>([]);
   const [managers, setManagers] = useState<ManagerRow[]>([]);
   const [companies, setCompanies] = useState<CompanyRow[]>([]);
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
   const [existingProjects, setExistingProjects] = useState<ExistingProjectRow[]>([]);
+  const [secondaryManagerByProjectId, setSecondaryManagerByProjectId] = useState<Record<string, string>>({});
   const [draftByProjectId, setDraftByProjectId] = useState<Record<string, ProjectDraft>>({});
 
   const [newProjectName, setNewProjectName] = useState("");
@@ -138,14 +166,16 @@ export default function DiretoriaNovoProjetoPage() {
   const [newProjectScopes, setNewProjectScopes] = useState<ProjectType[]>([]);
   const [newProjectStage, setNewProjectStage] = useState<ProjectStage>("ofertas");
   const [newProjectManagerId, setNewProjectManagerId] = useState("");
+  const [newProjectSecondaryManagerId, setNewProjectSecondaryManagerId] = useState("");
 
   useEffect(() => {
     void loadCompaniesAndInitial();
   }, []);
 
   useEffect(() => {
+    if (!companyReady) return;
     void load();
-  }, [selectedCompanyId]);
+  }, [selectedCompanyId, companyReady]);
 
   const managersById = useMemo(() => {
     const map: Record<string, string> = {};
@@ -156,6 +186,7 @@ export default function DiretoriaNovoProjetoPage() {
   async function loadCompaniesAndInitial() {
     setLoading(true);
     setMsg("");
+    setCompanyReady(false);
     try {
       const { data: sess } = await supabase.auth.getSession();
       const token = sess.session?.access_token ?? "";
@@ -188,6 +219,7 @@ export default function DiretoriaNovoProjetoPage() {
       setSelectedCompanyId("");
       setMsg(e instanceof Error ? e.message : "Erro ao carregar empresas.");
     } finally {
+      setCompanyReady(true);
       setLoading(false);
     }
   }
@@ -239,7 +271,9 @@ export default function DiretoriaNovoProjetoPage() {
           .select("id,name,description,start_date,end_date,budget_total,client_id,project_type,project_scopes,project_stage,status,owner_user_id,created_at")
           .order("created_at", { ascending: false });
 
-        const scoped = selectedCompanyId ? await base.eq("company_id", selectedCompanyId) : await base;
+        const scoped = selectedCompanyId
+          ? await base.or(`company_id.eq.${selectedCompanyId},company_id.is.null`)
+          : await base;
         if (scoped.error && isMissingColumnError(scoped.error.message)) {
           const fallback = await supabase
             .from("projects")
@@ -316,6 +350,26 @@ export default function DiretoriaNovoProjetoPage() {
         managerMap.set(uid, { id: uid, full_name: null, email: null });
       }
 
+      const secondaryByProjectId: Record<string, string> = {};
+      if (nextProjects.length > 0) {
+        const projectIds = nextProjects.map((p) => p.id);
+        const membersRes = await supabase
+          .from("project_members")
+          .select("project_id,user_id,member_role")
+          .in("project_id", projectIds)
+          .eq("member_role", "gestor");
+        if (!membersRes.error) {
+          const ownerByProjectId = new Map(nextProjects.map((p) => [p.id, p.owner_user_id]));
+          for (const row of (membersRes.data ??
+            []) as Array<{ project_id: string; user_id: string; member_role: string }>) {
+            const ownerId = ownerByProjectId.get(row.project_id);
+            if (!ownerId) continue;
+            if (row.user_id === ownerId) continue;
+            if (!secondaryByProjectId[row.project_id]) secondaryByProjectId[row.project_id] = row.user_id;
+          }
+        }
+      }
+
       const nextManagers = Array.from(managerMap.values()).sort((a, b) =>
         managerLabel(a).localeCompare(managerLabel(b), "pt-BR", { sensitivity: "base" })
       );
@@ -323,15 +377,24 @@ export default function DiretoriaNovoProjetoPage() {
       setClients(nextClients);
       setManagers(nextManagers);
       setExistingProjects(nextProjects);
+      setSecondaryManagerByProjectId(secondaryByProjectId);
 
       setDraftByProjectId(() => {
         const next: Record<string, ProjectDraft> = {};
-        for (const project of nextProjects) next[project.id] = buildDraftFromProject(project);
+        for (const project of nextProjects) {
+          next[project.id] = {
+            ...buildDraftFromProject(project),
+            secondary_manager_user_id: secondaryByProjectId[project.id] ?? "",
+          };
+        }
         return next;
       });
 
       if (!newProjectManagerId && nextManagers.length > 0) {
         setNewProjectManagerId(nextManagers[0].id);
+      }
+      if (newProjectSecondaryManagerId && newProjectSecondaryManagerId === newProjectManagerId) {
+        setNewProjectSecondaryManagerId("");
       }
 
       if (formOptionsWarn) {
@@ -341,6 +404,7 @@ export default function DiretoriaNovoProjetoPage() {
       setClients([]);
       setManagers([]);
       setExistingProjects([]);
+      setSecondaryManagerByProjectId({});
       setDraftByProjectId({});
       setMsg(e instanceof Error ? e.message : "Erro ao carregar cadastro de projeto.");
     } finally {
@@ -375,17 +439,42 @@ export default function DiretoriaNovoProjetoPage() {
     );
   }
 
+  async function syncProjectManagers(projectId: string, managerIds: string[]) {
+    const selected = Array.from(new Set(managerIds.filter(Boolean)));
+    if (selected.length === 0) return;
+
+    for (const managerId of selected) {
+      await ensureProjectManagerMembership(projectId, managerId);
+    }
+
+    const currentRes = await supabase
+      .from("project_members")
+      .select("id,user_id")
+      .eq("project_id", projectId)
+      .eq("member_role", "gestor");
+    if (currentRes.error) return;
+
+    const toDeleteIds = ((currentRes.data ?? []) as Array<{ id: string; user_id: string }>)
+      .filter((row) => !selected.includes(row.user_id))
+      .map((row) => row.id);
+    if (toDeleteIds.length > 0) {
+      await supabase.from("project_members").delete().in("id", toDeleteIds);
+    }
+  }
+
   async function createProject() {
     if (!newProjectName.trim()) return setMsg("Informe o nome do projeto.");
     if (!newProjectClientId) return setMsg("Selecione o cliente do projeto.");
     if (!newProjectType) return setMsg("Selecione o tipo principal do projeto.");
     if (!newProjectManagerId) return setMsg("Selecione o gestor responsavel.");
+    if (newProjectSecondaryManagerId && newProjectSecondaryManagerId === newProjectManagerId) {
+      return setMsg("Gestor adicional deve ser diferente do gestor principal.");
+    }
     if (!meId) return setMsg("Usuario nao identificado.");
     setSaving(true);
     setMsg("");
     try {
-      const budget = newProjectBudgetTotal.trim() ? Number(newProjectBudgetTotal.replace(",", ".")) : NaN;
-      const budgetTotal = Number.isFinite(budget) && budget > 0 ? budget : null;
+      const budgetTotal = parseCurrencyInput(newProjectBudgetTotal);
 
       const payload = {
         name: newProjectName.trim(),
@@ -429,7 +518,7 @@ export default function DiretoriaNovoProjetoPage() {
       }
       if (!projectId) throw new Error("Falha ao criar projeto.");
 
-      await ensureProjectManagerMembership(projectId, newProjectManagerId);
+      await syncProjectManagers(projectId, [newProjectManagerId, newProjectSecondaryManagerId]);
 
       setNewProjectName("");
       setNewProjectDesc("");
@@ -440,6 +529,7 @@ export default function DiretoriaNovoProjetoPage() {
       setNewProjectType("");
       setNewProjectScopes([]);
       setNewProjectStage("ofertas");
+      setNewProjectSecondaryManagerId("");
       setMsg("Projeto criado com sucesso e gestor direcionado.");
       await load();
     } catch (e: unknown) {
@@ -453,35 +543,65 @@ export default function DiretoriaNovoProjetoPage() {
     const draft = draftByProjectId[projectId];
     if (!draft) return;
     if (!draft.name.trim()) return setMsg("Nome do projeto e obrigatorio.");
-    if (!draft.client_id) return setMsg("Cliente e obrigatorio.");
-    if (!draft.project_type) return setMsg("Tipo principal e obrigatorio.");
     if (!draft.owner_user_id) return setMsg("Selecione o gestor responsavel.");
+    if (draft.secondary_manager_user_id && draft.secondary_manager_user_id === draft.owner_user_id) {
+      return setMsg("Gestor adicional deve ser diferente do gestor principal.");
+    }
 
     setSaving(true);
     setMsg("");
     try {
-      const budget = draft.budget_total.trim() ? Number(draft.budget_total.replace(",", ".")) : NaN;
-      const budgetTotal = Number.isFinite(budget) && budget > 0 ? budget : null;
+      const budgetTotal = parseCurrencyInput(draft.budget_total);
+      const nextClientId = draft.client_id.trim() ? draft.client_id.trim() : null;
+      const nextProjectType = draft.project_type ? draft.project_type : null;
+      const nextScopes = draft.project_scopes.length > 0 ? draft.project_scopes : null;
+      const updatePayload = {
+        name: draft.name.trim(),
+        description: draft.description.trim() || null,
+        start_date: draft.start_date || null,
+        end_date: draft.end_date || null,
+        budget_total: budgetTotal,
+        client_id: nextClientId,
+        project_type: nextProjectType,
+        project_scopes: nextScopes,
+        project_stage: draft.project_stage,
+        status: statusFromStage(draft.project_stage),
+        owner_user_id: draft.owner_user_id,
+      };
 
-      const { error } = await supabase
+      let { data: updatedRow, error } = await supabase
         .from("projects")
-        .update({
-          name: draft.name.trim(),
-          description: draft.description.trim() || null,
-          start_date: draft.start_date || null,
-          end_date: draft.end_date || null,
-          budget_total: budgetTotal,
-          client_id: draft.client_id,
-          project_type: draft.project_type,
-          project_scopes: draft.project_scopes,
-          project_stage: draft.project_stage,
-          status: statusFromStage(draft.project_stage),
-          owner_user_id: draft.owner_user_id,
-        })
+        .update(updatePayload)
+        .select("id")
+        .maybeSingle()
         .eq("id", projectId);
+      if (error && error.message.toLowerCase().includes("project_stage")) {
+        const fallback = await supabase
+          .from("projects")
+          .update({
+            name: updatePayload.name,
+            description: updatePayload.description,
+            start_date: updatePayload.start_date,
+            end_date: updatePayload.end_date,
+            budget_total: updatePayload.budget_total,
+            client_id: updatePayload.client_id,
+            project_type: updatePayload.project_type,
+            project_scopes: updatePayload.project_scopes,
+            status: updatePayload.status,
+            owner_user_id: updatePayload.owner_user_id,
+          })
+          .eq("id", projectId)
+          .select("id")
+          .maybeSingle();
+        error = fallback.error;
+        updatedRow = fallback.data;
+      }
       if (error) throw error;
+      if (!updatedRow?.id) {
+        throw new Error("Sem permissao para atualizar este projeto (verifique role/politicas RLS).");
+      }
 
-      await ensureProjectManagerMembership(projectId, draft.owner_user_id);
+      await syncProjectManagers(projectId, [draft.owner_user_id, draft.secondary_manager_user_id]);
 
       setMsg("Projeto atualizado com sucesso.");
       await load();
@@ -495,26 +615,28 @@ export default function DiretoriaNovoProjetoPage() {
   function cancelExistingProjectEdit(project: ExistingProjectRow) {
     setDraftByProjectId((prev) => ({
       ...prev,
-      [project.id]: buildDraftFromProject(project),
+      [project.id]: {
+        ...buildDraftFromProject(project),
+        secondary_manager_user_id: secondaryManagerByProjectId[project.id] ?? "",
+      },
     }));
   }
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-900">Diretoria - Novo projeto</h1>
-            <p className="mt-1 text-sm text-slate-600">Cadastro com direcionamento de gestor responsavel.</p>
-          </div>
+      <DiretoriaPageHeader
+        icon={FolderPlus}
+        title="Diretoria - Novo projeto"
+        subtitle="Cadastro com direcionamento de gestor responsavel."
+        action={
           <Link
             href="/diretoria/projetos"
             className="inline-flex items-center rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
           >
             Voltar para acompanhamento
           </Link>
-        </div>
-      </div>
+        }
+      />
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
         <h2 className="text-sm font-semibold text-slate-900">Cadastro de projeto</h2>
@@ -542,6 +664,7 @@ export default function DiretoriaNovoProjetoPage() {
           </div>
 
           <div>
+            <p className="mb-1 text-xs font-semibold text-slate-600">Nome do projeto</p>
             <input
               value={newProjectName}
               onChange={(e) => setNewProjectName(e.target.value)}
@@ -552,6 +675,7 @@ export default function DiretoriaNovoProjetoPage() {
           </div>
 
           <div>
+            <p className="mb-1 text-xs font-semibold text-slate-600">Gestor responsavel</p>
             <select
               value={newProjectManagerId}
               onChange={(e) => setNewProjectManagerId(e.target.value)}
@@ -566,8 +690,27 @@ export default function DiretoriaNovoProjetoPage() {
             </select>
             <p className="mt-1 text-xs text-slate-500">Selecione quem vai conduzir o projeto.</p>
           </div>
+          <div>
+            <p className="mb-1 text-xs font-semibold text-slate-600">Gestor adicional (opcional)</p>
+            <select
+              value={newProjectSecondaryManagerId}
+              onChange={(e) => setNewProjectSecondaryManagerId(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+            >
+              <option value="">Selecione gestor adicional (opcional)...</option>
+              {managers
+                .filter((m) => m.id !== newProjectManagerId)
+                .map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {managerLabel(m)}
+                  </option>
+                ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-500">Use para permitir dois gestores no mesmo projeto.</p>
+          </div>
 
           <div>
+            <p className="mb-1 text-xs font-semibold text-slate-600">Cliente</p>
             <select
               value={newProjectClientId}
               onChange={(e) => setNewProjectClientId(e.target.value)}
@@ -584,6 +727,7 @@ export default function DiretoriaNovoProjetoPage() {
           </div>
 
           <div>
+            <p className="mb-1 text-xs font-semibold text-slate-600">Tipo principal do projeto</p>
             <select
               value={newProjectType}
               onChange={(e) => setNewProjectType(e.target.value as ProjectType | "")}
@@ -600,6 +744,7 @@ export default function DiretoriaNovoProjetoPage() {
           </div>
 
           <div>
+            <p className="mb-1 text-xs font-semibold text-slate-600">Etapa inicial</p>
             <select
               value={newProjectStage}
               onChange={(e) => setNewProjectStage(e.target.value as ProjectStage)}
@@ -615,10 +760,11 @@ export default function DiretoriaNovoProjetoPage() {
           </div>
 
           <div>
+            <p className="mb-1 text-xs font-semibold text-slate-600">Orcamento (R$)</p>
             <input
               value={newProjectBudgetTotal}
-              onChange={(e) => setNewProjectBudgetTotal(e.target.value)}
-              placeholder="Orcamento (opcional) - ex: 250000"
+              onChange={(e) => setNewProjectBudgetTotal(formatCurrencyInput(e.target.value))}
+              placeholder="R$ 0,00"
               inputMode="decimal"
               className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm"
             />
@@ -626,6 +772,7 @@ export default function DiretoriaNovoProjetoPage() {
           </div>
 
           <div>
+            <p className="mb-1 text-xs font-semibold text-slate-600">Data de inicio</p>
             <input
               type="date"
               value={newProjectStart}
@@ -636,6 +783,7 @@ export default function DiretoriaNovoProjetoPage() {
           </div>
 
           <div>
+            <p className="mb-1 text-xs font-semibold text-slate-600">Previsao de termino</p>
             <input
               type="date"
               value={newProjectEnd}
@@ -646,6 +794,7 @@ export default function DiretoriaNovoProjetoPage() {
           </div>
 
           <div className="md:col-span-2">
+            <p className="mb-1 text-xs font-semibold text-slate-600">Descricao do projeto</p>
             <input
               value={newProjectDesc}
               onChange={(e) => setNewProjectDesc(e.target.value)}
@@ -697,84 +846,138 @@ export default function DiretoriaNovoProjetoPage() {
                     {project.name} - {stageLabel(project.project_stage)} - {managersById[project.owner_user_id] ?? project.owner_user_id.slice(0, 8)}
                   </summary>
                   <div className="mt-3 grid gap-3 md:grid-cols-2">
-                    <input
-                      value={draft.name}
-                      onChange={(e) => setDraftByProjectId((prev) => ({ ...prev, [project.id]: { ...draft, name: e.target.value } }))}
-                      placeholder="Nome do projeto"
-                      className="h-10 rounded-xl border border-slate-200 px-3 text-sm"
-                    />
-                    <select
-                      value={draft.owner_user_id}
-                      onChange={(e) => setDraftByProjectId((prev) => ({ ...prev, [project.id]: { ...draft, owner_user_id: e.target.value } }))}
-                      className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-                    >
-                      <option value="">Selecione o gestor responsavel...</option>
-                      {managers.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {managerLabel(m)}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={draft.client_id}
-                      onChange={(e) => setDraftByProjectId((prev) => ({ ...prev, [project.id]: { ...draft, client_id: e.target.value } }))}
-                      className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-                    >
-                      <option value="">Selecione o cliente...</option>
-                      {clients.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={draft.project_type}
-                      onChange={(e) => setDraftByProjectId((prev) => ({ ...prev, [project.id]: { ...draft, project_type: e.target.value as ProjectType | "" } }))}
-                      className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-                    >
-                      <option value="">Tipo principal do projeto...</option>
-                      {PROJECT_TYPE_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                    <select
-                      value={draft.project_stage}
-                      onChange={(e) => setDraftByProjectId((prev) => ({ ...prev, [project.id]: { ...draft, project_stage: e.target.value as ProjectStage } }))}
-                      className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-                    >
-                      <option value="ofertas">Ofertas</option>
-                      <option value="desenvolvimento">Desenvolvimento</option>
-                      <option value="as_built">As Built</option>
-                      <option value="pausado">Pausado</option>
-                      <option value="cancelado">Cancelado</option>
-                    </select>
-                    <input
-                      value={draft.budget_total}
-                      onChange={(e) => setDraftByProjectId((prev) => ({ ...prev, [project.id]: { ...draft, budget_total: e.target.value } }))}
-                      placeholder="Orcamento (opcional)"
-                      inputMode="decimal"
-                      className="h-10 rounded-xl border border-slate-200 px-3 text-sm"
-                    />
-                    <input
-                      type="date"
-                      value={draft.start_date}
-                      onChange={(e) => setDraftByProjectId((prev) => ({ ...prev, [project.id]: { ...draft, start_date: e.target.value } }))}
-                      className="h-10 rounded-xl border border-slate-200 px-3 text-sm"
-                    />
-                    <input
-                      type="date"
-                      value={draft.end_date}
-                      onChange={(e) => setDraftByProjectId((prev) => ({ ...prev, [project.id]: { ...draft, end_date: e.target.value } }))}
-                      className="h-10 rounded-xl border border-slate-200 px-3 text-sm"
-                    />
-                    <input
-                      value={draft.description}
-                      onChange={(e) => setDraftByProjectId((prev) => ({ ...prev, [project.id]: { ...draft, description: e.target.value } }))}
-                      placeholder="Descricao (opcional)"
-                      className="h-10 rounded-xl border border-slate-200 px-3 text-sm md:col-span-2"
-                    />
+                    <div>
+                      <p className="mb-1 text-xs font-semibold text-slate-600">Nome do projeto</p>
+                      <input
+                        value={draft.name}
+                        onChange={(e) => setDraftByProjectId((prev) => ({ ...prev, [project.id]: { ...draft, name: e.target.value } }))}
+                        placeholder="Nome do projeto"
+                        className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-semibold text-slate-600">Gestor responsavel</p>
+                      <select
+                        value={draft.owner_user_id}
+                        onChange={(e) => setDraftByProjectId((prev) => ({ ...prev, [project.id]: { ...draft, owner_user_id: e.target.value } }))}
+                        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                      >
+                        <option value="">Selecione o gestor responsavel...</option>
+                        {managers.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {managerLabel(m)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-semibold text-slate-600">Gestor adicional (opcional)</p>
+                      <select
+                        value={draft.secondary_manager_user_id}
+                        onChange={(e) =>
+                          setDraftByProjectId((prev) => ({
+                            ...prev,
+                            [project.id]: { ...draft, secondary_manager_user_id: e.target.value },
+                          }))
+                        }
+                        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                      >
+                        <option value="">Gestor adicional (opcional)...</option>
+                        {managers
+                          .filter((m) => m.id !== draft.owner_user_id)
+                          .map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {managerLabel(m)}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-semibold text-slate-600">Cliente</p>
+                      <select
+                        value={draft.client_id}
+                        onChange={(e) => setDraftByProjectId((prev) => ({ ...prev, [project.id]: { ...draft, client_id: e.target.value } }))}
+                        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                      >
+                        <option value="">Selecione o cliente...</option>
+                        {clients.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-semibold text-slate-600">Tipo principal do projeto</p>
+                      <select
+                        value={draft.project_type}
+                        onChange={(e) => setDraftByProjectId((prev) => ({ ...prev, [project.id]: { ...draft, project_type: e.target.value as ProjectType | "" } }))}
+                        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                      >
+                        <option value="">Tipo principal do projeto...</option>
+                        {PROJECT_TYPE_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-semibold text-slate-600">Etapa inicial</p>
+                      <select
+                        value={draft.project_stage}
+                        onChange={(e) => setDraftByProjectId((prev) => ({ ...prev, [project.id]: { ...draft, project_stage: e.target.value as ProjectStage } }))}
+                        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                      >
+                        <option value="ofertas">Ofertas</option>
+                        <option value="desenvolvimento">Desenvolvimento</option>
+                        <option value="as_built">As Built</option>
+                        <option value="pausado">Pausado</option>
+                        <option value="cancelado">Cancelado</option>
+                      </select>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-semibold text-slate-600">Orcamento (R$)</p>
+                      <input
+                        value={draft.budget_total}
+                        onChange={(e) =>
+                          setDraftByProjectId((prev) => ({
+                            ...prev,
+                            [project.id]: { ...draft, budget_total: formatCurrencyInput(e.target.value) },
+                          }))
+                        }
+                        placeholder="R$ 0,00"
+                        inputMode="decimal"
+                        className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-semibold text-slate-600">Data de inicio</p>
+                      <input
+                        type="date"
+                        value={draft.start_date}
+                        onChange={(e) => setDraftByProjectId((prev) => ({ ...prev, [project.id]: { ...draft, start_date: e.target.value } }))}
+                        className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs font-semibold text-slate-600">Previsao de termino</p>
+                      <input
+                        type="date"
+                        value={draft.end_date}
+                        onChange={(e) => setDraftByProjectId((prev) => ({ ...prev, [project.id]: { ...draft, end_date: e.target.value } }))}
+                        className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <p className="mb-1 text-xs font-semibold text-slate-600">Descricao do projeto</p>
+                      <input
+                        value={draft.description}
+                        onChange={(e) => setDraftByProjectId((prev) => ({ ...prev, [project.id]: { ...draft, description: e.target.value } }))}
+                        placeholder="Descricao (opcional)"
+                        className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm"
+                      />
+                    </div>
                     <div className="rounded-xl border border-slate-200 p-3 md:col-span-2">
                       <p className="text-xs font-semibold text-slate-700">Escopos/disciplinas</p>
                       <div className="mt-2 flex flex-wrap gap-2">

@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCcw } from "lucide-react";
+import { AlertTriangle, BellRing, RefreshCcw } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { PersonChip } from "@/components/people/PersonChip";
@@ -165,6 +165,8 @@ function deliverableEventLabel(eventType: string) {
   if (eventType === "assignment_cancelled") return "Atribuicao cancelada";
   if (eventType === "created") return "Criado";
   if (eventType === "contribution_added") return "Contribuicao registrada";
+  if (eventType === "contribution_approved") return "Contribuicao aprovada (interna)";
+  if (eventType === "contribution_returned") return "Contribuicao retornada para ajuste (interna)";
   if (eventType === "assignee_added") return "Responsavel adicionado";
   if (eventType === "assignee_removed") return "Responsavel removido";
   if (eventType === "document_uploaded") return "Documento enviado";
@@ -184,6 +186,28 @@ function deliverableStatusLabel(value?: string | null) {
   if (value === "blocked") return "Bloqueado";
   if (value === "cancelled") return "Cancelado";
   return value ?? "-";
+}
+
+function parseDueDate(value?: string | null) {
+  const raw = (value ?? "").trim();
+  if (!raw) return null;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+  if (iso) {
+    const dt = new Date(`${iso[1]}-${iso[2]}-${iso[3]}T00:00:00`);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  const br = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(raw);
+  if (br) {
+    const dt = new Date(`${br[3]}-${br[2]}-${br[1]}T00:00:00`);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  const brDash = /^(\d{2})-(\d{2})-(\d{4})/.exec(raw);
+  if (brDash) {
+    const dt = new Date(`${brDash[3]}-${brDash[2]}-${brDash[1]}T00:00:00`);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  const dt = new Date(raw);
+  return Number.isNaN(dt.getTime()) ? null : new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
 }
 
 function isLeadershipRole(role?: string | null) {
@@ -226,6 +250,8 @@ export default function CoordenadorProjetosPage() {
   const [dirAssignedTo, setDirAssignedTo] = useState("");
 
   const [contribTextByDeliverable, setContribTextByDeliverable] = useState<Record<string, string>>({});
+  const [contribHoursByDeliverable, setContribHoursByDeliverable] = useState<Record<string, string>>({});
+  const [contribReviewCommentByDeliverableId, setContribReviewCommentByDeliverableId] = useState<Record<string, string>>({});
   const [docLinkByDeliverable, setDocLinkByDeliverable] = useState<Record<string, string>>({});
   const [statusDraftByDeliverableId, setStatusDraftByDeliverableId] = useState<
     Record<string, Deliverable["status"]>
@@ -239,13 +265,16 @@ export default function CoordenadorProjetosPage() {
     Record<string, "all" | "leadership" | "rework">
   >({});
   const [timelineExpandedByDeliverableId, setTimelineExpandedByDeliverableId] = useState<Record<string, boolean>>({});
+  const [openedDeliverableId, setOpenedDeliverableId] = useState<string | null>(null);
+  const [deliverableActionById, setDeliverableActionById] = useState<
+    Record<string, "status" | "edit" | "document" | "assignees" | "contribution" | null>
+  >({});
 
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [teamMembers, setTeamMembers] = useState<ProjectTeamMember[]>([]);
   const [assignTeamId, setAssignTeamId] = useState("");
   const [assignUserId, setAssignUserId] = useState("");
 
-  const [editOpenByDeliverableId, setEditOpenByDeliverableId] = useState<Record<string, boolean>>({});
   const [editTitleByDeliverableId, setEditTitleByDeliverableId] = useState<Record<string, string>>({});
   const [editDescByDeliverableId, setEditDescByDeliverableId] = useState<Record<string, string>>({});
   const [editDueByDeliverableId, setEditDueByDeliverableId] = useState<Record<string, string>>({});
@@ -821,29 +850,95 @@ export default function CoordenadorProjetosPage() {
   }
 
   async function addContribution(deliverableId: string) {
+    const rawHours = (contribHoursByDeliverable[deliverableId] ?? "").replace(",", ".").trim();
+    const hours = Number(rawHours);
+    if (!Number.isFinite(hours) || hours <= 0) return setMsg("Informe horas validas de contribuicao.");
     const note = (contribTextByDeliverable[deliverableId] ?? "").trim();
-    if (!note) return setMsg("Informe a contribuicao.");
     setSaving(true);
     setMsg("");
     try {
+      const contributionText = note ? `${hours}h - ${note}` : `${hours}h`;
       const res = await supabase.from("deliverable_contributions").insert({
         deliverable_id: deliverableId,
         user_id: meId,
-        contribution_note: note,
+        contribution_note: contributionText,
       });
       if (res.error) throw new Error(res.error.message);
       const current = deliverables.find((x) => x.id === deliverableId) ?? null;
+
+      const assigneeRes = await supabase
+        .from("project_deliverable_assignees")
+        .select("id,project_id,contribution_unit,contribution_value")
+        .eq("deliverable_id", deliverableId)
+        .eq("user_id", meId)
+        .limit(1)
+        .maybeSingle();
+
+      if (!assigneeRes.error && assigneeRes.data?.id) {
+        const nextValue = Number(assigneeRes.data.contribution_value ?? 0) + hours;
+        const upd = await supabase
+          .from("project_deliverable_assignees")
+          .update({
+            contribution_unit: "hours",
+            contribution_value: nextValue,
+          })
+          .eq("id", assigneeRes.data.id);
+        if (upd.error) throw new Error(upd.error.message);
+      } else {
+        const ins = await supabase.from("project_deliverable_assignees").insert({
+          deliverable_id: deliverableId,
+          project_id: current?.project_id ?? selectedProjectId,
+          user_id: meId,
+          contribution_unit: "hours",
+          contribution_value: hours,
+          created_by: meId || null,
+        });
+        if (ins.error) throw new Error(ins.error.message);
+      }
+
       await logDeliverableEvent({
         deliverableId,
         projectId: current?.project_id ?? selectedProjectId,
         eventType: "contribution_added",
-        comment: note,
+        comment: contributionText,
       });
       setContribTextByDeliverable((prev) => ({ ...prev, [deliverableId]: "" }));
-      setMsg("Contribuicao registrada.");
+      setContribHoursByDeliverable((prev) => ({ ...prev, [deliverableId]: "" }));
+      setMsg("Contribuicao registrada com horas.");
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao registrar contribuicao.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function reviewContribution(deliverable: Deliverable, decision: "approve" | "return") {
+    const comment = (contribReviewCommentByDeliverableId[deliverable.id] ?? "").trim();
+    if (decision === "return" && !comment) {
+      return setMsg("Informe comentario para retornar a contribuicao.");
+    }
+    setSaving(true);
+    setMsg("");
+    try {
+      await logDeliverableEvent({
+        deliverableId: deliverable.id,
+        projectId: deliverable.project_id,
+        eventType: decision === "approve" ? "contribution_approved" : "contribution_returned",
+        comment: comment || (decision === "approve" ? "Contribuicao validada internamente." : null),
+      });
+      if (decision === "return") {
+        const upd = await supabase
+          .from("project_deliverables")
+          .update({ status: "in_progress" })
+          .eq("id", deliverable.id);
+        if (upd.error) throw new Error(upd.error.message);
+      }
+      setContribReviewCommentByDeliverableId((prev) => ({ ...prev, [deliverable.id]: "" }));
+      setMsg(decision === "approve" ? "Contribuicao aprovada internamente." : "Contribuicao retornada para ajuste.");
+      await load();
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao validar contribuicao.");
     } finally {
       setSaving(false);
     }
@@ -1114,15 +1209,17 @@ export default function CoordenadorProjetosPage() {
       </section>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-slate-900">Minha equipe</h2>
-          {projectMembers.length === 0 ? <p className="text-sm text-slate-500">Sem equipe nesse projeto.</p> : null}
-          {projectMembers.map((m) => (
-            <div key={m.id} className="rounded-xl border border-slate-200 p-3 text-sm">
-              <PersonChip name={personLabel(m.user_id)} subtitle={personCargo(m.user_id)} avatarUrl={personAvatar(m.user_id)} />
-            </div>
-          ))}
-        </section>
+        <details className="rounded-2xl border border-slate-200 bg-white p-6" open={false}>
+          <summary className="cursor-pointer text-sm font-semibold text-slate-900">Minha equipe</summary>
+          <div className="mt-4 space-y-3">
+            {projectMembers.length === 0 ? <p className="text-sm text-slate-500">Sem equipe nesse projeto.</p> : null}
+            {projectMembers.map((m) => (
+              <div key={m.id} className="rounded-xl border border-slate-200 p-3 text-sm">
+                <PersonChip name={personLabel(m.user_id)} subtitle={personCargo(m.user_id)} avatarUrl={personAvatar(m.user_id)} />
+              </div>
+            ))}
+          </div>
+        </details>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
           <h2 className="text-sm font-semibold text-slate-900">Direcionar documentos</h2>
@@ -1179,8 +1276,9 @@ export default function CoordenadorProjetosPage() {
         </section>
       </div>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
-        <h2 className="text-sm font-semibold text-slate-900">Equipes do projeto</h2>
+      <details className="rounded-2xl border border-slate-200 bg-white p-6" open={false}>
+        <summary className="cursor-pointer text-sm font-semibold text-slate-900">Equipes do projeto</summary>
+        <div className="mt-4 space-y-4">
         <p className="text-xs text-slate-500">Adicione membros em equipes ja criadas pelo gestor.</p>
 
         {teams.length ? (
@@ -1281,7 +1379,8 @@ export default function CoordenadorProjetosPage() {
             )}
           </div>
         </details>
-      </section>
+        </div>
+      </details>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 space-y-3">
         <h2 className="text-sm font-semibold text-slate-900">Campo de envio de documentos</h2>
@@ -1339,14 +1438,19 @@ export default function CoordenadorProjetosPage() {
         {filteredProjectDeliverables.map((d) => {
           const list = contributions.filter((c) => c.deliverable_id === d.id);
           const assignees = deliverableAssignees.filter((a) => a.deliverable_id === d.id);
+          const totalContributionHours = assignees.reduce((acc, a) => {
+            const unit = a.contribution_unit ?? "hours";
+            const value = Number(a.contribution_value ?? 0);
+            if (unit !== "hours" || !Number.isFinite(value) || value <= 0) return acc;
+            return acc + value;
+          }, 0);
           const allResponsibleIds = Array.from(
             new Set([...(d.assigned_to ? [d.assigned_to] : []), ...assignees.map((a) => a.user_id)])
           );
           const allResponsibleNames = allResponsibleIds.map((id) => personLabel(id));
           const timelineFilter = timelineFilterByDeliverableId[d.id] ?? "all";
-          const timelineAll = deliverableTimeline
-            .filter((t) => t.deliverable_id === d.id)
-            .filter((t) => {
+          const rawTimelineAll = deliverableTimeline.filter((t) => t.deliverable_id === d.id);
+          const timelineAll = rawTimelineAll.filter((t) => {
               if (timelineFilter === "leadership") return isLeadershipRole(t.actor_role);
               if (timelineFilter === "rework") {
                 return (
@@ -1356,12 +1460,29 @@ export default function CoordenadorProjetosPage() {
                 );
               }
               return true;
-            })
+            });
           const timelineExpanded = timelineExpandedByDeliverableId[d.id] === true;
           const timeline = timelineExpanded ? timelineAll : timelineAll.slice(0, 3);
           const timelineHasMore = timelineAll.length > 3;
           const queuedAssignees = pendingAssigneesByDeliverableId[d.id] ?? [];
           const draftStatus = statusDraftByDeliverableId[d.id] ?? d.status;
+          const selectedAction = deliverableActionById[d.id] ?? null;
+          const latestInternalContributionEvent =
+            rawTimelineAll.find((t) =>
+              t.event_type === "contribution_added" ||
+              t.event_type === "contribution_approved" ||
+              t.event_type === "contribution_returned"
+            ) ?? null;
+          const pendingContributionReview = latestInternalContributionEvent?.event_type === "contribution_added";
+          const overdueAwaitingInternalApproval = (() => {
+            const dueDate = parseDueDate(d.due_date);
+            if (!dueDate) return false;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const isPastDue = dueDate <= today;
+            if (!isPastDue) return false;
+            return latestInternalContributionEvent?.event_type !== "contribution_approved";
+          })();
           const hadReworkReturn = deliverableTimeline.some(
             (t) =>
               t.deliverable_id === d.id &&
@@ -1377,169 +1498,295 @@ export default function CoordenadorProjetosPage() {
             (queuedAssignees.length === 0 &&
               !(requiresReassignmentReason && (assigneeCommentByDeliverableId[d.id] ?? "").trim()));
           return (
-            <div key={d.id} className="rounded-xl border border-slate-200 p-3 space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-slate-900">{d.title}</p>
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    value={draftStatus}
-                    onChange={(e) =>
-                      setStatusDraftByDeliverableId((prev) => ({
-                        ...prev,
-                        [d.id]: e.target.value as Deliverable["status"],
-                      }))
-                    }
-                    className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs"
-                  >
-                    <option value="pending">Pendente</option>
-                    <option value="in_progress">Em andamento</option>
-                    <option value="sent">Enviado</option>
-                    <option value="approved">Aprovado</option>
-                    <option value="approved_with_comments">Aprovado com comentarios</option>
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => void saveDraftStatus(d.id, draftStatus)}
-                    disabled={saving}
-                    className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-800 disabled:opacity-60"
-                  >
-                    Salvar status
-                  </button>
+            <details
+              key={d.id}
+              className={`rounded-xl border ${
+                overdueAwaitingInternalApproval
+                  ? "border-2 border-rose-400 bg-rose-100/40"
+                  : pendingContributionReview
+                    ? "border-amber-300 bg-amber-50/40"
+                    : "border-slate-200 bg-white"
+              }`}
+              open={openedDeliverableId === d.id}
+              onToggle={(e) => {
+                const isOpen = (e.currentTarget as HTMLDetailsElement).open;
+                setOpenedDeliverableId(isOpen ? d.id : null);
+              }}
+            >
+              <summary className="cursor-pointer list-none px-3 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{d.title}</p>
+                    <p className="text-xs text-slate-500">
+                      Status: {deliverableStatusLabel(d.status)} | Prazo: {d.due_date ? new Date(d.due_date).toLocaleDateString("pt-BR") : "-"} | Responsavel:{" "}
+                      {allResponsibleNames.length ? allResponsibleNames.join(", ") : "Nao definido"}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700">
+                    Contribuicoes: {list.length} | Horas: {totalContributionHours.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}h
+                  </span>
+                  {pendingContributionReview ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-800">
+                      <BellRing size={13} />
+                      Pendente validacao interna
+                    </span>
+                  ) : null}
+                  {overdueAwaitingInternalApproval ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-100 px-2 py-1 text-[11px] font-semibold text-rose-800">
+                      <AlertTriangle size={13} />
+                      Atrasado (interno)
+                    </span>
+                  ) : null}
                 </div>
-              </div>
-              <input
-                value={statusCommentByDeliverableId[d.id] ?? ""}
-                onChange={(e) => setStatusCommentByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))}
-                placeholder="Comentario da mudanca de status"
-                className="h-9 w-full rounded-lg border border-slate-200 px-2 text-xs"
-              />
-              <p className="text-xs text-slate-500">
-                Responsavel: {allResponsibleNames.length ? allResponsibleNames.join(", ") : "Nao definido"}
-              </p>
-              {allResponsibleIds.length ? (
-                <button
-                  type="button"
-                  onClick={() => void cancelAssignmentAndUnlock(d)}
-                  disabled={saving}
-                  className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 disabled:opacity-60"
-                >
-                  Cancelar atribuicao e liberar ajustes
-                </button>
-              ) : null}
-              {d.status === "approved_with_comments" ? (
-                <p className="text-xs text-amber-700">Comentario: {d.approval_comment ?? "-"}</p>
-              ) : null}
-              {d.document_path ? (
-                <button
-                  type="button"
-                  onClick={() => void openDeliverableFile(d.id)}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
-                >
-                  Abrir arquivo enviado
-                </button>
-              ) : null}
-              {d.document_url ? (
-                <a
-                  href={d.document_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
-                >
-                  Abrir link informado
-                </a>
-              ) : null}
-
-              {d.status === "sent" ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void setStatus(d.id, "approved")}
-                    disabled={saving}
-                    className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
-                  >
-                    Aprovar
-                  </button>
-                  <input
-                    value={statusCommentByDeliverableId[d.id] ?? ""}
-                    onChange={(e) => setStatusCommentByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))}
-                    placeholder="Comentario da aprovacao"
-                    className="h-9 min-w-[220px] rounded-lg border border-slate-200 px-2 text-xs"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void setStatus(d.id, "approved_with_comments")}
-                    disabled={saving}
-                    className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 disabled:opacity-60"
-                  >
-                    Aprovar com comentarios
-                  </button>
+              </summary>
+              <div className="space-y-2 border-t border-slate-100 px-3 py-3">
+                {overdueAwaitingInternalApproval ? (
+                  <div className="rounded-lg border border-rose-300 bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-800">
+                    Entregavel atrasado: encaminhe e conclua a validacao interna da contribuicao.
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-semibold text-slate-900">{d.title}</p>
+                  <details className="relative" onClick={(e) => e.stopPropagation()} onToggle={(e) => e.stopPropagation()}>
+                    <summary className="cursor-pointer rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700">
+                      Acoes
+                    </summary>
+                    <div className="absolute right-0 z-10 mt-1 w-48 rounded-lg border border-slate-200 bg-white p-2 shadow">
+                      <button
+                        type="button"
+                        onClick={() => setDeliverableActionById((prev) => ({ ...prev, [d.id]: "status" }))}
+                        className="mb-1 w-full rounded-md border border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        Mudar status
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeliverableActionById((prev) => ({ ...prev, [d.id]: "edit" }))}
+                        className="mb-1 w-full rounded-md border border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        Editar entregavel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeliverableActionById((prev) => ({ ...prev, [d.id]: "document" }))}
+                        className="w-full rounded-md border border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        Documento
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeliverableActionById((prev) => ({ ...prev, [d.id]: "assignees" }))}
+                        className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        Atribuir pessoas
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeliverableActionById((prev) => ({ ...prev, [d.id]: "contribution" }))}
+                        className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        Registrar contribuicao
+                      </button>
+                    </div>
+                  </details>
                 </div>
-              ) : null}
 
-              <details
-                className="rounded-xl border border-slate-200 bg-slate-50 p-3"
-                open={!!editOpenByDeliverableId[d.id]}
-                onToggle={(e) => {
-                  const open = (e.currentTarget as HTMLDetailsElement).open;
-                  setEditOpenByDeliverableId((prev) => ({ ...prev, [d.id]: open }));
-                }}
-              >
-                <summary className="cursor-pointer text-xs font-semibold text-slate-700">Editar entregavel</summary>
-                <div className="mt-3 grid gap-2 md:grid-cols-2">
-                  <input
-                    value={editTitleByDeliverableId[d.id] ?? d.title}
-                    onChange={(e) => setEditTitleByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))}
-                    className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-xs"
-                    placeholder="Titulo"
-                  />
-                  <input
-                    type="date"
-                    value={editDueByDeliverableId[d.id] ?? (d.due_date ?? "")}
-                    onChange={(e) => setEditDueByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))}
-                    className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-xs"
-                  />
-                  <input
-                    value={editDescByDeliverableId[d.id] ?? (d.description ?? "")}
-                    onChange={(e) => setEditDescByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))}
-                    className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-xs md:col-span-2"
-                    placeholder="Descricao"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void saveDeliverableEdits(d.id)}
-                    disabled={saving}
-                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 disabled:opacity-60 md:col-span-2"
-                  >
-                    Salvar alteracoes
-                  </button>
-                </div>
-              </details>
+                {selectedAction === "status" ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                    <p className="text-xs font-semibold text-slate-700">Status do entregavel</p>
+                    <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+                      <select
+                        value={draftStatus}
+                        onChange={(e) =>
+                          setStatusDraftByDeliverableId((prev) => ({
+                            ...prev,
+                            [d.id]: e.target.value as Deliverable["status"],
+                          }))
+                        }
+                        className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                      >
+                        <option value="pending">Pendente</option>
+                        <option value="in_progress">Em andamento</option>
+                        <option value="sent">Enviado</option>
+                        <option value="approved">Aprovado</option>
+                        <option value="approved_with_comments">Aprovado com comentarios</option>
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => void saveDraftStatus(d.id, draftStatus)}
+                        disabled={saving}
+                        className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-800 disabled:opacity-60"
+                      >
+                        Salvar status
+                      </button>
+                    </div>
+                    <input
+                      value={statusCommentByDeliverableId[d.id] ?? ""}
+                      onChange={(e) => setStatusCommentByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                      placeholder="Comentario da mudanca de status"
+                      className="h-9 w-full rounded-lg border border-slate-200 px-2 text-xs"
+                    />
+                    <p className="text-xs text-slate-500">
+                      Responsavel: {allResponsibleNames.length ? allResponsibleNames.join(", ") : "Nao definido"}
+                    </p>
+                    {allResponsibleIds.length ? (
+                      <button
+                        type="button"
+                        onClick={() => void cancelAssignmentAndUnlock(d)}
+                        disabled={saving}
+                        className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800 disabled:opacity-60"
+                      >
+                        Cancelar atribuicao e liberar ajustes
+                      </button>
+                    ) : null}
+                    {d.status === "approved_with_comments" ? (
+                      <p className="text-xs text-amber-700">Comentario: {d.approval_comment ?? "-"}</p>
+                    ) : null}
+                    {d.status === "sent" ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void setStatus(d.id, "approved")}
+                          disabled={saving}
+                          className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                        >
+                          Aprovar
+                        </button>
+                        <input
+                          value={statusCommentByDeliverableId[d.id] ?? ""}
+                          onChange={(e) =>
+                            setStatusCommentByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))
+                          }
+                          placeholder="Comentario da aprovacao"
+                          className="h-9 min-w-[220px] rounded-lg border border-slate-200 px-2 text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void setStatus(d.id, "approved_with_comments")}
+                          disabled={saving}
+                          className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 disabled:opacity-60"
+                        >
+                          Aprovar com comentarios
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
 
-              <div className="flex flex-wrap gap-2">
-                <input
-                  value={docLinkByDeliverable[d.id] ?? ""}
-                  onChange={(e) => setDocLinkByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))}
-                  placeholder="Link do documento"
-                  className="h-9 flex-1 min-w-[240px] rounded-lg border border-slate-200 px-2 text-xs"
-                />
-                <button type="button" onClick={() => void saveDocument(d)} disabled={saving} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800">
-                  Enviar documento
-                </button>
-              </div>
+                {selectedAction === "edit" ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-semibold text-slate-700">Editar entregavel</p>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2">
+                      <input
+                        value={editTitleByDeliverableId[d.id] ?? d.title}
+                        onChange={(e) =>
+                          setEditTitleByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))
+                        }
+                        className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                        placeholder="Titulo"
+                      />
+                      <input
+                        type="date"
+                        value={editDueByDeliverableId[d.id] ?? (d.due_date ?? "")}
+                        onChange={(e) => setEditDueByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                        className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                      />
+                      <input
+                        value={editDescByDeliverableId[d.id] ?? (d.description ?? "")}
+                        onChange={(e) => setEditDescByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                        className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-xs md:col-span-2"
+                        placeholder="Descricao"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void saveDeliverableEdits(d.id)}
+                        disabled={saving}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 disabled:opacity-60 md:col-span-2"
+                      >
+                        Salvar alteracoes
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
 
-              <div className="flex flex-wrap gap-2">
-                <input
-                  value={contribTextByDeliverable[d.id] ?? ""}
-                  onChange={(e) => setContribTextByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))}
-                  placeholder="Registrar contribuicao nesse documento"
-                  className="h-9 flex-1 min-w-[240px] rounded-lg border border-slate-200 px-2 text-xs"
-                />
-                <button type="button" onClick={() => void addContribution(d.id)} disabled={saving} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800">
-                  Registrar
-                </button>
-              </div>
+                {selectedAction === "document" ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                    <p className="text-xs font-semibold text-slate-700">Documento do entregavel</p>
+                    <div className="flex flex-wrap gap-2">
+                      <input
+                        value={docLinkByDeliverable[d.id] ?? ""}
+                        onChange={(e) => setDocLinkByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                        placeholder="Link do documento"
+                        className="h-9 flex-1 min-w-[240px] rounded-lg border border-slate-200 px-2 text-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void saveDocument(d)}
+                        disabled={saving}
+                        className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800"
+                      >
+                        Enviar documento
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {d.document_path ? (
+                        <button
+                          type="button"
+                          onClick={() => void openDeliverableFile(d.id)}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+                        >
+                          Abrir arquivo enviado
+                        </button>
+                      ) : null}
+                      {d.document_url ? (
+                        <a
+                          href={d.document_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+                        >
+                          Abrir link informado
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
 
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                {selectedAction === "contribution" ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                    <p className="text-xs font-semibold text-slate-700">Registrar contribuicao nesse documento</p>
+                    <div className="grid gap-2 md:grid-cols-[180px_1fr_auto]">
+                      <input
+                        type="number"
+                        min="0.1"
+                        step="0.1"
+                        value={contribHoursByDeliverable[d.id] ?? ""}
+                        onChange={(e) =>
+                          setContribHoursByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))
+                        }
+                        placeholder="Horas (ex.: 2.5)"
+                        className="h-9 rounded-lg border border-slate-200 px-2 text-xs"
+                      />
+                      <input
+                        value={contribTextByDeliverable[d.id] ?? ""}
+                        onChange={(e) => setContribTextByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                        placeholder="Descricao da contribuicao (opcional)"
+                        className="h-9 rounded-lg border border-slate-200 px-2 text-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void addContribution(d.id)}
+                        disabled={saving}
+                        className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800"
+                      >
+                        Registrar
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {selectedAction === "assignees" ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <div className="text-xs font-semibold text-slate-700">Pessoas atribuidas</div>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <select
@@ -1667,8 +1914,11 @@ export default function CoordenadorProjetosPage() {
                   )}
                 </div>
               </div>
+                ) : null}
 
-              <p className="text-xs text-slate-500">Contribuidores ({list.length})</p>
+              <p className="text-xs text-slate-500">
+                Contribuidores ({list.length}) | Horas totais: {totalContributionHours.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}h
+              </p>
               {list.map((c) => (
                 <p key={c.id} className="text-xs text-slate-600">
                   {personLabel(c.user_id)} - {c.contribution_note ?? "Contribuicao"}
@@ -1694,6 +1944,39 @@ export default function CoordenadorProjetosPage() {
                   </select>
                 </div>
                 <div className="mt-2 space-y-1">
+                  {pendingContributionReview ? (
+                    <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 p-2">
+                      <p className="text-xs font-semibold text-amber-800">
+                        Nova contribuicao aguardando aprovacao/retorno interno.
+                      </p>
+                      <div className="mt-2 grid gap-2 md:grid-cols-[1fr_auto_auto]">
+                        <input
+                          value={contribReviewCommentByDeliverableId[d.id] ?? ""}
+                          onChange={(e) =>
+                            setContribReviewCommentByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))
+                          }
+                          placeholder="Comentario para retorno (obrigatorio ao retornar)"
+                          className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void reviewContribution(d, "approve")}
+                          disabled={saving}
+                          className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 disabled:opacity-60"
+                        >
+                          Aprovar contribuicao
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void reviewContribution(d, "return")}
+                          disabled={saving}
+                          className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 disabled:opacity-60"
+                        >
+                          Retornar com comentarios
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                   {timeline.length ? (
                     timeline.map((t) => (
                       <p
@@ -1730,7 +2013,8 @@ export default function CoordenadorProjetosPage() {
                   </div>
                 ) : null}
               </div>
-            </div>
+              </div>
+            </details>
           );
         })}
       </section>

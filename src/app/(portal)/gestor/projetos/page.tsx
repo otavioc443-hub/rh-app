@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCcw } from "lucide-react";
+import { AlertTriangle, BellRing, RefreshCcw } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { PersonChip } from "@/components/people/PersonChip";
@@ -42,7 +42,13 @@ type ProjectClient = {
   active: boolean;
 };
 
-type ProjectTeam = { id: string; project_id: string; name: string; created_at: string };
+type ProjectTeam = {
+  id: string;
+  project_id: string;
+  name: string;
+  coordinator_user_id: string | null;
+  created_at: string;
+};
 type ProjectTeamMember = { id: string; team_id: string; project_id: string; user_id: string; created_at: string };
 
 type ProjectMember = {
@@ -85,6 +91,15 @@ type Contribution = {
   user_id: string;
   contribution_note: string | null;
   created_at: string;
+};
+
+type DeliverableAssignee = {
+  id: string;
+  deliverable_id: string;
+  project_id: string;
+  user_id: string;
+  contribution_unit: "hours" | "percent" | "points" | null;
+  contribution_value: number | null;
 };
 
 type Profile = {
@@ -170,6 +185,8 @@ function deliverableEventLabel(eventType: string) {
   if (eventType === "status_changed") return "Mudanca de status";
   if (eventType === "created") return "Criado";
   if (eventType === "contribution_added") return "Contribuicao registrada";
+  if (eventType === "contribution_approved") return "Contribuicao aprovada (interna)";
+  if (eventType === "contribution_returned") return "Contribuicao retornada para ajuste (interna)";
   if (eventType === "assignee_added") return "Responsavel adicionado";
   if (eventType === "assignee_removed") return "Responsavel removido";
   if (eventType === "document_uploaded") return "Documento enviado";
@@ -189,6 +206,35 @@ function deliverableStatusLabel(value?: string | null) {
   if (value === "blocked") return "Bloqueado";
   if (value === "cancelled") return "Cancelado";
   return value ?? "-";
+}
+
+function formatDateTimeBR(value?: string | null) {
+  if (!value) return "-";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return value;
+  return dt.toLocaleString("pt-BR");
+}
+
+function parseDueDate(value?: string | null) {
+  const raw = (value ?? "").trim();
+  if (!raw) return null;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+  if (iso) {
+    const dt = new Date(`${iso[1]}-${iso[2]}-${iso[3]}T00:00:00`);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  const br = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(raw);
+  if (br) {
+    const dt = new Date(`${br[3]}-${br[2]}-${br[1]}T00:00:00`);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  const brDash = /^(\d{2})-(\d{2})-(\d{4})/.exec(raw);
+  if (brDash) {
+    const dt = new Date(`${brDash[3]}-${brDash[2]}-${brDash[1]}T00:00:00`);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  const dt = new Date(raw);
+  return Number.isNaN(dt.getTime()) ? null : new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
 }
 
 function downloadTextFile(filename: string, text: string, mime = "text/plain;charset=utf-8") {
@@ -258,6 +304,7 @@ export default function GestorProjetosPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [clientsLoaded, setClientsLoaded] = useState(false);
   const [msg, setMsg] = useState("");
   const [meId, setMeId] = useState<string>("");
   const [meCompanyId, setMeCompanyId] = useState<string>("");
@@ -268,6 +315,7 @@ export default function GestorProjetosPage() {
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [deliverables, setDeliverables] = useState<Deliverable[]>([]);
   const [contributions, setContributions] = useState<Contribution[]>([]);
+  const [deliverableAssignees, setDeliverableAssignees] = useState<DeliverableAssignee[]>([]);
   const [deliverableTimeline, setDeliverableTimeline] = useState<DeliverableTimelineRow[]>([]);
   const [deletedDeliverables, setDeletedDeliverables] = useState<DeletedDeliverableItem[]>([]);
   const [deletedTeamItems, setDeletedTeamItems] = useState<DeletedTeamItem[]>([]);
@@ -285,8 +333,10 @@ export default function GestorProjetosPage() {
   const [docDescription, setDocDescription] = useState("");
   const [docDueDate, setDocDueDate] = useState("");
   const [deliverableSearch, setDeliverableSearch] = useState("");
+  const [deliverableSearchInput, setDeliverableSearchInput] = useState("");
+  const [deliverableStatusDraft, setDeliverableStatusDraft] = useState<"all" | Deliverable["status"]>("all");
+  const [deliverableSelectDraft, setDeliverableSelectDraft] = useState("");
   const [deliverableStatusFilter, setDeliverableStatusFilter] = useState<"all" | Deliverable["status"]>("all");
-  const [deliverableDateFilter, setDeliverableDateFilter] = useState("");
   const [deliverableSelectFilter, setDeliverableSelectFilter] = useState("");
 
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
@@ -295,17 +345,23 @@ export default function GestorProjetosPage() {
   const [assignTeamId, setAssignTeamId] = useState("");
   const [assignUserId, setAssignUserId] = useState("");
   const [assignProjectRole, setAssignProjectRole] = useState<"coordenador" | "colaborador">("colaborador");
+  const [teamNameDraftByTeamId, setTeamNameDraftByTeamId] = useState<Record<string, string>>({});
+  const [teamCoordinatorDraftByTeamId, setTeamCoordinatorDraftByTeamId] = useState<Record<string, string>>({});
+  const [teamEditOpenByTeamId, setTeamEditOpenByTeamId] = useState<Record<string, boolean>>({});
+  const [teamAddMemberOpenByTeamId, setTeamAddMemberOpenByTeamId] = useState<Record<string, boolean>>({});
 
-  const [editOpenByDeliverableId, setEditOpenByDeliverableId] = useState<Record<string, boolean>>({});
   const [editTitleByDeliverableId, setEditTitleByDeliverableId] = useState<Record<string, string>>({});
   const [editDescByDeliverableId, setEditDescByDeliverableId] = useState<Record<string, string>>({});
   const [editDueByDeliverableId, setEditDueByDeliverableId] = useState<Record<string, string>>({});
   const [docLinkByDeliverable, setDocLinkByDeliverable] = useState<Record<string, string>>({});
   const [timelineExpandedByDeliverableId, setTimelineExpandedByDeliverableId] = useState<Record<string, boolean>>({});
+  const [openedDeliverableId, setOpenedDeliverableId] = useState<string | null>(null);
+  const [deliverableActionById, setDeliverableActionById] = useState<Record<string, "status" | "edit" | "document" | null>>({});
   const [statusDraftByDeliverableId, setStatusDraftByDeliverableId] = useState<
     Record<string, Deliverable["status"]>
   >({});
   const [statusCommentByDeliverableId, setStatusCommentByDeliverableId] = useState<Record<string, string>>({});
+  const [contribReviewCommentByDeliverableId, setContribReviewCommentByDeliverableId] = useState<Record<string, string>>({});
 
   const personLabel = useCallback((userId: string) => {
     const d = directoryById[userId];
@@ -367,6 +423,7 @@ export default function GestorProjetosPage() {
 
   async function load() {
     setLoading(true);
+    setClientsLoaded(false);
     setMsg("");
     try {
       const { data: authData, error: authErr } = await supabase.auth.getUser();
@@ -551,15 +608,20 @@ export default function GestorProjetosPage() {
       });
 
       let nextContributions: Contribution[] = [];
+      let nextAssignees: DeliverableAssignee[] = [];
       let nextTimeline: DeliverableTimelineRow[] = [];
       if (nextDeliverables.length > 0) {
         const deliverableIds = nextDeliverables.map((d) => d.id);
-        const [contribRes, timelineRes] = await Promise.all([
+        const [contribRes, assigneesRes, timelineRes] = await Promise.all([
           supabase
             .from("deliverable_contributions")
             .select("id,deliverable_id,user_id,contribution_note,created_at")
             .in("deliverable_id", deliverableIds)
             .order("created_at", { ascending: false }),
+          supabase
+            .from("project_deliverable_assignees")
+            .select("id,deliverable_id,project_id,user_id,contribution_unit,contribution_value")
+            .in("deliverable_id", deliverableIds),
           supabase
             .from("project_deliverable_timeline")
             .select("id,deliverable_id,project_id,event_type,status_from,status_to,comment,actor_user_id,created_at")
@@ -569,6 +631,12 @@ export default function GestorProjetosPage() {
         if (contribRes.error) throw new Error(contribRes.error.message);
         nextContributions = (contribRes.data ?? []) as Contribution[];
         setContributions(nextContributions);
+        if (!assigneesRes.error) {
+          nextAssignees = (assigneesRes.data ?? []) as DeliverableAssignee[];
+          setDeliverableAssignees(nextAssignees);
+        } else {
+          setDeliverableAssignees([]);
+        }
         if (!timelineRes.error) {
           nextTimeline = (timelineRes.data ?? []) as DeliverableTimelineRow[];
           setDeliverableTimeline(nextTimeline);
@@ -577,6 +645,7 @@ export default function GestorProjetosPage() {
         }
       } else {
         setContributions([]);
+        setDeliverableAssignees([]);
         setDeliverableTimeline([]);
       }
 
@@ -625,7 +694,9 @@ export default function GestorProjetosPage() {
         .order("name", { ascending: true });
       if (clientsRes.error) throw new Error(clientsRes.error.message);
       setClients((clientsRes.data ?? []) as ProjectClient[]);
+      setClientsLoaded(true);
     } catch (e: unknown) {
+      setClientsLoaded(true);
       setMsg(e instanceof Error ? e.message : "Erro ao carregar projetos.");
     } finally {
       setLoading(false);
@@ -671,6 +742,13 @@ export default function GestorProjetosPage() {
     return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
   }, [selectedMembers, companyUsers, personLabel]);
 
+  const projectCoordinatorOptions = useMemo(() => {
+    return selectedMembers
+      .filter((m) => m.member_role === "coordenador")
+      .map((m) => ({ id: m.user_id, label: personLabel(m.user_id) }))
+      .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+  }, [selectedMembers, personLabel]);
+
   useEffect(() => {
     if (!assignUserId) return;
     const opt = teamCandidateOptions.find((x) => x.id === assignUserId) ?? null;
@@ -682,19 +760,27 @@ export default function GestorProjetosPage() {
     () => deliverables.filter((d) => d.project_id === selectedProjectId),
     [deliverables, selectedProjectId]
   );
+  const applyDeliverableFilters = useCallback(() => {
+    setDeliverableSearch(deliverableSearchInput);
+    setDeliverableStatusFilter(deliverableStatusDraft);
+    setDeliverableSelectFilter(deliverableSelectDraft);
+  }, [
+    deliverableSearchInput,
+    deliverableStatusDraft,
+    deliverableSelectDraft,
+  ]);
   const filteredSelectedDeliverables = useMemo(() => {
     const search = deliverableSearch.trim().toLowerCase();
     return selectedDeliverables.filter((d) => {
       const byAssignee = assigneeFilter ? d.assigned_to === assigneeFilter : true;
       const bySelect = deliverableSelectFilter ? d.id === deliverableSelectFilter : true;
       const byStatus = deliverableStatusFilter === "all" ? true : d.status === deliverableStatusFilter;
-      const byDate = deliverableDateFilter ? (d.due_date ?? "") === deliverableDateFilter : true;
       const bySearch = search
         ? `${d.title} ${d.description ?? ""}`.toLowerCase().includes(search)
         : true;
-      return byAssignee && bySelect && byStatus && byDate && bySearch;
+      return byAssignee && bySelect && byStatus && bySearch;
     });
-  }, [selectedDeliverables, assigneeFilter, deliverableSelectFilter, deliverableStatusFilter, deliverableDateFilter, deliverableSearch]);
+  }, [selectedDeliverables, assigneeFilter, deliverableSelectFilter, deliverableStatusFilter, deliverableSearch]);
   const selectedDeletedDeliverables = useMemo(
     () =>
       deletedDeliverables
@@ -718,13 +804,23 @@ export default function GestorProjetosPage() {
     }
     try {
       const [tRes, tmRes] = await Promise.all([
-        supabase.from("project_teams").select("id,project_id,name,created_at").eq("project_id", projectId).order("name", { ascending: true }),
+        supabase
+          .from("project_teams")
+          .select("id,project_id,name,coordinator_user_id,created_at")
+          .eq("project_id", projectId)
+          .order("name", { ascending: true }),
         supabase.from("project_team_members").select("id,team_id,project_id,user_id,created_at").eq("project_id", projectId),
       ]);
       if (tRes.error) throw tRes.error;
       if (tmRes.error) throw tmRes.error;
-      setTeams((tRes.data ?? []) as ProjectTeam[]);
+      const loadedTeams = (tRes.data ?? []) as ProjectTeam[];
+      setTeams(loadedTeams);
       setTeamMembers((tmRes.data ?? []) as ProjectTeamMember[]);
+      setTeamCoordinatorDraftByTeamId(() => {
+        const next: Record<string, string> = {};
+        for (const t of loadedTeams) next[t.id] = t.coordinator_user_id ?? "";
+        return next;
+      });
       setAssignTeamId((prev) => (prev && (tRes.data ?? []).some((t) => t.id === prev) ? prev : String((tRes.data ?? [])[0]?.id ?? "")));
     } catch {
       // tabela pode nao existir ainda (SQL nao aplicado)
@@ -772,6 +868,11 @@ export default function GestorProjetosPage() {
     for (const c of clients) map[c.id] = c.name;
     return map;
   }, [clients]);
+  const selectedProjectClientLabel = useMemo(() => {
+    if (!selectedProject?.client_id) return "-";
+    if (!clientsLoaded) return "Carregando...";
+    return clientNameById[selectedProject.client_id] ?? "Cliente nao encontrado";
+  }, [selectedProject?.client_id, clientsLoaded, clientNameById]);
 
   async function addMember() {
     if (!selectedProjectId) return setMsg("Selecione um projeto.");
@@ -859,19 +960,20 @@ export default function GestorProjetosPage() {
       const fromStatus = needsAutoSentStep ? "sent" : currentStatus;
       const res = await supabase.from("project_deliverables").update({ status }).eq("id", id);
       if (res.error) throw new Error(res.error.message);
-      await logDeliverableEvent({
-        deliverableId: id,
-        projectId: current?.project_id ?? selectedProjectId,
-        eventType: getDeliverableStatusEventType(fromStatus, status),
-        statusFrom: fromStatus,
-        statusTo: status,
-        comment: timelineComment ?? null,
-      });
-      await load();
-    } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao atualizar status.");
-    } finally {
-      setSaving(false);
+        await logDeliverableEvent({
+          deliverableId: id,
+          projectId: current?.project_id ?? selectedProjectId,
+          eventType: getDeliverableStatusEventType(fromStatus, status),
+          statusFrom: fromStatus,
+          statusTo: status,
+          comment: timelineComment ?? null,
+        });
+        setOpenedDeliverableId(null);
+        await load();
+      } catch (e: unknown) {
+        setMsg(e instanceof Error ? e.message : "Erro ao atualizar status.");
+      } finally {
+        setSaving(false);
     }
   }
 
@@ -929,18 +1031,19 @@ export default function GestorProjetosPage() {
       };
       const res = await supabase.from("project_deliverables").update(payload).eq("id", deliverableId);
       if (res.error) throw new Error(res.error.message);
-      await logDeliverableEvent({
-        deliverableId,
-        projectId: current?.project_id ?? selectedProjectId,
-        eventType: "edited",
-        comment: "Entregavel atualizado (titulo/descricao/prazo).",
-      });
-      setMsg("Entregavel atualizado.");
-      await load();
-    } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao atualizar entregavel.");
-    } finally {
-      setSaving(false);
+        await logDeliverableEvent({
+          deliverableId,
+          projectId: current?.project_id ?? selectedProjectId,
+          eventType: "edited",
+          comment: "Entregavel atualizado (titulo/descricao/prazo).",
+        });
+        setMsg("Entregavel atualizado.");
+        setOpenedDeliverableId(null);
+        await load();
+      } catch (e: unknown) {
+        setMsg(e instanceof Error ? e.message : "Erro ao atualizar entregavel.");
+      } finally {
+        setSaving(false);
     }
   }
 
@@ -1038,6 +1141,37 @@ export default function GestorProjetosPage() {
     setStatusCommentByDeliverableId((prev) => ({ ...prev, [deliverableId]: "" }));
   }
 
+  async function reviewContribution(deliverable: Deliverable, decision: "approve" | "return") {
+    const comment = (contribReviewCommentByDeliverableId[deliverable.id] ?? "").trim();
+    if (decision === "return" && !comment) {
+      return setMsg("Informe comentario para retornar a contribuicao.");
+    }
+    setSaving(true);
+    setMsg("");
+    try {
+      await logDeliverableEvent({
+        deliverableId: deliverable.id,
+        projectId: deliverable.project_id,
+        eventType: decision === "approve" ? "contribution_approved" : "contribution_returned",
+        comment: comment || (decision === "approve" ? "Contribuicao validada internamente." : null),
+      });
+      if (decision === "return") {
+        const upd = await supabase
+          .from("project_deliverables")
+          .update({ status: "in_progress" })
+          .eq("id", deliverable.id);
+        if (upd.error) throw new Error(upd.error.message);
+      }
+      setContribReviewCommentByDeliverableId((prev) => ({ ...prev, [deliverable.id]: "" }));
+      setMsg(decision === "approve" ? "Contribuicao aprovada internamente." : "Contribuicao retornada para ajuste.");
+      await load();
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao validar contribuicao.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function deleteDeliverable(deliverableId: string) {
     if (!confirm("Excluir este entregavel? Esta acao nao pode ser desfeita.")) return;
     setSaving(true);
@@ -1045,12 +1179,7 @@ export default function GestorProjetosPage() {
     try {
       const res = await supabase.from("project_deliverables").delete().eq("id", deliverableId);
       if (res.error) throw new Error(res.error.message);
-      setEditOpenByDeliverableId((prev) => {
-        const next = { ...prev };
-        delete next[deliverableId];
-        return next;
-      });
-      setMsg("Entregavel excluido.");
+        setMsg("Entregavel excluido.");
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao excluir entregavel.");
@@ -1190,7 +1319,13 @@ export default function GestorProjetosPage() {
     setSaving(true);
     setMsg("");
     try {
-      const res = await supabase.from("project_teams").insert({ project_id: selectedProjectId, name, created_by: meId || null });
+      const res = await supabase
+        .from("project_teams")
+        .insert({
+          project_id: selectedProjectId,
+          name,
+          created_by: meId || null,
+        });
       if (res.error) throw new Error(res.error.message);
       setNewTeamName("");
       setMsg("Equipe criada.");
@@ -1202,9 +1337,10 @@ export default function GestorProjetosPage() {
     }
   }
 
-  async function addMemberToTeam() {
+  async function addMemberToTeam(forcedTeamId?: string) {
     if (!selectedProjectId) return setMsg("Selecione um projeto.");
-    if (!assignTeamId) return setMsg("Selecione uma equipe.");
+    const teamId = forcedTeamId ?? assignTeamId;
+    if (!teamId) return setMsg("Selecione uma equipe.");
     if (!assignUserId) return setMsg("Selecione um colaborador.");
     setSaving(true);
     setMsg("");
@@ -1221,11 +1357,11 @@ export default function GestorProjetosPage() {
         if (insMem.error) throw new Error(insMem.error.message);
       }
 
-      const res = await supabase.from("project_team_members").insert({
-        team_id: assignTeamId,
-        project_id: selectedProjectId,
-        user_id: assignUserId,
-        added_by: meId || null,
+        const res = await supabase.from("project_team_members").insert({
+          team_id: teamId,
+          project_id: selectedProjectId,
+          user_id: assignUserId,
+          added_by: meId || null,
       });
       if (res.error) {
         if ((res.error as { code?: string })?.code === "23505") {
@@ -1269,6 +1405,82 @@ export default function GestorProjetosPage() {
       await loadTeams(selectedProjectId);
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao excluir equipe.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveTeamName(teamId: string) {
+    const current = teams.find((t) => t.id === teamId) ?? null;
+    if (!current) return;
+    const nextName = (teamNameDraftByTeamId[teamId] ?? current.name ?? "").trim();
+    const nextCoordinatorId = (teamCoordinatorDraftByTeamId[teamId] ?? current.coordinator_user_id ?? "").trim();
+    if (!nextName) return setMsg("Informe o nome da equipe.");
+    if (nextName === (current.name ?? "").trim() && nextCoordinatorId === (current.coordinator_user_id ?? "")) {
+      return setMsg("Nenhuma alteracao para salvar.");
+    }
+    setSaving(true);
+    setMsg("");
+    try {
+      const res = await supabase
+        .from("project_teams")
+        .update({ name: nextName, coordinator_user_id: nextCoordinatorId || null })
+        .eq("id", teamId);
+      if (res.error) throw new Error(res.error.message);
+      setMsg("Equipe atualizada.");
+      await loadTeams(selectedProjectId);
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao atualizar nome da equipe.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function promoteTeamMemberToCoordinator(teamId: string, userId: string) {
+    if (!selectedProjectId) return setMsg("Selecione um projeto.");
+    const team = teams.find((t) => t.id === teamId) ?? null;
+    if (!team) return setMsg("Equipe nao encontrada.");
+    if (team.coordinator_user_id === userId) return setMsg("Este membro ja e o coordenador da equipe.");
+
+    const member = selectedMembers.find((m) => m.user_id === userId) ?? null;
+    if (!member) return setMsg("Membro do projeto nao encontrado.");
+
+    setSaving(true);
+    setMsg("");
+    try {
+      if (member.member_role !== "coordenador") {
+        const roleRes = await supabase.from("project_members").update({ member_role: "coordenador" }).eq("id", member.id);
+        if (roleRes.error) throw new Error(roleRes.error.message);
+      }
+
+      const teamRes = await supabase.from("project_teams").update({ coordinator_user_id: userId }).eq("id", teamId);
+      if (teamRes.error) throw new Error(teamRes.error.message);
+
+      setMsg(`"${personLabel(userId)}" definido como coordenador da equipe "${team.name}".`);
+      await load();
+      await loadTeams(selectedProjectId);
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao definir coordenador da equipe.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function clearTeamCoordinator(teamId: string, userId: string) {
+    if (!selectedProjectId) return setMsg("Selecione um projeto.");
+    const team = teams.find((t) => t.id === teamId) ?? null;
+    if (!team) return setMsg("Equipe nao encontrada.");
+    if (team.coordinator_user_id !== userId) return setMsg("Este membro nao e o coordenador atual da equipe.");
+
+    setSaving(true);
+    setMsg("");
+    try {
+      const teamRes = await supabase.from("project_teams").update({ coordinator_user_id: null }).eq("id", teamId);
+      if (teamRes.error) throw new Error(teamRes.error.message);
+      setMsg(`Coordenacao removida da equipe "${team.name}".`);
+      await loadTeams(selectedProjectId);
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao remover coordenacao da equipe.");
     } finally {
       setSaving(false);
     }
@@ -1321,7 +1533,7 @@ export default function GestorProjetosPage() {
             <p className="text-3xl font-semibold">{selectedProject.name}</p>
             <p className="mt-2 text-sm text-slate-200">{selectedProject.description ?? "Sem descricao"}</p>
             <p className="mt-2 text-xs text-slate-300">
-              Cliente: {selectedProject.client_id ? (clientNameById[selectedProject.client_id] ?? selectedProject.client_id) : "-"} | Tipo: {projectTypeLabel(selectedProject.project_type)}
+              Cliente: {selectedProjectClientLabel} | Tipo: {projectTypeLabel(selectedProject.project_type)}
               {selectedProject.project_scopes?.length ? ` | Escopos: ${selectedProject.project_scopes.map((s) => projectTypeLabel(s as ProjectType)).join(", ")}` : ""}
             </p>
             <div className="mt-5 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
@@ -1373,9 +1585,6 @@ export default function GestorProjetosPage() {
                         ? "Pausado"
                         : "Concluido"}
                   </span>
-                  <span className="text-xs text-slate-300">
-                    Apenas Diretoria pode alterar status/etapa.
-                  </span>
                 </div>
               </div>
             </div>
@@ -1385,259 +1594,343 @@ export default function GestorProjetosPage() {
         )}
       </section>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-slate-900">Adicionar equipe</h2>
-          <div className="grid gap-3 md:grid-cols-3">
-            <select
-              value={memberUserId}
-              onChange={(e) => setMemberUserId(e.target.value)}
-              className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm md:col-span-2"
-            >
-              <option value="">
-                {meCompanyId
-                  ? "Selecione colaborador da empresa..."
-                  : "Seu perfil esta sem empresa vinculada"}
-              </option>
-              {companyUsers.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {safeNameFromProfile(u) + ` (${u.role ?? "colaborador"})`}
-                </option>
-              ))}
-            </select>
-            <select value={memberRole} onChange={(e) => setMemberRole(e.target.value as "coordenador" | "colaborador")} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm">
-              <option value="coordenador">Coordenador</option>
-              <option value="colaborador">Colaborador</option>
-            </select>
-          </div>
-          <button type="button" onClick={() => void addMember()} disabled={!selectedProjectId || saving} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60">
-            Adicionar na equipe
-          </button>
+        <div className="space-y-6">
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
+            <h2 className="text-sm font-semibold text-slate-900">Equipe do projeto</h2>
+            <p className="text-xs text-slate-500">
+              Organize membros e equipes antes de acompanhar as entregas.
+            </p>
 
-          <div className="space-y-2">
-            <p className="text-xs text-slate-500">Membros do projeto</p>
-            {selectedMembers.length === 0 ? <p className="text-sm text-slate-500">Nenhum membro.</p> : null}
-            {selectedMembers.map((m) => (
-              <div key={m.id} className="rounded-xl border border-slate-200 p-3 text-sm">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <PersonChip name={personLabel(m.user_id)} subtitle={personCargo(m.user_id)} avatarUrl={personAvatar(m.user_id)} />
-                  {m.member_role === "gestor" ? (
-                    <span className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600">
-                      Gestor (fixo)
-                    </span>
-                  ) : (
-                    <div className="flex items-center gap-2">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <details className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-2">
+                <summary className="cursor-pointer list-none text-xs font-semibold text-slate-700">
+                  Membros do projeto ({selectedMembers.length})
+                </summary>
+                <div className="mt-3 space-y-2">
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-3">
+                    <p className="text-xs font-semibold text-slate-700">Adicionar membro ao projeto</p>
+                    <div className="grid gap-3 md:grid-cols-3">
                       <select
-                        value={memberRoleByMemberId[m.id] ?? (m.member_role as "coordenador" | "colaborador")}
-                        onChange={(e) =>
-                          setMemberRoleByMemberId((prev) => ({
-                            ...prev,
-                            [m.id]: e.target.value as "coordenador" | "colaborador",
-                          }))
-                        }
-                        className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                        value={memberUserId}
+                        onChange={(e) => setMemberUserId(e.target.value)}
+                        className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm md:col-span-2"
+                      >
+                        <option value="">
+                          {meCompanyId
+                            ? "Selecione colaborador da empresa..."
+                            : "Seu perfil esta sem empresa vinculada"}
+                        </option>
+                        {companyUsers.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {safeNameFromProfile(u) + ` (${u.role ?? "colaborador"})`}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={memberRole}
+                        onChange={(e) => setMemberRole(e.target.value as "coordenador" | "colaborador")}
+                        className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm"
                       >
                         <option value="coordenador">Coordenador</option>
                         <option value="colaborador">Colaborador</option>
                       </select>
-                      <button
-                        type="button"
-                        onClick={() => void updateMemberRole(m.id)}
-                        disabled={saving}
-                        className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-60"
-                      >
-                        Salvar funcao
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void removeMember(m.id)}
-                        disabled={saving}
-                        className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 disabled:opacity-60"
-                      >
-                        Remover
-                      </button>
                     </div>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => void addMember()}
+                      disabled={!selectedProjectId || saving}
+                      className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60"
+                    >
+                      Adicionar na equipe
+                    </button>
+                  </div>
+                  {selectedMembers.length === 0 ? <p className="text-sm text-slate-500">Nenhum membro.</p> : null}
+                  {selectedMembers.map((m) => (
+                    <div key={m.id} className="rounded-xl border border-slate-200 bg-white p-3 text-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <PersonChip name={personLabel(m.user_id)} subtitle={personCargo(m.user_id)} avatarUrl={personAvatar(m.user_id)} />
+                        {m.member_role === "gestor" ? (
+                          <span className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600">
+                            Gestor (fixo)
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={memberRoleByMemberId[m.id] ?? (m.member_role as "coordenador" | "colaborador")}
+                              onChange={(e) =>
+                                setMemberRoleByMemberId((prev) => ({
+                                  ...prev,
+                                  [m.id]: e.target.value as "coordenador" | "colaborador",
+                                }))
+                              }
+                              className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                            >
+                              <option value="coordenador">Coordenador</option>
+                              <option value="colaborador">Colaborador</option>
+                            </select>
+                            <button
+                              type="button"
+                              onClick={() => void updateMemberRole(m.id)}
+                              disabled={saving}
+                              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-60"
+                            >
+                              Salvar funcao
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void removeMember(m.id)}
+                              disabled={saving}
+                              className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 disabled:opacity-60"
+                            >
+                              Remover
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            ))}
-          </div>
+              </details>
 
-          <div className="pt-3 border-t border-slate-100 space-y-3">
-            <h3 className="text-sm font-semibold text-slate-900">Equipes do projeto</h3>
-            <p className="text-xs text-slate-500">
-              Crie equipes nomeadas (ex: Civil, Eletrica) e distribua os membros do projeto.
-            </p>
+              <details className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                <summary className="cursor-pointer list-none text-sm font-semibold text-slate-900">
+                  Equipes do projeto ({teams.length})
+                </summary>
+                <div className="mt-3 space-y-3">
+                <p className="text-xs text-slate-500">
+                  Crie equipes nomeadas (ex: Civil, Eletrica) e distribua os membros do projeto. O coordenador e definido dentro de cada equipe.
+                </p>
 
-            <div className="grid gap-2 md:grid-cols-3">
-              <input
-                value={newTeamName}
-                onChange={(e) => setNewTeamName(e.target.value)}
-                placeholder="Nome da equipe (ex: Civil)"
-                className="h-11 rounded-xl border border-slate-200 px-3 text-sm md:col-span-2"
-              />
-              <button
-                type="button"
-                onClick={() => void createTeam()}
-                disabled={saving || !selectedProjectId}
-                className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60"
-              >
-                Criar equipe
-              </button>
-            </div>
-
-            {teams.length ? (
-              <div className="space-y-3">
-                <div className="grid gap-2 md:grid-cols-3">
-                  <select
-                    value={assignTeamId}
-                    onChange={(e) => setAssignTeamId(e.target.value)}
-                    className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm md:col-span-2"
-                  >
-                    {teams.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
+                <div className="grid gap-2 md:grid-cols-2">
+                  <input
+                    value={newTeamName}
+                    onChange={(e) => setNewTeamName(e.target.value)}
+                    placeholder="Nome da equipe (ex: Civil)"
+                    className="h-11 rounded-xl border border-slate-200 px-3 text-sm md:col-span-2"
+                  />
                   <button
                     type="button"
-                    onClick={() => void (assignTeamId ? deleteTeam(assignTeamId) : null)}
-                    disabled={saving || !assignTeamId}
-                    className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-800 disabled:opacity-60"
-                    title="Excluir equipe selecionada"
+                    onClick={() => void createTeam()}
+                    disabled={saving || !selectedProjectId}
+                    className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60 md:col-span-2"
                   >
-                    Excluir equipe
+                    Criar equipe
                   </button>
                 </div>
 
-                <div className="grid gap-2 md:grid-cols-3">
-                  <select
-                    value={assignUserId}
-                    onChange={(e) => setAssignUserId(e.target.value)}
-                    className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm md:col-span-2"
-                  >
-                    <option value="">Selecione um membro...</option>
-                    {selectedMembers.map((m) => (
-                      <option key={m.user_id} value={m.user_id}>
-                        {personLabel(m.user_id)} ({m.member_role})
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => void addMemberToTeam()}
-                    disabled={saving || !assignTeamId || !assignUserId}
-                    className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60"
-                  >
-                    Adicionar na equipe
-                  </button>
-                </div>
-
-                <div className="grid gap-2 md:grid-cols-3">
-                  <select
-                    value={assignUserId}
-                    onChange={(e) => setAssignUserId(e.target.value)}
-                    className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm md:col-span-2"
-                  >
-                    <option value="">Selecione colaborador da empresa / do projeto...</option>
-                    {teamCandidateOptions.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    value={assignProjectRole}
-                    onChange={(e) => setAssignProjectRole(e.target.value as "coordenador" | "colaborador")}
-                    className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm"
-                    title="Papel no projeto (se ainda nao for membro, sera criado com este papel)"
-                  >
-                    <option value="colaborador">Colaborador</option>
-                    <option value="coordenador">Coordenador</option>
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => void addMemberToTeam()}
-                    disabled={saving || !assignTeamId || !assignUserId}
-                    className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60 md:col-span-3"
-                  >
-                    Adicionar ao projeto e equipe
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  {teams.map((t) => {
-                    const rows = teamMembers.filter((x) => x.team_id === t.id);
-                    return (
-                      <div key={t.id} className="rounded-xl border border-slate-200 p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="text-sm font-semibold text-slate-900">{t.name}</div>
-                          <div className="text-xs text-slate-500">{rows.length} membro(s)</div>
-                        </div>
-                        {rows.length ? (
-                          <div className="mt-2 space-y-2">
-                            {rows.map((r) => (
-                              <div key={r.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                                <div className="min-w-0">
-                                  <PersonChip
-                                    size="sm"
-                                    name={personLabel(r.user_id)}
-                                    subtitle={personCargo(r.user_id)}
-                                    avatarUrl={personAvatar(r.user_id)}
-                                  />
+                {teams.length ? (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      {teams.map((t) => {
+                        const rows = teamMembers.filter((x) => x.team_id === t.id);
+                        const editOpen = teamEditOpenByTeamId[t.id] === true;
+                        const addMemberOpen = teamAddMemberOpenByTeamId[t.id] === true;
+                        return (
+                          <div key={t.id} className="rounded-xl border border-slate-200 bg-white p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="text-sm font-semibold text-slate-900">{t.name}</div>
+                                <div className="text-xs text-slate-500">
+                                  Coordenador: {t.coordinator_user_id ? personLabel(t.coordinator_user_id) : "Nao definido"} | {rows.length} membro(s)
                                 </div>
+                              </div>
+                              <details className="relative">
+                                <summary className="cursor-pointer rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700">
+                                  Acoes
+                                </summary>
+                                <div className="absolute right-0 z-10 mt-1 w-52 rounded-lg border border-slate-200 bg-white p-2 shadow">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setAssignTeamId(t.id);
+                                      setTeamAddMemberOpenByTeamId({ [t.id]: !addMemberOpen });
+                                      setTeamEditOpenByTeamId({ [t.id]: false });
+                                      setAssignUserId("");
+                                      setMsg(`Selecione o colaborador para adicionar na equipe "${t.name}".`);
+                                    }}
+                                    className="mb-1 w-full rounded-md border border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                  >
+                                    Adicionar membro a equipe
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setTeamEditOpenByTeamId({ [t.id]: !editOpen });
+                                      setTeamAddMemberOpenByTeamId({ [t.id]: false });
+                                    }}
+                                    className="mb-1 w-full rounded-md border border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                  >
+                                    Editar equipe
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => void deleteTeam(t.id)}
+                                    disabled={saving}
+                                    className="w-full rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-left text-xs font-semibold text-rose-700 disabled:opacity-60"
+                                  >
+                                    Excluir equipe
+                                  </button>
+                                </div>
+                              </details>
+                            </div>
+                            {editOpen ? (
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <input
+                                  value={teamNameDraftByTeamId[t.id] ?? t.name}
+                                  onChange={(e) =>
+                                    setTeamNameDraftByTeamId((prev) => ({ ...prev, [t.id]: e.target.value }))
+                                  }
+                                  className="h-9 min-w-[200px] flex-1 rounded-lg border border-slate-200 bg-white px-2 text-sm"
+                                  placeholder="Novo nome da equipe"
+                                />
+                                <select
+                                  value={teamCoordinatorDraftByTeamId[t.id] ?? t.coordinator_user_id ?? ""}
+                                  onChange={(e) =>
+                                    setTeamCoordinatorDraftByTeamId((prev) => ({ ...prev, [t.id]: e.target.value }))
+                                  }
+                                  className="h-9 min-w-[220px] rounded-lg border border-slate-200 bg-white px-2 text-sm"
+                                >
+                                  <option value="">Selecione o coordenador da equipe...</option>
+                                  {projectCoordinatorOptions.map((o) => (
+                                    <option key={o.id} value={o.id}>
+                                      {o.label}
+                                    </option>
+                                  ))}
+                                </select>
                                 <button
                                   type="button"
-                                  onClick={() => void removeTeamMember(r)}
+                                  onClick={() => void saveTeamName(t.id)}
                                   disabled={saving}
                                   className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-60"
                                 >
-                                  Remover
+                                  Salvar
                                 </button>
                               </div>
-                            ))}
+                            ) : null}
+                            {addMemberOpen ? (
+                              <div className="mt-2 grid gap-2 md:grid-cols-3">
+                                <select
+                                  value={assignUserId}
+                                  onChange={(e) => setAssignUserId(e.target.value)}
+                                  className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm md:col-span-2"
+                                >
+                                  <option value="">Selecione colaborador da empresa / do projeto...</option>
+                                  {teamCandidateOptions.map((o) => (
+                                    <option key={o.id} value={o.id}>
+                                      {o.label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <select
+                                  value={assignProjectRole}
+                                  onChange={(e) => setAssignProjectRole(e.target.value as "coordenador" | "colaborador")}
+                                  className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm"
+                                  title="Papel no projeto (se ainda nao for membro, sera criado com este papel)"
+                                >
+                                  <option value="colaborador">Colaborador</option>
+                                  <option value="coordenador">Coordenador</option>
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => void addMemberToTeam(t.id)}
+                                  disabled={saving || !assignUserId}
+                                  className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60 md:col-span-3"
+                                >
+                                  Adicionar ao projeto e equipe
+                                </button>
+                              </div>
+                            ) : null}
+                            {rows.length ? (
+                              <div className="mt-2 space-y-2">
+                                {rows.map((r) => (
+                                  <div key={r.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                                    <div className="min-w-0">
+                                      <PersonChip
+                                        size="sm"
+                                        name={personLabel(r.user_id)}
+                                        subtitle={personCargo(r.user_id)}
+                                        avatarUrl={personAvatar(r.user_id)}
+                                      />
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {t.coordinator_user_id === r.user_id ? (
+                                        <div className="flex items-center gap-2">
+                                          <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
+                                            Coordenador
+                                          </span>
+                                          <button
+                                            type="button"
+                                            onClick={() => void clearTeamCoordinator(t.id, r.user_id)}
+                                            disabled={saving}
+                                            className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700 disabled:opacity-60"
+                                          >
+                                            Remover coordenacao
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          onClick={() => void promoteTeamMemberToCoordinator(t.id, r.user_id)}
+                                          disabled={saving}
+                                          className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-60"
+                                        >
+                                          Promover coordenador
+                                        </button>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => void removeTeamMember(r)}
+                                        disabled={saving}
+                                        className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 disabled:opacity-60"
+                                      >
+                                        Remover
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="mt-2 text-xs text-slate-500">Nenhum membro ainda.</div>
+                            )}
                           </div>
-                        ) : (
-                          <div className="mt-2 text-xs text-slate-500">Nenhum membro ainda.</div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-                Nenhuma equipe criada ainda (ou SQL de equipes ainda nao foi aplicado).
-              </div>
-            )}
-
-            <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-              <summary className="cursor-pointer text-xs font-semibold text-slate-700">
-                Historico de equipe excluida/removida ({selectedDeletedTeamItems.length})
-              </summary>
-              <div className="mt-2 space-y-2">
-                {selectedDeletedTeamItems.length ? (
-                  selectedDeletedTeamItems.map((item) => (
-                    <div key={item.id} className="rounded-lg border border-slate-200 bg-white p-2 text-xs text-slate-700">
-                      <p className="font-semibold">
-                        {item.event_kind === "team_deleted" ? "Equipe excluida" : "Colaborador removido"}
-                      </p>
-                      <p>Equipe: {item.team_name ?? "-"}</p>
-                      {item.user_id ? <p>Colaborador: {personLabel(item.user_id)}</p> : null}
-                      <p>Data: {new Date(item.deleted_at).toLocaleString("pt-BR")}</p>
+                        );
+                      })}
                     </div>
-                  ))
+                  </div>
                 ) : (
-                  <p className="text-xs text-slate-500">Nenhum historico de exclusao neste projeto.</p>
+                  <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
+                    Nenhuma equipe criada ainda (ou SQL de equipes ainda nao foi aplicado).
+                  </div>
                 )}
-              </div>
-            </details>
-          </div>
-        </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-slate-900">Lista de documentos entregaveis</h2>
+                <details className="rounded-xl border border-slate-200 bg-white p-3">
+                  <summary className="cursor-pointer text-xs font-semibold text-slate-700">
+                    Historico de equipe excluida/removida ({selectedDeletedTeamItems.length})
+                  </summary>
+                  <div className="mt-2 space-y-2">
+                    {selectedDeletedTeamItems.length ? (
+                      selectedDeletedTeamItems.map((item) => (
+                        <div key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
+                          <p className="font-semibold">
+                            {item.event_kind === "team_deleted" ? "Equipe excluida" : "Colaborador removido"}
+                          </p>
+                          <p>Equipe: {item.team_name ?? "-"}</p>
+                          {item.user_id ? <p>Colaborador: {personLabel(item.user_id)}</p> : null}
+                          <p>Data: {new Date(item.deleted_at).toLocaleString("pt-BR")}</p>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-xs text-slate-500">Nenhum historico de exclusao neste projeto.</p>
+                    )}
+                  </div>
+                </details>
+                </div>
+              </details>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-indigo-200 bg-indigo-50/30 p-6 space-y-4">
+            <h2 className="text-sm font-semibold text-slate-900">Lista de documentos entregaveis</h2>
           {assigneeFilter ? (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
               <span>Filtro ativo por colaborador: <b>{assigneeLabel || assigneeFilter.slice(0, 8)}</b></span>
@@ -1687,17 +1980,23 @@ export default function GestorProjetosPage() {
             </label>
           </div>
 
-          <div className="grid gap-2 md:grid-cols-4">
+          <div className="grid gap-2 xl:grid-cols-12">
             <input
-              value={deliverableSearch}
-              onChange={(e) => setDeliverableSearch(e.target.value)}
+              value={deliverableSearchInput}
+              onChange={(e) => setDeliverableSearchInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  applyDeliverableFilters();
+                }
+              }}
               placeholder="Buscar por titulo ou descricao..."
-              className="h-10 rounded-lg border border-slate-200 px-3 text-sm md:col-span-2"
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm xl:col-span-3"
             />
             <select
-              value={deliverableStatusFilter}
-              onChange={(e) => setDeliverableStatusFilter(e.target.value as "all" | Deliverable["status"])}
-              className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm"
+              value={deliverableStatusDraft}
+              onChange={(e) => setDeliverableStatusDraft(e.target.value as "all" | Deliverable["status"])}
+              className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm xl:col-span-3"
             >
               <option value="all">Todos status</option>
               <option value="pending">Pendente</option>
@@ -1706,40 +2005,152 @@ export default function GestorProjetosPage() {
               <option value="approved">Aprovado</option>
               <option value="approved_with_comments">Aprovado com comentarios</option>
             </select>
-            <input
-              type="date"
-              value={deliverableDateFilter}
-              onChange={(e) => setDeliverableDateFilter(e.target.value)}
-              className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
-            />
             <select
-              value={deliverableSelectFilter}
-              onChange={(e) => setDeliverableSelectFilter(e.target.value)}
-              className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm md:col-span-4"
+              value={deliverableSelectDraft}
+              onChange={(e) => setDeliverableSelectDraft(e.target.value)}
+              className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm xl:col-span-4"
             >
-              <option value="">Selecionar item (lista suspensa)</option>
+              <option value="">Selecione entregavel</option>
               {selectedDeliverables.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.title} {d.due_date ? `- ${d.due_date}` : ""}
                 </option>
               ))}
             </select>
+            <button
+              type="button"
+              onClick={applyDeliverableFilters}
+              className="h-10 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 xl:col-span-1"
+            >
+              Buscar
+            </button>
           </div>
 
           <div className="space-y-3">
             {filteredSelectedDeliverables.length === 0 ? <p className="text-sm text-slate-500">Nenhum entregavel para o filtro selecionado.</p> : null}
             {filteredSelectedDeliverables.map((d) => {
               const contribs = contributions.filter((c) => c.deliverable_id === d.id);
+              const assignees = deliverableAssignees.filter((a) => a.deliverable_id === d.id);
+              const totalContributionHours = assignees.reduce((acc, a) => {
+                const unit = a.contribution_unit ?? "hours";
+                const value = Number(a.contribution_value ?? 0);
+                if (unit !== "hours" || !Number.isFinite(value) || value <= 0) return acc;
+                return acc + value;
+              }, 0);
               const timelineAll = deliverableTimeline.filter((t) => t.deliverable_id === d.id);
               const timelineExpanded = timelineExpandedByDeliverableId[d.id] === true;
               const timeline = timelineExpanded ? timelineAll : timelineAll.slice(0, 3);
               const timelineHasMore = timelineAll.length > 3;
               const draftStatus = statusDraftByDeliverableId[d.id] ?? d.status;
+              const selectedAction = deliverableActionById[d.id] ?? null;
+              const latestInternalContributionEvent =
+                timelineAll.find((t) =>
+                  t.event_type === "contribution_added" ||
+                  t.event_type === "contribution_approved" ||
+                  t.event_type === "contribution_returned"
+                ) ?? null;
+              const pendingContributionReview = latestInternalContributionEvent?.event_type === "contribution_added";
+              const overdueAwaitingInternalApproval = (() => {
+                const dueDate = parseDueDate(d.due_date);
+                if (!dueDate) return false;
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const isPastDue = dueDate <= today;
+                if (!isPastDue) return false;
+                return latestInternalContributionEvent?.event_type !== "contribution_approved";
+              })();
               return (
-                <div key={d.id} className="rounded-xl border border-slate-200 p-3 space-y-2">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-slate-900">{d.title}</p>
-                    <div className="flex items-center gap-2">
+                <details
+                  key={d.id}
+                  className={`rounded-xl border ${
+                    overdueAwaitingInternalApproval
+                      ? "border-2 border-rose-400 bg-rose-100/40"
+                      : pendingContributionReview
+                        ? "border-amber-300 bg-amber-50/40"
+                        : "border-slate-200 bg-white"
+                  }`}
+                  open={openedDeliverableId === d.id}
+                  onToggle={(e) => {
+                    const isOpen = (e.currentTarget as HTMLDetailsElement).open;
+                    setOpenedDeliverableId(isOpen ? d.id : null);
+                  }}
+                >
+                  <summary className="cursor-pointer list-none px-3 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{d.title}</p>
+                        <p className="text-xs text-slate-500">
+                          Status: {deliverableStatusLabel(d.status)} | Prazo: {d.due_date ? new Date(d.due_date).toLocaleDateString("pt-BR") : "-"} | Responsavel:{" "}
+                          {d.assigned_to ? personLabel(d.assigned_to) : "Nao definido"}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700">
+                          Contribuicoes: {contribs.length} | Horas: {totalContributionHours.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}h
+                        </span>
+                        {pendingContributionReview ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-800">
+                            <BellRing size={13} />
+                            Pendente validacao interna
+                          </span>
+                        ) : null}
+                        {overdueAwaitingInternalApproval ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-100 px-2 py-1 text-[11px] font-semibold text-rose-800">
+                            <AlertTriangle size={13} />
+                            Atrasado (interno)
+                          </span>
+                        ) : null}
+                        <details
+                          className="relative"
+                          onClick={(e) => e.stopPropagation()}
+                          onToggle={(e) => e.stopPropagation()}
+                        >
+                          <summary className="cursor-pointer rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700">
+                            Acoes
+                          </summary>
+                          <div className="absolute right-0 z-10 mt-1 w-48 rounded-lg border border-slate-200 bg-white p-2 shadow">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDeliverableActionById((prev) => ({ ...prev, [d.id]: "status" }))
+                              }
+                              className="mb-1 w-full rounded-md border border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            >
+                              Mudar status
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDeliverableActionById((prev) => ({ ...prev, [d.id]: "edit" }))
+                              }
+                              className="mb-1 w-full rounded-md border border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            >
+                              Editar entregavel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setDeliverableActionById((prev) => ({ ...prev, [d.id]: "document" }))
+                              }
+                              className="w-full rounded-md border border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                            >
+                              Documento
+                            </button>
+                          </div>
+                        </details>
+                      </div>
+                    </div>
+                  </summary>
+                  <div className="space-y-3 border-t border-slate-100 px-3 py-3">
+                    {overdueAwaitingInternalApproval ? (
+                      <div className="rounded-lg border border-rose-300 bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-800">
+                        Entregavel atrasado: encaminhe e conclua a validacao interna da contribuicao.
+                      </div>
+                    ) : null}
+                    {selectedAction === "status" ? (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                      <p className="text-xs font-semibold text-slate-700">Status do entregavel</p>
+                      <div className="grid gap-2 md:grid-cols-[1fr_auto_auto]">
                       <select
                         value={draftStatus}
                         onChange={(e) =>
@@ -1772,68 +2183,86 @@ export default function GestorProjetosPage() {
                       >
                         Excluir
                       </button>
+                      </div>
+                      <input
+                        value={statusCommentByDeliverableId[d.id] ?? ""}
+                        onChange={(e) =>
+                          setStatusCommentByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))
+                        }
+                        placeholder="Comentario da mudanca de status"
+                        className="h-9 w-full rounded-lg border border-slate-200 px-2 text-xs"
+                      />
+                      <p className="text-xs text-slate-500">
+                        Responsavel: {d.assigned_to ? personLabel(d.assigned_to) : "Nao definido"}
+                      </p>
+                      {d.status === "approved_with_comments" ? (
+                        <p className="text-xs text-amber-700">Comentario: {d.approval_comment ?? "-"}</p>
+                      ) : null}
+                      {d.status === "sent" ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            void updateDeliverableStatus(
+                              d.id,
+                              "approved",
+                              (statusCommentByDeliverableId[d.id] ?? "").trim() || null
+                            )
+                          }
+                          disabled={saving}
+                          className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                        >
+                          Aprovar
+                        </button>
+                      ) : null}
                     </div>
-                  </div>
-                  <input
-                    value={statusCommentByDeliverableId[d.id] ?? ""}
-                    onChange={(e) =>
-                      setStatusCommentByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))
-                    }
-                    placeholder="Comentario da mudanca de status"
-                    className="h-9 w-full rounded-lg border border-slate-200 px-2 text-xs"
-                  />
-                  <p className="text-xs text-slate-500">
-                    Responsavel: {d.assigned_to ? personLabel(d.assigned_to) : "Nao definido"}
-                  </p>
-                  {d.status === "approved_with_comments" ? (
-                    <p className="text-xs text-amber-700">Comentario: {d.approval_comment ?? "-"}</p>
-                  ) : null}
-                  {d.document_path ? (
-                    <button
-                      type="button"
-                      onClick={() => void openDeliverableFile(d.id)}
-                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
-                    >
-                      Abrir arquivo enviado
-                    </button>
-                  ) : null}
-                  {d.document_url ? (
-                    <a
-                      href={d.document_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
-                    >
-                      Abrir link informado
-                    </a>
-                  ) : null}
+                    ) : null}
 
-                  {d.status === "sent" ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        void updateDeliverableStatus(
-                          d.id,
-                          "approved",
-                          (statusCommentByDeliverableId[d.id] ?? "").trim() || null
-                        )
-                      }
-                      disabled={saving}
-                      className="inline-flex items-center justify-center rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
-                    >
-                      Aprovar
-                    </button>
-                  ) : null}
+                    {selectedAction === "document" ? (
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                      <p className="text-xs font-semibold text-slate-700">Documento do entregavel</p>
+                      <div className="flex flex-wrap gap-2">
+                        <input
+                          value={docLinkByDeliverable[d.id] ?? ""}
+                          onChange={(e) => setDocLinkByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                          placeholder="Link do documento"
+                          className="h-9 flex-1 min-w-[220px] rounded-lg border border-slate-200 px-2 text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void updateDocumentLink(d.id, docLinkByDeliverable[d.id] ?? "")}
+                          disabled={saving}
+                          className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800 disabled:opacity-60"
+                        >
+                          Enviar documento
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {d.document_path ? (
+                          <button
+                            type="button"
+                            onClick={() => void openDeliverableFile(d.id)}
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+                          >
+                            Abrir arquivo enviado
+                          </button>
+                        ) : null}
+                        {d.document_url ? (
+                          <a
+                            href={d.document_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+                          >
+                            Abrir link informado
+                          </a>
+                        ) : null}
+                      </div>
+                    </div>
+                    ) : null}
 
-                  <details
-                    className="rounded-xl border border-slate-200 bg-slate-50 p-3"
-                    open={!!editOpenByDeliverableId[d.id]}
-                    onToggle={(e) => {
-                      const open = (e.currentTarget as HTMLDetailsElement).open;
-                      setEditOpenByDeliverableId((prev) => ({ ...prev, [d.id]: open }));
-                    }}
-                  >
-                    <summary className="cursor-pointer text-xs font-semibold text-slate-700">Editar entregavel</summary>
+                    {selectedAction === "edit" ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-semibold text-slate-700">Editar entregavel</p>
                     <div className="mt-3 grid gap-2 md:grid-cols-2">
                       <input
                         value={editTitleByDeliverableId[d.id] ?? d.title}
@@ -1862,67 +2291,100 @@ export default function GestorProjetosPage() {
                         Salvar alteracoes
                       </button>
                     </div>
-                  </details>
-
-                  <div className="flex flex-wrap gap-2">
-                    <input
-                      value={docLinkByDeliverable[d.id] ?? ""}
-                      onChange={(e) => setDocLinkByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))}
-                      placeholder="Link do documento"
-                      className="h-9 flex-1 min-w-[220px] rounded-lg border border-slate-200 px-2 text-xs"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void updateDocumentLink(d.id, docLinkByDeliverable[d.id] ?? "")}
-                      disabled={saving}
-                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-800 disabled:opacity-60"
-                    >
-                      Enviar documento
-                    </button>
                   </div>
-                  <p className="text-xs text-slate-500">Contribuicoes: {contribs.length}</p>
-                {contribs.map((c) => (
-                  <p key={c.id} className="text-xs text-slate-600">
-                      {personLabel(c.user_id)} - {c.contribution_note ?? "Contribuicao registrada"}
-                  </p>
-                ))}
+                    ) : null}
 
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <p className="text-xs font-semibold text-slate-700">Linha do tempo do documento</p>
-                  <div className="mt-2 space-y-1">
-                    {timeline.length ? (
-                      timeline.map((t) => (
-                        <p key={t.id} className="text-xs text-slate-600">
-                          {new Date(t.created_at).toLocaleString()} - {deliverableEventLabel(t.event_type)}
-                          {t.status_from || t.status_to
-                            ? ` (${deliverableStatusLabel(t.status_from)} -> ${deliverableStatusLabel(t.status_to)})`
-                            : ""}
-                          {t.comment ? ` - ${t.comment}` : ""}
-                          {t.actor_user_id ? ` - ${personLabel(t.actor_user_id)}` : ""}
-                        </p>
-                      ))
-                    ) : (
-                      <p className="text-xs text-slate-500">Sem eventos registrados.</p>
-                    )}
-                  </div>
-                  {timelineHasMore || timelineExpanded ? (
-                    <div className="mt-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setTimelineExpandedByDeliverableId((prev) => ({
-                            ...prev,
-                            [d.id]: !timelineExpanded,
-                          }))
-                        }
-                        className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700"
-                      >
-                        {timelineExpanded ? "Ver menos" : `Ver mais (${timelineAll.length - 3})`}
-                      </button>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="text-xs font-semibold text-slate-700">
+                        Contribuicoes ({contribs.length}) | Horas totais: {totalContributionHours.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}h
+                      </div>
+                      <div className="mt-2 space-y-1 text-xs text-slate-600">
+                        {contribs.length ? (
+                          contribs.map((c) => (
+                            <div key={c.id} className="flex items-start justify-between gap-3">
+                              <span className="min-w-0">
+                                {personLabel(c.user_id)} - {c.contribution_note ?? "Contribuicao registrada"}
+                              </span>
+                              <span className="shrink-0 text-slate-500">{formatDateTimeBR(c.created_at)}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-slate-500">Sem contribuicoes registradas.</div>
+                        )}
+                      </div>
                     </div>
-                  ) : null}
+
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                      <div className="text-xs font-semibold text-slate-700">Linha do tempo do documento</div>
+                      <div className="mt-2 space-y-1 text-xs text-slate-600">
+                        {pendingContributionReview ? (
+                          <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 p-2">
+                            <p className="text-xs font-semibold text-amber-800">
+                              Nova contribuicao aguardando aprovacao/retorno interno.
+                            </p>
+                            <div className="mt-2 grid gap-2 md:grid-cols-[1fr_auto_auto]">
+                              <input
+                                value={contribReviewCommentByDeliverableId[d.id] ?? ""}
+                                onChange={(e) =>
+                                  setContribReviewCommentByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))
+                                }
+                                placeholder="Comentario para retorno (obrigatorio ao retornar)"
+                                className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => void reviewContribution(d, "approve")}
+                                disabled={saving}
+                                className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 disabled:opacity-60"
+                              >
+                                Aprovar contribuicao
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void reviewContribution(d, "return")}
+                                disabled={saving}
+                                className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 disabled:opacity-60"
+                              >
+                                Retornar com comentarios
+                              </button>
+                            </div>
+                          </div>
+                        ) : null}
+                        {timeline.length ? (
+                          timeline.map((t) => (
+                            <div key={t.id}>
+                              {formatDateTimeBR(t.created_at)} - {deliverableEventLabel(t.event_type)}
+                              {t.status_from || t.status_to
+                                ? ` (${deliverableStatusLabel(t.status_from)} -> ${deliverableStatusLabel(t.status_to)})`
+                                : ""}
+                              {t.comment ? ` - ${t.comment}` : ""}
+                              {t.actor_user_id ? ` - ${personLabel(t.actor_user_id)}` : ""}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-slate-500">Sem eventos registrados.</div>
+                        )}
+                      </div>
+                      {timelineHasMore || timelineExpanded ? (
+                        <div className="mt-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setTimelineExpandedByDeliverableId((prev) => ({
+                                ...prev,
+                                [d.id]: !timelineExpanded,
+                              }))
+                            }
+                            className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700"
+                          >
+                            {timelineExpanded ? "Ver menos" : `Ver mais (${timelineAll.length - 3})`}
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                    
                 </div>
-              </div>
+              </details>
             );
             })}
           </div>

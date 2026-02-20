@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCcw } from "lucide-react";
+import { FileSignature, RefreshCcw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import DiretoriaPageHeader from "@/components/portal/DiretoriaPageHeader";
 
 type ProjectRow = {
   id: string;
@@ -317,14 +318,11 @@ export default function DiretoriaContratosPage() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-900">Diretoria - Aditivos e eventos contratuais</h1>
-            <p className="mt-1 text-sm text-slate-600">
-              Registre aditivos de valor, prorrogacoes de prazo, notificacoes e rescisoes por projeto.
-            </p>
-          </div>
+      <DiretoriaPageHeader
+        icon={FileSignature}
+        title="Diretoria - Aditivos e eventos contratuais"
+        subtitle="Registre aditivos de valor, prorrogacoes de prazo, notificacoes e rescisoes por projeto."
+        action={
           <button
             type="button"
             onClick={() => void load()}
@@ -334,8 +332,8 @@ export default function DiretoriaContratosPage() {
             <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
             Atualizar
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {msg ? <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">{msg}</div> : null}
 

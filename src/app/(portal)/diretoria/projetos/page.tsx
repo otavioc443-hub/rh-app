@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Download, RefreshCcw, Save } from "lucide-react";
+import { AlertTriangle, Download, FolderKanban, RefreshCcw, Save } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import DiretoriaPageHeader from "@/components/portal/DiretoriaPageHeader";
 
 type ProjectStatus = "active" | "paused" | "done";
 type ProjectStage = "ofertas" | "desenvolvimento" | "as_built" | "pausado" | "cancelado";
@@ -167,6 +168,28 @@ function deliverableStatusLabel(value?: string | null) {
   return value ?? "-";
 }
 
+function parseDueDate(value?: string | null) {
+  const raw = (value ?? "").trim();
+  if (!raw) return null;
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
+  if (iso) {
+    const dt = new Date(`${iso[1]}-${iso[2]}-${iso[3]}T00:00:00`);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  const br = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(raw);
+  if (br) {
+    const dt = new Date(`${br[3]}-${br[2]}-${br[1]}T00:00:00`);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  const brDash = /^(\d{2})-(\d{2})-(\d{4})/.exec(raw);
+  if (brDash) {
+    const dt = new Date(`${brDash[3]}-${brDash[2]}-${brDash[1]}T00:00:00`);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  const dt = new Date(raw);
+  return Number.isNaN(dt.getTime()) ? null : new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
+}
+
 function stageFromStatus(status: ProjectStatus): ProjectStage {
   if (status === "paused") return "ofertas";
   if (status === "done") return "as_built";
@@ -267,6 +290,7 @@ export default function DiretoriaProjetosPage() {
   const [typeFilter, setTypeFilter] = useState<"all" | ProjectType>("all");
   const [clientFilter, setClientFilter] = useState<"all" | string>("all");
   const [projectFilter, setProjectFilter] = useState<"all" | string>("all");
+  const [internalDelayFilter, setInternalDelayFilter] = useState<"all" | "only_overdue">("all");
   const [rankingWindow, setRankingWindow] = useState<"30" | "90" | "365" | "all">("90");
   const [stageDraftByProject, setStageDraftByProject] = useState<Record<string, ProjectStage>>({});
   const [stageNoteByProject, setStageNoteByProject] = useState<Record<string, string>>({});
@@ -524,6 +548,31 @@ export default function DiretoriaProjetosPage() {
     );
   }, [selectedProjectForStage, deliverableTimelineRows, deletedDeliverableRows, timelineRows]);
 
+  const overdueInternalByProjectId = useMemo(() => {
+    const map: Record<string, boolean> = {};
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (const d of deliverableRows) {
+      const dueDate = parseDueDate(d.due_date);
+      if (!dueDate || dueDate > today) continue;
+
+      const latestInternal = deliverableTimelineRows
+        .filter((t) =>
+          t.deliverable_id === d.id &&
+          (t.event_type === "contribution_added" ||
+            t.event_type === "contribution_approved" ||
+            t.event_type === "contribution_returned")
+        )
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+
+      if (!latestInternal || latestInternal.event_type !== "contribution_approved") {
+        map[d.project_id] = true;
+      }
+    }
+    return map;
+  }, [deliverableRows, deliverableTimelineRows]);
+
   const filtered = useMemo(() => {
     return projects.filter((p) => {
       const stage = p.project_stage ?? stageFromStatus(p.status);
@@ -536,9 +585,10 @@ export default function DiretoriaProjetosPage() {
       if (stageFilter !== "all" && stage !== stageFilter) return false;
       if (typeFilter !== "all" && p.project_type !== typeFilter) return false;
       if (clientFilter !== "all" && p.client_id !== clientFilter) return false;
+      if (internalDelayFilter === "only_overdue" && overdueInternalByProjectId[p.id] !== true) return false;
       return true;
     });
-  }, [projects, assigneeFilter, deliverableRows, projectFilter, statusFilter, stageFilter, typeFilter, clientFilter]);
+  }, [projects, assigneeFilter, deliverableRows, projectFilter, statusFilter, stageFilter, typeFilter, clientFilter, internalDelayFilter, overdueInternalByProjectId]);
 
   const stats = useMemo(() => {
     const total = projects.length;
@@ -854,15 +904,12 @@ export default function DiretoriaProjetosPage() {
 
   return (
     <div className="min-w-0 space-y-6">
-      <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h1 className="text-xl font-semibold text-slate-900">Diretoria - Acompanhamento de projetos</h1>
-            <p className="mt-1 text-sm text-slate-600">
-              Visao executiva com cliente, tipo, status, progresso, equipe, orcamento e custos extras.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
+      <DiretoriaPageHeader
+        icon={FolderKanban}
+        title="Diretoria - Acompanhamento de projetos"
+        subtitle="Visao executiva com cliente, tipo, status, progresso, equipe, orcamento e custos extras."
+        action={
+          <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/diretoria/projetos/novo"
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
@@ -895,8 +942,8 @@ export default function DiretoriaProjetosPage() {
               Exportar CSV
             </button>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       <div className="rounded-2xl border border-slate-900 bg-slate-900 p-6 text-white">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Painel Executivo</p>
@@ -1002,6 +1049,18 @@ export default function DiretoriaProjetosPage() {
                   {c.name}
                 </option>
               ))}
+            </select>
+          </label>
+
+          <label className="grid gap-1 text-xs font-semibold text-slate-700">
+            Atraso interno
+            <select
+              value={internalDelayFilter}
+              onChange={(e) => setInternalDelayFilter(e.target.value as "all" | "only_overdue")}
+              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+            >
+              <option value="all">Todos</option>
+              <option value="only_overdue">Somente atrasados internos</option>
             </select>
           </label>
         </div>
@@ -1298,14 +1357,24 @@ export default function DiretoriaProjetosPage() {
                 extrasPaid: 0,
               };
               const risk = riskLevel(p, summary);
+              const hasInternalOverdue = overdueInternalByProjectId[p.id] === true;
               return (
-                <div key={p.id} className="rounded-xl border border-slate-200 p-3">
+                <div
+                  key={p.id}
+                  className={`rounded-xl border p-3 ${hasInternalOverdue ? "border-2 border-rose-400 bg-rose-100/40" : "border-slate-200"}`}
+                >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <p className="font-semibold text-slate-900">{p.name}</p>
                       <p className="text-xs text-slate-500">{p.start_date || "-"} ate {p.end_date || "-"}</p>
                     </div>
                     <div className="flex gap-2">
+                      {hasInternalOverdue ? (
+                        <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-800">
+                          <AlertTriangle size={13} />
+                          Atrasado interno
+                        </span>
+                      ) : null}
                       <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${stageClass(p.project_stage ?? stageFromStatus(p.status))}`}>
                         {stageLabel(p.project_stage ?? stageFromStatus(p.status))}
                       </span>
@@ -1378,8 +1447,9 @@ export default function DiretoriaProjetosPage() {
                     extrasPaid: 0,
                   };
                   const risk = riskLevel(p, summary);
+                  const hasInternalOverdue = overdueInternalByProjectId[p.id] === true;
                   return (
-                    <tr key={p.id} className="border-t">
+                    <tr key={p.id} className={`border-t ${hasInternalOverdue ? "bg-rose-50/40" : ""}`}>
                       <td className="p-3">
                         <div className="font-semibold text-slate-900">{p.name}</div>
                         <div className="text-xs text-slate-500">
@@ -1394,9 +1464,17 @@ export default function DiretoriaProjetosPage() {
                         </div>
                       </td>
                       <td className="p-3 align-top">
-                        <span className={`inline-flex max-w-full rounded-full px-3 py-1 text-xs font-semibold ${stageClass(p.project_stage ?? stageFromStatus(p.status))}`}>
-                          <span className="truncate">{stageLabel(p.project_stage ?? stageFromStatus(p.status))}</span>
-                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {hasInternalOverdue ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-100 px-2 py-1 text-[11px] font-semibold text-rose-800">
+                              <AlertTriangle size={12} />
+                              Atrasado interno
+                            </span>
+                          ) : null}
+                          <span className={`inline-flex max-w-full rounded-full px-3 py-1 text-xs font-semibold ${stageClass(p.project_stage ?? stageFromStatus(p.status))}`}>
+                            <span className="truncate">{stageLabel(p.project_stage ?? stageFromStatus(p.status))}</span>
+                          </span>
+                        </div>
                       </td>
                       <td className="p-3 align-top">
                         <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${riskClass(risk)}`}>
