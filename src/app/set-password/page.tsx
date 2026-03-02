@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
+import { clearPortalExitIntent, markRecentLogin, supabase } from "@/lib/supabaseClient";
 
 function sanitizeRedirect(path: string | null) {
   const fallback = "/perfil";
@@ -78,6 +78,7 @@ export default function SetPasswordPage() {
         return;
       }
 
+      clearPortalExitIntent();
       setLoading(false);
     }
 
@@ -106,6 +107,8 @@ export default function SetPasswordPage() {
     }
 
     setMsg("Senha definida com sucesso! Redirecionando...");
+    clearPortalExitIntent();
+    markRecentLogin();
 
     // limpa o destino após usar (boa prática)
     try {

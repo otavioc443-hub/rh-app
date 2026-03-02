@@ -4,7 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 type AuditAction = "start" | "heartbeat" | "end";
-type LogoutReason = "manual" | "idle" | "token_expired";
+type LogoutReason = "manual" | "idle" | "token_expired" | "page_exit";
 
 async function getServerSupabase() {
   const cookieStore = await cookies();

@@ -1,7 +1,7 @@
 ﻿"use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BellRing, RefreshCcw } from "lucide-react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, BellRing, MoreHorizontal, RefreshCcw } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { PersonChip } from "@/components/people/PersonChip";
@@ -19,6 +19,7 @@ type Project = {
   owner_user_id: string;
   company_id?: string | null;
   client_id?: string | null;
+  project_line?: "eolica" | "solar" | "bess" | null;
   project_type?: ProjectType | null;
   project_scopes?: string[] | null;
   created_at: string;
@@ -64,6 +65,9 @@ type Deliverable = {
   title: string;
   description: string | null;
   due_date: string | null;
+  review_due_at?: string | null;
+  discipline_code?: "civil" | "eletromecanico" | null;
+  financial_status?: "aberto" | "pendente" | "baixado" | null;
   assigned_to: string | null;
   status: "pending" | "in_progress" | "sent" | "approved" | "approved_with_comments";
   approval_comment: string | null;
@@ -139,6 +143,13 @@ type DeletedDeliverableItem = {
   deleted_at: string;
 };
 
+function formatHoursAsHm(value: number | null | undefined) {
+  const totalMinutes = Math.max(0, Math.round((Number(value) || 0) * 60));
+  const hh = Math.floor(totalMinutes / 60);
+  const mm = totalMinutes % 60;
+  return `${String(hh).padStart(2, "0")}h${String(mm).padStart(2, "0")}min`;
+}
+
 type DeletedTeamItem = {
   id: string;
   source_module: "projects" | "pd_projects";
@@ -169,6 +180,13 @@ const PROJECT_TYPE_OPTIONS: Array<{ value: ProjectType; label: string }> = [
 function projectTypeLabel(value: ProjectType | null | undefined) {
   const found = PROJECT_TYPE_OPTIONS.find((o) => o.value === value);
   return found?.label ?? "-";
+}
+
+function projectLineLabel(value?: "eolica" | "solar" | "bess" | null) {
+  if (value === "eolica") return "Eolica";
+  if (value === "solar") return "Solar";
+  if (value === "bess") return "BESS";
+  return "-";
 }
 
 function getDeliverableStatusEventType(statusFrom?: string | null, statusTo?: string | null) {
@@ -213,6 +231,63 @@ function formatDateTimeBR(value?: string | null) {
   const dt = new Date(value);
   if (Number.isNaN(dt.getTime())) return value;
   return dt.toLocaleString("pt-BR");
+}
+
+function DonutProgressMetric({
+  label,
+  value,
+  accentClass,
+  detail,
+}: {
+  label: string;
+  value: number;
+  accentClass: string;
+  detail?: ReactNode;
+}) {
+  const pct = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+  const radius = 18;
+  const stroke = 4;
+  const size = 44;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = circumference * (1 - pct / 100);
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+      <p className="text-slate-300">{label}</p>
+      <div className="mt-2 flex items-center gap-3">
+        <div className="relative h-11 w-11 shrink-0">
+          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+            <circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={stroke}
+              className="text-white/10"
+            />
+            <circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={stroke}
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              strokeDashoffset={dashOffset}
+              className={accentClass}
+            />
+          </svg>
+          <span className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-white">
+            {pct}%
+          </span>
+        </div>
+        <p className="text-2xl font-semibold leading-none">{pct}%</p>
+      </div>
+      {detail ? <div className="mt-2">{detail}</div> : null}
+    </div>
+  );
 }
 
 function parseDueDate(value?: string | null) {
@@ -308,7 +383,6 @@ export default function GestorProjetosPage() {
   const [msg, setMsg] = useState("");
   const [meId, setMeId] = useState<string>("");
   const [meCompanyId, setMeCompanyId] = useState<string>("");
-  const [isAdmin, setIsAdmin] = useState(false);
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [clients, setClients] = useState<ProjectClient[]>([]);
@@ -343,6 +417,10 @@ export default function GestorProjetosPage() {
   const [teamMembers, setTeamMembers] = useState<ProjectTeamMember[]>([]);
   const [newTeamName, setNewTeamName] = useState("");
   const [assignTeamId, setAssignTeamId] = useState("");
+  const [deliverableTeamId, setDeliverableTeamId] = useState("");
+  const [deliverableDisciplineDirectionFilter, setDeliverableDisciplineDirectionFilter] = useState<"all" | "civil" | "eletromecanico">("all");
+  const [deliverableDirectionPanelOpen, setDeliverableDirectionPanelOpen] = useState(false);
+  const [deliverableDirectionSelectedIds, setDeliverableDirectionSelectedIds] = useState<string[]>([]);
   const [assignUserId, setAssignUserId] = useState("");
   const [assignProjectRole, setAssignProjectRole] = useState<"coordenador" | "colaborador">("colaborador");
   const [teamNameDraftByTeamId, setTeamNameDraftByTeamId] = useState<Record<string, string>>({});
@@ -356,6 +434,14 @@ export default function GestorProjetosPage() {
   const [docLinkByDeliverable, setDocLinkByDeliverable] = useState<Record<string, string>>({});
   const [timelineExpandedByDeliverableId, setTimelineExpandedByDeliverableId] = useState<Record<string, boolean>>({});
   const [openedDeliverableId, setOpenedDeliverableId] = useState<string | null>(null);
+  const [openedActionMenuDeliverableId, setOpenedActionMenuDeliverableId] = useState<string | null>(null);
+  const [, setActionMenuAnchor] = useState<{
+    top: number;
+    left: number;
+    connectorTop: number;
+    connectorLeft: number;
+    connectorHeight: number;
+  } | null>(null);
   const [deliverableActionById, setDeliverableActionById] = useState<Record<string, "status" | "edit" | "document" | null>>({});
   const [statusDraftByDeliverableId, setStatusDraftByDeliverableId] = useState<
     Record<string, Deliverable["status"]>
@@ -374,7 +460,9 @@ export default function GestorProjetosPage() {
     if (n && !isEmailLike(n)) return n;
 
     // Fallback final: nunca exibir e-mail inteiro.
-    return `Colaborador ${userId.slice(0, 8)}`;
+    const email = (p?.email ?? "").trim();
+    if (email) return email;
+    return "Colaborador sem nome";
   }, [directoryById, profilesById]);
 
   const personCargo = useCallback((userId: string) => {
@@ -401,8 +489,9 @@ export default function GestorProjetosPage() {
     const full = (u.full_name ?? "").trim();
     if (full) return full;
     const email = (u.email ?? "").trim();
-    if (email && email.includes("@")) return email.split("@")[0]?.trim() || `Colaborador ${String(u.id).slice(0, 8)}`;
-    return `Colaborador ${String(u.id).slice(0, 8)}`;
+    if (email && email.includes("@")) return email.split("@")[0]?.trim() || email;
+    if (email) return email;
+    return "Colaborador sem nome";
   }
 
   async function loadMemberDirectory(projectId: string) {
@@ -440,7 +529,6 @@ export default function GestorProjetosPage() {
         // ignore
       }
       const isAdmin = effectiveRole === "admin";
-      setIsAdmin(isAdmin);
 
       const meProfileRes = await supabase
         .from("profiles")
@@ -541,9 +629,13 @@ export default function GestorProjetosPage() {
       }
 
       const [projRes, memRes, delRes, deletedRes, deletedTeamsRes] = await Promise.all([
-        supabase.from("projects").select("id,name,description,status,start_date,end_date,budget_total,owner_user_id,client_id,project_type,project_scopes,created_at").in("id", ids).order("created_at", { ascending: false }),
+        supabase.from("projects").select("id,name,description,status,start_date,end_date,budget_total,owner_user_id,client_id,project_line,project_type,project_scopes,created_at").in("id", ids).order("created_at", { ascending: false }),
         supabase.from("project_members").select("id,project_id,user_id,member_role").in("project_id", ids),
-        supabase.from("project_deliverables").select("id,project_id,title,description,due_date,assigned_to,status,approval_comment,document_url,document_path,document_file_name,submitted_by").in("project_id", ids).order("created_at", { ascending: false }),
+        supabase
+          .from("project_deliverables")
+          .select("id,project_id,title,description,due_date,review_due_at,discipline_code,financial_status,assigned_to,status,approval_comment,document_url,document_path,document_file_name,submitted_by")
+          .in("project_id", ids)
+          .order("created_at", { ascending: false }),
         supabase
           .from("project_deliverable_deleted_items")
           .select("id,source_module,project_id,deliverable_ref_id,title,description,due_date,status,deleted_by,deleted_at")
@@ -708,6 +800,18 @@ export default function GestorProjetosPage() {
   }, []);
 
   useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest("[data-action-menu-root='true']")) return;
+      setOpenedActionMenuDeliverableId(null);
+      setActionMenuAnchor(null);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, []);
+
+  useEffect(() => {
     void loadMemberDirectory(selectedProjectId);
   }, [selectedProjectId]);
 
@@ -760,6 +864,12 @@ export default function GestorProjetosPage() {
     () => deliverables.filter((d) => d.project_id === selectedProjectId),
     [deliverables, selectedProjectId]
   );
+  const deliverablesByDirectionDiscipline = useMemo(() => {
+    return selectedDeliverables.filter((d) => {
+      if (deliverableDisciplineDirectionFilter === "all") return true;
+      return d.discipline_code === deliverableDisciplineDirectionFilter;
+    });
+  }, [selectedDeliverables, deliverableDisciplineDirectionFilter]);
   const applyDeliverableFilters = useCallback(() => {
     setDeliverableSearch(deliverableSearchInput);
     setDeliverableStatusFilter(deliverableStatusDraft);
@@ -771,16 +881,47 @@ export default function GestorProjetosPage() {
   ]);
   const filteredSelectedDeliverables = useMemo(() => {
     const search = deliverableSearch.trim().toLowerCase();
-    return selectedDeliverables.filter((d) => {
-      const byAssignee = assigneeFilter ? d.assigned_to === assigneeFilter : true;
-      const bySelect = deliverableSelectFilter ? d.id === deliverableSelectFilter : true;
-      const byStatus = deliverableStatusFilter === "all" ? true : d.status === deliverableStatusFilter;
-      const bySearch = search
-        ? `${d.title} ${d.description ?? ""}`.toLowerCase().includes(search)
-        : true;
-      return byAssignee && bySelect && byStatus && bySearch;
-    });
-  }, [selectedDeliverables, assigneeFilter, deliverableSelectFilter, deliverableStatusFilter, deliverableSearch]);
+    return selectedDeliverables
+      .filter((d) => {
+        const byAssignee = assigneeFilter ? d.assigned_to === assigneeFilter : true;
+        const bySelect = deliverableSelectFilter ? d.id === deliverableSelectFilter : true;
+        const byStatus = deliverableStatusFilter === "all" ? true : d.status === deliverableStatusFilter;
+        const bySearch = search
+          ? `${d.title} ${d.description ?? ""}`.toLowerCase().includes(search)
+          : true;
+        return byAssignee && bySelect && byStatus && bySearch;
+      })
+      .sort((a, b) => {
+        const latestEventA =
+          deliverableTimeline.find((t) =>
+            t.deliverable_id === a.id &&
+            (t.event_type === "contribution_added" || t.event_type === "contribution_approved" || t.event_type === "contribution_returned")
+          ) ?? null;
+        const latestEventB =
+          deliverableTimeline.find((t) =>
+            t.deliverable_id === b.id &&
+            (t.event_type === "contribution_added" || t.event_type === "contribution_approved" || t.event_type === "contribution_returned")
+          ) ?? null;
+
+        const dueA = parseDueDate(a.due_date);
+        const dueB = parseDueDate(b.due_date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const isOverdueA = !!dueA && dueA <= today && latestEventA?.event_type !== "contribution_approved";
+        const isOverdueB = !!dueB && dueB <= today && latestEventB?.event_type !== "contribution_approved";
+        if (isOverdueA !== isOverdueB) return isOverdueA ? -1 : 1;
+
+        const pendingA = latestEventA?.event_type === "contribution_added";
+        const pendingB = latestEventB?.event_type === "contribution_added";
+        if (pendingA !== pendingB) return pendingA ? -1 : 1;
+
+        if (dueA && dueB) return dueA.getTime() - dueB.getTime();
+        if (dueA && !dueB) return -1;
+        if (!dueA && dueB) return 1;
+        return a.title.localeCompare(b.title, "pt-BR");
+      });
+  }, [selectedDeliverables, assigneeFilter, deliverableSelectFilter, deliverableStatusFilter, deliverableSearch, deliverableTimeline]);
   const selectedDeletedDeliverables = useMemo(
     () =>
       deletedDeliverables
@@ -822,10 +963,12 @@ export default function GestorProjetosPage() {
         return next;
       });
       setAssignTeamId((prev) => (prev && (tRes.data ?? []).some((t) => t.id === prev) ? prev : String((tRes.data ?? [])[0]?.id ?? "")));
+      setDeliverableTeamId((prev) => (prev && (tRes.data ?? []).some((t) => t.id === prev) ? prev : String((tRes.data ?? [])[0]?.id ?? "")));
     } catch {
       // tabela pode nao existir ainda (SQL nao aplicado)
       setTeams([]);
       setTeamMembers([]);
+      setDeliverableTeamId("");
     }
   }
 
@@ -1410,6 +1553,77 @@ export default function GestorProjetosPage() {
     }
   }
 
+  async function directSelectedDeliverablesByTeam() {
+    if (!selectedProjectId) return setMsg("Selecione um projeto.");
+    if (!deliverableTeamId) return setMsg("Selecione uma equipe para direcionar.");
+    const targetDeliverables = selectedDeliverables.filter((d) => deliverableDirectionSelectedIds.includes(d.id));
+    if (targetDeliverables.length === 0) return setMsg("Selecione ao menos um entregavel.");
+
+    const team = teams.find((t) => t.id === deliverableTeamId) ?? null;
+    if (!team) return setMsg("Equipe selecionada nao encontrada.");
+    const memberIds = Array.from(
+      new Set([
+        ...teamMembers.filter((tm) => tm.team_id === deliverableTeamId).map((tm) => tm.user_id),
+        ...(team.coordinator_user_id ? [team.coordinator_user_id] : []),
+      ])
+    );
+    if (memberIds.length === 0) return setMsg("A equipe selecionada nao possui membros.");
+    const primaryAssigneeId = team.coordinator_user_id && memberIds.includes(team.coordinator_user_id)
+      ? team.coordinator_user_id
+      : memberIds[0];
+
+    setSaving(true);
+    setMsg("");
+    try {
+      const targetIds = targetDeliverables.map((d) => d.id);
+      const existingRes = await supabase
+        .from("project_deliverable_assignees")
+        .select("deliverable_id,user_id")
+        .in("deliverable_id", targetIds)
+        .in("user_id", memberIds);
+      if (existingRes.error) throw new Error(existingRes.error.message);
+      const existingSet = new Set(
+        ((existingRes.data ?? []) as Array<{ deliverable_id: string; user_id: string }>).map((r) => `${r.deliverable_id}:${r.user_id}`)
+      );
+      const assigneeInserts = targetDeliverables.flatMap((d) =>
+        memberIds
+          .filter((userId) => !existingSet.has(`${d.id}:${userId}`))
+          .map((userId) => ({
+            deliverable_id: d.id,
+            project_id: selectedProjectId,
+            user_id: userId,
+            contribution_unit: "hours" as const,
+            contribution_value: null,
+            created_by: meId || null,
+          }))
+      );
+      if (assigneeInserts.length) {
+        const ins = await supabase.from("project_deliverable_assignees").insert(assigneeInserts);
+        if (ins.error) throw new Error(ins.error.message);
+      }
+      await Promise.all(
+        targetDeliverables.map(async (d) => {
+          const upd = await supabase.from("project_deliverables").update({ assigned_to: primaryAssigneeId }).eq("id", d.id);
+          if (upd.error) throw new Error(upd.error.message);
+          await logDeliverableEvent({
+            deliverableId: d.id,
+            projectId: selectedProjectId,
+            eventType: "assignee_added",
+            comment: `Direcionado para equipe ${team.name}.`,
+          });
+        })
+      );
+      setMsg(`${targetDeliverables.length} entregavel(is) direcionado(s) para a equipe "${team.name}".`);
+      setDeliverableDirectionSelectedIds([]);
+      setDeliverableDirectionPanelOpen(false);
+      await load();
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao direcionar entregaveis selecionados.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function saveTeamName(teamId: string) {
     const current = teams.find((t) => t.id === teamId) ?? null;
     if (!current) return;
@@ -1533,10 +1747,10 @@ export default function GestorProjetosPage() {
             <p className="text-3xl font-semibold">{selectedProject.name}</p>
             <p className="mt-2 text-sm text-slate-200">{selectedProject.description ?? "Sem descricao"}</p>
             <p className="mt-2 text-xs text-slate-300">
-              Cliente: {selectedProjectClientLabel} | Tipo: {projectTypeLabel(selectedProject.project_type)}
+              Cliente: {selectedProjectClientLabel} | Linha: {projectLineLabel(selectedProject.project_line)} | Modalidade: {projectTypeLabel(selectedProject.project_type)}
               {selectedProject.project_scopes?.length ? ` | Escopos: ${selectedProject.project_scopes.map((s) => projectTypeLabel(s as ProjectType)).join(", ")}` : ""}
             </p>
-            <div className="mt-5 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
+            <div className="mt-5 flex flex-col gap-4 text-sm lg:flex-row lg:items-start lg:justify-between">
               {(() => {
                 const ag = aggregatesByProject.get(selectedProject.id) ?? {
                   totalDocs: 0,
@@ -1546,23 +1760,104 @@ export default function GestorProjetosPage() {
                   progressSent: 0,
                   contributorCount: 0,
                 };
+                const selectedDocs = deliverables.filter((d) => d.project_id === selectedProject.id);
+                const disciplineStats = {
+                  civil: {
+                    total: selectedDocs.filter((d) => d.discipline_code === "civil").length,
+                    approved: selectedDocs.filter(
+                      (d) => d.discipline_code === "civil" && (d.status === "approved" || d.status === "approved_with_comments")
+                    ).length,
+                    sent: selectedDocs.filter(
+                      (d) =>
+                        d.discipline_code === "civil" &&
+                        (d.status === "sent" || d.status === "approved" || d.status === "approved_with_comments")
+                    ).length,
+                  },
+                  eletromecanico: {
+                    total: selectedDocs.filter((d) => d.discipline_code === "eletromecanico").length,
+                    approved: selectedDocs.filter(
+                      (d) =>
+                        d.discipline_code === "eletromecanico" &&
+                        (d.status === "approved" || d.status === "approved_with_comments")
+                    ).length,
+                    sent: selectedDocs.filter(
+                      (d) =>
+                        d.discipline_code === "eletromecanico" &&
+                        (d.status === "sent" || d.status === "approved" || d.status === "approved_with_comments")
+                    ).length,
+                  },
+                };
                 return (
                   <>
-                    <div>
-                      <p className="text-slate-300">Entrega projeto</p>
-                      <p className="text-2xl font-semibold">{ag.progressApproved}%</p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:w-[620px]">
+                      <DonutProgressMetric
+                        label="Entrega projeto"
+                        value={ag.progressApproved}
+                        accentClass="text-emerald-400"
+                        detail={
+                          <div className="space-y-1 text-[11px]">
+                            <div className="flex items-center justify-between text-slate-300">
+                              <span className="inline-flex items-center gap-1">
+                                <span className="h-2 w-2 rounded-full bg-sky-400" />
+                                Civil
+                              </span>
+                              <span>
+                                {disciplineStats.civil.total ? `${disciplineStats.civil.approved}/${disciplineStats.civil.total}` : "-"}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-slate-300">
+                              <span className="inline-flex items-center gap-1">
+                                <span className="h-2 w-2 rounded-full bg-amber-400" />
+                                Eletromec.
+                              </span>
+                              <span>
+                                {disciplineStats.eletromecanico.total
+                                  ? `${disciplineStats.eletromecanico.approved}/${disciplineStats.eletromecanico.total}`
+                                  : "-"}
+                              </span>
+                            </div>
+                          </div>
+                        }
+                      />
+                      <DonutProgressMetric
+                        label="Envio docs"
+                        value={ag.progressSent}
+                        accentClass="text-cyan-400"
+                        detail={
+                          <div className="space-y-1 text-[11px]">
+                            <div className="flex items-center justify-between text-slate-300">
+                              <span className="inline-flex items-center gap-1">
+                                <span className="h-2 w-2 rounded-full bg-sky-400" />
+                                Civil
+                              </span>
+                              <span>
+                                {disciplineStats.civil.total ? `${disciplineStats.civil.sent}/${disciplineStats.civil.total}` : "-"}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-slate-300">
+                              <span className="inline-flex items-center gap-1">
+                                <span className="h-2 w-2 rounded-full bg-amber-400" />
+                                Eletromec.
+                              </span>
+                              <span>
+                                {disciplineStats.eletromecanico.total
+                                  ? `${disciplineStats.eletromecanico.sent}/${disciplineStats.eletromecanico.total}`
+                                  : "-"}
+                              </span>
+                            </div>
+                          </div>
+                        }
+                      />
                     </div>
-                    <div>
-                      <p className="text-slate-300">Envio docs</p>
-                      <p className="text-2xl font-semibold">{ag.progressSent}%</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-300">Entregaveis</p>
-                      <p className="text-2xl font-semibold">{ag.totalDocs}</p>
-                    </div>
-                    <div>
-                      <p className="text-slate-300">Contribuidores</p>
-                      <p className="text-2xl font-semibold">{ag.contributorCount}</p>
+                    <div className="grid grid-cols-2 gap-6 lg:min-w-[300px] lg:justify-items-end">
+                      <div className="w-full lg:text-right">
+                        <p className="text-slate-300">Entregaveis</p>
+                        <p className="text-2xl font-semibold">{ag.totalDocs}</p>
+                      </div>
+                      <div className="w-full lg:text-right">
+                        <p className="text-slate-300">Membros</p>
+                        <p className="text-2xl font-semibold">{selectedMembers.length}</p>
+                      </div>
                     </div>
                   </>
                 );
@@ -1980,6 +2275,133 @@ export default function GestorProjetosPage() {
             </label>
           </div>
 
+          <div className="rounded-xl border border-indigo-200 bg-white p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-semibold text-slate-700">Direcionar entregaveis por equipe</p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Filtre por disciplina, selecione os entregaveis e direcione em lote para uma equipe responsavel.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeliverableDirectionPanelOpen((prev) => !prev);
+                  if (!deliverableDirectionPanelOpen) setDeliverableDirectionSelectedIds([]);
+                }}
+                className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-800"
+              >
+                {deliverableDirectionPanelOpen ? "Fechar direcionamento" : "Direcionar entregaveis"}
+              </button>
+            </div>
+            {deliverableDirectionPanelOpen ? (
+              <div className="mt-3 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="grid gap-2 md:grid-cols-[220px_1fr_auto_auto]">
+                  <select
+                    value={deliverableDisciplineDirectionFilter}
+                    onChange={(e) => {
+                      setDeliverableDisciplineDirectionFilter(e.target.value as "all" | "civil" | "eletromecanico");
+                      setDeliverableDirectionSelectedIds([]);
+                    }}
+                    className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm"
+                  >
+                    <option value="all">Todas disciplinas</option>
+                    <option value="civil">Civil</option>
+                    <option value="eletromecanico">Eletromecanico</option>
+                  </select>
+                  <select
+                    value={deliverableTeamId}
+                    onChange={(e) => setDeliverableTeamId(e.target.value)}
+                    className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm"
+                  >
+                    <option value="">Selecione a equipe responsavel...</option>
+                    {teams.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDeliverableDirectionSelectedIds(
+                        deliverablesByDirectionDiscipline.map((d) => d.id)
+                      )
+                    }
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                  >
+                    Marcar todos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDeliverableDirectionSelectedIds([])}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                  >
+                    Limpar
+                  </button>
+                </div>
+
+                <div className="max-h-52 space-y-2 overflow-auto rounded-lg border border-slate-200 bg-white p-2">
+                  {deliverablesByDirectionDiscipline.length === 0 ? (
+                    <p className="px-1 py-2 text-xs text-slate-500">Nenhum entregavel para a disciplina selecionada.</p>
+                  ) : (
+                    deliverablesByDirectionDiscipline.map((d) => {
+                      const checked = deliverableDirectionSelectedIds.includes(d.id);
+                      return (
+                        <label key={d.id} className="flex cursor-pointer items-center justify-between gap-3 rounded-md border border-slate-100 px-2 py-2 hover:bg-slate-50">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) =>
+                                setDeliverableDirectionSelectedIds((prev) =>
+                                  e.target.checked ? Array.from(new Set([...prev, d.id])) : prev.filter((id) => id !== d.id)
+                                )
+                              }
+                            />
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-semibold text-slate-800">{d.title}</p>
+                              <p className="text-[11px] text-slate-500">
+                                Disciplina: {d.discipline_code === "civil" ? "Civil" : d.discipline_code === "eletromecanico" ? "Eletromecanico" : "Nao informada"} | Status: {deliverableStatusLabel(d.status)}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="shrink-0 text-[11px] text-slate-500">{d.due_date ? formatDateTimeBR(`${d.due_date}T00:00:00`) : "-"}</span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs text-slate-600">
+                    Selecionados: <b>{deliverableDirectionSelectedIds.length}</b>
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDeliverableDirectionPanelOpen(false);
+                        setDeliverableDirectionSelectedIds([]);
+                      }}
+                      className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void directSelectedDeliverablesByTeam()}
+                      disabled={saving || !selectedProjectId || !deliverableTeamId || deliverableDirectionSelectedIds.length === 0}
+                      className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-800 disabled:opacity-60"
+                    >
+                      Direcionar selecionados
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
           <div className="grid gap-2 xl:grid-cols-12">
             <input
               value={deliverableSearchInput}
@@ -2050,6 +2472,32 @@ export default function GestorProjetosPage() {
                   t.event_type === "contribution_returned"
                 ) ?? null;
               const pendingContributionReview = latestInternalContributionEvent?.event_type === "contribution_added";
+              const disciplineLabel =
+                d.discipline_code === "civil"
+                  ? "Civil"
+                  : d.discipline_code === "eletromecanico"
+                    ? "Eletromecanico"
+                    : "Nao informada";
+              const financialStatus = d.financial_status ?? "aberto";
+              const financialLocked = financialStatus !== "aberto";
+              const financialStatusLabel = financialStatus === "baixado" ? "Baixado" : financialStatus === "pendente" ? "Pendente" : "Aberto";
+              const dueDateDraft = (editDueByDeliverableId[d.id] ?? "").trim();
+              const dueDateRaw = dueDateDraft || (d.due_date ?? "").trim() || (d.review_due_at ?? "").trim();
+              const dueDateLabel = (() => {
+                if (!dueDateRaw) return "-";
+                const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(dueDateRaw);
+                if (isoMatch) return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+                const brMatch = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(dueDateRaw);
+                if (brMatch) return `${brMatch[1]}/${brMatch[2]}/${brMatch[3]}`;
+                const parsed = new Date(dueDateRaw);
+                return Number.isNaN(parsed.getTime()) ? dueDateRaw : parsed.toLocaleDateString("pt-BR");
+              })();
+              const assigneeNames = assignees.map((a) => personLabel(a.user_id)).filter(Boolean);
+              const summaryResponsibleLabel = d.assigned_to
+                ? personLabel(d.assigned_to)
+                : assigneeNames.length
+                  ? assigneeNames.join(", ")
+                  : "Nao definido";
               const overdueAwaitingInternalApproval = (() => {
                 const dueDate = parseDueDate(d.due_date);
                 if (!dueDate) return false;
@@ -2080,13 +2528,14 @@ export default function GestorProjetosPage() {
                       <div>
                         <p className="text-sm font-semibold text-slate-900">{d.title}</p>
                         <p className="text-xs text-slate-500">
-                          Status: {deliverableStatusLabel(d.status)} | Prazo: {d.due_date ? new Date(d.due_date).toLocaleDateString("pt-BR") : "-"} | Responsavel:{" "}
-                          {d.assigned_to ? personLabel(d.assigned_to) : "Nao definido"}
+                          Status: {deliverableStatusLabel(d.status)} | Prazo:{" "}
+                          {dueDateLabel} | Disciplina:{" "}
+                          {disciplineLabel} | Financeiro: {financialStatusLabel} | Responsavel: {summaryResponsibleLabel}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700">
-                          Contribuicoes: {contribs.length} | Horas: {totalContributionHours.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}h
+                          Contribuicoes: {contribs.length} | Horas: {formatHoursAsHm(totalContributionHours)}
                         </span>
                         {pendingContributionReview ? (
                           <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-800">
@@ -2100,44 +2549,106 @@ export default function GestorProjetosPage() {
                             Atrasado (interno)
                           </span>
                         ) : null}
-                        <details
+                        <div
                           className="relative"
+                          data-action-menu-root="true"
                           onClick={(e) => e.stopPropagation()}
-                          onToggle={(e) => e.stopPropagation()}
                         >
-                          <summary className="cursor-pointer rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700">
-                            Acoes
-                          </summary>
-                          <div className="absolute right-0 z-10 mt-1 w-48 rounded-lg border border-slate-200 bg-white p-2 shadow">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (openedActionMenuDeliverableId === d.id) {
+                                setOpenedActionMenuDeliverableId(null);
+                                setActionMenuAnchor(null);
+                                return;
+                              }
+                              setOpenedActionMenuDeliverableId(d.id);
+                              setActionMenuAnchor(null);
+                            }}
+                            className="inline-flex cursor-pointer items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                          >
+                            <MoreHorizontal size={14} /> Acoes
+                          </button>
+                          {openedActionMenuDeliverableId === d.id ? (
+                          <>
+                          <div
+                            className="absolute right-5 top-full z-40 h-2 w-1 rounded-full bg-indigo-300"
+                            data-action-menu-root="true"
+                          />
+                          <div
+                            className="absolute right-4 top-[calc(100%+2px)] z-40 h-4 w-4 rotate-45 rounded-[2px] border-2 border-indigo-200 bg-white shadow-sm"
+                            data-action-menu-root="true"
+                          />
+                          <div
+                            className="absolute right-0 top-[calc(100%+8px)] z-50 w-[208px] rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl"
+                            data-action-menu-root="true"
+                          >
+                            <div className="mb-2 border-b border-slate-100 px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                              Acoes do entregavel
+                            </div>
                             <button
                               type="button"
-                              onClick={() =>
-                                setDeliverableActionById((prev) => ({ ...prev, [d.id]: "status" }))
-                              }
-                              className="mb-1 w-full rounded-md border border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (financialLocked) {
+                                  setMsg("Entregavel em boletim (pendente/baixado) nao pode ser alterado.");
+                                  return;
+                                }
+                                setOpenedDeliverableId(d.id);
+                                setDeliverableActionById({ [d.id]: "status" });
+                                setOpenedActionMenuDeliverableId(null);
+                                setActionMenuAnchor(null);
+                              }}
+                              disabled={financialLocked}
+                              className="mb-1 w-full rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               Mudar status
                             </button>
                             <button
                               type="button"
-                              onClick={() =>
-                                setDeliverableActionById((prev) => ({ ...prev, [d.id]: "edit" }))
-                              }
-                              className="mb-1 w-full rounded-md border border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (financialLocked) {
+                                  setMsg("Entregavel em boletim (pendente/baixado) nao pode ser alterado.");
+                                  return;
+                                }
+                                setOpenedDeliverableId(d.id);
+                                setDeliverableActionById({ [d.id]: "edit" });
+                                setOpenedActionMenuDeliverableId(null);
+                                setActionMenuAnchor(null);
+                              }}
+                              disabled={financialLocked}
+                              className="mb-1 w-full rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               Editar entregavel
                             </button>
                             <button
                               type="button"
-                              onClick={() =>
-                                setDeliverableActionById((prev) => ({ ...prev, [d.id]: "document" }))
-                              }
-                              className="w-full rounded-md border border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (financialLocked) {
+                                  setMsg("Entregavel em boletim (pendente/baixado) nao pode ser alterado.");
+                                  return;
+                                }
+                                setOpenedDeliverableId(d.id);
+                                setDeliverableActionById({ [d.id]: "document" });
+                                setOpenedActionMenuDeliverableId(null);
+                                setActionMenuAnchor(null);
+                              }}
+                              disabled={financialLocked}
+                              className="w-full rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                             >
                               Documento
                             </button>
                           </div>
-                        </details>
+                          </>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   </summary>
@@ -2147,7 +2658,13 @@ export default function GestorProjetosPage() {
                         Entregavel atrasado: encaminhe e conclua a validacao interna da contribuicao.
                       </div>
                     ) : null}
-                    {selectedAction === "status" ? (
+                    {selectedAction && financialLocked ? (
+                    <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
+                      Entregavel vinculado a boletim (financeiro {financialStatusLabel.toLowerCase()}) nao permite alteracoes.
+                    </div>
+                    ) : null}
+
+                    {selectedAction === "status" && !financialLocked ? (
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
                       <p className="text-xs font-semibold text-slate-700">Status do entregavel</p>
                       <div className="grid gap-2 md:grid-cols-[1fr_auto_auto]">
@@ -2214,10 +2731,19 @@ export default function GestorProjetosPage() {
                           Aprovar
                         </button>
                       ) : null}
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setDeliverableActionById((prev) => ({ ...prev, [d.id]: null }))}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
                     </div>
                     ) : null}
 
-                    {selectedAction === "document" ? (
+                    {selectedAction === "document" && !financialLocked ? (
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
                       <p className="text-xs font-semibold text-slate-700">Documento do entregavel</p>
                       <div className="flex flex-wrap gap-2">
@@ -2257,10 +2783,19 @@ export default function GestorProjetosPage() {
                           </a>
                         ) : null}
                       </div>
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setDeliverableActionById((prev) => ({ ...prev, [d.id]: null }))}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
                     </div>
                     ) : null}
 
-                    {selectedAction === "edit" ? (
+                    {selectedAction === "edit" && !financialLocked ? (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <p className="text-xs font-semibold text-slate-700">Editar entregavel</p>
                     <div className="mt-3 grid gap-2 md:grid-cols-2">
@@ -2282,21 +2817,30 @@ export default function GestorProjetosPage() {
                         className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-xs md:col-span-2"
                         placeholder="Descricao"
                       />
-                      <button
-                        type="button"
-                        onClick={() => void saveDeliverableEdits(d.id)}
-                        disabled={saving}
-                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 disabled:opacity-60 md:col-span-2"
-                      >
-                        Salvar alteracoes
-                      </button>
+                      <div className="flex flex-wrap justify-end gap-2 md:col-span-2">
+                        <button
+                          type="button"
+                          onClick={() => setDeliverableActionById((prev) => ({ ...prev, [d.id]: null }))}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void saveDeliverableEdits(d.id)}
+                          disabled={saving}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 disabled:opacity-60"
+                        >
+                          Salvar alteracoes
+                        </button>
+                      </div>
                     </div>
                   </div>
                     ) : null}
 
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                       <div className="text-xs font-semibold text-slate-700">
-                        Contribuicoes ({contribs.length}) | Horas totais: {totalContributionHours.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}h
+                        Contribuicoes ({contribs.length}) | Horas totais: {formatHoursAsHm(totalContributionHours)}
                       </div>
                       <div className="mt-2 space-y-1 text-xs text-slate-600">
                         {contribs.length ? (

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCcw, Wallet } from "lucide-react";
+import { MoreHorizontal, RefreshCcw, Wallet } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserRole } from "@/hooks/useUserRole";
 
@@ -88,6 +88,14 @@ export default function FinanceiroRemessasPage() {
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
   const [downloadingCnabId, setDownloadingCnabId] = useState<string | null>(null);
   const [uploadingFileId, setUploadingFileId] = useState<string | null>(null);
+  const [openedActionMenuRemittanceId, setOpenedActionMenuRemittanceId] = useState<string | null>(null);
+  const [, setActionMenuAnchor] = useState<{
+    top: number;
+    left: number;
+    connectorTop: number;
+    connectorLeft: number;
+    connectorHeight: number;
+  } | null>(null);
 
   const selectedIds = useMemo(
     () => Object.keys(selectedInvoiceIds).filter((id) => selectedInvoiceIds[id]),
@@ -98,6 +106,18 @@ export default function FinanceiroRemessasPage() {
     const selected = new Set(selectedIds);
     return availableInvoices.reduce((acc, inv) => acc + (selected.has(inv.id) ? Number(inv.gross_amount ?? 0) : 0), 0);
   }, [availableInvoices, selectedIds]);
+
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest("[data-action-menu-root='true']")) return;
+      setOpenedActionMenuRemittanceId(null);
+      setActionMenuAnchor(null);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, []);
 
   async function load() {
     setLoading(true);
@@ -588,39 +608,88 @@ export default function FinanceiroRemessasPage() {
                       </div>
                     </td>
                     <td className="p-3">
-                      <div className="flex flex-col gap-2">
+                      <div className="relative inline-flex" data-action-menu-root="true">
                         <button
                           type="button"
-                          onClick={() => void generateBoleto(r.id)}
-                          disabled={generatingBoletoId === r.id || r.status === "paid" || r.status === "cancelled"}
-                          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-60"
+                          onClick={() => {
+                            if (openedActionMenuRemittanceId === r.id) {
+                              setOpenedActionMenuRemittanceId(null);
+                              setActionMenuAnchor(null);
+                              return;
+                            }
+                            setOpenedActionMenuRemittanceId(r.id);
+                            setActionMenuAnchor(null);
+                          }}
+                          className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                         >
-                          {generatingBoletoId === r.id ? "Gerando..." : "Gerar boleto"}
+                          <MoreHorizontal size={14} /> Acoes
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => void generatePix(r.id)}
-                          disabled={generatingPixId === r.id || r.status === "paid" || r.status === "cancelled"}
-                          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-60"
-                        >
-                          {generatingPixId === r.id ? "Gerando..." : "Gerar PIX"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void downloadCnab(r.id)}
-                          disabled={downloadingCnabId === r.id || r.status === "cancelled"}
-                          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-60"
-                        >
-                          {downloadingCnabId === r.id ? "Gerando..." : "Baixar CNAB Bradesco"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void markAsPaid(r.id)}
-                          disabled={markingPaidId === r.id || r.status === "paid" || r.status === "cancelled"}
-                          className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
-                        >
-                          {markingPaidId === r.id ? "Salvando..." : "Marcar como paga"}
-                        </button>
+                        {openedActionMenuRemittanceId === r.id ? (
+                          <>
+                            <div className="absolute right-5 top-full z-40 h-2 w-1 rounded-full bg-indigo-300" data-action-menu-root="true" />
+                            <div className="absolute right-4 top-[calc(100%+2px)] z-40 h-4 w-4 rotate-45 rounded-[2px] border-2 border-indigo-200 bg-white shadow-sm" data-action-menu-root="true" />
+                            <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-[220px] rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl" data-action-menu-root="true">
+                              <div className="mb-2 border-b border-slate-100 px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                Acoes da remessa
+                              </div>
+                              {(() => {
+                                const disabledPaidOrCancelled = r.status === "paid" || r.status === "cancelled";
+                                return (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenedActionMenuRemittanceId(null);
+                                        setActionMenuAnchor(null);
+                                        void generateBoleto(r.id);
+                                      }}
+                                      disabled={generatingBoletoId === r.id || disabledPaidOrCancelled}
+                                      className="mb-1 w-full rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                                    >
+                                      {generatingBoletoId === r.id ? "Gerando..." : "Gerar boleto"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenedActionMenuRemittanceId(null);
+                                        setActionMenuAnchor(null);
+                                        void generatePix(r.id);
+                                      }}
+                                      disabled={generatingPixId === r.id || disabledPaidOrCancelled}
+                                      className="mb-1 w-full rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                                    >
+                                      {generatingPixId === r.id ? "Gerando..." : "Gerar PIX"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenedActionMenuRemittanceId(null);
+                                        setActionMenuAnchor(null);
+                                        void downloadCnab(r.id);
+                                      }}
+                                      disabled={downloadingCnabId === r.id || r.status === "cancelled"}
+                                      className="mb-1 w-full rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                                    >
+                                      {downloadingCnabId === r.id ? "Gerando..." : "Baixar CNAB Bradesco"}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenedActionMenuRemittanceId(null);
+                                        setActionMenuAnchor(null);
+                                        void markAsPaid(r.id);
+                                      }}
+                                      disabled={markingPaidId === r.id || disabledPaidOrCancelled}
+                                      className="w-full rounded-xl px-3 py-2 text-left text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+                                    >
+                                      {markingPaidId === r.id ? "Salvando..." : "Marcar como paga"}
+                                    </button>
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          </>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -631,6 +700,7 @@ export default function FinanceiroRemessasPage() {
             </tbody>
           </table>
         </div>
+
       </div>
     </div>
   );

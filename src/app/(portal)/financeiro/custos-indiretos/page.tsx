@@ -1,11 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { Download, Printer, RefreshCcw, Save } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Download, MoreHorizontal, Pencil, Printer, RefreshCcw, Save } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserRole } from "@/hooks/useUserRole";
 
-type CostCategory = "rh" | "financeiro" | "adm" | "ti" | "juridico" | "outros";
+type CostCategory =
+  | "rh"
+  | "financeiro"
+  | "adm"
+  | "ti"
+  | "juridico"
+  | "utilidades"
+  | "tributos"
+  | "infraestrutura"
+  | "outros";
 type CostType = "monthly" | "one_time" | "percentage_payroll";
 type SourceMode = "manual" | "collaborator" | "sector";
 type SplitMode = "equal" | "budget";
@@ -51,15 +60,25 @@ type IndirectCostAuditRow = {
   id: string;
   indirect_cost_id: string;
   project_id: string;
-  action: "delete";
+  action: "delete" | "update";
   reason: string;
+  old_row?: Record<string, unknown> | null;
+  new_row?: Record<string, unknown> | null;
   actor_user_id: string;
   actor_role: string | null;
   created_at: string;
 };
 
+function isLegacyAbsolutePercentageValue(amount: number) {
+  return amount > 100;
+}
+
 function fmtMoney(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function fmtPctValue(v: number) {
+  return `${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 }
 
 function categoryLabel(v: CostCategory) {
@@ -68,13 +87,24 @@ function categoryLabel(v: CostCategory) {
   if (v === "adm") return "Administrativo";
   if (v === "ti") return "TI";
   if (v === "juridico") return "Juridico";
+  if (v === "utilidades") return "Utilidades";
+  if (v === "tributos") return "Tributos";
+  if (v === "infraestrutura") return "Infraestrutura";
   return "Outros";
 }
 
 function typeLabel(v: CostType) {
   if (v === "monthly") return "Mensal";
   if (v === "one_time") return "Pontual";
-  return "% sobre folha";
+  return "% sobre salario";
+}
+
+function indirectAmountLabel(row: Pick<IndirectCostRow, "cost_type" | "amount">) {
+  const amount = Number(row.amount) || 0;
+  if (row.cost_type === "percentage_payroll" && !isLegacyAbsolutePercentageValue(amount)) {
+    return fmtPctValue(amount);
+  }
+  return fmtMoney(amount);
 }
 
 function splitAmount(total: number, weights: number[]) {
@@ -100,6 +130,17 @@ function parseNoteTag(notes: string | null, key: string) {
   const end = tail.indexOf(" | ");
   const value = (end >= 0 ? tail.slice(0, end) : tail).trim();
   return value || "-";
+}
+
+function parseIndirectCollaboratorName(notes: string | null) {
+  const source = parseNoteTag(notes, "Fonte");
+  if (!source || source === "-") return "";
+  if (!source.toLowerCase().startsWith("colaborador:")) return "";
+  return source.slice("colaborador:".length).trim();
+}
+
+function isIntegralSingleProjectIndirect(notes: string | null) {
+  return parseNoteTag(notes, "Rateio").toLowerCase() === "integral (projeto unico)";
 }
 
 function csvEscape(v: unknown) {
@@ -149,6 +190,33 @@ export default function FinanceiroCustosIndiretosPage() {
   const [historyRows, setHistoryRows] = useState<IndirectCostRow[]>([]);
   const [auditRows, setAuditRows] = useState<IndirectCostAuditRow[]>([]);
   const [actorNameById, setActorNameById] = useState<Record<string, string>>({});
+  const [editingHistoryId, setEditingHistoryId] = useState<string>("");
+  const [editingHistorySource, setEditingHistorySource] = useState<string>("");
+  const [openHistoryActionId, setOpenHistoryActionId] = useState<string>("");
+  const [historyActionAnchor, setHistoryActionAnchor] = useState<{
+    top: number;
+    left: number;
+    connectorTop: number;
+    connectorLeft: number;
+    connectorHeight: number;
+  } | null>(null);
+  const [detailHistoryRow, setDetailHistoryRow] = useState<IndirectCostRow | null>(null);
+  const [auditModalOpen, setAuditModalOpen] = useState(false);
+  const historySectionRef = useRef<HTMLElement | null>(null);
+  const historyTableAreaRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!detailHistoryRow && !auditModalOpen) return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      if (detailHistoryRow) setDetailHistoryRow(null);
+      if (auditModalOpen) setAuditModalOpen(false);
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [detailHistoryRow, auditModalOpen]);
 
   const [sourceMode, setSourceMode] = useState<SourceMode>("manual");
   const [splitMode, setSplitMode] = useState<SplitMode>("equal");
@@ -165,7 +233,6 @@ export default function FinanceiroCustosIndiretosPage() {
   const [historyProjectId, setHistoryProjectId] = useState<"all" | string>("all");
   const [historyCategory, setHistoryCategory] = useState<"all" | CostCategory>("all");
   const [historyType, setHistoryType] = useState<"all" | CostType>("all");
-  const [historyQ, setHistoryQ] = useState("");
   const [auditFrom, setAuditFrom] = useState("");
   const [auditTo, setAuditTo] = useState("");
   const [auditActorId, setAuditActorId] = useState<"all" | string>("all");
@@ -200,6 +267,16 @@ export default function FinanceiroCustosIndiretosPage() {
     [collabs, selectedCollaboratorId]
   );
 
+  const salaryByCollaboratorName = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const c of collabs) {
+      const name = String(c.nome ?? "").trim().toLowerCase();
+      if (!name) continue;
+      map.set(name, Number(c.salario) || 0);
+    }
+    return map;
+  }, [collabs]);
+
   const selectedSectorStats = useMemo(() => {
     const key = selectedSector.trim().toLowerCase();
     if (!key) return { count: 0, payroll: 0 };
@@ -221,13 +298,16 @@ export default function FinanceiroCustosIndiretosPage() {
   }, [activeProjects, splitMode]);
 
   const preview = useMemo(() => {
-    const values = splitAmount(amountNum, projectWeights);
+    const values =
+      costType === "percentage_payroll" && activeProjects.length <= 1
+        ? activeProjects.map(() => amountNum)
+        : splitAmount(amountNum, projectWeights);
     return activeProjects.map((p, idx) => ({
       project_id: p.id,
       project_name: p.name,
       value: values[idx] ?? 0,
     }));
-  }, [activeProjects, amountNum, projectWeights]);
+  }, [activeProjects, amountNum, projectWeights, costType]);
 
   const projectNameById = useMemo(() => {
     const map: Record<string, string> = {};
@@ -238,7 +318,6 @@ export default function FinanceiroCustosIndiretosPage() {
   const filteredHistory = useMemo(() => {
     const fromMs = historyFrom ? new Date(`${historyFrom}T00:00:00`).getTime() : null;
     const toMs = historyTo ? new Date(`${historyTo}T23:59:59`).getTime() : null;
-    const term = historyQ.trim().toLowerCase();
     return historyRows.filter((r) => {
       if (historyProjectId !== "all" && r.project_id !== historyProjectId) return false;
       if (historyCategory !== "all" && r.cost_category !== historyCategory) return false;
@@ -247,24 +326,67 @@ export default function FinanceiroCustosIndiretosPage() {
       const createdMs = new Date(r.created_at).getTime();
       if (fromMs !== null && Number.isFinite(createdMs) && createdMs < fromMs) return false;
       if (toMs !== null && Number.isFinite(createdMs) && createdMs > toMs) return false;
-
-      if (!term) return true;
-      const haystack = [
-        projectNameById[r.project_id] ?? r.project_id,
-        categoryLabel(r.cost_category),
-        typeLabel(r.cost_type),
-        r.notes ?? "",
-      ]
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(term);
+      return true;
     });
-  }, [historyRows, historyFrom, historyTo, historyProjectId, historyCategory, historyType, historyQ, projectNameById]);
+  }, [historyRows, historyFrom, historyTo, historyProjectId, historyCategory, historyType]);
+
+  const resolveEffectiveHistoryAmount = useMemo(
+    () => (row: Pick<IndirectCostRow, "cost_type" | "amount" | "notes">) => {
+      const amount = Number(row.amount) || 0;
+      if (amount <= 0) return 0;
+      if (row.cost_type !== "percentage_payroll") return amount;
+      if (isLegacyAbsolutePercentageValue(amount)) return amount;
+      const collaboratorName = parseIndirectCollaboratorName(row.notes ?? null);
+      const collaboratorSalary = collaboratorName
+        ? (salaryByCollaboratorName.get(collaboratorName.toLowerCase()) ?? 0)
+        : 0;
+      if (collaboratorSalary <= 0) return 0;
+      return isIntegralSingleProjectIndirect(row.notes ?? null) || activeProjects.length <= 1
+        ? collaboratorSalary
+        : collaboratorSalary * (amount / 100);
+    },
+    [salaryByCollaboratorName, activeProjects.length]
+  );
+
+  const effectiveAmountDetail = useMemo(
+    () => (row: Pick<IndirectCostRow, "cost_type" | "amount" | "notes">) => {
+      const amount = Number(row.amount) || 0;
+      if (row.cost_type !== "percentage_payroll" || isLegacyAbsolutePercentageValue(amount)) {
+        return {
+          label: indirectAmountLabel(row),
+          hint: "",
+        };
+      }
+      const collaboratorName = parseIndirectCollaboratorName(row.notes ?? null);
+      const collaboratorSalary = collaboratorName
+        ? (salaryByCollaboratorName.get(collaboratorName.toLowerCase()) ?? 0)
+        : 0;
+      if (collaboratorSalary > 0) {
+        const isIntegral = isIntegralSingleProjectIndirect(row.notes ?? null) || activeProjects.length <= 1;
+        const effective = isIntegral ? collaboratorSalary : collaboratorSalary * (amount / 100);
+        return {
+          label: fmtMoney(effective),
+          hint: isIntegral
+            ? `Integral sobre ${collaboratorName} (${fmtMoney(collaboratorSalary)})`
+            : `${fmtPctValue(amount)} sobre ${collaboratorName} (${fmtMoney(collaboratorSalary)})`,
+        };
+      }
+      return {
+        label: "Nao identificado",
+        hint: `${fmtPctValue(amount)} sem salario/origem valida`,
+      };
+    },
+    [salaryByCollaboratorName, activeProjects.length]
+  );
 
   const historyTotal = useMemo(
-    () => filteredHistory.reduce((acc, r) => acc + (Number(r.amount) || 0), 0),
-    [filteredHistory]
+    () => filteredHistory.reduce((acc, r) => acc + resolveEffectiveHistoryAmount(r), 0),
+    [filteredHistory, resolveEffectiveHistoryAmount]
   );
+
+  const historyTotalLabel = useMemo(() => {
+    return fmtMoney(historyTotal);
+  }, [historyTotal]);
 
   const actorOptions = useMemo(() => {
     const ids = Array.from(new Set(auditRows.map((a) => a.actor_user_id).filter(Boolean)));
@@ -296,6 +418,11 @@ export default function FinanceiroCustosIndiretosPage() {
       return haystack.includes(term);
     });
   }, [auditRows, auditFrom, auditTo, auditActorId, auditQ, actorNameById, projectNameById]);
+
+  const openHistoryActionRow = useMemo(
+    () => historyRows.find((row) => row.id === openHistoryActionId) ?? null,
+    [historyRows, openHistoryActionId]
+  );
 
   async function load() {
     setLoading(true);
@@ -343,7 +470,7 @@ export default function FinanceiroCustosIndiretosPage() {
       setCollabs((collabsRes.data ?? []) as CollaboratorRow[]);
 
       const scopedProjectIds = projectList
-        .filter((p) => !cid || p.company_id === cid)
+        .filter((p) => !cid || p.company_id === cid || p.company_id === null)
         .map((p) => p.id);
 
       if (scopedProjectIds.length) {
@@ -426,22 +553,93 @@ export default function FinanceiroCustosIndiretosPage() {
   useEffect(() => {
     if (sourceMode !== "collaborator") return;
     if (!selectedCollaborator) return;
+    if (costType === "percentage_payroll") return;
     if (amountNum > 0) return;
     const salary = Number(selectedCollaborator.salario) || 0;
     if (salary > 0) setAmount(String(salary));
-  }, [sourceMode, selectedCollaborator, amountNum]);
+  }, [sourceMode, selectedCollaborator, amountNum, costType]);
+
+  useEffect(() => {
+    if (!openHistoryActionId) return;
+
+    function handleOutsideClick(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("[data-history-actions-root='true']")) return;
+      setOpenHistoryActionId("");
+      setHistoryActionAnchor(null);
+    }
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [openHistoryActionId]);
+
+  function resetForm() {
+    setEditingHistoryId("");
+    setEditingHistorySource("");
+    setOpenHistoryActionId("");
+    setHistoryActionAnchor(null);
+    setSourceMode("manual");
+    setSplitMode("equal");
+    setCostCategory("adm");
+    setCostType("monthly");
+    setAmount("");
+    setNotes("");
+    setStartDate("");
+    setEndDate("");
+    setSelectedCollaboratorId("");
+    setSelectedSector("");
+  }
+
+  function beginEditHistoryRow(row: IndirectCostRow) {
+    setOpenHistoryActionId("");
+    setHistoryActionAnchor(null);
+    const source = parseNoteTag(row.notes, "Fonte");
+    const split = parseNoteTag(row.notes, "Rateio");
+    const noteText = parseNoteTag(row.notes, "Obs");
+    const collabName = source.startsWith("colaborador:") ? source.slice("colaborador:".length).trim() : "";
+    const sectorName = source.startsWith("setor:") ? source.slice("setor:".length).trim() : "";
+    const matchedCollab = collabName
+      ? collabs.find((c) => String(c.nome ?? "").trim().toLowerCase() === collabName.toLowerCase())
+      : undefined;
+
+    setEditingHistoryId(row.id);
+    setEditingHistorySource(source === "-" ? "manual" : source);
+    setSourceMode(source.startsWith("setor:") ? "sector" : matchedCollab ? "collaborator" : "manual");
+    setSplitMode(split === "orcamento" ? "budget" : "equal");
+    setCostCategory(row.cost_category);
+    setCostType(row.cost_type);
+    setAmount(String(Number(row.amount) || 0));
+    setNotes(noteText === "-" ? "" : noteText);
+    setStartDate(row.start_date ?? "");
+    setEndDate(row.end_date ?? "");
+    setSelectedCollaboratorId(matchedCollab?.id ?? "");
+    setSelectedSector(sectorName);
+    setMsg("");
+  }
 
   async function saveIndirectCosts() {
     if (!isAllowed) {
       setMsg("Sem permissao para cadastrar custos indiretos.");
       return;
     }
-    if (!activeProjects.length) {
+    if (!editingHistoryId && !activeProjects.length) {
       setMsg("Nao existem projetos ativos para rateio.");
       return;
     }
     if (amountNum <= 0) {
       setMsg("Informe um valor maior que zero.");
+      return;
+    }
+    if ((costType === "monthly" || costType === "percentage_payroll") && (!startDate || !endDate)) {
+      setMsg("Custos recorrentes exigem inicio e fim de vigencia.");
+      return;
+    }
+    if (!editingHistoryId && costType === "percentage_payroll" && amountNum > 100) {
+      setMsg("Para % sobre salario, informe um percentual entre 0 e 100.");
+      return;
+    }
+    if (startDate && endDate && startDate > endDate) {
+      setMsg("A data final nao pode ser menor que a data inicial.");
       return;
     }
 
@@ -453,21 +651,88 @@ export default function FinanceiroCustosIndiretosPage() {
       setMsg("Selecione um setor.");
       return;
     }
+    if (costType === "percentage_payroll" && sourceMode !== "collaborator") {
+      setMsg("Para percentual, use origem por colaborador.");
+      return;
+    }
 
     const baseSource =
+      editingHistoryId && editingHistorySource
+        ? editingHistorySource
+        :
       sourceMode === "manual"
         ? "manual"
         : sourceMode === "collaborator"
         ? `colaborador:${selectedCollaborator?.nome ?? selectedCollaboratorId}`
         : `setor:${selectedSector}`;
 
+    const rateioLabel =
+      costType === "percentage_payroll" && preview.filter((p) => p.value > 0).length <= 1
+        ? "integral (projeto unico)"
+        : splitMode === "equal"
+          ? "igual"
+          : "orcamento";
+
     const sharedNotes = [
       `Fonte=${baseSource}`,
-      `Rateio=${splitMode === "equal" ? "igual" : "orcamento"}`,
+      `Rateio=${rateioLabel}`,
       notes.trim() ? `Obs=${notes.trim()}` : "",
     ]
       .filter(Boolean)
       .join(" | ");
+
+    if (editingHistoryId) {
+      const currentRow = historyRows.find((r) => r.id === editingHistoryId);
+      if (!currentRow) {
+        setMsg("Lancamento nao encontrado para edicao.");
+        return;
+      }
+
+      setSaving(true);
+      setMsg("");
+      try {
+        const nextRow = {
+          ...currentRow,
+          cost_category: costCategory,
+          cost_type: costType,
+          amount: amountNum,
+          notes: sharedNotes,
+          start_date: startDate || null,
+          end_date: endDate || null,
+        };
+        const { error } = await supabase
+          .from("project_indirect_costs")
+          .update({
+            cost_category: costCategory,
+            cost_type: costType,
+            amount: amountNum,
+            notes: sharedNotes,
+            start_date: startDate || null,
+            end_date: endDate || null,
+          })
+          .eq("id", editingHistoryId);
+        if (error) throw new Error(error.message);
+        const auditInsert = await supabase.from("project_indirect_costs_audit").insert({
+          indirect_cost_id: currentRow.id,
+          project_id: currentRow.project_id,
+          action: "update",
+          reason: "Edicao de lancamento",
+          old_row: currentRow,
+          new_row: nextRow,
+          actor_user_id: meId,
+          actor_role: role ?? null,
+        });
+        if (auditInsert.error) throw new Error(auditInsert.error.message);
+        setMsg("Lancamento indireto atualizado.");
+        resetForm();
+        await load();
+      } catch (e: unknown) {
+        setMsg(e instanceof Error ? e.message : "Erro ao atualizar custo indireto.");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
 
     const rows = preview
       .filter((p) => p.value > 0)
@@ -492,9 +757,12 @@ export default function FinanceiroCustosIndiretosPage() {
     try {
       const { error } = await supabase.from("project_indirect_costs").insert(rows);
       if (error) throw new Error(error.message);
-      setMsg(`Custos indiretos cadastrados em ${rows.length} projetos ativos.`);
-      setNotes("");
-      if (sourceMode === "manual") setAmount("");
+      setMsg(
+        costType === "percentage_payroll" && rows.length === 1
+          ? "Custo indireto percentual cadastrado de forma integral no unico projeto ativo do rateio."
+          : `Custos indiretos cadastrados em ${rows.length} projetos ativos.`
+      );
+      resetForm();
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao salvar custos indiretos.");
@@ -512,6 +780,7 @@ export default function FinanceiroCustosIndiretosPage() {
         "categoria",
         "tipo",
         "valor",
+        "valor_efetivo",
         "origem",
         "rateio",
         "inicio_vigencia",
@@ -527,7 +796,8 @@ export default function FinanceiroCustosIndiretosPage() {
           projectNameById[r.project_id] ?? r.project_id,
           categoryLabel(r.cost_category),
           typeLabel(r.cost_type),
-          (Number(r.amount) || 0).toFixed(2),
+          indirectAmountLabel(r),
+          effectiveAmountDetail(r).label,
           parseNoteTag(r.notes, "Fonte"),
           parseNoteTag(r.notes, "Rateio"),
           r.start_date ?? "",
@@ -552,7 +822,8 @@ export default function FinanceiroCustosIndiretosPage() {
             <td>${htmlEscape(projectNameById[r.project_id] ?? r.project_id)}</td>
             <td>${htmlEscape(categoryLabel(r.cost_category))}</td>
             <td>${htmlEscape(typeLabel(r.cost_type))}</td>
-            <td style="text-align:right">${htmlEscape(fmtMoney(Number(r.amount) || 0))}</td>
+            <td style="text-align:right">${htmlEscape(indirectAmountLabel(r))}</td>
+            <td style="text-align:right">${htmlEscape(effectiveAmountDetail(r).label)}</td>
             <td>${htmlEscape(parseNoteTag(r.notes, "Fonte"))}</td>
             <td>${htmlEscape(parseNoteTag(r.notes, "Rateio"))}</td>
             <td>${htmlEscape(`${r.start_date ?? "-"} ate ${r.end_date ?? "-"}`)}</td>
@@ -592,9 +863,8 @@ export default function FinanceiroCustosIndiretosPage() {
             | projeto ${htmlEscape(historyProjectId === "all" ? "Todos" : (projectNameById[historyProjectId] ?? historyProjectId))}
             | categoria ${htmlEscape(historyCategory === "all" ? "Todas" : categoryLabel(historyCategory))}
             | tipo ${htmlEscape(historyType === "all" ? "Todos" : typeLabel(historyType))}
-            | busca "${htmlEscape(historyQ || "-")}"
           </p>
-          <p class="kpi">Registros: ${htmlEscape(filteredHistory.length)} | Total: ${htmlEscape(fmtMoney(historyTotal))}</p>
+          <p class="kpi">Registros: ${htmlEscape(filteredHistory.length)} | Total: ${htmlEscape(historyTotalLabel)}</p>
           <table>
             <thead>
               <tr>
@@ -603,13 +873,14 @@ export default function FinanceiroCustosIndiretosPage() {
                 <th>Categoria</th>
                 <th>Tipo</th>
                 <th>Valor</th>
+                <th>Valor efetivo</th>
                 <th>Origem</th>
                 <th>Rateio</th>
                 <th>Vigencia</th>
               </tr>
             </thead>
             <tbody>
-              ${rowsHtml || '<tr><td colspan="8">Nenhum lancamento encontrado.</td></tr>'}
+              ${rowsHtml || '<tr><td colspan="9">Nenhum lancamento encontrado.</td></tr>'}
             </tbody>
           </table>
         </body>
@@ -783,7 +1054,7 @@ export default function FinanceiroCustosIndiretosPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 p-6">
-      <section className="rounded-3xl border border-slate-200 bg-white p-6">
+      <section ref={historySectionRef} className="relative rounded-3xl border border-slate-200 bg-white p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-3xl font-semibold tracking-tight text-slate-900">Custos indiretos</h1>
@@ -816,17 +1087,38 @@ export default function FinanceiroCustosIndiretosPage() {
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-semibold text-slate-600">Valor informado</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">{fmtMoney(amountNum)}</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">
+              {costType === "percentage_payroll" ? fmtPctValue(amountNum) : fmtMoney(amountNum)}
+            </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-semibold text-slate-600">Rateio</p>
-            <p className="mt-1 text-2xl font-semibold text-slate-900">{splitMode === "equal" ? "Igual" : "Por orcamento"}</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-900">
+              {costType === "percentage_payroll" && preview.filter((p) => p.value > 0).length <= 1
+                ? "Integral (projeto unico)"
+                : splitMode === "equal"
+                  ? "Igual"
+                  : "Por orcamento"}
+            </p>
           </div>
         </div>
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-6">
-        <h2 className="text-base font-semibold text-slate-900">Novo custo indireto (rateio automatico)</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-slate-900">
+            {editingHistoryId ? "Editar lancamento indireto" : "Novo custo indireto (rateio automatico)"}
+          </h2>
+          {editingHistoryId ? (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Cancelar edicao
+            </button>
+          ) : null}
+        </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-4">
           <label className="grid gap-1 text-sm font-semibold text-slate-700">
@@ -854,6 +1146,9 @@ export default function FinanceiroCustosIndiretosPage() {
               <option value="adm">Administrativo</option>
               <option value="ti">TI</option>
               <option value="juridico">Juridico</option>
+              <option value="utilidades">Utilidades (luz, agua, internet)</option>
+              <option value="tributos">Tributos (IPTU, impostos, taxas)</option>
+              <option value="infraestrutura">Infraestrutura (aluguel, condominio, manutencao)</option>
               <option value="outros">Outros</option>
             </select>
           </label>
@@ -867,7 +1162,7 @@ export default function FinanceiroCustosIndiretosPage() {
             >
               <option value="monthly">Mensal</option>
               <option value="one_time">Pontual</option>
-              <option value="percentage_payroll">% sobre folha</option>
+              <option value="percentage_payroll">% sobre salario do colaborador</option>
             </select>
           </label>
 
@@ -922,34 +1217,58 @@ export default function FinanceiroCustosIndiretosPage() {
           ) : null}
 
           <label className="grid gap-1 text-sm font-semibold text-slate-700">
-            Valor total (R$)
+            {costType === "percentage_payroll" ? "Percentual sobre o salario do colaborador (%)" : "Valor total (R$)"}
             <input
               className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900"
-              placeholder="0,00"
+              placeholder={costType === "percentage_payroll" ? "0 a 100" : "0,00"}
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
             />
           </label>
 
           <label className="grid gap-1 text-sm font-semibold text-slate-700">
-            Inicio (opcional)
+            Inicio {(costType === "monthly" || costType === "percentage_payroll") ? "(obrigatorio)" : "(opcional)"}
             <input
               type="date"
-              className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900"
+              className={`h-11 rounded-xl border bg-white px-3 text-sm font-medium text-slate-900 ${
+                (costType === "monthly" || costType === "percentage_payroll") && !startDate
+                  ? "border-amber-300"
+                  : "border-slate-200"
+              }`}
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
             />
           </label>
 
           <label className="grid gap-1 text-sm font-semibold text-slate-700">
-            Fim (opcional)
+            Fim {(costType === "monthly" || costType === "percentage_payroll") ? "(obrigatorio)" : "(opcional)"}
             <input
               type="date"
-              className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-900"
+              className={`h-11 rounded-xl border bg-white px-3 text-sm font-medium text-slate-900 ${
+                (costType === "monthly" || costType === "percentage_payroll") && !endDate
+                  ? "border-amber-300"
+                  : "border-slate-200"
+              }`}
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
             />
           </label>
+        </div>
+
+        <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+          {costType === "one_time" ? (
+            <span>
+              Sem vigencia informada, o custo pontual vale apenas no mes do lancamento.
+            </span>
+          ) : costType === "monthly" ? (
+            <span>
+              Custo mensal exige inicio e fim de vigencia. Sem esse intervalo, o rateio recorrente nao sera salvo.
+            </span>
+          ) : (
+            <span>
+              % sobre salario exige origem por colaborador, inicio e fim de vigencia, e aceita somente valores entre 0 e 100. Valores acima de 100 sao tratados como cadastro legado em valor absoluto.
+            </span>
+          )}
         </div>
 
         {sourceMode === "collaborator" && selectedCollaborator ? (
@@ -988,7 +1307,7 @@ export default function FinanceiroCustosIndiretosPage() {
             onClick={() => void saveIndirectCosts()}
             className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
           >
-            <Save size={16} /> Salvar rateio
+            <Save size={16} /> {editingHistoryId ? "Salvar alteracoes" : "Salvar rateio"}
           </button>
         </div>
       </section>
@@ -1003,7 +1322,7 @@ export default function FinanceiroCustosIndiretosPage() {
               <tr>
                 <th className="p-3">Projeto</th>
                 <th className="p-3 text-right">Peso</th>
-                <th className="p-3 text-right">Valor rateado</th>
+                <th className="p-3 text-right">{costType === "percentage_payroll" ? "Percentual rateado" : "Valor rateado"}</th>
               </tr>
             </thead>
             <tbody>
@@ -1014,7 +1333,9 @@ export default function FinanceiroCustosIndiretosPage() {
                       <div className="font-medium text-slate-900">{row.project_name}</div>
                     </td>
                     <td className="p-3 text-right text-slate-600">{projectWeights[idx] ?? 0}</td>
-                    <td className="p-3 text-right font-semibold text-slate-900">{fmtMoney(row.value)}</td>
+                    <td className="p-3 text-right font-semibold text-slate-900">
+                      {costType === "percentage_payroll" ? fmtPctValue(row.value) : fmtMoney(row.value)}
+                    </td>
                   </tr>
                 ))
               ) : (
@@ -1045,6 +1366,14 @@ export default function FinanceiroCustosIndiretosPage() {
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
+              onClick={() => setAuditModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+              title="Abrir auditoria de exclusoes em tela suspensa"
+            >
+              Ver auditoria
+            </button>
+            <button
+              type="button"
               onClick={exportHistoryCsv}
               disabled={!filteredHistory.length}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
@@ -1064,7 +1393,7 @@ export default function FinanceiroCustosIndiretosPage() {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-6">
+        <div className="mt-4 grid gap-3 md:grid-cols-5">
           <label className="grid gap-1 text-xs font-semibold text-slate-700">
             De
             <input
@@ -1111,6 +1440,9 @@ export default function FinanceiroCustosIndiretosPage() {
               <option value="adm">Administrativo</option>
               <option value="ti">TI</option>
               <option value="juridico">Juridico</option>
+              <option value="utilidades">Utilidades</option>
+              <option value="tributos">Tributos</option>
+              <option value="infraestrutura">Infraestrutura</option>
               <option value="outros">Outros</option>
             </select>
           </label>
@@ -1124,26 +1456,18 @@ export default function FinanceiroCustosIndiretosPage() {
               <option value="all">Todos</option>
               <option value="monthly">Mensal</option>
               <option value="one_time">Pontual</option>
-              <option value="percentage_payroll">% folha</option>
+              <option value="percentage_payroll">% salario</option>
             </select>
-          </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-700">
-            Buscar
-            <input
-              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-              value={historyQ}
-              onChange={(e) => setHistoryQ(e.target.value)}
-              placeholder="Projeto, origem, observacao..."
-            />
           </label>
         </div>
 
         <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
-          Registros: <b>{filteredHistory.length}</b> | Total filtrado: <b>{fmtMoney(historyTotal)}</b>
+          Registros: <b>{filteredHistory.length}</b> | Total filtrado: <b>{historyTotalLabel}</b>
         </div>
 
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-[1100px] w-full text-left text-sm">
+        <div ref={historyTableAreaRef} className="relative mt-4">
+          <div className="overflow-x-auto">
+          <table className="min-w-[860px] w-full text-left text-sm">
             <thead className="bg-slate-50 text-slate-700">
               <tr>
                 <th className="p-3">Criado em</th>
@@ -1151,10 +1475,8 @@ export default function FinanceiroCustosIndiretosPage() {
                 <th className="p-3">Categoria</th>
                 <th className="p-3">Tipo</th>
                 <th className="p-3 text-right">Valor</th>
-                <th className="p-3">Origem</th>
-                <th className="p-3">Rateio</th>
-                <th className="p-3">Vigencia</th>
-                {canDeleteHistory ? <th className="p-3 text-right">Acao</th> : null}
+                <th className="p-3 text-right">Valor efetivo</th>
+                {isAllowed ? <th className="p-3 text-right">Acao</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -1165,148 +1487,350 @@ export default function FinanceiroCustosIndiretosPage() {
                     <td className="p-3">
                       <div className="font-medium text-slate-900">{projectNameById[r.project_id] ?? r.project_id}</div>
                     </td>
-                    <td className="p-3 text-slate-700">{categoryLabel(r.cost_category)}</td>
-                    <td className="p-3 text-slate-700">{typeLabel(r.cost_type)}</td>
-                    <td className="p-3 text-right font-semibold text-slate-900">{fmtMoney(Number(r.amount) || 0)}</td>
-                    <td className="p-3 text-slate-600">{parseNoteTag(r.notes, "Fonte")}</td>
-                    <td className="p-3 text-slate-600">{parseNoteTag(r.notes, "Rateio")}</td>
-                    <td className="p-3 text-slate-600">
-                      {(r.start_date ?? "-") + " ate " + (r.end_date ?? "-")}
+                    <td className="p-3">
+                      <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                        {categoryLabel(r.cost_category)}
+                      </span>
                     </td>
-                    {canDeleteHistory ? (
+                    <td className="p-3">
+                      <span className="inline-flex rounded-full border border-slate-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                        {typeLabel(r.cost_type)}
+                      </span>
+                    </td>
+                    <td className="p-3 text-right font-semibold text-slate-900">{indirectAmountLabel(r)}</td>
+                    <td className="p-3 text-right">
+                      <div className="font-semibold text-slate-900">{effectiveAmountDetail(r).label}</div>
+                      {effectiveAmountDetail(r).hint ? (
+                        <div className="mt-0.5 text-[11px] text-slate-500">{effectiveAmountDetail(r).hint}</div>
+                      ) : null}
+                    </td>
+                    {isAllowed ? (
                       <td className="p-3 text-right">
-                        <button
-                          type="button"
-                          disabled={saving}
-                          onClick={() => void deleteHistoryRow(r.id)}
-                          className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-60"
-                        >
-                          Excluir
-                        </button>
+                        <div className="relative inline-flex justify-end" data-history-actions-root="true">
+                          <button
+                            type="button"
+                            disabled={saving}
+                            onClick={(event) => {
+                              if (openHistoryActionId === r.id) {
+                                setOpenHistoryActionId("");
+                                setHistoryActionAnchor(null);
+                                return;
+                              }
+                              const sectionEl = historyTableAreaRef.current;
+                              const buttonEl = event.currentTarget;
+                              if (sectionEl) {
+                                const sectionRect = sectionEl.getBoundingClientRect();
+                                const buttonRect = buttonEl.getBoundingClientRect();
+                                const menuWidth = 208;
+                                const left = Math.max(
+                                  12,
+                                  Math.min(
+                                    buttonRect.right - sectionRect.left - menuWidth,
+                                    sectionRect.width - menuWidth - 12
+                                  )
+                                );
+                                const anchorRight = buttonRect.right - sectionRect.left - 18;
+                                const connectorLeft = Math.max(left + 16, Math.min(anchorRight, left + menuWidth - 16));
+                                const top = buttonRect.bottom - sectionRect.top + 4;
+                                const connectorTop = buttonRect.bottom - sectionRect.top;
+                                setHistoryActionAnchor({
+                                  top,
+                                  left,
+                                  connectorTop,
+                                  connectorLeft,
+                                  connectorHeight: 8,
+                                });
+                              } else {
+                                setHistoryActionAnchor(null);
+                              }
+                              setOpenHistoryActionId(r.id);
+                            }}
+                            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                          >
+                            <MoreHorizontal size={14} /> Acoes
+                          </button>
+                        </div>
                       </td>
                     ) : null}
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td className="p-4 text-slate-500" colSpan={canDeleteHistory ? 9 : 8}>
+                  <td className="p-4 text-slate-500" colSpan={isAllowed ? 7 : 6}>
                     Nenhum lancamento encontrado para os filtros aplicados.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-        </div>
-      </section>
-
-      <section className="rounded-3xl border border-slate-200 bg-white p-6">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900">Auditoria de exclusoes</h2>
-            <p className="mt-1 text-sm text-slate-600">Ultimas exclusoes de custos indiretos.</p>
           </div>
-          <button
-            type="button"
-            onClick={exportAuditCsv}
-            disabled={!filteredAuditRows.length}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
-          >
-            <Download size={16} /> Exportar CSV auditoria
-          </button>
-          <button
-            type="button"
-            onClick={exportAuditPdf}
-            disabled={!filteredAuditRows.length}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
-          >
-            <Printer size={16} /> Exportar PDF auditoria
-          </button>
+
+          {openHistoryActionRow && historyActionAnchor ? (
+            <>
+              <div
+                className="pointer-events-none absolute z-40 w-1 rounded-full bg-indigo-300"
+                style={{
+                  left: historyActionAnchor.connectorLeft,
+                  top: historyActionAnchor.connectorTop,
+                  height: historyActionAnchor.connectorHeight,
+                }}
+                data-history-actions-root="true"
+              />
+              <div
+                className="pointer-events-none absolute z-40 h-4 w-4 rotate-45 rounded-[2px] border-2 border-indigo-200 bg-white shadow-sm"
+                style={{
+                  left: historyActionAnchor.connectorLeft - 6,
+                  top: historyActionAnchor.connectorTop + 2,
+                }}
+                data-history-actions-root="true"
+              />
+              <div
+                className="absolute z-50 w-[208px] max-w-[calc(100%-24px)] max-h-[220px] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl"
+                style={{ left: historyActionAnchor.left, top: historyActionAnchor.top }}
+                data-history-actions-root="true"
+              >
+                <div className="mb-2 border-b border-slate-100 px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                  Acoes do lancamento
+                </div>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => beginEditHistoryRow(openHistoryActionRow)}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                >
+                  <Pencil size={14} /> Editar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDetailHistoryRow(openHistoryActionRow);
+                    setOpenHistoryActionId("");
+                    setHistoryActionAnchor(null);
+                  }}
+                  className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Ver mais
+                </button>
+                {canDeleteHistory ? (
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => {
+                      setOpenHistoryActionId("");
+                      setHistoryActionAnchor(null);
+                      void deleteHistoryRow(openHistoryActionRow.id);
+                    }}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                  >
+                    Excluir
+                  </button>
+                ) : null}
+              </div>
+            </>
+          ) : null}
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-4">
-          <label className="grid gap-1 text-xs font-semibold text-slate-700">
-            De
-            <input
-              type="date"
-              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-              value={auditFrom}
-              onChange={(e) => setAuditFrom(e.target.value)}
-            />
-          </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-700">
-            Ate
-            <input
-              type="date"
-              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-              value={auditTo}
-              onChange={(e) => setAuditTo(e.target.value)}
-            />
-          </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-700">
-            Ator
-            <select
-              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-              value={auditActorId}
-              onChange={(e) => setAuditActorId(e.target.value)}
-            >
-              <option value="all">Todos</option>
-              {actorOptions.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-700">
-            Buscar
-            <input
-              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-              value={auditQ}
-              onChange={(e) => setAuditQ(e.target.value)}
-              placeholder="Motivo, ator, projeto..."
-            />
-          </label>
-        </div>
-
-        <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
-          Registros de auditoria: <b>{filteredAuditRows.length}</b>
-        </div>
-
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-[900px] w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-700">
-              <tr>
-                <th className="p-3">Data/hora</th>
-                <th className="p-3">Projeto</th>
-                <th className="p-3">Acao</th>
-                <th className="p-3">Motivo</th>
-                <th className="p-3">Ator</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredAuditRows.length ? (
-                filteredAuditRows.map((a) => (
-                  <tr key={a.id} className="border-t">
-                    <td className="p-3 text-slate-600">{new Date(a.created_at).toLocaleString("pt-BR")}</td>
-                    <td className="p-3 font-medium text-slate-900">{projectNameById[a.project_id] ?? a.project_id}</td>
-                    <td className="p-3 text-slate-700">{a.action}</td>
-                    <td className="p-3 text-slate-700">{a.reason}</td>
-                    <td className="p-3 text-slate-600">
-                      {(actorNameById[a.actor_user_id] ?? a.actor_user_id.slice(0, 8))} | {a.actor_role ?? "-"} ({a.actor_user_id.slice(0, 8)})
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td className="p-4 text-slate-500" colSpan={5}>
-                    Nenhuma exclusao registrada.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
       </section>
+
+      {detailHistoryRow ? (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-slate-950/40 p-4"
+          onClick={() => setDetailHistoryRow(null)}
+        >
+          <div
+            className="relative w-full max-w-5xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setDetailHistoryRow(null)}
+              className="absolute right-6 top-6 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Fechar
+            </button>
+            <div className="pr-24">
+              <div>
+                <h3 className="text-base font-semibold text-slate-900">Base do lancamento indireto</h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  {projectNameById[detailHistoryRow.project_id] ?? detailHistoryRow.project_id}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Criado em</p>
+                <p className="mt-1 text-sm font-medium text-slate-900">
+                  {new Date(detailHistoryRow.created_at).toLocaleString("pt-BR")}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Valor</p>
+                <p className="mt-1 text-sm font-medium text-slate-900">{indirectAmountLabel(detailHistoryRow)}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Valor efetivo</p>
+                <p className="mt-1 text-sm font-medium text-slate-900">{effectiveAmountDetail(detailHistoryRow).label}</p>
+                {effectiveAmountDetail(detailHistoryRow).hint ? (
+                  <p className="mt-1 text-xs text-slate-500">{effectiveAmountDetail(detailHistoryRow).hint}</p>
+                ) : null}
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Origem</p>
+                <p className="mt-1 text-sm font-medium text-slate-900">{parseNoteTag(detailHistoryRow.notes, "Fonte")}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Rateio</p>
+                <p className="mt-1 text-sm font-medium text-slate-900">{parseNoteTag(detailHistoryRow.notes, "Rateio")}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Vigencia</p>
+                <p className="mt-1 text-sm font-medium text-slate-900">
+                  {(detailHistoryRow.start_date ?? "-") + " ate " + (detailHistoryRow.end_date ?? "-")}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Observacao</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm font-medium text-slate-900">
+                  {parseNoteTag(detailHistoryRow.notes, "Obs")}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {auditModalOpen ? (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-slate-950/40 p-4"
+          onClick={() => setAuditModalOpen(false)}
+        >
+          <div
+            className="relative max-h-[90vh] w-full max-w-5xl overflow-auto rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="relative flex flex-wrap items-start justify-between gap-3 pr-24">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900">Base da auditoria de custos indiretos</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Exclusoes ficam registradas abaixo. Edicoes sao visualizadas pelo estado atual do lancamento em
+                  {" "}Ver mais{" "}e pelo formulario de edicao.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAuditModalOpen(false)}
+                className="absolute right-0 top-0 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Fechar
+              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={exportAuditCsv}
+                  disabled={!filteredAuditRows.length}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+                >
+                  <Download size={16} /> Exportar CSV auditoria
+                </button>
+                <button
+                  type="button"
+                  onClick={exportAuditPdf}
+                  disabled={!filteredAuditRows.length}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+                >
+                  <Printer size={16} /> Exportar PDF auditoria
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-4">
+              <label className="grid gap-1 text-xs font-semibold text-slate-700">
+                De
+                <input
+                  type="date"
+                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                  value={auditFrom}
+                  onChange={(e) => setAuditFrom(e.target.value)}
+                />
+              </label>
+              <label className="grid gap-1 text-xs font-semibold text-slate-700">
+                Ate
+                <input
+                  type="date"
+                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                  value={auditTo}
+                  onChange={(e) => setAuditTo(e.target.value)}
+                />
+              </label>
+              <label className="grid gap-1 text-xs font-semibold text-slate-700">
+                Ator
+                <select
+                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                  value={auditActorId}
+                  onChange={(e) => setAuditActorId(e.target.value)}
+                >
+                  <option value="all">Todos</option>
+                  {actorOptions.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="grid gap-1 text-xs font-semibold text-slate-700">
+                Buscar
+                <input
+                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                  value={auditQ}
+                  onChange={(e) => setAuditQ(e.target.value)}
+                  placeholder="Motivo, ator, projeto..."
+                />
+              </label>
+            </div>
+
+            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
+              Registros de auditoria: <b>{filteredAuditRows.length}</b>
+            </div>
+
+            <div className="mt-4 overflow-x-auto">
+              <table className="min-w-[900px] w-full text-left text-sm">
+                <thead className="bg-slate-50 text-slate-700">
+                  <tr>
+                    <th className="p-3">Data/hora</th>
+                    <th className="p-3">Projeto</th>
+                    <th className="p-3">Acao</th>
+                    <th className="p-3">Motivo</th>
+                    <th className="p-3">Ator</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAuditRows.length ? (
+                    filteredAuditRows.map((a) => (
+                      <tr key={a.id} className="border-t">
+                        <td className="p-3 text-slate-600">{new Date(a.created_at).toLocaleString("pt-BR")}</td>
+                        <td className="p-3 font-medium text-slate-900">{projectNameById[a.project_id] ?? a.project_id}</td>
+                        <td className="p-3 text-slate-700">{a.action}</td>
+                        <td className="p-3 text-slate-700">{a.reason}</td>
+                        <td className="p-3 text-slate-600">
+                          {(actorNameById[a.actor_user_id] ?? a.actor_user_id.slice(0, 8))} | {a.actor_role ?? "-"} (
+                          {a.actor_user_id.slice(0, 8)})
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td className="p-4 text-slate-500" colSpan={5}>
+                        Nenhuma exclusao registrada.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

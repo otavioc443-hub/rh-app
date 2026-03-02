@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { supabase } from "@/lib/supabaseClient";
+import {
+  clearPortalExitIntent,
+  clearRecentLoginMarker,
+  forceClientLogout,
+  hasPortalExitIntent,
+  markRecentLogin,
+  supabase,
+} from "@/lib/supabaseClient";
 
 const DEFAULT_AFTER_LOGIN = "/home";
 
@@ -22,15 +29,30 @@ export default function LoginPage() {
 
     supabase.auth
       .getSession()
-      .then(({ data }) => {
+      .then(async ({ data }) => {
         if (!alive) return;
-        if (data.session?.user) router.replace(DEFAULT_AFTER_LOGIN);
+        if (!data.session?.user) return;
+        if (hasPortalExitIntent()) {
+          clearPortalExitIntent();
+          clearRecentLoginMarker();
+          await forceClientLogout();
+          return;
+        }
+        router.replace(DEFAULT_AFTER_LOGIN);
       })
       .catch(console.error);
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!alive) return;
-      if (session?.user) router.replace(DEFAULT_AFTER_LOGIN);
+      if (!session?.user) return;
+
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        clearPortalExitIntent();
+        markRecentLogin();
+        router.replace(DEFAULT_AFTER_LOGIN);
+        return;
+      }
+      router.replace(DEFAULT_AFTER_LOGIN);
     });
 
     return () => {
@@ -58,7 +80,10 @@ export default function LoginPage() {
         return;
       }
 
-      if (data.user) router.replace(DEFAULT_AFTER_LOGIN);
+      if (data.user) {
+        markRecentLogin();
+        router.replace(DEFAULT_AFTER_LOGIN);
+      }
     } catch (err) {
       console.error(err);
       setMsg("Erro inesperado ao tentar entrar.");

@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-type LogoutReason = "manual" | "idle" | "token_expired" | null;
+type LogoutReason = "manual" | "idle" | "token_expired" | "page_exit" | null;
 
 type SessionAuditRow = {
   id: string;
@@ -23,6 +23,11 @@ type ProfileRow = {
   email: string | null;
   role: string | null;
   department_id: string | null;
+};
+
+type DepartmentRow = {
+  id: string;
+  name: string | null;
 };
 
 function normalizeRole(value: string | null) {
@@ -162,7 +167,24 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const filtered = merged.filter((r) => {
+    const departmentIds = Array.from(new Set(merged.map((r) => r.department_id).filter(Boolean))) as string[];
+    const departmentsById = new Map<string, string>();
+    if (departmentIds.length > 0) {
+      const { data: departmentsData } = await supabaseAdmin
+        .from("departments")
+        .select("id, name")
+        .in("id", departmentIds);
+      for (const d of (departmentsData ?? []) as DepartmentRow[]) {
+        if (d.id) departmentsById.set(d.id, d.name?.trim() || d.id);
+      }
+    }
+
+    const mergedWithDepartments = merged.map((r) => ({
+      ...r,
+      department_name: r.department_id ? (departmentsById.get(r.department_id) ?? r.department_id) : null,
+    }));
+
+    const filtered = mergedWithDepartments.filter((r) => {
       if (roleFilter !== "all" && normalizeRole(r.role) !== roleFilter) return false;
       if (departmentId !== "all" && r.department_id !== departmentId) return false;
 

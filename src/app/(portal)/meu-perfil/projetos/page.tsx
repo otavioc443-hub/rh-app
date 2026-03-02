@@ -1,9 +1,11 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, RefreshCcw, Save } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, MoreHorizontal, RefreshCcw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { PersonChip } from "@/components/people/PersonChip";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import { PageHelpModal } from "@/components/ui/PageHelpModal";
 
 type Project = { id: string; name: string; description: string | null; status: string | null; start_date: string | null; end_date: string | null };
 type ProjectMember = { id: string; project_id: string; user_id: string; member_role: "gestor" | "coordenador" | "colaborador" };
@@ -12,6 +14,7 @@ type Deliverable = {
   project_id: string;
   title: string;
   due_date: string | null;
+  financial_status?: "aberto" | "pendente" | "baixado" | null;
   assigned_to: string | null;
   status: "pending" | "in_progress" | "sent" | "approved" | "approved_with_comments";
   approval_comment: string | null;
@@ -121,6 +124,31 @@ function parseReworkComment(raw?: string | null) {
   };
 }
 
+function normalizeHourMinuteInput(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 4);
+  const hh = digits.slice(0, 2);
+  const mm = digits.slice(2, 4);
+  if (!digits) return "";
+  if (digits.length <= 2) return `${hh}H`;
+  return `${hh}H${mm}MIN`;
+}
+
+function parseHourMinuteToDecimal(value: string) {
+  const m = /^(\d{1,2})H(\d{2})MIN$/i.exec((value ?? "").trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (!Number.isFinite(h) || !Number.isFinite(min) || h < 0 || min < 0 || min > 59) return null;
+  return h + min / 60;
+}
+
+function formatHoursAsHm(value: number | null | undefined) {
+  const totalMinutes = Math.max(0, Math.round((Number(value) || 0) * 60));
+  const hh = Math.floor(totalMinutes / 60);
+  const mm = totalMinutes % 60;
+  return `${String(hh).padStart(2, "0")}h${String(mm).padStart(2, "0")}min`;
+}
+
 function formatDateBR(value?: string | null) {
   const raw = (value ?? "").trim();
   if (!raw) return "-";
@@ -188,6 +216,8 @@ export default function MeuPerfilProjetosPage() {
     Record<string, "all" | "leadership" | "rework">
   >({});
   const [timelineExpandedByDeliverableId, setTimelineExpandedByDeliverableId] = useState<Record<string, boolean>>({});
+  const [actionsOpenByDeliverableId, setActionsOpenByDeliverableId] = useState<Record<string, boolean>>({});
+  const [showPageHelp, setShowPageHelp] = useState(false);
 
   const [teamOpen, setTeamOpen] = useState(false);
   const [teamLoading, setTeamLoading] = useState(false);
@@ -201,16 +231,50 @@ export default function MeuPerfilProjetosPage() {
   // - Colaborador ve apenas projetos em que participa (query filtrada por memberships).
   // - Admin ve todos os projetos.
   const selectedProject = useMemo(() => projects.find((p) => p.id === selectedProjectId) ?? null, [projects, selectedProjectId]);
-  const projectDeliverablesAssignedToMe = useMemo(() => {
+  const projectDeliverablesAssignedToMeAll = useMemo(() => {
     const extraAssigneeDeliverableIds = new Set(
       deliverableAssignees.filter((a) => a.user_id === meId).map((a) => a.deliverable_id)
     );
     return deliverables.filter(
       (d) =>
-        (d.assigned_to === meId || extraAssigneeDeliverableIds.has(d.id)) &&
-        canCollaboratorEditDeliverable(d.status)
+        d.assigned_to === meId || extraAssigneeDeliverableIds.has(d.id)
     );
   }, [deliverables, deliverableAssignees, meId]);
+
+  const projectDeliverablesAssignedToMe = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const rankStatus = (status: Deliverable["status"]) => {
+      if (status === "in_progress") return 1;
+      if (status === "pending") return 2;
+      if (status === "approved_with_comments") return 3;
+      if (status === "sent") return 4;
+      if (status === "approved") return 5;
+      return 9;
+    };
+    return [...projectDeliverablesAssignedToMeAll]
+      .filter((d) => canCollaboratorEditDeliverable(d.status))
+      .sort((a, b) => {
+        const aDue = parseDueDate(a.due_date);
+        const bDue = parseDueDate(b.due_date);
+        const aOverdue = !!aDue && aDue <= today;
+        const bOverdue = !!bDue && bDue <= today;
+        if (aOverdue !== bOverdue) return aOverdue ? -1 : 1;
+        if (aDue && bDue && aDue.getTime() !== bDue.getTime()) return aDue.getTime() - bDue.getTime();
+        if (aDue && !bDue) return -1;
+        if (!aDue && bDue) return 1;
+        const rs = rankStatus(a.status) - rankStatus(b.status);
+        if (rs !== 0) return rs;
+        return a.title.localeCompare(b.title, "pt-BR");
+      });
+  }, [projectDeliverablesAssignedToMeAll]);
+
+  const projectDeliverablesExcluded = useMemo(
+    () =>
+      projectDeliverablesAssignedToMeAll.filter((d) => !canCollaboratorEditDeliverable(d.status)),
+    [projectDeliverablesAssignedToMeAll]
+  );
+
 
   const personLabel = (userId: string) => {
     const d = directoryById[userId];
@@ -360,7 +424,7 @@ export default function MeuPerfilProjetosPage() {
         const [delPrimaryRes, myAssigneeRowsRes] = await Promise.all([
           supabase
             .from("project_deliverables")
-            .select("id,project_id,title,due_date,assigned_to,status,approval_comment,document_url,document_path,document_file_name,description,submitted_by,submitted_at")
+            .select("id,project_id,title,due_date,financial_status,assigned_to,status,approval_comment,document_url,document_path,document_file_name,description,submitted_by,submitted_at")
             .eq("project_id", selectedProjectId)
             .eq("assigned_to", meId)
             .order("created_at", { ascending: false }),
@@ -382,7 +446,7 @@ export default function MeuPerfilProjetosPage() {
         if (extraDeliverableIds.length > 0) {
           const delExtraRes = await supabase
             .from("project_deliverables")
-            .select("id,project_id,title,due_date,assigned_to,status,approval_comment,document_url,document_path,document_file_name,description,submitted_by,submitted_at")
+            .select("id,project_id,title,due_date,financial_status,assigned_to,status,approval_comment,document_url,document_path,document_file_name,description,submitted_by,submitted_at")
             .eq("project_id", selectedProjectId)
             .in("id", extraDeliverableIds)
             .order("created_at", { ascending: false });
@@ -595,64 +659,78 @@ export default function MeuPerfilProjetosPage() {
     setTeamMembers([]);
   }, [selectedProjectId]);
 
-  async function saveDocument(deliverable: Deliverable) {
-    if (!canCollaboratorEditDeliverable(deliverable.status)) {
-      return setMsg("Este entregavel esta bloqueado para edicao. Aguarde reencaminhamento do coordenador.");
-    }
-    const link = (docLinkByDeliverable[deliverable.id] ?? "").trim();
-    if (!link) return setMsg("Informe o link do documento.");
-    setSaving(true);
-    setMsg("");
-    try {
-      const { data: sess } = await supabase.auth.getSession();
-      const token = sess.session?.access_token ?? null;
-      const response = await fetch("/api/projects/deliverables/link", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          deliverable_id: deliverable.id,
-          document_url: link,
-        }),
-      });
-      const json = (await response.json()) as { ok?: boolean; error?: string };
-      if (!response.ok || !json.ok) {
-        throw new Error(json.error || "Nao foi possivel salvar o link do documento.");
-      }
-
-      await logDeliverableEvent({
-        deliverableId: deliverable.id,
-        projectId: deliverable.project_id,
-        eventType: "document_updated",
-        statusFrom: deliverable.status,
-        statusTo: deliverable.status,
-        comment: "Link atualizado.",
-      });
-      setMsg("Link salvo. Registre a contribuicao para enviar o entregavel.");
-      await load();
-    } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao enviar documento.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function addContribution(deliverableId: string) {
     const currentDeliverable = deliverables.find((x) => x.id === deliverableId) ?? null;
     if (currentDeliverable && !canCollaboratorEditDeliverable(currentDeliverable.status)) {
       return setMsg("Este entregavel esta bloqueado para edicao. Aguarde reencaminhamento do coordenador.");
     }
-    const rawHours = (contribHoursByDeliverable[deliverableId] ?? "").replace(",", ".").trim();
-    const hours = Number(rawHours);
-    if (!Number.isFinite(hours) || hours <= 0) return setMsg("Informe horas validas de contribuicao.");
+    const rawHourMinute = (contribHoursByDeliverable[deliverableId] ?? "").trim();
+    const hours = parseHourMinuteToDecimal(rawHourMinute);
+    if (!Number.isFinite(hours ?? NaN) || (hours ?? 0) <= 0) {
+      return setMsg("Informe horas no formato 00H00MIN (ex.: 02H30MIN).");
+    }
     const note = (contribTextByDeliverable[deliverableId] ?? "").trim();
     setSaving(true);
     setMsg("");
     try {
-      const contributionText = note ? `${hours}h - ${note}` : `${hours}h`;
+      const deliverable = currentDeliverable;
+      if (deliverable) {
+        const link = (docLinkByDeliverable[deliverableId] ?? "").trim();
+        if (link) {
+          const { data: sess } = await supabase.auth.getSession();
+          const token = sess.session?.access_token ?? null;
+          const response = await fetch("/api/projects/deliverables/link", {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              deliverable_id: deliverable.id,
+              document_url: link,
+            }),
+          });
+          const json = (await response.json()) as { ok?: boolean; error?: string };
+          if (!response.ok || !json.ok) throw new Error(json.error || "Nao foi possivel salvar o link do documento.");
+          await logDeliverableEvent({
+            deliverableId: deliverable.id,
+            projectId: deliverable.project_id,
+            eventType: "document_updated",
+            statusFrom: deliverable.status,
+            statusTo: deliverable.status,
+            comment: "Link atualizado.",
+          });
+        }
+
+        const f = fileByDeliverable[deliverable.id] ?? null;
+        if (f) {
+          const { data: sess } = await supabase.auth.getSession();
+          const token = sess.session?.access_token ?? null;
+          const fd = new FormData();
+          fd.append("deliverable_id", deliverable.id);
+          fd.append("file", f);
+          const resUpload = await fetch("/api/projects/deliverables/upload", {
+            method: "POST",
+            credentials: "include",
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            body: fd,
+          });
+          const jsonUpload = (await resUpload.json()) as { ok?: boolean; error?: string };
+          if (!resUpload.ok) throw new Error(jsonUpload.error || `Erro no upload (status ${resUpload.status})`);
+          await logDeliverableEvent({
+            deliverableId: deliverable.id,
+            projectId: deliverable.project_id,
+            eventType: "file_uploaded",
+            statusFrom: deliverable.status,
+            statusTo: deliverable.status,
+            comment: "Arquivo anexado.",
+          });
+          setFileByDeliverable((prev) => ({ ...prev, [deliverable.id]: null }));
+        }
+      }
+
+      const contributionText = note ? `${rawHourMinute} - ${note}` : rawHourMinute;
       const res = await supabase.from("deliverable_contributions").insert({
         deliverable_id: deliverableId,
         user_id: meId,
@@ -670,7 +748,7 @@ export default function MeuPerfilProjetosPage() {
         .maybeSingle();
 
       if (!assigneeRes.error && assigneeRes.data?.id) {
-        const nextValue = Number(assigneeRes.data.contribution_value ?? 0) + hours;
+        const nextValue = Number(assigneeRes.data.contribution_value ?? 0) + (hours ?? 0);
         const upd = await supabase
           .from("project_deliverable_assignees")
           .update({
@@ -685,7 +763,7 @@ export default function MeuPerfilProjetosPage() {
           project_id: currentDeliverable?.project_id ?? selectedProjectId,
           user_id: meId,
           contribution_unit: "hours",
-          contribution_value: hours,
+          contribution_value: hours ?? 0,
         });
         if (ins.error) throw new Error(ins.error.message);
       }
@@ -698,7 +776,7 @@ export default function MeuPerfilProjetosPage() {
       });
       setContribTextByDeliverable((prev) => ({ ...prev, [deliverableId]: "" }));
       setContribHoursByDeliverable((prev) => ({ ...prev, [deliverableId]: "" }));
-      setMsg("Contribuicao registrada com sucesso.");
+      setMsg("Contribuicao registrada e informacoes do entregavel enviadas com sucesso.");
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao registrar contribuicao.");
@@ -873,17 +951,33 @@ export default function MeuPerfilProjetosPage() {
       </div>
 
       <div className="rounded-3xl border border-slate-200 bg-white p-5">
-        <h2 className="text-base font-semibold text-slate-900">Documentos atribuidos a voce</h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-semibold text-slate-900">Documentos atribuidos a voce</h2>
+            <InfoTooltip
+              title="Documentos atribuidos a voce"
+              body={["Use o botao Acoes de cada entregavel para abrir detalhes, enviar link/arquivo e registrar contribuicao."]}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowPageHelp(true)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Ajuda da pagina
+          </button>
+        </div>
         <p className="mt-1 text-sm text-slate-600">Atualize o link do documento e registre sua contribuicao.</p>
 
         <div className="mt-4 space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
             Participacao individual no projeto:{" "}
-            <span className="font-semibold">{myParticipationHoursInProject.toFixed(1)}h</span>
+            <span className="font-semibold">{formatHoursAsHm(myParticipationHoursInProject)}</span>
             {" "}({myParticipationPercentInProject.toFixed(1)}%)
           </div>
           {projectDeliverablesAssignedToMe.length ? (
-            projectDeliverablesAssignedToMe.map((d) => {
+            <>
+              {projectDeliverablesAssignedToMe.map((d) => {
               const myContribs = contributions.filter((c) => c.deliverable_id === d.id && c.user_id === meId);
               const timelineFilter = timelineFilterByDeliverableId[d.id] ?? "all";
               const rawTimelineAll = deliverableTimeline.filter((t) => t.deliverable_id === d.id);
@@ -927,6 +1021,12 @@ export default function MeuPerfilProjetosPage() {
                 .map((t) => ({ row: t, parsed: parseReworkComment(t.comment) }))
                 .find((x) => x.parsed);
               const canEdit = canCollaboratorEditDeliverable(d.status);
+              const financialStatus = d.financial_status ?? "aberto";
+              const financialLocked = financialStatus !== "aberto";
+              const financialStatusLabel =
+                financialStatus === "baixado" ? "Baixado" : financialStatus === "pendente" ? "Pendente" : "Aberto";
+              const canEditContent = canEdit && !financialLocked;
+              const actionsOpen = actionsOpenByDeliverableId[d.id] ?? false;
               return (
                 <div
                   key={d.id}
@@ -934,258 +1034,361 @@ export default function MeuPerfilProjetosPage() {
                     overdueAwaitingInternalApproval ? "border-2 border-rose-400 bg-rose-100/40" : "border-slate-200"
                   }`}
                 >
-                  {overdueAwaitingInternalApproval ? (
-                    <div className="mb-2 rounded-lg border border-rose-300 bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-800">
-                      Entregavel atrasado: envie contribuicao e aguarde validacao interna.
-                    </div>
-                  ) : null}
-                  <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="mb-3 flex flex-wrap items-start justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-3">
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold text-slate-900">{d.title}</div>
                       <div className="mt-1 text-xs text-slate-500">
                         Status: <span className="font-semibold text-slate-700">{statusLabel(d.status)}</span>
-                        {d.due_date ? ` - Prazo: ${formatDateBR(d.due_date)}` : ""}
+                        {d.due_date ? ` | Prazo: ${formatDateBR(d.due_date)}` : ""}
+                        {" | "}Financeiro:{" "}
+                        <span
+                          className={
+                            financialStatus === "baixado"
+                              ? "font-semibold text-emerald-700"
+                              : financialStatus === "pendente"
+                                ? "font-semibold text-amber-700"
+                                : "font-medium text-slate-600"
+                          }
+                        >
+                          {financialStatusLabel}
+                        </span>
+                        {" | "}Responsavel:{" "}
+                        <span className="font-medium text-slate-600">
+                          {allAssignees.length ? allAssignees.map((uid) => personLabel(uid)).join(", ") : "Nao definido"}
+                        </span>
                       </div>
-                      {d.status === "approved_with_comments" ? (
-                        <div className="mt-1 text-xs text-amber-700">Comentario da aprovacao: {d.approval_comment ?? "-"}</div>
-                      ) : null}
-                      {d.description ? <div className="mt-2 text-sm text-slate-600">{d.description}</div> : null}
+                    </div>
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs text-slate-700">
+                        Contribuicoes: {myContribs.length} | Horas: {formatHoursAsHm(
+                          myContribs.reduce((acc, c) => acc + (Number((c as unknown as { hours?: number | null }).hours ?? 0) || 0), 0) ||
+                          Number(deliverableAssignees.find((a) => a.deliverable_id === d.id && a.user_id === meId)?.contribution_value ?? 0) ||
+                          0
+                        )}
+                      </span>
                       {overdueAwaitingInternalApproval ? (
-                        <div className="mt-2 inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-100 px-2 py-1 text-[11px] font-semibold text-rose-800">
+                        <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-800">
                           <AlertTriangle size={13} />
                           Atrasado (interno)
-                        </div>
+                        </span>
                       ) : null}
-                      {latestReworkAssignment?.parsed ? (
-                        <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
-                          <div className="font-semibold">
-                            Motivo: {latestReworkAssignment.parsed.reason}
-                            {latestReworkAssignment.row.actor_user_id
-                              ? ` - por ${personLabel(latestReworkAssignment.row.actor_user_id)}`
-                              : ""}
-                          </div>
-                          <div>{latestReworkAssignment.parsed.note || latestReworkAssignment.parsed.raw}</div>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="text-xs font-semibold text-slate-700">Pessoas atribuidas neste entregavel</div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {allAssignees.length ? (
-                        allAssignees.map((uid) => (
-                          <span
-                            key={uid}
-                            className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700"
-                          >
-                            {personLabel(uid)}
-                            {uid === meId ? " (voce)" : ""}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="text-xs text-slate-500">Sem outras atribuicoes.</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {canEdit ? (
-                    <div className="mt-3 grid gap-3 md:grid-cols-3">
-                      <input
-                        value={docLinkByDeliverable[d.id] ?? ""}
-                        onChange={(e) => setDocLinkByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))}
-                        placeholder="Link do documento"
-                        className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900 md:col-span-2"
-                      />
                       <button
                         type="button"
-                        onClick={() => void saveDocument(d)}
-                        disabled={saving}
-                        className="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                        onClick={() =>
+                          setActionsOpenByDeliverableId((prev) =>
+                            prev[d.id]
+                              ? {}
+                              : {
+                                  [d.id]: true,
+                                }
+                          )
+                        }
+                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
                       >
-                        <Save size={16} /> Salvar/Enviar
+                        <MoreHorizontal size={16} />
+                        Acoes
+                        {actionsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                       </button>
                     </div>
-                  ) : (
-                    <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                      Entregavel enviado. A edicao fica bloqueada ate reencaminhamento pelo coordenador.
-                    </div>
-                  )}
+                  </div>
 
-                  <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="text-xs font-semibold text-slate-700">Arquivo do entregavel</div>
-                      {d.document_path ? (
+                  {actionsOpen ? (
+                    <>
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-indigo-200 bg-indigo-50 px-3 py-2">
+                        <div>
+                          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-700">Acoes deste entregavel</div>
+                          <div className="text-xs text-indigo-900">Os campos abaixo afetam apenas {d.title}.</div>
+                        </div>
                         <button
                           type="button"
-                          onClick={() => void openDeliverableFile(d.id)}
-                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+                          onClick={() => setActionsOpenByDeliverableId({})}
+                          className="rounded-xl border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"
                         >
-                          Abrir arquivo atual
-                        </button>
-                      ) : null}
-                    </div>
-
-                    {canEdit ? (
-                      <div className="mt-2 grid gap-2 md:grid-cols-3">
-                        <input
-                          type="file"
-                          accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/png,image/jpeg,image/webp"
-                          className="block w-full text-sm md:col-span-2"
-                          onChange={(e) => {
-                            const f = e.target.files?.[0] ?? null;
-                            setFileByDeliverable((prev) => ({ ...prev, [d.id]: f }));
-                          }}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => void uploadDeliverableFile(d)}
-                          disabled={saving}
-                          className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
-                        >
-                          Enviar arquivo
+                          Fechar acoes
                         </button>
                       </div>
-                    ) : null}
-
-                    {(filesByDeliverableId[d.id] ?? []).length ? (
-                      <div className="mt-3 space-y-2">
-                        <div className="text-[11px] font-semibold text-slate-700">Ultimas versoes</div>
-                        {(filesByDeliverableId[d.id] ?? []).slice(0, 3).map((f) => (
-                          <div key={f.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
-                            <div className="min-w-0">
-                              <div className="truncate text-xs font-semibold text-slate-800">
-                                v{f.version} - {f.file_name ?? "Arquivo"} - {formatDateTimeBR(f.created_at)}
-                              </div>
+                      {overdueAwaitingInternalApproval ? (
+                        <div className="mb-2 rounded-lg border border-rose-300 bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-800">
+                          Entregavel atrasado: envie contribuicao e aguarde validacao interna.
+                        </div>
+                      ) : null}
+                      {financialLocked ? (
+                        <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                          Entregavel vinculado a boletim (financeiro {financialStatusLabel.toLowerCase()}) nao permite alteracoes.
+                        </div>
+                      ) : null}
+                      <div className="min-w-0">
+                        {d.status === "approved_with_comments" ? (
+                          <div className="mt-1 text-xs text-amber-700">Comentario da aprovacao: {d.approval_comment ?? "-"}</div>
+                        ) : null}
+                        {d.description ? <div className="mt-2 text-sm text-slate-600">{d.description}</div> : null}
+                        {latestReworkAssignment?.parsed ? (
+                          <div className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-2 text-xs text-amber-800">
+                            <div className="font-semibold">
+                              Motivo: {latestReworkAssignment.parsed.reason}
+                              {latestReworkAssignment.row.actor_user_id
+                                ? ` - por ${personLabel(latestReworkAssignment.row.actor_user_id)}`
+                                : ""}
                             </div>
+                            <div>{latestReworkAssignment.parsed.note || latestReworkAssignment.parsed.raw}</div>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {canEditContent ? (
+                        <div className="mt-3">
+                          <input
+                            value={docLinkByDeliverable[d.id] ?? ""}
+                            onChange={(e) => setDocLinkByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                            placeholder="Link do documento"
+                            className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                          />
+                        </div>
+                      ) : financialLocked ? (
+                        <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                          Documento em boletim ({financialStatusLabel.toLowerCase()}). Alteracoes ficam bloqueadas ate liberacao financeira.
+                        </div>
+                      ) : (
+                        <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                          Entregavel enviado. A edicao fica bloqueada ate reencaminhamento pelo coordenador.
+                        </div>
+                      )}
+
+                      <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-xs font-semibold text-slate-700">Arquivo do entregavel</div>
+                          {d.document_path ? (
                             <button
                               type="button"
-                              onClick={() => void openDeliverableFile(d.id, f.version)}
-                              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                              onClick={() => void openDeliverableFile(d.id)}
+                              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
                             >
-                              Abrir
+                              Abrir arquivo atual
+                            </button>
+                          ) : null}
+                        </div>
+
+                      {canEditContent ? (
+                        <div className="mt-2 grid gap-2 md:grid-cols-3">
+                            <input
+                              type="file"
+                              accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/png,image/jpeg,image/webp"
+                              className="block w-full text-sm md:col-span-2"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0] ?? null;
+                                setFileByDeliverable((prev) => ({ ...prev, [d.id]: f }));
+                              }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => void uploadDeliverableFile(d)}
+                              disabled={saving}
+                              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+                            >
+                              Enviar arquivo
                             </button>
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="mt-2 text-xs text-slate-600">Nenhum arquivo enviado ainda.</div>
-                    )}
-                  </div>
+                        ) : null}
 
-                  {canEdit ? (
-                    <div className="mt-3 grid gap-3 md:grid-cols-3">
-                      <input
-                        type="number"
-                        min="0.1"
-                        step="0.1"
-                        value={contribHoursByDeliverable[d.id] ?? ""}
-                        onChange={(e) =>
-                          setContribHoursByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))
-                        }
-                        placeholder="Horas (ex.: 2.5)"
-                        className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-                      />
-                      <input
-                        value={contribTextByDeliverable[d.id] ?? ""}
-                        onChange={(e) => setContribTextByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))}
-                        placeholder="Descricao da contribuicao (opcional)"
-                        className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => void addContribution(d.id)}
-                        disabled={saving}
-                        className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
-                      >
-                        Registrar contribuicao
-                      </button>
-                    </div>
-                  ) : null}
-
-                  {myContribs.length ? (
-                    <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                      <div className="text-xs font-semibold text-slate-700">Minhas contribuicoes recentes</div>
-                      <div className="mt-2 space-y-1 text-xs text-slate-600">
-                        {myContribs.slice(0, 3).map((c) => (
-                          <div key={c.id} className="flex items-start justify-between gap-3">
-                            <span className="min-w-0">{c.contribution_note ?? "-"}</span>
-                            <span className="shrink-0 text-slate-500">{formatDateTimeBR(c.created_at)}</span>
+                        {(filesByDeliverableId[d.id] ?? []).length ? (
+                          <div className="mt-3 space-y-2">
+                            <div className="text-[11px] font-semibold text-slate-700">Ultimas versoes</div>
+                            {(filesByDeliverableId[d.id] ?? []).slice(0, 3).map((f) => (
+                              <div key={f.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                                <div className="min-w-0">
+                                  <div className="truncate text-xs font-semibold text-slate-800">
+                                    v{f.version} - {f.file_name ?? "Arquivo"} - {formatDateTimeBR(f.created_at)}
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => void openDeliverableFile(d.id, f.version)}
+                                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                                >
+                                  Abrir
+                                </button>
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        ) : (
+                          <div className="mt-2 text-xs text-slate-600">Nenhum arquivo enviado ainda.</div>
+                        )}
                       </div>
-                    </div>
-                  ) : null}
 
-                  <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-xs font-semibold text-slate-700">Linha do tempo do documento</div>
-                      <select
-                        value={timelineFilter}
-                        onChange={(e) =>
-                          setTimelineFilterByDeliverableId((prev) => ({
-                            ...prev,
-                            [d.id]: e.target.value as "all" | "leadership" | "rework",
-                          }))
-                        }
-                        className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs"
-                      >
-                        <option value="all">Todos</option>
-                        <option value="leadership">Apenas lideranca</option>
-                        <option value="rework">Apenas reencaminhamento</option>
-                      </select>
-                    </div>
-                    <div className="mt-2 space-y-1 text-xs text-slate-600">
-                      {timeline.length ? (
-                        timeline.map((t) => (
-                          <div
-                            key={t.id}
-                            className={isLeadershipRole(t.actor_role) && t.comment ? "font-semibold text-indigo-700" : undefined}
+                      {canEditContent ? (
+                        <div className="mt-3 grid gap-3 md:grid-cols-3">
+                          <input
+                            type="text"
+                            value={contribHoursByDeliverable[d.id] ?? ""}
+                            onChange={(e) =>
+                              setContribHoursByDeliverable((prev) => ({
+                                ...prev,
+                                [d.id]: normalizeHourMinuteInput(e.target.value),
+                              }))
+                            }
+                            placeholder="00H00MIN"
+                            className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                          />
+                          <input
+                            value={contribTextByDeliverable[d.id] ?? ""}
+                            onChange={(e) => setContribTextByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                            placeholder="Descricao da contribuicao (opcional)"
+                            className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void addContribution(d.id)}
+                            disabled={saving}
+                            className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
                           >
-                            {formatDateTimeBR(t.created_at)} - {deliverableEventLabel(t.event_type)}
-                            {t.status_from || t.status_to
-                              ? ` (${statusLabel(t.status_from ?? "-")} -> ${statusLabel(t.status_to ?? "-")})`
-                              : ""}
-                            {t.comment ? ` - ${t.comment}` : ""}
-                            {isLeadershipRole(t.actor_role) && t.comment ? " [Comentario da lideranca]" : ""}
-                            {t.actor_user_id ? ` - ${personLabel(t.actor_user_id)}` : ""}
+                            Registrar contribuicao
+                          </button>
+                        </div>
+                      ) : null}
+
+                      {canEditContent ? (
+                        <div className="mt-3 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDocLinkByDeliverable((prev) => ({ ...prev, [d.id]: "" }));
+                              setContribTextByDeliverable((prev) => ({ ...prev, [d.id]: "" }));
+                              setContribHoursByDeliverable((prev) => ({ ...prev, [d.id]: "" }));
+                              setFileByDeliverable((prev) => ({ ...prev, [d.id]: null }));
+                              setActionsOpenByDeliverableId((prev) => ({ ...prev, [d.id]: false }));
+                            }}
+                            disabled={saving}
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                          >
+                            Cancelar acao
+                          </button>
+                        </div>
+                      ) : null}
+                      {myContribs.length ? (
+                        <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                          <div className="text-xs font-semibold text-slate-700">Minhas contribuicoes recentes</div>
+                          <div className="mt-2 space-y-1 text-xs text-slate-600">
+                            {myContribs.slice(0, 3).map((c) => (
+                              <div key={c.id} className="flex items-start justify-between gap-3">
+                                <span className="min-w-0">{c.contribution_note ?? "-"}</span>
+                                <span className="shrink-0 text-slate-500">{formatDateTimeBR(c.created_at)}</span>
+                              </div>
+                            ))}
                           </div>
-                        ))
-                      ) : (
-                        <div className="text-slate-500">Sem eventos registrados.</div>
-                      )}
-                    </div>
-                    {timelineHasMore || timelineExpanded ? (
-                      <div className="mt-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setTimelineExpandedByDeliverableId((prev) => ({
-                              ...prev,
-                              [d.id]: !timelineExpanded,
-                            }))
-                          }
-                          className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700"
-                        >
-                          {timelineExpanded ? "Ver menos" : `Ver mais (${timelineAll.length - 3})`}
-                        </button>
+                        </div>
+                      ) : null}
+
+                      <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-xs font-semibold text-slate-700">Linha do tempo do documento</div>
+                          <select
+                            value={timelineFilter}
+                            onChange={(e) =>
+                              setTimelineFilterByDeliverableId((prev) => ({
+                                ...prev,
+                                [d.id]: e.target.value as "all" | "leadership" | "rework",
+                              }))
+                            }
+                            className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs"
+                          >
+                            <option value="all">Todos</option>
+                            <option value="leadership">Apenas lideranca</option>
+                            <option value="rework">Apenas reencaminhamento</option>
+                          </select>
+                        </div>
+                        <div className="mt-2 space-y-1 text-xs text-slate-600">
+                          {timeline.length ? (
+                            timeline.map((t) => (
+                              <div
+                                key={t.id}
+                                className={isLeadershipRole(t.actor_role) && t.comment ? "font-semibold text-indigo-700" : undefined}
+                              >
+                                {formatDateTimeBR(t.created_at)} - {deliverableEventLabel(t.event_type)}
+                                {t.status_from || t.status_to
+                                  ? ` (${statusLabel(t.status_from ?? "-")} -> ${statusLabel(t.status_to ?? "-")})`
+                                  : ""}
+                                {t.comment ? ` - ${t.comment}` : ""}
+                                {isLeadershipRole(t.actor_role) && t.comment ? " [Comentario da lideranca]" : ""}
+                                {t.actor_user_id ? ` - ${personLabel(t.actor_user_id)}` : ""}
+                              </div>
+                            ))
+                          ) : (
+                            <div className="text-slate-500">Sem eventos registrados.</div>
+                          )}
+                        </div>
+                        {timelineHasMore || timelineExpanded ? (
+                          <div className="mt-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setTimelineExpandedByDeliverableId((prev) => ({
+                                  ...prev,
+                                  [d.id]: !timelineExpanded,
+                                }))
+                              }
+                              className="rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700"
+                            >
+                              {timelineExpanded ? "Ver menos" : `Ver mais (${timelineAll.length - 3})`}
+                            </button>
+                          </div>
+                        ) : null}
                       </div>
-                    ) : null}
-                  </div>
+                    </>
+                  ) : null}
+
                 </div>
               );
-            })
+            })}
+            </>
           ) : (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
               Nenhum documento atribuido a voce neste projeto.
             </div>
           )}
+
+          <details className="group rounded-2xl border border-slate-200 bg-slate-50" open={false}>
+            <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-slate-800">
+              <span className="inline-flex items-center gap-2">
+                <ChevronRight size={14} className="inline-block transition-transform group-open:rotate-90" />
+                Itens excluidos ({projectDeliverablesExcluded.length})
+              </span>
+            </summary>
+            <div className="border-t border-slate-200 px-4 py-3">
+              {projectDeliverablesExcluded.length ? (
+                <div className="space-y-2">
+                  {projectDeliverablesExcluded.map((d) => (
+                    <div key={d.id} className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                      <div className="text-sm font-semibold text-slate-900">{d.title}</div>
+                      <div className="mt-1 text-xs text-slate-500">
+                        Status: <span className="font-semibold text-slate-700">{statusLabel(d.status)}</span>
+                        {d.due_date ? ` | Prazo: ${formatDateBR(d.due_date)}` : ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-slate-500">Nenhum item excluido no momento.</div>
+              )}
+            </div>
+          </details>
         </div>
       </div>
 
       <div className="text-xs text-slate-500">
         Dica: se voce nao esta vendo um projeto, confirme se voce esta cadastrado como membro em <code>project_members</code>.
       </div>
+
+      <PageHelpModal
+        open={showPageHelp}
+        onClose={() => setShowPageHelp(false)}
+        title="Ajuda da pagina - Meus entregaveis"
+        items={[
+          { title: "Acoes", text: "abre os detalhes do entregavel para enviar link/arquivo e registrar contribuicao." },
+          { title: "Atrasado (interno)", text: "indica pendencia interna de validacao da contribuicao." },
+          { title: "Itens excluidos", text: "entregaveis atribuidos a voce, mas bloqueados para edicao (ex.: enviados/aprovados)." },
+          { title: "Linha do tempo", text: "mostra comentarios e movimentacoes (inclusive da lideranca) quando o card estiver expandido." },
+        ]}
+      />
     </div>
   );
 }

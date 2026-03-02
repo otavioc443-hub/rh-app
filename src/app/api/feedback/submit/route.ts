@@ -12,6 +12,14 @@ type ActiveCycle = {
   release_end: string;
 };
 
+type PdiPayloadItem = {
+  goal: string;
+  action: string;
+  deadline: string | null;
+  responsible: string;
+  indicator: string;
+};
+
 export async function POST(req: Request) {
   const guard = await requireRoles(["coordenador", "gestor", "admin"]);
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
@@ -111,15 +119,16 @@ export async function POST(req: Request) {
 
     const finalClassification =
       finalScore >= 9 ? "Destaque" : finalScore >= 7 ? "Bom desempenho" : finalScore >= 5 ? "Atencao" : "Critico";
+    const legacyRating = Math.min(5, Math.max(1, Math.round(finalScore / 2)));
 
     const { error: insertErr } = await supabaseAdmin.from("feedbacks").insert({
       user_id: guard.userId,
       user_email: guard.email,
+      rating: legacyRating,
       target_user_id: targetUserId,
       evaluator_user_id: guard.userId,
       source_role: guard.role,
       cycle_id: cycle.id,
-      scores,
       comment,
       details_json: details,
       final_score: finalScore,
@@ -136,17 +145,51 @@ export async function POST(req: Request) {
       targetDate.setDate(targetDate.getDate() + 30);
 
       // Retroalimenta PDI de curto prazo automaticamente
-      const pdiGoal = String(details?.pdi_goal ?? "").trim();
-      const pdiTitle = pdiGoal || "PDI curto prazo: melhoria a partir de feedback";
-      const pdiAction = shortTermAction || String(details?.pdi_action ?? "").trim() || comment.slice(0, 260);
-      const pdiDeadline = String(details?.pdi_deadline ?? "").trim();
-      const { error: pdiErr } = await supabaseAdmin.from("pdi_items").insert({
-        user_id: targetUserId,
-        title: pdiTitle,
-        action: pdiAction,
-        target_date: pdiDeadline || targetDate.toISOString().slice(0, 10),
-        status: "planejado",
-      });
+      const rawPdiItems = Array.isArray(details?.pdi_items) ? (details.pdi_items as Array<Record<string, unknown>>) : [];
+      let normalizedPdiItems: PdiPayloadItem[] = rawPdiItems
+        .map((item) => ({
+          goal: String(item?.goal ?? "").trim(),
+          action: String(item?.action ?? "").trim(),
+          deadline: String(item?.deadline ?? "").trim() || null,
+          responsible: String(item?.responsible ?? "").trim(),
+          indicator: String(item?.indicator ?? "").trim(),
+        }))
+        .filter((item) => item.goal || item.action || item.deadline || item.responsible || item.indicator);
+
+      if (!normalizedPdiItems.length) {
+        const legacyPdiItem: PdiPayloadItem = {
+          goal: String(details?.pdi_goal ?? "").trim(),
+          action: String(details?.pdi_action ?? "").trim(),
+          deadline: String(details?.pdi_deadline ?? "").trim() || null,
+          responsible: String(details?.pdi_responsible ?? "").trim(),
+          indicator: String(details?.pdi_indicator ?? "").trim(),
+        };
+        if (
+          legacyPdiItem.goal ||
+          legacyPdiItem.action ||
+          legacyPdiItem.deadline ||
+          legacyPdiItem.responsible ||
+          legacyPdiItem.indicator
+        ) {
+          normalizedPdiItems = [legacyPdiItem];
+        }
+      }
+
+      const pdiRows = (normalizedPdiItems.length ? normalizedPdiItems : [{ goal: "", action: "", deadline: null, responsible: "", indicator: "" }]).map(
+        (item, index) => ({
+          user_id: targetUserId,
+          title:
+            item.goal ||
+            (normalizedPdiItems.length > 1
+              ? `PDI curto prazo ${index + 1}: melhoria a partir de feedback`
+              : "PDI curto prazo: melhoria a partir de feedback"),
+          action: item.action || shortTermAction || comment.slice(0, 260),
+          target_date: item.deadline || targetDate.toISOString().slice(0, 10),
+          status: "planejado" as const,
+        })
+      );
+
+      const { error: pdiErr } = await supabaseAdmin.from("pdi_items").insert(pdiRows);
       if (pdiErr) {
         return NextResponse.json({ error: `Feedback salvo, mas PDI falhou: ${pdiErr.message}` }, { status: 400 });
       }

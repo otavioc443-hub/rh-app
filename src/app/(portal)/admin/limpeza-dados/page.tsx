@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ShieldAlert, Trash2, RefreshCcw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
@@ -73,7 +73,7 @@ export default function AdminDataCleanupPage() {
     return data.session?.access_token ?? "";
   }
 
-  async function loadRawRoleAndToken() {
+  const loadRawRoleAndToken = useCallback(async () => {
     const { data: userRes } = await supabase.auth.getUser();
     const user = userRes.user;
     if (!user) {
@@ -94,7 +94,7 @@ export default function AdminDataCleanupPage() {
     if (profile?.company_id) {
       setSelectedCompanyId(profile.company_id);
     }
-  }
+  }, [router]);
 
   async function loadCompanies(currentToken: string) {
     setLoadingCompanies(true);
@@ -192,7 +192,7 @@ export default function AdminDataCleanupPage() {
     return () => {
       mounted = false;
     };
-  }, [roleLoading, canAccess, router]);
+  }, [roleLoading, canAccess, router, loadRawRoleAndToken]);
 
   useEffect(() => {
     if (!token || !selectedCompanyId) return;

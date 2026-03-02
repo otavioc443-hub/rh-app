@@ -93,6 +93,13 @@ function hoursDiff(fromIso: string, toIso: string) {
   return Math.max(0, (to - from) / (1000 * 60 * 60));
 }
 
+function formatHoursAsHm(value: number | null | undefined) {
+  const totalMinutes = Math.max(0, Math.round((Number(value) || 0) * 60));
+  const hh = Math.floor(totalMinutes / 60);
+  const mm = totalMinutes % 60;
+  return `${String(hh).padStart(2, "0")}h${String(mm).padStart(2, "0")}min`;
+}
+
 function deriveAssignedArea(row: Pick<ProfileRequestRow, "request_type" | "requested_changes">): AssignedArea {
   const explicit = row.requested_changes?.assigned_area;
   if (explicit === "rh" || explicit === "financeiro") return explicit;
@@ -437,7 +444,7 @@ export default function RhSolicitacoesPage() {
         <StatCard label="Concluidas" value={stats.done} />
         <StatCard label="Recusadas" value={stats.rejected} />
         <StatCard label="Atrasadas (SLA)" value={stats.overdue} />
-        <StatCard label="Tempo medio analise" value={`${stats.avgHours.toFixed(1)}h`} />
+        <StatCard label="Tempo medio analise" value={formatHoursAsHm(stats.avgHours)} />
       </div>
 
       {stats.overdue > 0 ? (
@@ -593,42 +600,50 @@ export default function RhSolicitacoesPage() {
                   ) : null}
                 </div>
 
-                <label className="grid gap-1 text-xs font-semibold text-slate-700">
-                  Novo status
-                  <select
-                    value={decisionStatus}
-                    onChange={(e) => setDecisionStatus(e.target.value as RequestStatus)}
-                    className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-                  >
-                    <option value="pending">Pendente</option>
-                    <option value="in_review">Em analise</option>
-                    <option value="approved">Aprovada</option>
-                    <option value="rejected">Recusada</option>
-                    <option value="implemented">Implementada</option>
-                    <option value="cancelled">Cancelada</option>
-                  </select>
-                </label>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Acoes da solicitacao selecionada
+                  </div>
 
-                <label className="grid gap-1 text-xs font-semibold text-slate-700">
-                  Observacoes da analise
-                  <textarea
-                    value={decisionNotes}
-                    onChange={(e) => setDecisionNotes(e.target.value)}
-                    className="min-h-[90px] rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-900"
-                  />
-                </label>
+                  <label className="grid gap-1 text-xs font-semibold text-slate-700">
+                    Novo status
+                    <select
+                      value={decisionStatus}
+                      onChange={(e) => setDecisionStatus(e.target.value as RequestStatus)}
+                      className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                    >
+                      <option value="pending">Pendente</option>
+                      <option value="in_review">Em analise</option>
+                      <option value="approved">Aprovada</option>
+                      <option value="rejected">Recusada</option>
+                      <option value="implemented">Implementada</option>
+                      <option value="cancelled">Cancelada</option>
+                    </select>
+                  </label>
 
-                <button
-                  type="button"
-                  onClick={() => void decide()}
-                  disabled={saving}
-                  className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60"
-                >
-                  {saving ? "Salvando..." : "Registrar decisao"}
-                </button>
+                  <label className="mt-3 grid gap-1 text-xs font-semibold text-slate-700">
+                    Observacoes da analise
+                    <textarea
+                      value={decisionNotes}
+                      onChange={(e) => setDecisionNotes(e.target.value)}
+                      className="min-h-[90px] rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-900"
+                    />
+                  </label>
+
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => void decide()}
+                      disabled={saving}
+                      className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60"
+                    >
+                      {saving ? "Salvando..." : "Registrar decisao"}
+                    </button>
+                  </div>
+                </div>
 
                 <div className="rounded-xl border border-slate-200 bg-white p-3">
-                  <p className="text-xs font-semibold text-slate-700">Redirecionar solicitacao</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Redirecionar solicitacao</p>
                   <div className="mt-2 grid gap-2">
                     <select
                       value={redirectArea}

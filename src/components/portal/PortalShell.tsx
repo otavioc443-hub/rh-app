@@ -2,7 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
+import {
+  clearLocalSupabaseSession,
+  clearPortalExitIntent,
+  clearRecentLoginMarker,
+  forceClientLogout,
+  getSessionAuditId,
+  hasPortalExitIntent,
+  hasRecentLoginMarker,
+  markPortalExitIntent,
+  supabase,
+} from "@/lib/supabaseClient";
 import Sidebar from "@/components/portal/Sidebar";
 import NotificationBell from "@/components/portal/NotificationBell";
 import { isRouteHidden } from "@/lib/featureVisibility";
@@ -91,9 +101,50 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       setDebugErr(null);
 
       try {
-        const { data: sessRes, error: sessErr } = await withTimeout(supabase.auth.getSession(), 7000);
+        if (typeof window !== "undefined") {
+          const nav = window.performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+          if (nav?.type === "reload") {
+            clearPortalExitIntent();
+          } else if (hasPortalExitIntent()) {
+            const sessionAuditId = getSessionAuditId();
+            if (sessionAuditId) {
+              try {
+                const { data: sess } = await supabase.auth.getSession();
+                const token = sess.session?.access_token ?? null;
+                await fetch("/api/session-audit", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                  },
+                  body: JSON.stringify({
+                    action: "end",
+                    sessionId: sessionAuditId,
+                    reason: "page_exit",
+                  }),
+                });
+              } catch {
+                // noop
+              }
+            }
+            clearPortalExitIntent();
+            clearRecentLoginMarker();
+            clearLocalSupabaseSession();
+            await safeRedirectToLogin();
+            return;
+          }
+        }
+
+        let { data: sessRes, error: sessErr } = await withTimeout(supabase.auth.getSession(), 7000);
 
         if (!alive.current) return;
+
+        if ((!sessRes?.session?.user || sessErr) && hasRecentLoginMarker()) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          const retry = await withTimeout(supabase.auth.getSession(), 7000);
+          sessRes = retry.data;
+          sessErr = retry.error;
+        }
 
         if (sessErr) {
           await safeRedirectToLogin();
@@ -106,6 +157,8 @@ export default function PortalShell({ children }: { children: React.ReactNode })
           await safeRedirectToLogin();
           return;
         }
+
+        clearRecentLoginMarker();
 
         const { data: profile, error: profileErr } = await supabase
           .from("profiles")
@@ -219,6 +272,14 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       boot();
     });
 
+    const markOnLeave = () => {
+      markPortalExitIntent();
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("pagehide", markOnLeave);
+      window.addEventListener("beforeunload", markOnLeave);
+    }
+
     const onProfileUpdated = () => {
       void boot();
     };
@@ -229,6 +290,10 @@ export default function PortalShell({ children }: { children: React.ReactNode })
     return () => {
       alive.current = false;
       sub.subscription.unsubscribe();
+      if (typeof window !== "undefined") {
+        window.removeEventListener("pagehide", markOnLeave);
+        window.removeEventListener("beforeunload", markOnLeave);
+      }
       if (typeof window !== "undefined") {
         window.removeEventListener("portal-profile-updated", onProfileUpdated);
       }
@@ -311,7 +376,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
             </button>
             <button
               onClick={async () => {
-                await supabase.auth.signOut();
+                await forceClientLogout();
                 router.replace("/");
               }}
               className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800"

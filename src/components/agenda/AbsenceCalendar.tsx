@@ -122,7 +122,7 @@ export default function AbsenceCalendar({ myAllowance, myRequests, onRefresh }: 
       if (conflict) throw new Error("Conflito com uma solicitação existente no período.");
 
       // 4) criar solicitação
-      const { error: ierr } = await supabase.from("absence_requests").insert({
+      const insertPayload = {
         user_id: user.id,
         manager_id: me.manager_id,
         allowance_id: myAllowance.id,
@@ -131,9 +131,15 @@ export default function AbsenceCalendar({ myAllowance, myRequests, onRefresh }: 
         days_count: days,
         reason: reason.trim() ? reason.trim() : null,
         status: "pending_manager",
-      });
+      };
+      const { error: ierr } = await supabase.from("absence_requests").insert(insertPayload);
 
       if (ierr) throw ierr;
+      await fetch("/api/ausencias/requests/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "created", requests: [insertPayload] }),
+      }).catch(() => null);
 
       setReason("");
       setMsg("Solicitação enviada ao gestor para aprovação ✅");

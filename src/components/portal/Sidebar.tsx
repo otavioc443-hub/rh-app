@@ -14,9 +14,11 @@ import {
   BadgeCheck,
   ClipboardList,
   Shield,
+  ShieldCheck,
   Users,
   UserPlus,
   Briefcase,
+  FolderOpen,
   Layers,
   LayoutDashboard,
   UserCog,
@@ -30,7 +32,7 @@ import {
   Trash2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { supabase } from "@/lib/supabaseClient";
+import { forceClientLogout, supabase } from "@/lib/supabaseClient";
 import { isRouteHidden } from "@/lib/featureVisibility";
 
 type Role = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "financeiro" | "pd" | "admin";
@@ -93,6 +95,7 @@ export default function Sidebar({
         roles: ["colaborador", "coordenador", "gestor", "diretoria", "rh", "financeiro", "pd", "admin"],
         children: [
           { label: "Visão Geral", icon: LayoutDashboard, href: "/institucional", exact: true },
+          { label: "Rede social", icon: MessageSquareText, href: "/institucional/rede-social" },
           { label: "Organograma", icon: GitBranch, href: "/institucional/organograma", roles: ["gestor", "financeiro", "admin"] },
         ],
       },
@@ -154,8 +157,10 @@ export default function Sidebar({
         roles: ["financeiro", "admin"],
         children: [
           { label: "Painel Financeiro", icon: LayoutDashboard, href: "/financeiro", exact: true },
+          { label: "Visao gerencial", icon: LineChart, href: "/financeiro/gerencial" },
           { label: "Custos indiretos", icon: Layers, href: "/financeiro/custos-indiretos" },
           { label: "Solicitacoes", icon: ClipboardList, href: "/financeiro/solicitacoes" },
+          { label: "Aprovar extras", icon: ShieldCheck, href: "/financeiro/pagamentos-extras" },
           { label: "Notas fiscais", icon: Wallet, href: "/financeiro/notas-fiscais" },
           { label: "Remessas", icon: Wallet, href: "/financeiro/remessas" },
         ],
@@ -185,6 +190,9 @@ export default function Sidebar({
         icon: Shield,
         roles: ["diretoria", "admin"],
         children: [
+          { label: "Painel CEO", icon: LayoutDashboard, href: "/ceo", exact: true },
+          { label: "Painel TV", icon: MonitorCheck, href: "/ceo-tv" },
+          { label: "Presets TV", icon: CalendarClock, href: "/ceo/painel-tv-config" },
           { label: "Aprovar aditivos", icon: ClipboardList, href: "/ceo/aditivos-contratuais", exact: true },
         ],
       },
@@ -214,6 +222,7 @@ export default function Sidebar({
         children: [
           { label: "Acompanhamento", icon: ClipboardList, href: "/diretoria/projetos", exact: true },
           { label: "Novo projeto", icon: Briefcase, href: "/diretoria/projetos/novo" },
+          { label: "Projetos cadastrados", icon: FolderOpen, href: "/diretoria/projetos/cadastrados" },
           { label: "Medicoes/Boletins", icon: ClipboardList, href: "/diretoria/medicoes" },
           { label: "Aditivos/Contratos", icon: ClipboardList, href: "/diretoria/contratos" },
           { label: "Clientes", icon: Building2, href: "/diretoria/clientes" },
@@ -313,12 +322,16 @@ export default function Sidebar({
   }, [pathname, role]);
 
   async function handleLogout() {
+    let manualHandled = false;
     try {
       if (typeof window !== "undefined" && window.__logoutManual) {
+        manualHandled = true;
         await window.__logoutManual();
       }
     } catch {}
-    await supabase.auth.signOut();
+    if (!manualHandled) {
+      await forceClientLogout();
+    }
     router.replace("/");
   }
   const userSubtitle = jobTitle?.trim() ? jobTitle : departmentName ? `Setor: ${departmentName}` : null;

@@ -75,7 +75,9 @@ export default function GestorPagamentosExtrasPage() {
     const p = profilesById[userId];
     const name = (p?.full_name ?? "").trim();
     if (name && !name.includes("@")) return name;
-    return `Colaborador ${userId.slice(0, 8)}`;
+    const email = (p?.email ?? "").trim();
+    if (email) return email;
+    return "Colaborador sem nome";
   };
 
   async function loadAll() {

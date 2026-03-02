@@ -1,7 +1,7 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, BellRing, RefreshCcw } from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, BellRing, MoreHorizontal, RefreshCcw } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { PersonChip } from "@/components/people/PersonChip";
@@ -14,6 +14,7 @@ type Project = {
   description: string | null;
   status: "active" | "paused" | "done";
   client_id?: string | null;
+  project_line?: "eolica" | "solar" | "bess" | null;
   project_type?: ProjectType | null;
   project_scopes?: string[] | null;
 };
@@ -45,6 +46,9 @@ type Deliverable = {
   title: string;
   description: string | null;
   due_date: string | null;
+  review_due_at?: string | null;
+  discipline_code?: "civil" | "eletromecanico" | null;
+  financial_status?: "aberto" | "pendente" | "baixado" | null;
   assigned_to: string | null;
   status: "pending" | "in_progress" | "sent" | "approved" | "approved_with_comments";
   approval_comment: string | null;
@@ -117,6 +121,13 @@ type AssigneeReason =
   | "ajuste_escopo"
   | "prioridade_urgente";
 
+function formatHoursAsHm(value: number | null | undefined) {
+  const totalMinutes = Math.max(0, Math.round((Number(value) || 0) * 60));
+  const hh = Math.floor(totalMinutes / 60);
+  const mm = totalMinutes % 60;
+  return `${String(hh).padStart(2, "0")}h${String(mm).padStart(2, "0")}min`;
+}
+
 const ASSIGNEE_REASON_OPTIONS: Array<{ value: AssigneeReason; label: string }> = [
   { value: "atribuicao_inicial", label: "Atribuicao inicial" },
   { value: "reencaminhamento", label: "Reencaminhamento" },
@@ -146,6 +157,13 @@ function projectTypeLabel(value: ProjectType | null | undefined) {
   if (value === "eletrico") return "Eletrico";
   if (value === "hidraulico") return "Hidraulico";
   if (value === "outro") return "Outro";
+  return "-";
+}
+
+function projectLineLabel(value?: "eolica" | "solar" | "bess" | null) {
+  if (value === "eolica") return "Eolica";
+  if (value === "solar") return "Solar";
+  if (value === "bess") return "BESS";
   return "-";
 }
 
@@ -210,6 +228,56 @@ function parseDueDate(value?: string | null) {
   return Number.isNaN(dt.getTime()) ? null : new Date(dt.getFullYear(), dt.getMonth(), dt.getDate());
 }
 
+function DonutProgressMetric({
+  label,
+  value,
+  accentClass,
+  detail,
+}: {
+  label: string;
+  value: number;
+  accentClass: string;
+  detail?: ReactNode;
+}) {
+  const pct = Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+  const radius = 18;
+  const stroke = 4;
+  const size = 44;
+  const circumference = 2 * Math.PI * radius;
+  const dashOffset = circumference * (1 - pct / 100);
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+      <p className="text-slate-300">{label}</p>
+      <div className="mt-2 flex items-center gap-3">
+        <div className="relative h-11 w-11 shrink-0">
+          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+            <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="currentColor" strokeWidth={stroke} className="text-white/10" />
+            <circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={stroke}
+              strokeLinecap="round"
+              strokeDasharray={circumference}
+              strokeDashoffset={dashOffset}
+              className={accentClass}
+            />
+          </svg>
+          <span className="absolute inset-0 flex items-center justify-center text-[10px] font-semibold text-white">{pct}%</span>
+        </div>
+        <div className="text-xs text-slate-300">
+          <p className="text-2xl font-semibold leading-none text-white">{pct}%</p>
+          <p className="mt-1">Progresso por entregaveis</p>
+        </div>
+      </div>
+      {detail ? <div className="mt-2">{detail}</div> : null}
+    </div>
+  );
+}
+
 function isLeadershipRole(role?: string | null) {
   return role === "gestor" || role === "coordenador" || role === "admin";
 }
@@ -266,6 +334,14 @@ export default function CoordenadorProjetosPage() {
   >({});
   const [timelineExpandedByDeliverableId, setTimelineExpandedByDeliverableId] = useState<Record<string, boolean>>({});
   const [openedDeliverableId, setOpenedDeliverableId] = useState<string | null>(null);
+  const [openedActionMenuDeliverableId, setOpenedActionMenuDeliverableId] = useState<string | null>(null);
+  const [, setActionMenuAnchor] = useState<{
+    top: number;
+    left: number;
+    connectorTop: number;
+    connectorLeft: number;
+    connectorHeight: number;
+  } | null>(null);
   const [deliverableActionById, setDeliverableActionById] = useState<
     Record<string, "status" | "edit" | "document" | "assignees" | "contribution" | null>
   >({});
@@ -327,11 +403,11 @@ export default function CoordenadorProjetosPage() {
       }
 
       const [projRes, memRes, delRes] = await Promise.all([
-        supabase.from("projects").select("id,name,description,status,client_id,project_type,project_scopes").in("id", projectIds),
+        supabase.from("projects").select("id,name,description,status,client_id,project_line,project_type,project_scopes").in("id", projectIds),
         supabase.from("project_members").select("id,project_id,user_id,member_role").in("project_id", projectIds),
         supabase
           .from("project_deliverables")
-          .select("id,project_id,title,description,due_date,assigned_to,status,approval_comment,document_url,document_path,document_file_name,submitted_by")
+          .select("id,project_id,title,description,due_date,review_due_at,discipline_code,financial_status,assigned_to,status,approval_comment,document_url,document_path,document_file_name,submitted_by")
           .in("project_id", projectIds)
           .order("created_at", { ascending: false }),
       ]);
@@ -450,6 +526,18 @@ export default function CoordenadorProjetosPage() {
     void load();
   }, []);
 
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+      if (target.closest("[data-action-menu-root='true']")) return;
+      setOpenedActionMenuDeliverableId(null);
+      setActionMenuAnchor(null);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, []);
+
   async function loadTeams(projectId: string) {
     if (!projectId) {
       setTeams([]);
@@ -501,30 +589,66 @@ export default function CoordenadorProjetosPage() {
     () => members.filter((m) => m.project_id === selectedProjectId),
     [members, selectedProjectId]
   );
-  function canBeDeliverableResponsible(userId: string) {
-    return projectMembers.some((m) => m.user_id === userId);
-  }
-
   const projectDeliverables = useMemo(
     () => deliverables.filter((d) => d.project_id === selectedProjectId),
     [deliverables, selectedProjectId]
   );
   const filteredProjectDeliverables = useMemo(() => {
     const search = deliverableSearch.trim().toLowerCase();
-    return projectDeliverables.filter((d) => {
-      const hasExtraAssignee = assigneeFilter
-        ? deliverableAssignees.some((a) => a.deliverable_id === d.id && a.user_id === assigneeFilter)
-        : false;
-      const byAssignee = assigneeFilter ? (d.assigned_to === assigneeFilter || hasExtraAssignee) : true;
-      const bySelect = deliverableSelectFilter ? d.id === deliverableSelectFilter : true;
-      const byStatus = deliverableStatusFilter === "all" ? true : d.status === deliverableStatusFilter;
-      const byDate = deliverableDateFilter ? (d.due_date ?? "") === deliverableDateFilter : true;
-      const bySearch = search
-        ? `${d.title} ${d.description ?? ""}`.toLowerCase().includes(search)
-        : true;
-      return byAssignee && bySelect && byStatus && byDate && bySearch;
-    });
-  }, [projectDeliverables, deliverableAssignees, assigneeFilter, deliverableSearch, deliverableSelectFilter, deliverableStatusFilter, deliverableDateFilter]);
+    return projectDeliverables
+      .filter((d) => {
+        const hasExtraAssignee = assigneeFilter
+          ? deliverableAssignees.some((a) => a.deliverable_id === d.id && a.user_id === assigneeFilter)
+          : false;
+        const byAssignee = assigneeFilter ? (d.assigned_to === assigneeFilter || hasExtraAssignee) : true;
+        const bySelect = deliverableSelectFilter ? d.id === deliverableSelectFilter : true;
+        const byStatus = deliverableStatusFilter === "all" ? true : d.status === deliverableStatusFilter;
+        const byDate = deliverableDateFilter ? (d.due_date ?? "") === deliverableDateFilter : true;
+        const bySearch = search
+          ? `${d.title} ${d.description ?? ""}`.toLowerCase().includes(search)
+          : true;
+        return byAssignee && bySelect && byStatus && byDate && bySearch;
+      })
+      .sort((a, b) => {
+        const latestEventA =
+          deliverableTimeline.find((t) =>
+            t.deliverable_id === a.id &&
+            (t.event_type === "contribution_added" || t.event_type === "contribution_approved" || t.event_type === "contribution_returned")
+          ) ?? null;
+        const latestEventB =
+          deliverableTimeline.find((t) =>
+            t.deliverable_id === b.id &&
+            (t.event_type === "contribution_added" || t.event_type === "contribution_approved" || t.event_type === "contribution_returned")
+          ) ?? null;
+
+        const dueA = parseDueDate(a.due_date);
+        const dueB = parseDueDate(b.due_date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const isOverdueA = !!dueA && dueA <= today && latestEventA?.event_type !== "contribution_approved";
+        const isOverdueB = !!dueB && dueB <= today && latestEventB?.event_type !== "contribution_approved";
+        if (isOverdueA !== isOverdueB) return isOverdueA ? -1 : 1;
+
+        const pendingA = latestEventA?.event_type === "contribution_added";
+        const pendingB = latestEventB?.event_type === "contribution_added";
+        if (pendingA !== pendingB) return pendingA ? -1 : 1;
+
+        if (dueA && dueB) return dueA.getTime() - dueB.getTime();
+        if (dueA && !dueB) return -1;
+        if (!dueA && dueB) return 1;
+        return a.title.localeCompare(b.title, "pt-BR");
+      });
+  }, [
+    projectDeliverables,
+    deliverableAssignees,
+    assigneeFilter,
+    deliverableSearch,
+    deliverableSelectFilter,
+    deliverableStatusFilter,
+    deliverableDateFilter,
+    deliverableTimeline,
+  ]);
 
   // Ao trocar de projeto (ou recarregar), garanta que o select aponte para um
   // entregavel valido do projeto atual, para evitar "select vazio".
@@ -1178,29 +1302,115 @@ export default function CoordenadorProjetosPage() {
             <p className="text-3xl font-semibold">{selectedProject.name}</p>
             <p className="mt-2 text-sm text-slate-200">{selectedProject.description ?? "Sem descricao"}</p>
             <p className="mt-2 text-xs text-slate-300">
-              Cliente: {selectedProject.client_id ? (clientNameById[selectedProject.client_id] ?? selectedProject.client_id) : "-"} | Tipo: {projectTypeLabel(selectedProject.project_type)}
+              Cliente: {selectedProject.client_id ? (clientNameById[selectedProject.client_id] ?? selectedProject.client_id) : "-"} | Linha: {projectLineLabel(selectedProject.project_line)} | Modalidade: {projectTypeLabel(selectedProject.project_type)}
               {selectedProject.project_scopes?.length
                 ? ` | Escopos: ${selectedProject.project_scopes.map((s) => projectTypeLabel(s as ProjectType)).join(", ")}`
                 : ""}
             </p>
 
-            <div className="mt-5 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
-              <div>
-                <p className="text-slate-300">Total docs</p>
-                <p className="text-2xl font-semibold">{progress.total}</p>
-              </div>
-              <div>
-                <p className="text-slate-300">Percentual enviado</p>
-                <p className="text-2xl font-semibold">{progress.sentPct}%</p>
-              </div>
-              <div>
-                <p className="text-slate-300">Percentual aprovado</p>
-                <p className="text-2xl font-semibold">{progress.approvedPct}%</p>
-              </div>
-              <div>
-                <p className="text-slate-300">Membros</p>
-                <p className="text-2xl font-semibold">{projectMembers.length}</p>
-              </div>
+            <div className="mt-5 flex flex-col gap-4 text-sm lg:flex-row lg:items-start lg:justify-between">
+              {(() => {
+                const disciplineStats = {
+                  civil: {
+                    total: projectDeliverables.filter((d) => d.discipline_code === "civil").length,
+                    sent: projectDeliverables.filter(
+                      (d) =>
+                        d.discipline_code === "civil" &&
+                        (d.status === "sent" || d.status === "approved" || d.status === "approved_with_comments")
+                    ).length,
+                    approved: projectDeliverables.filter(
+                      (d) =>
+                        d.discipline_code === "civil" &&
+                        (d.status === "approved" || d.status === "approved_with_comments")
+                    ).length,
+                  },
+                  eletromecanico: {
+                    total: projectDeliverables.filter((d) => d.discipline_code === "eletromecanico").length,
+                    sent: projectDeliverables.filter(
+                      (d) =>
+                        d.discipline_code === "eletromecanico" &&
+                        (d.status === "sent" || d.status === "approved" || d.status === "approved_with_comments")
+                    ).length,
+                    approved: projectDeliverables.filter(
+                      (d) =>
+                        d.discipline_code === "eletromecanico" &&
+                        (d.status === "approved" || d.status === "approved_with_comments")
+                    ).length,
+                  },
+                };
+                return (
+                  <>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:w-[620px]">
+                      <DonutProgressMetric
+                        label="Percentual enviado"
+                        value={progress.sentPct}
+                        accentClass="text-cyan-400"
+                        detail={
+                          <div className="space-y-1 text-[11px]">
+                            <div className="flex items-center justify-between text-slate-300">
+                              <span className="inline-flex items-center gap-1">
+                                <span className="h-2 w-2 rounded-full bg-sky-400" />
+                                Civil
+                              </span>
+                              <span>{disciplineStats.civil.total ? `${disciplineStats.civil.sent}/${disciplineStats.civil.total}` : "-"}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-slate-300">
+                              <span className="inline-flex items-center gap-1">
+                                <span className="h-2 w-2 rounded-full bg-amber-400" />
+                                Eletromec.
+                              </span>
+                              <span>
+                                {disciplineStats.eletromecanico.total
+                                  ? `${disciplineStats.eletromecanico.sent}/${disciplineStats.eletromecanico.total}`
+                                  : "-"}
+                              </span>
+                            </div>
+                          </div>
+                        }
+                      />
+                      <DonutProgressMetric
+                        label="Percentual aprovado"
+                        value={progress.approvedPct}
+                        accentClass="text-emerald-400"
+                        detail={
+                          <div className="space-y-1 text-[11px]">
+                            <div className="flex items-center justify-between text-slate-300">
+                              <span className="inline-flex items-center gap-1">
+                                <span className="h-2 w-2 rounded-full bg-sky-400" />
+                                Civil
+                              </span>
+                              <span>
+                                {disciplineStats.civil.total ? `${disciplineStats.civil.approved}/${disciplineStats.civil.total}` : "-"}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between text-slate-300">
+                              <span className="inline-flex items-center gap-1">
+                                <span className="h-2 w-2 rounded-full bg-amber-400" />
+                                Eletromec.
+                              </span>
+                              <span>
+                                {disciplineStats.eletromecanico.total
+                                  ? `${disciplineStats.eletromecanico.approved}/${disciplineStats.eletromecanico.total}`
+                                  : "-"}
+                              </span>
+                            </div>
+                          </div>
+                        }
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-6 lg:min-w-[280px] lg:justify-items-end">
+                      <div className="w-full lg:text-right">
+                        <p className="text-slate-300">Total docs</p>
+                        <p className="text-2xl font-semibold">{progress.total}</p>
+                      </div>
+                      <div className="w-full lg:text-right">
+                        <p className="text-slate-300">Membros</p>
+                        <p className="text-2xl font-semibold">{projectMembers.length}</p>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
         ) : (
@@ -1493,6 +1703,26 @@ export default function CoordenadorProjetosPage() {
           const requiresReassignmentReason =
             hadReworkReturn && (d.status === "in_progress" || d.status === "pending");
           const assigneeReason: AssigneeReason = assigneeReasonByDeliverableId[d.id] ?? "atribuicao_inicial";
+              const disciplineLabel =
+                d.discipline_code === "civil"
+                  ? "Civil"
+                  : d.discipline_code === "eletromecanico"
+                    ? "Eletromecanico"
+                    : "Nao informada";
+              const financialStatus = d.financial_status ?? "aberto";
+              const financialLocked = financialStatus !== "aberto";
+              const financialStatusLabel = financialStatus === "baixado" ? "Baixado" : financialStatus === "pendente" ? "Pendente" : "Aberto";
+          const dueDateDraft = (editDueByDeliverableId[d.id] ?? "").trim();
+          const dueDateRaw = dueDateDraft || (d.due_date ?? "").trim() || (d.review_due_at ?? "").trim();
+          const dueDateLabel = (() => {
+            if (!dueDateRaw) return "-";
+            const isoMatch = /^(\d{4})-(\d{2})-(\d{2})/.exec(dueDateRaw);
+            if (isoMatch) return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+            const brMatch = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(dueDateRaw);
+            if (brMatch) return `${brMatch[1]}/${brMatch[2]}/${brMatch[3]}`;
+            const parsed = new Date(dueDateRaw);
+            return Number.isNaN(parsed.getTime()) ? dueDateRaw : parsed.toLocaleDateString("pt-BR");
+          })();
           const saveAssignmentsDisabled =
             saving ||
             (queuedAssignees.length === 0 &&
@@ -1518,25 +1748,165 @@ export default function CoordenadorProjetosPage() {
                   <div>
                     <p className="text-sm font-semibold text-slate-900">{d.title}</p>
                     <p className="text-xs text-slate-500">
-                      Status: {deliverableStatusLabel(d.status)} | Prazo: {d.due_date ? new Date(d.due_date).toLocaleDateString("pt-BR") : "-"} | Responsavel:{" "}
-                      {allResponsibleNames.length ? allResponsibleNames.join(", ") : "Nao definido"}
+                      Status: {deliverableStatusLabel(d.status)} | Prazo: {dueDateLabel} | Disciplina: {disciplineLabel} | Responsavel:{" "}
+                      {allResponsibleNames.length ? allResponsibleNames.join(", ") : "Nao definido"} | Financeiro: {financialStatusLabel}
                     </p>
                   </div>
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700">
-                    Contribuicoes: {list.length} | Horas: {totalContributionHours.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}h
-                  </span>
-                  {pendingContributionReview ? (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-800">
-                      <BellRing size={13} />
-                      Pendente validacao interna
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] font-medium text-slate-700">
+                      Contribuicoes: {list.length} | Horas: {formatHoursAsHm(totalContributionHours)}
                     </span>
-                  ) : null}
-                  {overdueAwaitingInternalApproval ? (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-100 px-2 py-1 text-[11px] font-semibold text-rose-800">
-                      <AlertTriangle size={13} />
-                      Atrasado (interno)
-                    </span>
-                  ) : null}
+                    {pendingContributionReview ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-800">
+                        <BellRing size={13} />
+                        Pendente validacao interna
+                      </span>
+                    ) : null}
+                    {overdueAwaitingInternalApproval ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-100 px-2 py-1 text-[11px] font-semibold text-rose-800">
+                        <AlertTriangle size={13} />
+                        Atrasado (interno)
+                      </span>
+                    ) : null}
+                    <div
+                      className="relative"
+                      data-action-menu-root="true"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (openedActionMenuDeliverableId === d.id) {
+                            setOpenedActionMenuDeliverableId(null);
+                            setActionMenuAnchor(null);
+                            return;
+                          }
+                          setOpenedActionMenuDeliverableId(d.id);
+                          setActionMenuAnchor(null);
+                        }}
+                        className="inline-flex cursor-pointer items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                      >
+                        <MoreHorizontal size={14} /> Acoes
+                      </button>
+                      {openedActionMenuDeliverableId === d.id ? (
+                      <>
+                      <div
+                        className="absolute right-5 top-full z-40 h-2 w-1 rounded-full bg-indigo-300"
+                        data-action-menu-root="true"
+                      />
+                      <div
+                        className="absolute right-4 top-[calc(100%+2px)] z-40 h-4 w-4 rotate-45 rounded-[2px] border-2 border-indigo-200 bg-white shadow-sm"
+                        data-action-menu-root="true"
+                      />
+                      <div
+                        className="absolute right-0 top-[calc(100%+8px)] z-50 w-[208px] rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl"
+                        data-action-menu-root="true"
+                      >
+                        <div className="mb-2 border-b border-slate-100 px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                          Acoes do entregavel
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (financialLocked) {
+                              setMsg("Entregavel em boletim (pendente/baixado) nao pode ser alterado.");
+                              return;
+                            }
+                            setOpenedDeliverableId(d.id);
+                            setDeliverableActionById({ [d.id]: "status" });
+                            setOpenedActionMenuDeliverableId(null);
+                            setActionMenuAnchor(null);
+                          }}
+                          disabled={financialLocked}
+                          className="mb-1 w-full rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Mudar status
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (financialLocked) {
+                              setMsg("Entregavel em boletim (pendente/baixado) nao pode ser alterado.");
+                              return;
+                            }
+                            setOpenedDeliverableId(d.id);
+                            setDeliverableActionById({ [d.id]: "edit" });
+                            setOpenedActionMenuDeliverableId(null);
+                            setActionMenuAnchor(null);
+                          }}
+                          disabled={financialLocked}
+                          className="mb-1 w-full rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Editar entregavel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (financialLocked) {
+                              setMsg("Entregavel em boletim (pendente/baixado) nao pode ser alterado.");
+                              return;
+                            }
+                            setOpenedDeliverableId(d.id);
+                            setDeliverableActionById({ [d.id]: "document" });
+                            setOpenedActionMenuDeliverableId(null);
+                            setActionMenuAnchor(null);
+                          }}
+                          disabled={financialLocked}
+                          className="w-full rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Documento
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (financialLocked) {
+                              setMsg("Entregavel em boletim (pendente/baixado) nao pode ser alterado.");
+                              return;
+                            }
+                            setOpenedDeliverableId(d.id);
+                            setDeliverableActionById({ [d.id]: "assignees" });
+                            setOpenedActionMenuDeliverableId(null);
+                            setActionMenuAnchor(null);
+                          }}
+                          disabled={financialLocked}
+                          className="mt-1 w-full rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Atribuir pessoas
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (financialLocked) {
+                              setMsg("Entregavel em boletim (pendente/baixado) nao pode ser alterado.");
+                              return;
+                            }
+                            setOpenedDeliverableId(d.id);
+                            setDeliverableActionById({ [d.id]: "contribution" });
+                            setOpenedActionMenuDeliverableId(null);
+                            setActionMenuAnchor(null);
+                          }}
+                          disabled={financialLocked}
+                          className="mt-1 w-full rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          Registrar contribuicao
+                        </button>
+                      </div>
+                      </>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
               </summary>
               <div className="space-y-2 border-t border-slate-100 px-3 py-3">
@@ -1545,53 +1915,13 @@ export default function CoordenadorProjetosPage() {
                     Entregavel atrasado: encaminhe e conclua a validacao interna da contribuicao.
                   </div>
                 ) : null}
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-slate-900">{d.title}</p>
-                  <details className="relative" onClick={(e) => e.stopPropagation()} onToggle={(e) => e.stopPropagation()}>
-                    <summary className="cursor-pointer rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700">
-                      Acoes
-                    </summary>
-                    <div className="absolute right-0 z-10 mt-1 w-48 rounded-lg border border-slate-200 bg-white p-2 shadow">
-                      <button
-                        type="button"
-                        onClick={() => setDeliverableActionById((prev) => ({ ...prev, [d.id]: "status" }))}
-                        className="mb-1 w-full rounded-md border border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                      >
-                        Mudar status
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeliverableActionById((prev) => ({ ...prev, [d.id]: "edit" }))}
-                        className="mb-1 w-full rounded-md border border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                      >
-                        Editar entregavel
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeliverableActionById((prev) => ({ ...prev, [d.id]: "document" }))}
-                        className="w-full rounded-md border border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                      >
-                        Documento
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeliverableActionById((prev) => ({ ...prev, [d.id]: "assignees" }))}
-                        className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                      >
-                        Atribuir pessoas
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setDeliverableActionById((prev) => ({ ...prev, [d.id]: "contribution" }))}
-                        className="mt-1 w-full rounded-md border border-slate-200 px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                      >
-                        Registrar contribuicao
-                      </button>
-                    </div>
-                  </details>
-                </div>
+                {selectedAction && financialLocked ? (
+                  <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
+                    Entregavel vinculado a boletim (financeiro {financialStatusLabel.toLowerCase()}) nao permite alteracoes.
+                  </div>
+                ) : null}
 
-                {selectedAction === "status" ? (
+                {selectedAction === "status" && !financialLocked ? (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
                     <p className="text-xs font-semibold text-slate-700">Status do entregavel</p>
                     <div className="grid gap-2 md:grid-cols-[1fr_auto]">
@@ -1670,10 +2000,19 @@ export default function CoordenadorProjetosPage() {
                         </button>
                       </div>
                     ) : null}
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setDeliverableActionById((prev) => ({ ...prev, [d.id]: null }))}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
                   </div>
                 ) : null}
 
-                {selectedAction === "edit" ? (
+                {selectedAction === "edit" && !financialLocked ? (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <p className="text-xs font-semibold text-slate-700">Editar entregavel</p>
                     <div className="mt-3 grid gap-2 md:grid-cols-2">
@@ -1697,19 +2036,28 @@ export default function CoordenadorProjetosPage() {
                         className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-xs md:col-span-2"
                         placeholder="Descricao"
                       />
-                      <button
-                        type="button"
-                        onClick={() => void saveDeliverableEdits(d.id)}
-                        disabled={saving}
-                        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 disabled:opacity-60 md:col-span-2"
-                      >
-                        Salvar alteracoes
-                      </button>
+                      <div className="flex flex-wrap justify-end gap-2 md:col-span-2">
+                        <button
+                          type="button"
+                          onClick={() => setDeliverableActionById((prev) => ({ ...prev, [d.id]: null }))}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void saveDeliverableEdits(d.id)}
+                          disabled={saving}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 disabled:opacity-60"
+                        >
+                          Salvar alteracoes
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ) : null}
 
-                {selectedAction === "document" ? (
+                {selectedAction === "document" && !financialLocked ? (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
                     <p className="text-xs font-semibold text-slate-700">Documento do entregavel</p>
                     <div className="flex flex-wrap gap-2">
@@ -1749,10 +2097,19 @@ export default function CoordenadorProjetosPage() {
                         </a>
                       ) : null}
                     </div>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setDeliverableActionById((prev) => ({ ...prev, [d.id]: null }))}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
                   </div>
                 ) : null}
 
-                {selectedAction === "contribution" ? (
+                {selectedAction === "contribution" && !financialLocked ? (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
                     <p className="text-xs font-semibold text-slate-700">Registrar contribuicao nesse documento</p>
                     <div className="grid gap-2 md:grid-cols-[180px_1fr_auto]">
@@ -1782,10 +2139,19 @@ export default function CoordenadorProjetosPage() {
                         Registrar
                       </button>
                     </div>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setDeliverableActionById((prev) => ({ ...prev, [d.id]: null }))}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
                   </div>
                 ) : null}
 
-                {selectedAction === "assignees" ? (
+                {selectedAction === "assignees" && !financialLocked ? (
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                 <div className="text-xs font-semibold text-slate-700">Pessoas atribuidas</div>
                 <div className="mt-2 flex flex-wrap gap-2">
@@ -1917,7 +2283,7 @@ export default function CoordenadorProjetosPage() {
                 ) : null}
 
               <p className="text-xs text-slate-500">
-                Contribuidores ({list.length}) | Horas totais: {totalContributionHours.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}h
+                Contribuidores ({list.length}) | Horas totais: {formatHoursAsHm(totalContributionHours)}
               </p>
               {list.map((c) => (
                 <p key={c.id} className="text-xs text-slate-600">

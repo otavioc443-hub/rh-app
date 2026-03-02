@@ -128,6 +128,11 @@ export async function GET(req: NextRequest) {
       })
       .map((p) => p.id)
   );
+  const activeProfileIds = new Set(
+    profileRows
+      .filter((p) => p.active !== false)
+      .map((p) => p.id)
+  );
 
   const clientsScoped = rawClients
     .filter((row) => {
@@ -164,6 +169,7 @@ export async function GET(req: NextRequest) {
   for (const c of colaboradores) {
     const uid = (c.user_id ?? "").trim();
     if (!uid) continue;
+    if (!activeProfileIds.has(uid)) continue;
     if (!isAdminLike && !companyProfileIds.has(uid)) continue;
     const cargoName = (c.cargo ?? "").trim().toLowerCase();
     const prev = managerMap.get(uid);

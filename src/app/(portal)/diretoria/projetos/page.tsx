@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Download, FolderKanban, RefreshCcw, Save } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import Link from "next/link";
@@ -65,6 +65,36 @@ type ExtraPaymentRow = {
   created_at: string | null;
 };
 
+type RemittanceRow = {
+  id: string;
+  total_amount: number | null;
+  status: "draft" | "payment_pending" | "paid" | "cancelled" | null;
+  due_date: string | null;
+  created_at: string | null;
+};
+
+type BulletinStatus =
+  | "em_analise"
+  | "faturado"
+  | "enviado_cliente"
+  | "previsao_pagamento"
+  | "pago"
+  | "parcialmente_pago"
+  | "atrasado"
+  | "cancelado"
+  | "outro";
+
+type BulletinRow = {
+  id: string;
+  project_id: string;
+  amount_total: number | null;
+  paid_amount: number | null;
+  status: BulletinStatus;
+  expected_payment_date: string | null;
+  paid_at: string | null;
+  created_at: string | null;
+};
+
 type ProjectTimelineRow = {
   id: string;
   project_id: string;
@@ -107,7 +137,11 @@ type ProjectSummary = {
 type IndirectCostRow = {
   id: string;
   project_id: string;
+  cost_type: "monthly" | "one_time" | "percentage_payroll";
   amount: number;
+  notes?: string | null;
+  start_date: string | null;
+  end_date: string | null;
   created_at: string | null;
 };
 
@@ -115,6 +149,7 @@ type ProjectAllocationRow = {
   project_id: string;
   user_id: string;
   allocation_pct: number | null;
+  created_at: string | null;
 };
 
 function fmtMoney(value: number) {
@@ -245,6 +280,72 @@ function lastMonths(n: number) {
   return out;
 }
 
+function startOfMonth(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), 1);
+}
+
+function endOfMonth(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+function monthsBetween(start: Date, end: Date) {
+  const out: Date[] = [];
+  const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+  const limit = new Date(end.getFullYear(), end.getMonth(), 1);
+  while (cursor <= limit) {
+    out.push(new Date(cursor));
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+  return out;
+}
+
+function activeMonthsInRange(
+  rangeStart: Date,
+  rangeEnd: Date,
+  costStart?: string | null,
+  costEnd?: string | null,
+  fallbackStart?: string | null
+) {
+  const parsedCostStart = parseDateOnly(costStart);
+  const parsedFallbackStart = parseDateOnly(fallbackStart);
+  const hasExplicitWindow = Boolean(parsedCostStart || parseDateOnly(costEnd));
+  const effectiveStart = parsedCostStart ?? parsedFallbackStart ?? rangeStart;
+  const effectiveEnd = parseDateOnly(costEnd) ?? (hasExplicitWindow ? rangeEnd : effectiveStart);
+  const clippedStart = effectiveStart > rangeStart ? effectiveStart : rangeStart;
+  const clippedEnd = effectiveEnd < rangeEnd ? effectiveEnd : rangeEnd;
+  if (clippedStart > clippedEnd) return 0;
+  return monthsBetween(startOfMonth(clippedStart), startOfMonth(clippedEnd)).length;
+}
+
+function isLegacyAbsolutePercentageValue(amount: number) {
+  return amount > 100;
+}
+
+function parseNoteTag(notes: string | null | undefined, key: string) {
+  const src = String(notes ?? "");
+  const marker = `${key}=`;
+  const start = src.indexOf(marker);
+  if (start < 0) return "";
+  const tail = src.slice(start + marker.length);
+  const end = tail.indexOf(" | ");
+  const value = (end >= 0 ? tail.slice(0, end) : tail).trim();
+  return value;
+}
+
+function parseIndirectCollaboratorName(notes: string | null | undefined) {
+  const source = parseNoteTag(notes, "Fonte");
+  if (!source.toLowerCase().startsWith("colaborador:")) return "";
+  return source.slice("colaborador:".length).trim();
+}
+
+function isEmailLike(value: string) {
+  return value.includes("@");
+}
+
+function isIntegralSingleProjectIndirect(notes: string | null | undefined) {
+  return parseNoteTag(notes, "Rateio").toLowerCase() === "integral (projeto unico)";
+}
+
 function riskLevel(project: ProjectRow, summary: ProjectSummary) {
   const now = new Date();
   const end = parseDateOnly(project.end_date);
@@ -279,7 +380,11 @@ export default function DiretoriaProjetosPage() {
   const [extrasRows, setExtrasRows] = useState<ExtraPaymentRow[]>([]);
   const [indirectCostRows, setIndirectCostRows] = useState<IndirectCostRow[]>([]);
   const [allocationRows, setAllocationRows] = useState<ProjectAllocationRow[]>([]);
+  const [remittanceRows, setRemittanceRows] = useState<RemittanceRow[]>([]);
+  const [bulletinRows, setBulletinRows] = useState<BulletinRow[]>([]);
   const [userNameById, setUserNameById] = useState<Record<string, string>>({});
+  const [salaryByUserId, setSalaryByUserId] = useState<Record<string, number>>({});
+  const [collaboratorNameByUserId, setCollaboratorNameByUserId] = useState<Record<string, string>>({});
   const [timelineRows, setTimelineRows] = useState<ProjectTimelineRow[]>([]);
   const [deliverableTimelineRows, setDeliverableTimelineRows] = useState<DeliverableTimelineRow[]>([]);
   const [deletedDeliverableRows, setDeletedDeliverableRows] = useState<DeletedDeliverableRow[]>([]);
@@ -335,7 +440,7 @@ export default function DiretoriaProjetosPage() {
 
       const projectIds = projectRows.map((p) => p.id);
 
-      const [clientsRes, memberRes, deliverableRes, extrasRes, indirectRes, allocationRes] = await Promise.all([
+      const [clientsRes, memberRes, deliverableRes, extrasRes, indirectRes, allocationRes, collabsRes, remittanceRes, bulletinRes] = await Promise.all([
         supabase.from("project_clients").select("id,name").eq("active", true).order("name", { ascending: true }),
         projectIds.length
           ? supabase.from("project_members").select("id,project_id,user_id").in("project_id", projectIds)
@@ -347,10 +452,15 @@ export default function DiretoriaProjetosPage() {
           ? supabase.from("project_extra_payments").select("id,project_id,amount,status,reference_month,created_at").in("project_id", projectIds)
           : Promise.resolve({ data: [], error: null }),
         projectIds.length
-          ? supabase.from("project_indirect_costs").select("id,project_id,amount,created_at").in("project_id", projectIds)
+          ? supabase.from("project_indirect_costs").select("id,project_id,cost_type,amount,notes,start_date,end_date,created_at").in("project_id", projectIds)
           : Promise.resolve({ data: [], error: null }),
         projectIds.length
-          ? supabase.from("project_member_allocations").select("project_id,user_id,allocation_pct").in("project_id", projectIds)
+          ? supabase.from("project_member_allocations").select("project_id,user_id,allocation_pct,created_at").in("project_id", projectIds)
+          : Promise.resolve({ data: [], error: null }),
+        supabase.from("colaboradores").select("user_id,nome,salario,is_active"),
+        supabase.from("collaborator_invoice_remittances").select("id,total_amount,status,due_date,created_at"),
+        projectIds.length
+          ? supabase.from("project_measurement_bulletins").select("id,project_id,amount_total,paid_amount,status,expected_payment_date,paid_at,created_at").in("project_id", projectIds)
           : Promise.resolve({ data: [], error: null }),
       ]);
 
@@ -360,6 +470,9 @@ export default function DiretoriaProjetosPage() {
       if (extrasRes.error) throw extrasRes.error;
       if (indirectRes.error) throw indirectRes.error;
       if (allocationRes.error) throw allocationRes.error;
+      if (collabsRes.error) throw collabsRes.error;
+      if (remittanceRes.error) throw remittanceRes.error;
+      if (bulletinRes.error) throw bulletinRes.error;
 
       const clientsRows = (clientsRes.data ?? []) as ProjectClientRow[];
       setClients(clientsRows);
@@ -375,6 +488,21 @@ export default function DiretoriaProjetosPage() {
       setExtrasRows(extras);
       setIndirectCostRows((indirectRes.data ?? []) as IndirectCostRow[]);
       setAllocationRows((allocationRes.data ?? []) as ProjectAllocationRow[]);
+      setRemittanceRows((remittanceRes.data ?? []) as RemittanceRow[]);
+      setBulletinRows((bulletinRes.data ?? []) as BulletinRow[]);
+
+      const salaryMap: Record<string, number> = {};
+      const collaboratorNameMap: Record<string, string> = {};
+      for (const c of (collabsRes.data ?? []) as Array<{ user_id: string | null; salario: number | null; is_active: boolean | null }>) {
+        const uid = (c.user_id ?? "").trim();
+        if (!uid) continue;
+        if (c.is_active === false) continue;
+        salaryMap[uid] = Number(c.salario) || 0;
+        const name = String((c as { nome?: string | null }).nome ?? "").trim();
+        if (name) collaboratorNameMap[uid] = name;
+      }
+      setSalaryByUserId(salaryMap);
+      setCollaboratorNameByUserId(collaboratorNameMap);
 
       const userIds = Array.from(
         new Set(
@@ -386,7 +514,12 @@ export default function DiretoriaProjetosPage() {
         if (!profileRes.error) {
           const map: Record<string, string> = {};
           for (const p of (profileRes.data ?? []) as Array<{ id: string; full_name: string | null; email: string | null }>) {
-            map[p.id] = (p.full_name ?? "").trim() || (p.email ?? "").trim() || `Colaborador ${p.id.slice(0, 8)}`;
+            const profileName = (p.full_name ?? "").trim();
+            const collaboratorName = (collaboratorNameByUserId[p.id] ?? "").trim();
+            map[p.id] =
+              (profileName && !isEmailLike(profileName) ? profileName : "") ||
+              (collaboratorName && !isEmailLike(collaboratorName) ? collaboratorName : "") ||
+              "Colaborador sem nome";
           }
           setUserNameById(map);
         } else {
@@ -477,7 +610,11 @@ export default function DiretoriaProjetosPage() {
       setExtrasRows([]);
       setIndirectCostRows([]);
       setAllocationRows([]);
+      setRemittanceRows([]);
+      setBulletinRows([]);
       setUserNameById({});
+      setSalaryByUserId({});
+      setCollaboratorNameByUserId({});
       setTimelineRows([]);
       setDeliverableTimelineRows([]);
       setDeletedDeliverableRows([]);
@@ -489,6 +626,8 @@ export default function DiretoriaProjetosPage() {
 
   useEffect(() => {
     void load();
+    // load e definido no escopo do componente e nao depende de valores reativos externos.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const clientOptions = useMemo(() => {
@@ -620,13 +759,181 @@ export default function DiretoriaProjetosPage() {
     return d.toISOString();
   }, [rankingWindow]);
 
-  const isInRankingWindow = (value?: string | null) => {
+  const isInRankingWindow = useCallback((value?: string | null) => {
     if (!rankingCutoffIso) return true;
     if (!value) return false;
     const ts = new Date(value).getTime();
     if (Number.isNaN(ts)) return false;
     return ts >= new Date(rankingCutoffIso).getTime();
-  };
+  }, [rankingCutoffIso]);
+
+  const projectPayrollTotalsById = useMemo(() => {
+    const result = new Map<string, number>();
+    if (!projects.length) return result;
+
+    const salaryUsers = new Set(Object.keys(salaryByUserId).filter((uid) => (salaryByUserId[uid] ?? 0) > 0));
+    if (!salaryUsers.size) return result;
+
+    const activeMembersByProject = new Map<string, string[]>();
+    for (const m of memberRows) {
+      if (!salaryUsers.has(m.user_id)) continue;
+      const list = activeMembersByProject.get(m.project_id) ?? [];
+      if (!list.includes(m.user_id)) list.push(m.user_id);
+      activeMembersByProject.set(m.project_id, list);
+    }
+
+    const allocationsByProject = new Map<string, ProjectAllocationRow[]>();
+    for (const a of allocationRows) {
+      if (!salaryUsers.has(a.user_id)) continue;
+      const list = allocationsByProject.get(a.project_id) ?? [];
+      list.push(a);
+      allocationsByProject.set(a.project_id, list);
+    }
+
+    const allProjectsById = new Map(projects.map((p) => [p.id, p]));
+    const starts = projects
+      .map((p) => parseDateOnly(p.start_date) ?? parseDateOnly(p.created_at))
+      .filter((v): v is Date => !!v);
+    const ends = projects
+      .map((p) => parseDateOnly(p.end_date) ?? new Date())
+      .filter((v): v is Date => !!v);
+    if (!starts.length || !ends.length) return result;
+    const globalStart = startOfMonth(new Date(Math.min(...starts.map((d) => d.getTime()))));
+    const globalEnd = startOfMonth(new Date(Math.max(...ends.map((d) => d.getTime()))));
+    const months = monthsBetween(globalStart, globalEnd);
+
+    for (const month of months) {
+      const monthStartRef = startOfMonth(month);
+      const monthEndRef = endOfMonth(month);
+      const rawByUser = new Map<string, Map<string, number>>();
+
+      for (const project of projects) {
+        const pStart = parseDateOnly(project.start_date) ?? parseDateOnly(project.created_at) ?? monthStartRef;
+        const pEnd = parseDateOnly(project.end_date) ?? monthEndRef;
+        if (pStart > monthEndRef || pEnd < monthStartRef) continue;
+
+        const scopedAllocs = (allocationsByProject.get(project.id) ?? []).filter((a) => {
+          if (!a.created_at) return true;
+          const created = new Date(a.created_at);
+          return !Number.isNaN(created.getTime()) && created <= monthEndRef;
+        });
+
+        if (scopedAllocs.length) {
+          for (const a of scopedAllocs) {
+            const w = Math.max(0, Number(a.allocation_pct ?? 0)) / 100;
+            if (w <= 0) continue;
+            const perProject = rawByUser.get(a.user_id) ?? new Map<string, number>();
+            perProject.set(project.id, (perProject.get(project.id) ?? 0) + w);
+            rawByUser.set(a.user_id, perProject);
+          }
+          continue;
+        }
+
+        const members = activeMembersByProject.get(project.id) ?? [];
+        if (!members.length) continue;
+        const split = 1 / members.length;
+        for (const uid of members) {
+          const perProject = rawByUser.get(uid) ?? new Map<string, number>();
+          perProject.set(project.id, (perProject.get(project.id) ?? 0) + split);
+          rawByUser.set(uid, perProject);
+        }
+      }
+
+      for (const [uid, weightsByProject] of rawByUser.entries()) {
+        const salary = salaryByUserId[uid] ?? 0;
+        if (salary <= 0) continue;
+        const totalWeight = Array.from(weightsByProject.values()).reduce((acc, w) => acc + w, 0);
+        if (totalWeight <= 0) continue;
+        for (const [projectId, weight] of weightsByProject.entries()) {
+          if (!allProjectsById.has(projectId)) continue;
+          const normalized = weight / totalWeight;
+          result.set(projectId, (result.get(projectId) ?? 0) + salary * normalized);
+        }
+      }
+    }
+
+    return result;
+  }, [projects, memberRows, allocationRows, salaryByUserId]);
+
+  const projectPayrollMonthlyById = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const p of projects) {
+      const total = projectPayrollTotalsById.get(p.id) ?? 0;
+      const start = parseDateOnly(p.start_date) ?? parseDateOnly(p.created_at);
+      const end = parseDateOnly(p.end_date) ?? new Date();
+      if (!start || !end) {
+        out.set(p.id, total);
+        continue;
+      }
+      const months = Math.max(
+        1,
+        (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
+      );
+      out.set(p.id, total / months);
+    }
+    return out;
+  }, [projects, projectPayrollTotalsById]);
+
+  const projectIndirectTotalsById = useMemo(() => {
+    const result = new Map<string, number>();
+    const projectById = new Map(projects.map((p) => [p.id, p]));
+    const salaryByCollaboratorName = new Map(
+      Object.entries(collaboratorNameByUserId)
+        .map(([uid, name]) => {
+          const salary = salaryByUserId[uid] ?? 0;
+          return [String(name ?? "").trim().toLowerCase(), salary] as const;
+        })
+        .filter(([name, salary]) => Boolean(name) && salary > 0)
+    );
+    for (const row of indirectCostRows) {
+      const project = projectById.get(row.project_id);
+      if (!project) continue;
+      const amount = Number(row.amount) || 0;
+      if (amount <= 0) continue;
+      const rangeStart = parseDateOnly(project.start_date) ?? parseDateOnly(project.created_at) ?? new Date();
+      const rangeEnd = parseDateOnly(project.end_date) ?? new Date();
+      const months = activeMonthsInRange(rangeStart, rangeEnd, row.start_date, row.end_date, row.created_at);
+      if (months <= 0) continue;
+
+      let value = 0;
+      if (row.cost_type === "one_time") {
+        value = amount;
+      } else if (row.cost_type === "monthly") {
+        value = amount * months;
+      } else if (isLegacyAbsolutePercentageValue(amount)) {
+        value = amount;
+      } else {
+        const collaboratorName = parseIndirectCollaboratorName(row.notes);
+        const collaboratorSalary = collaboratorName ? (salaryByCollaboratorName.get(collaboratorName.toLowerCase()) ?? 0) : 0;
+        const monthlyBase = collaboratorSalary > 0 ? collaboratorSalary : (projectPayrollMonthlyById.get(row.project_id) ?? 0);
+        value =
+          (isIntegralSingleProjectIndirect(row.notes) || projects.filter((p) => p.status === "active").length <= 1
+            ? monthlyBase
+            : monthlyBase * (amount / 100)) * months;
+      }
+      result.set(row.project_id, (result.get(row.project_id) ?? 0) + value);
+    }
+    return result;
+  }, [projects, indirectCostRows, projectPayrollMonthlyById, collaboratorNameByUserId, salaryByUserId]);
+
+  const projectIndirectMonthlyById = useMemo(() => {
+    const out = new Map<string, number>();
+    for (const p of projects) {
+      const total = projectIndirectTotalsById.get(p.id) ?? 0;
+      const start = parseDateOnly(p.start_date) ?? parseDateOnly(p.created_at);
+      const end = parseDateOnly(p.end_date) ?? new Date();
+      if (!start || !end) {
+        out.set(p.id, total);
+        continue;
+      }
+      const months = Math.max(
+        1,
+        (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()) + 1
+      );
+      out.set(p.id, total / months);
+    }
+    return out;
+  }, [projects, projectIndirectTotalsById]);
 
   const projectEfficiencyRows = useMemo(() => {
     const filteredIds = new Set(filtered.map((p) => p.id));
@@ -642,21 +949,16 @@ export default function DiretoriaProjetosPage() {
       directByProject.set(e.project_id, (directByProject.get(e.project_id) ?? 0) + (Number(e.amount) || 0));
     }
 
-    const indirectByProject = new Map<string, number>();
-    for (const i of indirectCostRows) {
-      if (!filteredIds.has(i.project_id)) continue;
-      if (!isInRankingWindow(i.created_at)) continue;
-      indirectByProject.set(i.project_id, (indirectByProject.get(i.project_id) ?? 0) + (Number(i.amount) || 0));
-    }
-
     const rows = filtered.map((p) => {
       const scoped = windowDeliverables.filter((d) => d.project_id === p.id);
       const approvedCount = scoped.filter((d) => d.status === "approved").length;
       const productivityPct = scoped.length ? Math.round((approvedCount / scoped.length) * 100) : 0;
       const revenue = Number(p.budget_total) || 0;
       const direct = directByProject.get(p.id) ?? 0;
-      const indirect = indirectByProject.get(p.id) ?? 0;
-      const profit = revenue - direct - indirect;
+      const indirect = projectIndirectTotalsById.get(p.id) ?? 0;
+      const payroll = projectPayrollTotalsById.get(p.id) ?? 0;
+
+      const profit = revenue - direct - indirect - payroll;
       const marginPct = revenue > 0 ? (profit / revenue) * 100 : 0;
       const profitabilityScore = Math.max(0, Math.min(100, marginPct));
       const index = Math.round(productivityPct * 0.5 + profitabilityScore * 0.5);
@@ -669,13 +971,14 @@ export default function DiretoriaProjetosPage() {
         revenue,
         direct,
         indirect,
+        payroll,
         profit,
       };
     });
 
     rows.sort((a, b) => b.index - a.index || b.marginPct - a.marginPct);
     return rows;
-  }, [filtered, deliverableRows, extrasRows, indirectCostRows, rankingCutoffIso]);
+  }, [filtered, deliverableRows, extrasRows, projectPayrollTotalsById, projectIndirectTotalsById, isInRankingWindow]);
 
   const collaboratorEfficiencyRows = useMemo(() => {
     const filteredIds = new Set(filtered.map((p) => p.id));
@@ -689,26 +992,21 @@ export default function DiretoriaProjetosPage() {
       if (e.status === "rejected") continue;
       directByProject.set(e.project_id, (directByProject.get(e.project_id) ?? 0) + (Number(e.amount) || 0));
     }
-    const indirectByProject = new Map<string, number>();
-    for (const i of indirectCostRows) {
-      if (!filteredIds.has(i.project_id)) continue;
-      if (!isInRankingWindow(i.created_at)) continue;
-      indirectByProject.set(i.project_id, (indirectByProject.get(i.project_id) ?? 0) + (Number(i.amount) || 0));
-    }
-
     const membersByProject = new Map<string, string[]>();
     for (const m of memberRows) {
       if (!filteredIds.has(m.project_id)) continue;
       const list = membersByProject.get(m.project_id) ?? [];
-      list.push(m.user_id);
+      if (!list.includes(m.user_id)) list.push(m.user_id);
       membersByProject.set(m.project_id, list);
     }
 
-    const allocationsByProject = new Map<string, ProjectAllocationRow[]>();
+    const allocationsByProject = new Map<string, Array<{ user_id: string; pct: number }>>();
     for (const a of allocationRows) {
       if (!filteredIds.has(a.project_id)) continue;
+      const pct = Math.max(0, Number(a.allocation_pct ?? 0));
+      if (pct <= 0) continue;
       const list = allocationsByProject.get(a.project_id) ?? [];
-      list.push(a);
+      list.push({ user_id: a.user_id, pct });
       allocationsByProject.set(a.project_id, list);
     }
 
@@ -728,15 +1026,17 @@ export default function DiretoriaProjetosPage() {
 
     for (const p of filtered) {
       const revenue = Number(p.budget_total) || 0;
-      const cost = (directByProject.get(p.id) ?? 0) + (indirectByProject.get(p.id) ?? 0);
+      const nonPayrollCost = (directByProject.get(p.id) ?? 0) + (projectIndirectTotalsById.get(p.id) ?? 0);
+      const payrollTotal = projectPayrollTotalsById.get(p.id) ?? 0;
       const allocs = allocationsByProject.get(p.id) ?? [];
       if (allocs.length > 0) {
+        const totalPct = allocs.reduce((acc, a) => acc + a.pct, 0);
+        if (totalPct <= 0) continue;
         for (const a of allocs) {
-          const pct = Math.max(0, Number(a.allocation_pct) || 0) / 100;
-          if (pct <= 0) continue;
+          const pct = a.pct / totalPct;
           const row = ensure(a.user_id);
           row.revenue += revenue * pct;
-          row.cost += cost * pct;
+          row.cost += (nonPayrollCost * pct) + (payrollTotal * pct);
         }
       } else {
         const members = membersByProject.get(p.id) ?? [];
@@ -745,7 +1045,7 @@ export default function DiretoriaProjetosPage() {
         for (const uid of members) {
           const row = ensure(uid);
           row.revenue += revenue * split;
-          row.cost += cost * split;
+          row.cost += (nonPayrollCost * split) + (payrollTotal * split);
         }
       }
     }
@@ -769,7 +1069,7 @@ export default function DiretoriaProjetosPage() {
     });
     rows.sort((a, b) => b.index - a.index || b.productivityPct - a.productivityPct);
     return rows;
-  }, [filtered, extrasRows, indirectCostRows, allocationRows, deliverableRows, memberRows, userNameById, rankingCutoffIso]);
+  }, [filtered, extrasRows, allocationRows, deliverableRows, memberRows, userNameById, projectPayrollTotalsById, projectIndirectTotalsById, isInRankingWindow]);
 
   const monthly = useMemo(() => {
     const months = lastMonths(6);
@@ -799,6 +1099,80 @@ export default function DiretoriaProjetosPage() {
       extras: extrasByMonth[m] ?? 0,
     }));
   }, [projects, extrasRows]);
+
+  const eacContractRows = useMemo(() => {
+    return filtered.map((p) => {
+      const revenue = Number(p.budget_total) || 0;
+      const payrollMonthly = projectPayrollMonthlyById.get(p.id) ?? 0;
+      const payrollTotal = projectPayrollTotalsById.get(p.id) ?? 0;
+      const direct = extrasRows
+        .filter((e) => e.project_id === p.id && e.status !== "rejected")
+        .reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
+      const indirect = projectIndirectTotalsById.get(p.id) ?? 0;
+      const cost = direct + indirect + payrollTotal;
+      const profit = revenue - cost;
+      const marginPct = revenue > 0 ? (profit / revenue) * 100 : 0;
+
+      return { projectId: p.id, projectName: p.name, revenue, payrollMonthly, payrollTotal, direct, indirect, cost, profit, marginPct };
+    });
+  }, [filtered, extrasRows, projectPayrollMonthlyById, projectPayrollTotalsById, projectIndirectTotalsById]);
+
+  const eacContractTotals = useMemo(() => {
+    const revenue = eacContractRows.reduce((acc, r) => acc + r.revenue, 0);
+    const cost = eacContractRows.reduce((acc, r) => acc + r.cost, 0);
+    const profit = revenue - cost;
+    const marginPct = revenue > 0 ? (profit / revenue) * 100 : 0;
+    return { revenue, cost, profit, marginPct };
+  }, [eacContractRows]);
+
+  const eacCashProjection = useMemo(() => {
+    const horizons = [30, 60, 90] as const;
+    const filteredIds = new Set(filtered.map((p) => p.id));
+    const payrollMonthly = eacContractRows.reduce((acc, r) => acc + r.payrollMonthly, 0);
+    const avgMonthlyIndirect = filtered.reduce((acc, p) => acc + (projectIndirectMonthlyById.get(p.id) ?? 0), 0);
+
+    return horizons.map((days) => {
+      const limit = new Date();
+      limit.setDate(limit.getDate() + days);
+      limit.setHours(23, 59, 59, 999);
+
+      const remittanceOut = remittanceRows
+        .filter((r) => r.status !== "paid" && r.status !== "cancelled")
+        .filter((r) => {
+          const base = r.due_date ? new Date(`${r.due_date}T00:00:00`) : r.created_at ? new Date(r.created_at) : null;
+          return !!base && !Number.isNaN(base.getTime()) && base <= limit;
+        })
+        .reduce((acc, r) => acc + (Number(r.total_amount) || 0), 0);
+
+      const extrasPendingOut = extrasRows
+        .filter((e) => filteredIds.has(e.project_id) && e.status === "pending")
+        .filter((e) => {
+          const base = e.created_at ? new Date(e.created_at) : e.reference_month ? new Date(`${e.reference_month}-01`) : null;
+          return !!base && !Number.isNaN(base.getTime()) && base <= limit;
+        })
+        .reduce((acc, e) => acc + (Number(e.amount) || 0), 0);
+
+      const bulletinIn = bulletinRows
+        .filter((b) => filteredIds.has(b.project_id) && b.status !== "cancelado")
+        .filter((b) => {
+          const base = b.paid_at ? new Date(b.paid_at) : null;
+          return !!base && !Number.isNaN(base.getTime()) && base <= limit;
+        })
+        .reduce((acc, b) => {
+          const paid = Number(b.paid_amount ?? 0) || 0;
+          const total = Number(b.amount_total ?? 0) || 0;
+          const received = paid > 0 ? paid : b.status === "pago" ? total : 0;
+          return acc + Math.max(0, received);
+        }, 0);
+
+      const payrollOut = payrollMonthly * (days / 30);
+      const indirectProjected = avgMonthlyIndirect * (days / 30);
+      const totalOut = remittanceOut + extrasPendingOut + payrollOut + indirectProjected;
+      const netProjected = bulletinIn - totalOut;
+
+      return { days, bulletinIn, payrollOut, remittanceOut, extrasPendingOut, indirectProjected, totalOut, netProjected };
+    });
+  }, [filtered, eacContractRows, remittanceRows, extrasRows, bulletinRows, projectIndirectMonthlyById]);
 
   function exportCsv() {
     const header = [
@@ -1231,7 +1605,114 @@ export default function DiretoriaProjetosPage() {
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-slate-900">Indice de produtividade e lucratividade</p>
+          <p className="text-sm font-semibold text-slate-900">Lucratividade consolidada (visao contratual)</p>
+          <p className="text-xs text-slate-500">Receita - (Direto + Indireto + Folha alocada no periodo do projeto)</p>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-4">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs text-slate-500">Receita contratada</p>
+            <p className="text-lg font-semibold text-slate-900">{fmtMoney(eacContractTotals.revenue)}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs text-slate-500">Custo total previsto</p>
+            <p className="text-lg font-semibold text-slate-900">{fmtMoney(eacContractTotals.cost)}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs text-slate-500">Lucro previsto</p>
+            <p className="text-lg font-semibold text-slate-900">{fmtMoney(eacContractTotals.profit)}</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs text-slate-500">Margem prevista</p>
+            <p className="text-lg font-semibold text-slate-900">{fmtPct(eacContractTotals.marginPct)}</p>
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 text-slate-600">
+              <tr>
+                <th className="py-2 pr-2">Projeto</th>
+                <th className="py-2 pr-2">Receita</th>
+                <th className="py-2 pr-2">Direto</th>
+                <th className="py-2 pr-2">Indireto</th>
+                <th className="py-2 pr-2">Folha alocada</th>
+                <th className="py-2 pr-2">Custo total</th>
+                <th className="py-2 pr-2">Lucro</th>
+                <th className="py-2 pr-2">Margem</th>
+              </tr>
+            </thead>
+            <tbody>
+              {eacContractRows.slice(0, 20).map((row) => (
+                <tr key={row.projectId} className="border-t border-slate-200">
+                  <td className="py-2 pr-2 font-semibold text-slate-900">{row.projectName}</td>
+                  <td className="py-2 pr-2">{fmtMoney(row.revenue)}</td>
+                  <td className="py-2 pr-2">{fmtMoney(row.direct)}</td>
+                  <td className="py-2 pr-2">{fmtMoney(row.indirect)}</td>
+                  <td className="py-2 pr-2">{fmtMoney(row.payrollTotal)}</td>
+                  <td className="py-2 pr-2">{fmtMoney(row.cost)}</td>
+                  <td className="py-2 pr-2">{fmtMoney(row.profit)}</td>
+                  <td className="py-2 pr-2">{fmtPct(row.marginPct)}</td>
+                </tr>
+              ))}
+              {!eacContractRows.length ? (
+                <tr>
+                  <td className="py-2 text-slate-500" colSpan={8}>Sem dados para o filtro atual.</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <p className="text-xs font-semibold text-slate-700">Pressao de caixa (30/60/90)</p>
+          <div className="mt-2 overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="text-slate-600">
+                <tr>
+                  <th className="py-2 pr-2">Indicador</th>
+                  {eacCashProjection.map((p) => (
+                    <th key={`cash-h-${p.days}`} className="py-2 pr-2 text-right">{p.days} dias</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-t border-slate-200">
+                  <td className="py-2 pr-2 font-medium text-slate-900">Entradas (boletins pagos)</td>
+                  {eacCashProjection.map((p) => <td key={`cash-in-${p.days}`} className="py-2 pr-2 text-right">{fmtMoney(p.bulletinIn)}</td>)}
+                </tr>
+                <tr className="border-t border-slate-200">
+                  <td className="py-2 pr-2">Folha projetada</td>
+                  {eacCashProjection.map((p) => <td key={`cash-pay-${p.days}`} className="py-2 pr-2 text-right">{fmtMoney(p.payrollOut)}</td>)}
+                </tr>
+                <tr className="border-t border-slate-200">
+                  <td className="py-2 pr-2">Remessas em aberto</td>
+                  {eacCashProjection.map((p) => <td key={`cash-rem-${p.days}`} className="py-2 pr-2 text-right">{fmtMoney(p.remittanceOut)}</td>)}
+                </tr>
+                <tr className="border-t border-slate-200">
+                  <td className="py-2 pr-2">Extras pendentes</td>
+                  {eacCashProjection.map((p) => <td key={`cash-ext-${p.days}`} className="py-2 pr-2 text-right">{fmtMoney(p.extrasPendingOut)}</td>)}
+                </tr>
+                <tr className="border-t border-slate-200">
+                  <td className="py-2 pr-2">Indiretos estimados</td>
+                  {eacCashProjection.map((p) => <td key={`cash-ind-${p.days}`} className="py-2 pr-2 text-right">{fmtMoney(p.indirectProjected)}</td>)}
+                </tr>
+                <tr className="border-t border-slate-200 font-semibold text-slate-900">
+                  <td className="py-2 pr-2">Saida total projetada</td>
+                  {eacCashProjection.map((p) => <td key={`cash-out-${p.days}`} className="py-2 pr-2 text-right">{fmtMoney(p.totalOut)}</td>)}
+                </tr>
+                <tr className="border-t border-slate-200 font-semibold text-slate-900">
+                  <td className="py-2 pr-2">Saldo projetado</td>
+                  {eacCashProjection.map((p) => <td key={`cash-net-${p.days}`} className="py-2 pr-2 text-right">{fmtMoney(p.netProjected)}</td>)}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-semibold text-slate-900">Indice de produtividade e margem operacional</p>
           <div className="flex items-center gap-2">
             <p className="text-xs text-slate-500">Criterio: 50% produtividade + 50% margem operacional</p>
             <select

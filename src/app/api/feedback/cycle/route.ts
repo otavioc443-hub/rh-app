@@ -14,6 +14,13 @@ type FeedbackCycle = {
   created_by: string | null;
 };
 
+function isSchemaCacheMissingTableError(message: string | undefined | null) {
+  const m = String(message ?? "").toLowerCase();
+  return (
+    m.includes("schema cache") && m.includes("feedback_cycles")
+  ) || m.includes("could not find the table 'public.feedback_cycles'");
+}
+
 export async function GET() {
   const guard = await requireRoles(["colaborador", "coordenador", "rh", "admin", "gestor"]);
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
@@ -26,7 +33,18 @@ export async function GET() {
     .limit(1)
     .maybeSingle<FeedbackCycle>();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (error) {
+    if (isSchemaCacheMissingTableError(error.message)) {
+      return NextResponse.json({
+        ok: true,
+        cycle: null,
+        collectOpen: false,
+        releaseOpen: false,
+        warning: "Tabela feedback_cycles nao encontrada neste banco. Aplique a migration de feedback.",
+      });
+    }
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
 
   const now = Date.now();
   const collectOpen = !!data && now >= Date.parse(data.collect_start) && now <= Date.parse(data.collect_end);
@@ -55,7 +73,15 @@ export async function PUT(req: Request) {
       .from("feedback_cycles")
       .update({ active: false })
       .eq("active", true);
-    if (disableErr) return NextResponse.json({ error: disableErr.message }, { status: 400 });
+    if (disableErr) {
+      if (isSchemaCacheMissingTableError(disableErr.message)) {
+        return NextResponse.json(
+          { error: "Tabela feedback_cycles nao encontrada neste banco. Aplique a migration de feedback antes de salvar o ciclo." },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json({ error: disableErr.message }, { status: 400 });
+    }
 
     const { data, error } = await supabaseAdmin
       .from("feedback_cycles")
@@ -71,11 +97,18 @@ export async function PUT(req: Request) {
       .select("id,name,collect_start,collect_end,release_start,release_end,active,created_at,created_by")
       .single<FeedbackCycle>();
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (error) {
+      if (isSchemaCacheMissingTableError(error.message)) {
+        return NextResponse.json(
+          { error: "Tabela feedback_cycles nao encontrada neste banco. Aplique a migration de feedback antes de salvar o ciclo." },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
     return NextResponse.json({ ok: true, cycle: data });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro inesperado.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

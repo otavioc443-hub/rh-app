@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { RefreshCcw } from "lucide-react";
@@ -98,7 +99,8 @@ type RankingItem = {
   uid: string;
   name: string;
   avatarUrl: string | null;
-  finalScore: number;
+  finalScore: number | null;
+  hasProductivityBase: boolean;
   productivityPct: number;
   qualityPct: number;
   totalDocs: number;
@@ -118,7 +120,9 @@ type ExtraPaymentRow = {
 type IndirectCostRow = {
   id: string;
   project_id: string;
+  cost_type?: "monthly" | "one_time" | "percentage_payroll" | null;
   amount: number;
+  notes?: string | null;
 };
 
 type DeliverableAssigneeRow = {
@@ -217,6 +221,13 @@ function toneClass(tone: Stat["tone"]) {
   return "border-slate-200 bg-white";
 }
 
+function financeToneClass(tone: Stat["tone"]) {
+  if (tone === "good") return "border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50";
+  if (tone === "warn") return "border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-50";
+  if (tone === "danger") return "border-rose-200 bg-gradient-to-br from-rose-50 to-pink-50";
+  return "border-slate-200 bg-gradient-to-br from-white to-slate-50";
+}
+
 function initialsFromName(name: string) {
   const words = name.trim().split(/\s+/).filter(Boolean);
   if (!words.length) return "??";
@@ -226,6 +237,31 @@ function initialsFromName(name: string) {
 
 function isEmailLike(value: string) {
   return value.includes("@");
+}
+
+function parseNoteTag(notes: string | null | undefined, key: string) {
+  const src = String(notes ?? "");
+  const marker = `${key}=`;
+  const start = src.indexOf(marker);
+  if (start < 0) return "";
+  const tail = src.slice(start + marker.length);
+  const end = tail.indexOf(" | ");
+  const value = (end >= 0 ? tail.slice(0, end) : tail).trim();
+  return value;
+}
+
+function parseIndirectCollaboratorName(notes: string | null | undefined) {
+  const source = parseNoteTag(notes, "Fonte");
+  if (!source.toLowerCase().startsWith("colaborador:")) return "";
+  return source.slice("colaborador:".length).trim();
+}
+
+function isIntegralSingleProjectIndirect(notes: string | null | undefined) {
+  return parseNoteTag(notes, "Rateio").toLowerCase() === "integral (projeto unico)";
+}
+
+function isLegacyAbsolutePercentageValue(amount: number) {
+  return amount > 100;
 }
 
 const DASHBOARD_CONFIG: Record<SectorKey, { title: string; subtitle: string; links: LinkItem[] }> = {
@@ -545,14 +581,13 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
       }
 
       if (sector === "gestor") {
-        const budgetTotal = scopedProjects.reduce((acc, p) => acc + (Number(p.budget_total) || 0), 0);
         const directCost = extraPayments
           .filter((x) => x.status === "approved" || x.status === "paid")
           .reduce((acc, x) => acc + (Number(x.amount) || 0), 0);
         const pendingExtras = extraPayments.filter((x) => x.status === "pending").length;
-        extraLabel = "Custo operacional consolidado";
-        extraValue = fmtMoney(budgetTotal + directCost);
-        extraHint = `Escopo + custos diretos de execucao. Pendencias financeiras: ${pendingExtras}.`;
+        extraLabel = "Custo direto consolidado";
+        extraValue = fmtMoney(directCost);
+        extraHint = `Somente custos diretos aprovados/pagos. Pendencias financeiras: ${pendingExtras}.`;
         extraTone = pendingExtras > 0 ? "warn" : "neutral";
       }
 
@@ -706,13 +741,15 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
 
         const rankedUsers = Array.from(rankByUser.entries())
           .map(([uid, agg]) => {
+            const hasProductivityBase = agg.docs > 0;
             const docs = Math.max(agg.docs, 1);
             const qualityPct = (agg.quality / docs) * 100;
             const productivityPct = (agg.productivity / docs) * 100;
-            const finalScore = (qualityPct + productivityPct) / 2;
+            const finalScore = hasProductivityBase ? (qualityPct + productivityPct) / 2 : null;
             return {
               uid,
               docs,
+              hasProductivityBase,
               qualityPct,
               productivityPct,
               finalScore,
@@ -720,17 +757,30 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
               reworkDocs: agg.reworkDocs,
             };
           })
-          .sort((a, b) => b.finalScore - a.finalScore);
+          .sort((a, b) => (Number(b.finalScore ?? -1) - Number(a.finalScore ?? -1)));
 
         const profileById: Record<string, { name: string; avatarUrl: string | null }> = {};
         try {
           const ids = rankedUsers.map((x) => x.uid);
           if (ids.length) {
+            const collaboratorByUserId: Record<string, string> = {};
+            const collabsRes = await supabase.from("colaboradores").select("user_id,nome").in("user_id", ids);
+            if (!collabsRes.error) {
+              for (const c of (collabsRes.data ?? []) as Array<{ user_id: string | null; nome: string | null }>) {
+                const uid = (c.user_id ?? "").trim();
+                const nome = (c.nome ?? "").trim();
+                if (uid && nome && !isEmailLike(nome)) collaboratorByUserId[uid] = nome;
+              }
+            }
             const pr = await supabase.from("profiles").select("id,full_name,email,avatar_url").in("id", ids);
             if (!pr.error) {
               for (const p of (pr.data ?? []) as Array<{ id: string; full_name: string | null; email: string | null; avatar_url?: string | null }>) {
                 const full = (p.full_name ?? "").trim();
-                const safeName = full && !isEmailLike(full) ? full : `Colaborador ${p.id.slice(0, 8)}`;
+                const fromCollaborator = collaboratorByUserId[p.id] ?? "";
+                const safeName =
+                  (full && !isEmailLike(full) ? full : "") ||
+                  (fromCollaborator && !isEmailLike(fromCollaborator) ? fromCollaborator : "") ||
+                  "Colaborador sem nome";
                 profileById[p.id] = {
                   name: safeName,
                   avatarUrl: p.avatar_url ?? null,
@@ -746,9 +796,10 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
           const profile = profileById[r.uid];
           nextRankingItems.push({
             uid: r.uid,
-            name: profile?.name ?? r.uid.slice(0, 8),
+            name: profile?.name ?? "Colaborador sem nome",
             avatarUrl: profile?.avatarUrl ?? null,
             finalScore: r.finalScore,
+            hasProductivityBase: r.hasProductivityBase,
             productivityPct: r.productivityPct,
             qualityPct: r.qualityPct,
             totalDocs: Math.round(r.docs),
@@ -791,13 +842,23 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
         if (sector === "diretoria") {
           let indirectCosts: IndirectCostRow[] = [];
           let allocations: ProjectAllocationRow[] = [];
+          const salaryByCollaboratorName = new Map<string, number>();
           try {
-            const [indRes, allocRes] = await Promise.all([
-              supabase.from("project_indirect_costs").select("id,project_id,amount").in("project_id", projectIds),
+            const [indRes, allocRes, collabRes] = await Promise.all([
+              supabase.from("project_indirect_costs").select("id,project_id,cost_type,amount,notes").in("project_id", projectIds),
               supabase.from("project_member_allocations").select("project_id,user_id,allocation_pct").in("project_id", projectIds),
+              supabase.from("colaboradores").select("nome,salario,is_active"),
             ]);
             if (!indRes.error) indirectCosts = (indRes.data ?? []) as IndirectCostRow[];
             if (!allocRes.error) allocations = (allocRes.data ?? []) as ProjectAllocationRow[];
+            if (!collabRes.error) {
+              for (const row of (collabRes.data ?? []) as Array<{ nome?: string | null; salario?: number | null; is_active?: boolean | null }>) {
+                if (row.is_active === false) continue;
+                const name = String(row.nome ?? "").trim().toLowerCase();
+                if (!name) continue;
+                salaryByCollaboratorName.set(name, Number(row.salario ?? 0) || 0);
+              }
+            }
           } catch {}
 
           const budgetByProject = new Map(scopedProjects.map((p) => [p.id, Number(p.budget_total) || 0]));
@@ -808,7 +869,20 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
           }
           const indirectByProject = new Map<string, number>();
           for (const ic of indirectCosts) {
-            indirectByProject.set(ic.project_id, (indirectByProject.get(ic.project_id) ?? 0) + (Number(ic.amount) || 0));
+            const amount = Number(ic.amount) || 0;
+            if (amount <= 0) continue;
+            let value = amount;
+            if (ic.cost_type === "percentage_payroll" && !isLegacyAbsolutePercentageValue(amount)) {
+              const collaboratorName = parseIndirectCollaboratorName(ic.notes);
+              const salary = collaboratorName ? (salaryByCollaboratorName.get(collaboratorName.toLowerCase()) ?? 0) : 0;
+              value =
+                salary > 0
+                  ? (isIntegralSingleProjectIndirect(ic.notes) || scopedProjects.filter((p) => p.status === "active").length <= 1
+                      ? salary
+                      : salary * (amount / 100))
+                  : 0;
+            }
+            indirectByProject.set(ic.project_id, (indirectByProject.get(ic.project_id) ?? 0) + value);
           }
 
           let revenueTotal = 0;
@@ -841,24 +915,27 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
           }
 
           const collabIndex = Array.from(rankByUser.entries()).map(([uid, agg]) => {
+            const hasProductivityBase = agg.docs > 0;
             const docs = Math.max(agg.docs, 1);
             const productivityPct = (agg.productivity / docs) * 100;
             const p = collabProfit.get(uid);
             const margin = p && p.revenue > 0 ? ((p.revenue - p.cost) / p.revenue) * 100 : 0;
-            const idx = p ? productivityPct * 0.5 + margin * 0.5 : productivityPct;
-            return { uid, idx, productivityPct, margin };
+            const idx = hasProductivityBase ? (p ? productivityPct * 0.5 + margin * 0.5 : productivityPct) : null;
+            return { uid, idx, productivityPct, margin, hasProductivityBase };
           });
 
-          collabIndex.sort((a, b) => b.idx - a.idx);
+          collabIndex.sort((a, b) => Number(b.idx ?? -1) - Number(a.idx ?? -1));
           const bestCollab = collabIndex[0];
           if (bestCollab) {
             dynamicStats.push({
               label: "Top performer (produtividade + margem)",
-              value: fmtPct(bestCollab.idx),
-              hint: `${profileById[bestCollab.uid]?.name ?? bestCollab.uid.slice(0, 8)} | Prod ${fmtPct(
-                bestCollab.productivityPct
-              )} | Lucr ${fmtPct(bestCollab.margin)}`,
-              tone: toneFromPercent(bestCollab.idx, { goodMin: 75, warnMin: 60 }),
+              value: bestCollab.hasProductivityBase ? fmtPct(bestCollab.idx ?? 0) : "Sem base",
+              hint: bestCollab.hasProductivityBase
+                ? `${profileById[bestCollab.uid]?.name ?? "Colaborador sem nome"} | Prod ${fmtPct(
+                    bestCollab.productivityPct
+                  )} | Lucr ${fmtPct(bestCollab.margin)}`
+                : "Sem base de produtividade no recorte para compor ranking.",
+              tone: bestCollab.hasProductivityBase ? toneFromPercent(bestCollab.idx ?? 0, { goodMin: 75, warnMin: 60 }) : "neutral",
             });
           }
         }
@@ -957,20 +1034,22 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
   }, [sector, rankingWindowDays]);
 
   const hasStats = useMemo(() => stats.length > 0, [stats]);
+  const isFinance = sector === "financeiro";
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+      <div className={isFinance ? "rounded-3xl border border-indigo-200 bg-gradient-to-br from-indigo-950 via-blue-900 to-slate-900 p-6 text-white shadow-sm" : "rounded-2xl border border-slate-200 bg-white p-6"}>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold text-slate-900">{cfg.title}</h1>
-            <p className="mt-1 text-sm text-slate-600">{cfg.subtitle}</p>
+            {isFinance ? <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-200">Financeiro</p> : null}
+            <h1 className={`text-xl font-semibold ${isFinance ? "text-white" : "text-slate-900"}`}>{cfg.title}</h1>
+            <p className={`mt-1 text-sm ${isFinance ? "text-blue-100/90" : "text-slate-600"}`}>{cfg.subtitle}</p>
           </div>
           <button
             type="button"
             onClick={() => void load()}
             disabled={loading}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+            className={isFinance ? "inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-100 disabled:opacity-60" : "inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"}
           >
             <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
             Atualizar
@@ -983,7 +1062,20 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {hasStats
           ? stats.map((s) => (
-              <div key={s.label} className={`rounded-2xl border p-5 ${toneClass(s.tone)}`}>
+              <div key={s.label} className={`rounded-2xl border p-5 ${isFinance ? financeToneClass(s.tone) : toneClass(s.tone)} ${isFinance ? "shadow-sm" : ""}`}>
+                {isFinance ? (
+                  <div
+                    className={`mb-3 h-1.5 rounded-full ${
+                      s.tone === "good"
+                        ? "bg-emerald-500"
+                        : s.tone === "warn"
+                          ? "bg-amber-500"
+                          : s.tone === "danger"
+                            ? "bg-rose-500"
+                            : "bg-indigo-500"
+                    }`}
+                  />
+                ) : null}
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{s.label}</p>
                 <p className="mt-2 text-3xl font-semibold text-slate-900">{s.value}</p>
                 {s.hint ? <p className="mt-1 text-sm text-slate-600">{s.hint}</p> : null}
@@ -1011,14 +1103,14 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
             ))}
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+      <div className={isFinance ? "rounded-3xl border border-indigo-200 bg-gradient-to-b from-white to-indigo-50/40 p-6" : "rounded-2xl border border-slate-200 bg-white p-6"}>
         <p className="text-sm font-semibold text-slate-900">Acessos rápidos</p>
         <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {cfg.links.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+              className={isFinance ? "rounded-xl border border-indigo-200 bg-white px-4 py-3 text-sm font-semibold text-indigo-950 transition hover:border-indigo-300 hover:bg-indigo-50" : "rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"}
             >
               {item.label}
             </Link>
@@ -1055,9 +1147,11 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
                   >
                     <div className="flex items-center gap-3">
                       {item.avatarUrl ? (
-                        <img
+                        <Image
                           src={item.avatarUrl}
                           alt={item.name}
+                          width={36}
+                          height={36}
                           className="h-9 w-9 rounded-full object-cover"
                         />
                       ) : (
@@ -1077,7 +1171,12 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
                         </p>
                       </div>
                     </div>
-                    <p className="text-sm font-semibold text-slate-900">{fmtPct(item.finalScore)}</p>
+                    <p
+                      className="text-sm font-semibold text-slate-900"
+                      title={item.hasProductivityBase ? undefined : "Sem base de entregaveis avaliados no periodo para calcular o indice."}
+                    >
+                      {item.hasProductivityBase ? fmtPct(item.finalScore ?? 0) : "Sem base"}
+                    </p>
                   </Link>
                 ))
               ) : (

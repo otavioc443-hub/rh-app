@@ -3,16 +3,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { useUserRole } from "@/hooks/useUserRole";
 
-type LogoutReason = "manual" | "idle" | "token_expired" | null;
-type SessionMode = "online" | "all";
-type SessionReasonFilter = "all" | "manual" | "idle" | "token_expired";
+type LogoutReason = "manual" | "idle" | "token_expired" | "page_exit" | null;
+type SessionReasonFilter = "all" | "manual" | "idle" | "token_expired" | "page_exit";
 type SessionRoleFilter = "all" | "admin" | "rh" | "gestor" | "coordenador" | "colaborador";
+type QuickViewFilter = "all" | "online" | "ended";
+type SortKey = "last_seen_at" | "login_at" | "logout_reason";
+type SortDirection = "asc" | "desc";
+const PAGE_SIZE = 20;
 
 type SessionRow = {
   id: string;
   user_id: string;
   company_id: string | null;
   department_id: string | null;
+  department_name?: string | null;
   login_at: string;
   last_seen_at: string;
   logout_at: string | null;
@@ -61,6 +65,22 @@ function simplifyUA(ua: string | null) {
   return { browser, device };
 }
 
+function formatLogoutReason(reason: LogoutReason) {
+  if (reason === "manual") return "Manual";
+  if (reason === "idle") return "Idle";
+  if (reason === "token_expired") return "Token exp.";
+  if (reason === "page_exit") return "Saida real";
+  return "-";
+}
+
+function logoutReasonBadgeClass(reason: LogoutReason) {
+  if (reason === "manual") return "bg-slate-100 text-slate-700";
+  if (reason === "idle") return "bg-amber-50 text-amber-700";
+  if (reason === "token_expired") return "bg-rose-50 text-rose-700";
+  if (reason === "page_exit") return "bg-blue-50 text-blue-700";
+  return "bg-slate-100 text-slate-500";
+}
+
 function escapeCsv(value: unknown) {
   const str = String(value ?? "");
   if (/[",\n;]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
@@ -92,12 +112,15 @@ export default function SessionsClient() {
   const [rows, setRows] = useState<SessionRow[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const [mode, setMode] = useState<SessionMode>("all");
   const [reason, setReason] = useState<SessionReasonFilter>("all");
   const [search, setSearch] = useState("");
   const [limit, setLimit] = useState(50);
   const [departmentId, setDepartmentId] = useState<"all" | string>("all");
   const [roleFilter, setRoleFilter] = useState<SessionRoleFilter>("all");
+  const [quickView, setQuickView] = useState<QuickViewFilter>("all");
+  const [sortKey, setSortKey] = useState<SortKey>("last_seen_at");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [page, setPage] = useState(1);
 
   async function fetchSessions() {
     setLoading(true);
@@ -105,7 +128,6 @@ export default function SessionsClient() {
 
     try {
       const params = new URLSearchParams({
-        mode,
         reason,
         departmentId,
         role: roleFilter,
@@ -131,7 +153,7 @@ export default function SessionsClient() {
     const t = setInterval(fetchSessions, 30_000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canView, mode, reason, limit, departmentId, roleFilter]);
+  }, [canView, reason, limit, departmentId, roleFilter]);
 
   useEffect(() => {
     if (!canView) return;
@@ -141,20 +163,80 @@ export default function SessionsClient() {
   }, [search]);
 
   const departmentOptions = useMemo(() => {
-    const set = new Set<string>();
+    const map = new Map<string, string>();
     for (const r of rows) {
-      if (r.department_id) set.add(r.department_id);
+      if (r.department_id) map.set(r.department_id, r.department_name?.trim() || r.department_id);
     }
-    return Array.from(set).sort();
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  }, [rows]);
+
+  const visibleRows = useMemo(() => {
+    return rows.filter((r) => {
+      const st = getOnlineStatus(r.last_seen_at, r.logout_at);
+      if (quickView === "online") return st.online;
+      if (quickView === "ended") return !!r.logout_at;
+      return true;
+    });
+  }, [quickView, rows]);
+
+  const sortedVisibleRows = useMemo(() => {
+    const reasonOrder: Record<string, number> = {
+      manual: 1,
+      idle: 2,
+      page_exit: 3,
+      token_expired: 4,
+      "": 5,
+    };
+
+    const factor = sortDirection === "asc" ? 1 : -1;
+    return [...visibleRows].sort((a, b) => {
+      let compare = 0;
+      if (sortKey === "logout_reason") {
+        compare =
+          (reasonOrder[a.logout_reason ?? ""] ?? 99) -
+          (reasonOrder[b.logout_reason ?? ""] ?? 99);
+      } else {
+        const ta = Date.parse(a[sortKey] ?? "");
+        const tb = Date.parse(b[sortKey] ?? "");
+        compare = (Number.isFinite(ta) ? ta : 0) - (Number.isFinite(tb) ? tb : 0);
+      }
+      if (compare === 0) {
+        const fallbackA = Date.parse(a.last_seen_at ?? a.login_at ?? "");
+        const fallbackB = Date.parse(b.last_seen_at ?? b.login_at ?? "");
+        compare = (Number.isFinite(fallbackA) ? fallbackA : 0) - (Number.isFinite(fallbackB) ? fallbackB : 0);
+      }
+      return compare * factor;
+    });
+  }, [sortDirection, sortKey, visibleRows]);
+
+  const totalPages = Math.max(1, Math.ceil(sortedVisibleRows.length / PAGE_SIZE));
+
+  const pagedRows = useMemo(() => {
+    const safePage = Math.min(page, totalPages);
+    const start = (safePage - 1) * PAGE_SIZE;
+    return sortedVisibleRows.slice(start, start + PAGE_SIZE);
+  }, [page, sortedVisibleRows, totalPages]);
+
+  const quickViewCounts = useMemo(() => {
+    const online = rows.filter((r) => getOnlineStatus(r.last_seen_at, r.logout_at).online).length;
+    const ended = rows.filter((r) => !!r.logout_at).length;
+    return {
+      all: rows.length,
+      online,
+      ended,
+    };
   }, [rows]);
 
   const stats = useMemo(() => {
-    const online = rows.filter((r) => getOnlineStatus(r.last_seen_at, r.logout_at).online).length;
-    const uniqueUsers = new Set(rows.map((r) => r.user_id)).size;
-    const idle = rows.filter((r) => r.logout_reason === "idle").length;
-    const manual = rows.filter((r) => r.logout_reason === "manual").length;
-    return { online, uniqueUsers, idle, manual };
-  }, [rows]);
+    const online = visibleRows.filter((r) => getOnlineStatus(r.last_seen_at, r.logout_at).online).length;
+    const uniqueUsers = new Set(visibleRows.map((r) => r.user_id)).size;
+    const idle = visibleRows.filter((r) => r.logout_reason === "idle").length;
+    const manual = visibleRows.filter((r) => r.logout_reason === "manual").length;
+    const pageExit = visibleRows.filter((r) => r.logout_reason === "page_exit").length;
+    return { online, uniqueUsers, idle, manual, pageExit };
+  }, [visibleRows]);
 
   function handleExportCsv() {
     const headers = [
@@ -173,7 +255,7 @@ export default function SessionsClient() {
       "user_agent",
     ];
 
-    const exportRows = rows.map((r) => {
+    const exportRows = sortedVisibleRows.map((r) => {
       const st = getOnlineStatus(r.last_seen_at, r.logout_at);
       const ua = simplifyUA(r.user_agent);
 
@@ -184,6 +266,7 @@ export default function SessionsClient() {
         role: r.role ?? "",
         user_id: r.user_id,
         department_id: r.department_id ?? "",
+        department_name: r.department_name ?? "",
         login_at: r.login_at,
         last_seen_at: r.last_seen_at,
         last_seen_humano: st.ageText,
@@ -197,6 +280,30 @@ export default function SessionsClient() {
     const filename = `sessoes_${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
     downloadCsvWithHeaders(filename, headers, exportRows);
   }
+
+  function toggleSort(nextKey: SortKey) {
+    if (sortKey === nextKey) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortKey(nextKey);
+    setSortDirection(nextKey === "logout_reason" ? "asc" : "desc");
+    setPage(1);
+  }
+
+  function sortLabel(key: SortKey) {
+    if (sortKey !== key) return "↕";
+    return sortDirection === "asc" ? "↑" : "↓";
+  }
+
+  useEffect(() => {
+    setPage(1);
+  }, [quickView, reason, departmentId, roleFilter, search, limit]);
+
+  useEffect(() => {
+    if (page <= totalPages) return;
+    setPage(totalPages);
+  }, [page, totalPages]);
 
   if (roleLoading) {
     return (
@@ -242,37 +349,46 @@ export default function SessionsClient() {
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div className="rounded-xl border border-slate-200 p-4">
+          <button
+            type="button"
+            onClick={() => setQuickView("online")}
+            className={[
+              "rounded-xl border p-4 text-left transition",
+              quickView === "online" ? "border-emerald-300 bg-emerald-50/70" : "border-slate-200 hover:bg-slate-50",
+            ].join(" ")}
+          >
             <p className="text-xs text-slate-500">Online (lista atual)</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">{stats.online}</p>
-          </div>
-          <div className="rounded-xl border border-slate-200 p-4">
+          </button>
+          <button
+            type="button"
+            onClick={() => setQuickView("all")}
+            className={[
+              "rounded-xl border p-4 text-left transition",
+              quickView === "all" ? "border-slate-400 bg-slate-50" : "border-slate-200 hover:bg-slate-50",
+            ].join(" ")}
+          >
             <p className="text-xs text-slate-500">Usuarios distintos (lista atual)</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">{stats.uniqueUsers}</p>
-          </div>
-          <div className="rounded-xl border border-slate-200 p-4">
-            <p className="text-xs text-slate-500">Logouts (idle / manual)</p>
+          </button>
+          <button
+            type="button"
+            onClick={() => setQuickView("ended")}
+            className={[
+              "rounded-xl border p-4 text-left transition",
+              quickView === "ended" ? "border-blue-300 bg-blue-50/70" : "border-slate-200 hover:bg-slate-50",
+            ].join(" ")}
+          >
+            <p className="text-xs text-slate-500">Logouts (idle / manual / saida real)</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">
-              {stats.idle} / {stats.manual}
+              {stats.idle} / {stats.manual} / {stats.pageExit}
             </p>
-          </div>
+          </button>
         </div>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <div className="flex flex-wrap items-end gap-3">
-          <div>
-            <label className="block text-xs font-semibold text-slate-700">Modo</label>
-            <select
-              value={mode}
-              onChange={(e) => setMode(e.target.value as SessionMode)}
-              className="mt-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-            >
-              <option value="online">Online agora</option>
-              <option value="all">Todas</option>
-            </select>
-          </div>
-
           <div>
             <label className="block text-xs font-semibold text-slate-700">Logout</label>
             <select
@@ -284,6 +400,7 @@ export default function SessionsClient() {
               <option value="manual">Manual</option>
               <option value="idle">Idle</option>
               <option value="token_expired">Token exp.</option>
+              <option value="page_exit">Saida real</option>
             </select>
           </div>
 
@@ -295,9 +412,9 @@ export default function SessionsClient() {
               className="mt-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
             >
               <option value="all">Todos</option>
-              {departmentOptions.map((id) => (
-                <option key={id} value={id}>
-                  {id}
+              {departmentOptions.map((department) => (
+                <option key={department.id} value={department.id}>
+                  {department.name}
                 </option>
               ))}
             </select>
@@ -343,6 +460,37 @@ export default function SessionsClient() {
           </div>
         </div>
 
+        <div className="mt-4 flex flex-wrap gap-2">
+          {[
+            { id: "all", label: "Todas" },
+            { id: "online", label: "Somente online" },
+            { id: "ended", label: "Somente encerradas" },
+          ].map((item) => {
+            const active = quickView === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setQuickView(item.id as QuickViewFilter)}
+                className={[
+                  "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                  active
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                ].join(" ")}
+              >
+                {item.label} (
+                {item.id === "all"
+                  ? quickViewCounts.all
+                  : item.id === "online"
+                    ? quickViewCounts.online
+                    : quickViewCounts.ended}
+                )
+              </button>
+            );
+          })}
+        </div>
+
         {error && (
           <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
         )}
@@ -353,29 +501,45 @@ export default function SessionsClient() {
               <tr>
                 <th className="px-4 py-3 font-semibold">Status</th>
                 <th className="px-4 py-3 font-semibold">Usuario</th>
-                <th className="px-4 py-3 font-semibold">Dispositivo</th>
-                <th className="px-4 py-3 font-semibold">Login</th>
-                <th className="px-4 py-3 font-semibold">Ultimo acesso</th>
+                    <th className="px-4 py-3 font-semibold">Perfil</th>
+                    <th className="px-4 py-3 font-semibold">Dispositivo</th>
+                <th className="px-4 py-3 font-semibold">
+                  <button type="button" onClick={() => toggleSort("login_at")} className="inline-flex items-center gap-1">
+                    Login
+                    <span className="text-slate-400">{sortLabel("login_at")}</span>
+                  </button>
+                </th>
+                <th className="px-4 py-3 font-semibold">
+                  <button type="button" onClick={() => toggleSort("last_seen_at")} className="inline-flex items-center gap-1">
+                    Ultimo acesso
+                    <span className="text-slate-400">{sortLabel("last_seen_at")}</span>
+                  </button>
+                </th>
                 <th className="px-4 py-3 font-semibold">Logout</th>
-                <th className="px-4 py-3 font-semibold">Motivo</th>
+                <th className="px-4 py-3 font-semibold">
+                  <button type="button" onClick={() => toggleSort("logout_reason")} className="inline-flex items-center gap-1">
+                    Motivo
+                    <span className="text-slate-400">{sortLabel("logout_reason")}</span>
+                  </button>
+                </th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-slate-200">
               {loading ? (
                 <tr>
-                  <td className="px-4 py-4 text-slate-600" colSpan={7}>
+                  <td className="px-4 py-4 text-slate-600" colSpan={8}>
                     Carregando...
                   </td>
                 </tr>
-              ) : rows.length === 0 ? (
+              ) : sortedVisibleRows.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-4 text-slate-600" colSpan={7}>
+                  <td className="px-4 py-4 text-slate-600" colSpan={8}>
                     Nenhum registro encontrado.
                   </td>
                 </tr>
               ) : (
-                rows.map((r) => {
+                pagedRows.map((r) => {
                   const st = getOnlineStatus(r.last_seen_at, r.logout_at);
                   const ua = simplifyUA(r.user_agent);
 
@@ -399,7 +563,16 @@ export default function SessionsClient() {
                             {r.full_name?.trim() || r.email?.trim() || "Usuario"}
                           </span>
                           <span className="text-xs text-slate-600">{r.email ?? "E-mail nao informado"}</span>
+                          {r.department_name ? (
+                            <span className="text-xs text-slate-500">Departamento: {r.department_name}</span>
+                          ) : null}
                         </div>
+                      </td>
+
+                      <td className="px-4 py-3 text-slate-800">
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
+                          {r.role ?? "colaborador"}
+                        </span>
                       </td>
 
                       <td className="px-4 py-3 text-slate-800">
@@ -417,7 +590,16 @@ export default function SessionsClient() {
 
                       <td className="px-4 py-3 text-slate-800">{toLocal(r.logout_at)}</td>
 
-                      <td className="px-4 py-3 text-slate-800">{r.logout_reason ?? "-"}</td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={[
+                            "inline-flex items-center rounded-full px-2 py-1 text-xs font-semibold",
+                            logoutReasonBadgeClass(r.logout_reason),
+                          ].join(" ")}
+                        >
+                          {formatLogoutReason(r.logout_reason)}
+                        </span>
+                      </td>
                     </tr>
                   );
                 })
@@ -425,6 +607,32 @@ export default function SessionsClient() {
             </tbody>
           </table>
         </div>
+
+        {sortedVisibleRows.length > 0 ? (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">
+              Exibindo {pagedRows.length} de {sortedVisibleRows.length} registros filtrados. Pagina {Math.min(page, totalPages)} de {totalPages}.
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                disabled={page <= 1}
+                className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
+              >
+                Anterior
+              </button>
+              <button
+                type="button"
+                onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                disabled={page >= totalPages}
+                className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
+              >
+                Proxima
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         <p className="mt-3 text-xs text-slate-500">
           &quot;Online agora&quot; considera <b>logout_at vazio</b> e <b>last_seen_at</b> nos ultimos {ONLINE_WINDOW_MINUTES} minutos.

@@ -19,6 +19,14 @@ type CycleInfo = {
   active: boolean;
 };
 
+type PdiDraft = {
+  goal: string;
+  action: string;
+  deadline: string;
+  responsible: string;
+  indicator: string;
+};
+
 type TechnicalKey = "entrega" | "qualidade" | "autonomia" | "organizacao" | "responsabilidade";
 type BehaviorKey =
   | "comunicacao"
@@ -67,6 +75,14 @@ const EVOLUTION_OPTIONS = [
   "Apresentou regressao",
 ] as const;
 
+const EMPTY_PDI_ITEM: PdiDraft = {
+  goal: "",
+  action: "",
+  deadline: "",
+  responsible: "",
+  indicator: "",
+};
+
 export default function GestorFeedbackPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -101,11 +117,7 @@ export default function GestorFeedbackPage() {
   const [developmentPoints, setDevelopmentPoints] = useState("");
   const [finalMessage, setFinalMessage] = useState("");
 
-  const [pdiGoal, setPdiGoal] = useState("");
-  const [pdiAction, setPdiAction] = useState("");
-  const [pdiDeadline, setPdiDeadline] = useState("");
-  const [pdiResponsible, setPdiResponsible] = useState("");
-  const [pdiIndicator, setPdiIndicator] = useState("");
+  const [pdiItems, setPdiItems] = useState<PdiDraft[]>([{ ...EMPTY_PDI_ITEM }]);
 
   const finalScore = useMemo(() => {
     const vals = [...Object.values(technical), ...Object.values(behavioral)];
@@ -151,6 +163,18 @@ export default function GestorFeedbackPage() {
     setBehavioral((prev) => ({ ...prev, [key]: value }));
   }
 
+  function updatePdiItem(index: number, patch: Partial<PdiDraft>) {
+    setPdiItems((prev) => prev.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
+  }
+
+  function addPdiItem() {
+    setPdiItems((prev) => [...prev, { ...EMPTY_PDI_ITEM }]);
+  }
+
+  function removePdiItem(index: number) {
+    setPdiItems((prev) => (prev.length <= 1 ? prev : prev.filter((_, itemIndex) => itemIndex !== index)));
+  }
+
   async function submit(status: "draft" | "sent") {
     setMsg("");
     if (!targetUserId) return setMsg("Selecione o coordenador avaliado.");
@@ -162,6 +186,16 @@ export default function GestorFeedbackPage() {
 
     setSubmitting(true);
     try {
+      const normalizedPdiItems = pdiItems
+        .map((item) => ({
+          goal: item.goal.trim(),
+          action: item.action.trim(),
+          deadline: item.deadline || null,
+          responsible: item.responsible.trim(),
+          indicator: item.indicator.trim(),
+        }))
+        .filter((item) => item.goal || item.action || item.deadline || item.responsible || item.indicator);
+      const primaryPdiItem = normalizedPdiItems[0] ?? null;
       const details = {
         technical,
         behavioral,
@@ -171,11 +205,12 @@ export default function GestorFeedbackPage() {
         evolution_change: evolutionChange.trim(),
         strengths: strengths.trim(),
         development_points: developmentPoints.trim(),
-        pdi_goal: pdiGoal.trim(),
-        pdi_action: pdiAction.trim(),
-        pdi_deadline: pdiDeadline || null,
-        pdi_responsible: pdiResponsible.trim(),
-        pdi_indicator: pdiIndicator.trim(),
+        pdi_goal: primaryPdiItem?.goal ?? "",
+        pdi_action: primaryPdiItem?.action ?? "",
+        pdi_deadline: primaryPdiItem?.deadline ?? null,
+        pdi_responsible: primaryPdiItem?.responsible ?? "",
+        pdi_indicator: primaryPdiItem?.indicator ?? "",
+        pdi_items: normalizedPdiItems,
         final_message: finalMessage.trim(),
       };
 
@@ -186,7 +221,7 @@ export default function GestorFeedbackPage() {
           target_user_id: targetUserId,
           scores: { ...technical, ...behavioral },
           comment: finalMessage.trim() || developmentPoints.trim() || strengths.trim(),
-          short_term_action: pdiAction.trim(),
+          short_term_action: primaryPdiItem?.action ?? "",
           final_score: finalScore,
           details,
           status,
@@ -333,13 +368,63 @@ export default function GestorFeedbackPage() {
 
         <section className="space-y-3">
           <h2 className="text-sm font-semibold text-slate-900">7. PDI de curto prazo</h2>
-          <div className="grid gap-3 md:grid-cols-2">
-            <input value={pdiGoal} onChange={(e) => setPdiGoal(e.target.value)} placeholder="Meta de desenvolvimento" className="h-11 rounded-xl border border-slate-200 px-3 text-sm" />
-            <input value={pdiAction} onChange={(e) => setPdiAction(e.target.value)} placeholder="Acao sugerida" className="h-11 rounded-xl border border-slate-200 px-3 text-sm" />
-            <input type="date" value={pdiDeadline} onChange={(e) => setPdiDeadline(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm" />
-            <input value={pdiResponsible} onChange={(e) => setPdiResponsible(e.target.value)} placeholder="Responsavel" className="h-11 rounded-xl border border-slate-200 px-3 text-sm" />
-            <input value={pdiIndicator} onChange={(e) => setPdiIndicator(e.target.value)} placeholder="Indicador de sucesso" className="h-11 rounded-xl border border-slate-200 px-3 text-sm md:col-span-2" />
+          <div className="space-y-3">
+            {pdiItems.map((item, index) => (
+              <div key={`pdi-${index}`} className="rounded-xl border border-slate-200 p-4 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Meta {index + 1}</p>
+                  {pdiItems.length > 1 ? (
+                    <button
+                      type="button"
+                      onClick={() => removePdiItem(index)}
+                      className="text-xs font-semibold text-rose-600 hover:text-rose-700"
+                    >
+                      Remover meta
+                    </button>
+                  ) : null}
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <input
+                    value={item.goal}
+                    onChange={(e) => updatePdiItem(index, { goal: e.target.value })}
+                    placeholder="Meta de desenvolvimento"
+                    className="h-11 rounded-xl border border-slate-200 px-3 text-sm"
+                  />
+                  <input
+                    value={item.action}
+                    onChange={(e) => updatePdiItem(index, { action: e.target.value })}
+                    placeholder="Acao sugerida"
+                    className="h-11 rounded-xl border border-slate-200 px-3 text-sm"
+                  />
+                  <input
+                    type="date"
+                    value={item.deadline}
+                    onChange={(e) => updatePdiItem(index, { deadline: e.target.value })}
+                    className="h-11 rounded-xl border border-slate-200 px-3 text-sm"
+                  />
+                  <input
+                    value={item.responsible}
+                    onChange={(e) => updatePdiItem(index, { responsible: e.target.value })}
+                    placeholder="Responsavel"
+                    className="h-11 rounded-xl border border-slate-200 px-3 text-sm"
+                  />
+                  <input
+                    value={item.indicator}
+                    onChange={(e) => updatePdiItem(index, { indicator: e.target.value })}
+                    placeholder="Indicador de sucesso"
+                    className="h-11 rounded-xl border border-slate-200 px-3 text-sm md:col-span-2"
+                  />
+                </div>
+              </div>
+            ))}
           </div>
+          <button
+            type="button"
+            onClick={addPdiItem}
+            className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+          >
+            + Nova meta
+          </button>
         </section>
 
         <section>

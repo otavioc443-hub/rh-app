@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { forceClientLogout } from "@/lib/supabaseClient";
 
 type Role = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "financeiro" | "pd" | "admin";
 type ProfileRow = { role: Role | null; active: boolean | null };
@@ -37,6 +38,11 @@ function normalizeSupabaseError(e: unknown): string {
   return `${base}${code}${status}${details}${hint}${name}`.trim();
 }
 
+function isJwtExpiredError(e: unknown): boolean {
+  const msg = normalizeSupabaseError(e).toLowerCase();
+  return msg.includes("jwt expired") || msg.includes("token is expired") || msg.includes("invalid jwt");
+}
+
 export function useUserRole() {
   const [loading, setLoading] = useState(() => {
     if (!cached) return true;
@@ -65,6 +71,11 @@ export function useUserRole() {
         if (!mounted.current) return;
 
         if (sessErr) {
+          if (isJwtExpiredError(sessErr)) {
+            await forceClientLogout();
+            if (typeof window !== "undefined") window.location.replace("/");
+            return;
+          }
           cached = null;
           setRole(null);
           setActive(false);
@@ -98,6 +109,11 @@ export function useUserRole() {
         if (!mounted.current) return;
 
         if (profErr) {
+          if (isJwtExpiredError(profErr)) {
+            await forceClientLogout();
+            if (typeof window !== "undefined") window.location.replace("/");
+            return;
+          }
           // Aqui é erro REAL: RLS/GRANT/permission denied etc.
           cached = null;
           setRole(null);
@@ -145,6 +161,11 @@ export function useUserRole() {
           setError("Seu perfil está sem role. Defina role = colaborador/coordenador/gestor/diretoria/rh/financeiro/pd/admin.");
         }
       } catch (e: unknown) {
+        if (isJwtExpiredError(e)) {
+          await forceClientLogout();
+          if (typeof window !== "undefined") window.location.replace("/");
+          return;
+        }
         if (!mounted.current) return;
         cached = null;
         setRole(null);

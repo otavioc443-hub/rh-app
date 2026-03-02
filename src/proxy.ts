@@ -60,12 +60,11 @@ export async function proxy(req: NextRequest) {
   const { data } = await supabase.auth.getUser();
   const user = data?.user;
 
-  // sem user => volta pro login
+  // Sem user SSR: nao bloqueamos aqui.
+  // A autenticacao do portal e validada no cliente pelo PortalShell/useUserRole.
+  // Isso evita loop quando a sessao esta em sessionStorage no browser e nao em cookie SSR.
   if (!user) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/";
-    url.searchParams.set("redirectedFrom", pathname);
-    return NextResponse.redirect(url);
+    return res;
   }
 
   // ✅ checa role apenas quando necessário

@@ -545,37 +545,44 @@ export default function MeuPerfilNotaFiscalPage() {
                       </span>
                     </td>
                     <td className="p-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => void enqueueAutomaticIssue(row.id)}
-                          disabled={enqueuingId === row.id}
-                          className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
-                        >
-                          {enqueuingId === row.id ? "Enfileirando..." : "Emitir automatico"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void launchIntegration(row.id)}
-                          disabled={launchingId === row.id}
-                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                        >
-                          <ExternalLink size={14} />
-                          {launchingId === row.id ? "Abrindo..." : "Abrir portal"}
-                        </button>
-                        <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600">
-                          <Eye size={14} />
-                          {PROVIDER_LABEL[row.integration_provider]}
-                        </span>
-                        {latestJobByInvoiceId[row.id] ? (
-                          <span
-                            className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${jobStatusClass(
-                              latestJobByInvoiceId[row.id].status
-                            )}`}
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
+                        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                          Acoes da nota
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void enqueueAutomaticIssue(row.id)}
+                            disabled={enqueuingId === row.id}
+                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
                           >
-                            Job: {jobStatusLabel(latestJobByInvoiceId[row.id].status)}
+                            {enqueuingId === row.id ? "Enfileirando..." : "Emitir automatico"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void launchIntegration(row.id)}
+                            disabled={launchingId === row.id}
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                          >
+                            <ExternalLink size={14} />
+                            {launchingId === row.id ? "Abrindo..." : "Abrir portal"}
+                          </button>
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600">
+                            <Eye size={14} />
+                            {PROVIDER_LABEL[row.integration_provider]}
                           </span>
-                        ) : null}
+                          {latestJobByInvoiceId[row.id] ? (
+                            <span
+                              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${jobStatusClass(
+                                latestJobByInvoiceId[row.id].status
+                              )}`}
+                            >
+                              Job: {jobStatusLabel(latestJobByInvoiceId[row.id].status)}
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                       {latestJobByInvoiceId[row.id]?.last_error ? (
                         <p className="mt-2 text-xs text-rose-700">{latestJobByInvoiceId[row.id].last_error}</p>

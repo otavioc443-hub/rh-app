@@ -7,7 +7,6 @@ type FeedbackRow = {
   target_user_id: string | null;
   evaluator_user_id: string | null;
   source_role: string | null;
-  scores: Record<string, number> | null;
   comment: string | null;
   details_json: Record<string, unknown> | null;
   final_score: number | null;
@@ -25,6 +24,20 @@ type CycleRow = {
   release_end: string;
 };
 
+function extractScores(details: Record<string, unknown> | null) {
+  if (!details) return null;
+  const technical = typeof details.technical === "object" && details.technical ? (details.technical as Record<string, unknown>) : {};
+  const behavioral =
+    typeof details.behavioral === "object" && details.behavioral ? (details.behavioral as Record<string, unknown>) : {};
+  const merged = { ...technical, ...behavioral };
+  const normalized = Object.fromEntries(
+    Object.entries(merged)
+      .map(([key, value]) => [key, Number(value)])
+      .filter(([, value]) => Number.isFinite(value))
+  );
+  return Object.keys(normalized).length ? normalized : null;
+}
+
 export async function GET() {
   const guard = await requireRoles(["colaborador", "coordenador", "gestor", "rh", "admin"]);
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
@@ -36,7 +49,7 @@ export async function GET() {
   const { data: rows, error } = await supabaseAdmin
     .from("feedbacks")
     .select(
-      "id,target_user_id,evaluator_user_id,source_role,scores,comment,details_json,final_score,final_classification,status,created_at,cycle_id,released_to_collaborator"
+      "id,target_user_id,evaluator_user_id,source_role,comment,details_json,final_score,final_classification,status,created_at,cycle_id,released_to_collaborator"
     )
     .eq("target_user_id", targetId)
     .eq("status", "sent")
@@ -81,6 +94,7 @@ export async function GET() {
     const evaluator = f.evaluator_user_id ? evaluatorById.get(f.evaluator_user_id) : null;
     return {
       ...f,
+      scores: extractScores(f.details_json),
       cycle_name: cycle?.name ?? null,
       evaluator_name: evaluator?.full_name ?? null,
       evaluator_email: evaluator?.email ?? null,

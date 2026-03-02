@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Download, RefreshCcw, Search, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 import { supabase } from "@/lib/supabaseClient";
 
 type RequestStatus =
@@ -54,6 +55,12 @@ type AuditRow = {
   created_at: string;
 };
 
+type ExtraPaymentPendingRow = {
+  id: string;
+  amount: number | null;
+  status: "pending" | "approved" | "rejected" | "paid" | null;
+};
+
 function statusLabel(status: RequestStatus) {
   if (status === "pending") return "Pendente";
   if (status === "in_review") return "Em analise";
@@ -86,11 +93,22 @@ function fmtDate(dateIso: string | null) {
   return d.toLocaleString("pt-BR");
 }
 
+function fmtMoney(value: number) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+}
+
 function hoursDiff(fromIso: string, toIso: string) {
   const from = new Date(fromIso).getTime();
   const to = new Date(toIso).getTime();
   if (Number.isNaN(from) || Number.isNaN(to)) return 0;
   return Math.max(0, (to - from) / (1000 * 60 * 60));
+}
+
+function formatHoursAsHm(value: number | null | undefined) {
+  const totalMinutes = Math.max(0, Math.round((Number(value) || 0) * 60));
+  const hh = Math.floor(totalMinutes / 60);
+  const mm = totalMinutes % 60;
+  return `${String(hh).padStart(2, "0")}h${String(mm).padStart(2, "0")}min`;
 }
 
 function deriveAssignedArea(row: Pick<ProfileRequestRow, "request_type" | "requested_changes">): AssignedArea {
@@ -118,12 +136,13 @@ export default function FinanceiroSolicitacoesPage() {
   const [auditRows, setAuditRows] = useState<AuditRow[]>([]);
   const [decisionStatus, setDecisionStatus] = useState<RequestStatus>("in_review");
   const [decisionNotes, setDecisionNotes] = useState("");
+  const [extraPaymentsPending, setExtraPaymentsPending] = useState<ExtraPaymentPendingRow[]>([]);
 
   async function load() {
     setLoading(true);
     setMsg("");
     try {
-      const [reqRes, slaRes] = await Promise.all([
+      const [reqRes, slaRes, extrasRes] = await Promise.all([
         supabase
           .from("profile_update_requests")
           .select(
@@ -135,11 +154,17 @@ export default function FinanceiroSolicitacoesPage() {
           .select("sla_hours")
           .eq("config_key", "profile_update_requests")
           .maybeSingle<{ sla_hours: number }>(),
+        supabase
+          .from("project_extra_payments")
+          .select("id,amount,status")
+          .eq("status", "pending"),
       ]);
       if (reqRes.error) throw new Error(reqRes.error.message);
+      if (extrasRes.error) throw new Error(extrasRes.error.message);
       if (!slaRes.error && typeof slaRes.data?.sla_hours === "number") {
         setSlaHours(slaRes.data.sla_hours);
       }
+      setExtraPaymentsPending((extrasRes.data ?? []) as ExtraPaymentPendingRow[]);
 
       const nextRows = (reqRes.data ?? []) as ProfileRequestRow[];
       setRows(nextRows);
@@ -181,6 +206,7 @@ export default function FinanceiroSolicitacoesPage() {
       setRows([]);
       setColabById({});
       setProfileById({});
+      setExtraPaymentsPending([]);
       setSelectedId("");
       setMsg(e instanceof Error ? e.message : "Erro ao carregar solicitacoes.");
     } finally {
@@ -298,6 +324,12 @@ export default function FinanceiroSolicitacoesPage() {
     };
   }, [scopedRows, slaHours]);
 
+  const extrasPendingStats = useMemo(() => {
+    const count = extraPaymentsPending.filter((r) => r.status === "pending").length;
+    const amount = extraPaymentsPending.reduce((acc, r) => acc + (Number(r.amount ?? 0) || 0), 0);
+    return { count, amount };
+  }, [extraPaymentsPending]);
+
   function exportCsv() {
     const header = ["id", "titulo", "tipo", "status", "colaborador", "empresa", "criada_em", "revisada_em"];
     const lines = filtered.map((r) => {
@@ -372,24 +404,33 @@ export default function FinanceiroSolicitacoesPage() {
               Governanca de solicitacoes de adequacao com decisao e trilha de auditoria.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void load()}
-            disabled={loading}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
-          >
-            <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
-            Atualizar
-          </button>
-          <button
-            type="button"
-            onClick={exportCsv}
-            disabled={loading || !filtered.length}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
-          >
-            <Download size={16} />
-            Exportar CSV
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/financeiro/pagamentos-extras"
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+            >
+              <ShieldCheck size={16} />
+              Aprovar extras
+            </Link>
+            <button
+              type="button"
+              onClick={() => void load()}
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+            >
+              <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
+              Atualizar
+            </button>
+            <button
+              type="button"
+              onClick={exportCsv}
+              disabled={loading || !filtered.length}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+            >
+              <Download size={16} />
+              Exportar CSV
+            </button>
+          </div>
         </div>
       </div>
 
@@ -400,12 +441,30 @@ export default function FinanceiroSolicitacoesPage() {
         <StatCard label="Concluidas" value={stats.done} />
         <StatCard label="Recusadas" value={stats.rejected} />
         <StatCard label="Atrasadas (SLA)" value={stats.overdue} />
-        <StatCard label="Tempo medio analise" value={`${stats.avgHours.toFixed(1)}h`} />
+        <StatCard label="Tempo medio analise" value={formatHoursAsHm(stats.avgHours)} />
       </div>
 
       {stats.overdue > 0 ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           Existem {stats.overdue} solicitacoes da fila Financeiro acima de {slaHours}h.
+        </div>
+      ) : null}
+
+      {extrasPendingStats.count > 0 ? (
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              Existem <b>{extrasPendingStats.count}</b> pagamento(s) extra(s) pendente(s) de aprovacao, totalizando{" "}
+              <b>{fmtMoney(extrasPendingStats.amount)}</b>.
+            </div>
+            <Link
+              href="/financeiro/pagamentos-extras"
+              className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-white px-3 py-2 text-xs font-semibold text-sky-800 hover:bg-sky-100/40"
+            >
+              <ShieldCheck size={14} />
+              Ir para Aprovar extras
+            </Link>
+          </div>
         </div>
       ) : null}
 

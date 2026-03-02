@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Building2, RefreshCcw, Save } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -48,7 +48,7 @@ export default function DiretoriaClientesPage() {
     return map;
   }, [companies]);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setMsg("");
     try {
@@ -88,11 +88,11 @@ export default function DiretoriaClientesPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [editingId]);
 
   useEffect(() => {
     void load();
-  }, []);
+  }, [load]);
 
   function startNew() {
     setEditingId("");
@@ -313,4 +313,3 @@ export default function DiretoriaClientesPage() {
     </div>
   );
 }
-

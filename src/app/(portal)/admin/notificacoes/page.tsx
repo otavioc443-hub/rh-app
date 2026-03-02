@@ -53,6 +53,51 @@ const RULES: Array<{ key: string; label: string; description: string }> = [
     label: "P&D: entregavel aprovado com comentarios",
     description: "Dispara quando status do entregavel P&D muda para aprovado com comentarios.",
   },
+  {
+    key: "absence_allowance_created",
+    label: "RH: ausencia programada liberada",
+    description: "Dispara quando RH/Admin cria liberacao de periodo de ausencia para colaborador.",
+  },
+  {
+    key: "absence_allowance_updated",
+    label: "RH: ausencia programada atualizada",
+    description: "Dispara quando RH/Admin edita uma liberacao de periodo de ausencia.",
+  },
+  {
+    key: "absence_allowance_deactivated",
+    label: "RH: ausencia programada desativada",
+    description: "Dispara quando RH/Admin desativa uma liberacao de periodo de ausencia.",
+  },
+  {
+    key: "absence_allowance_deleted",
+    label: "RH: ausencia programada excluida",
+    description: "Dispara quando RH/Admin exclui uma liberacao de periodo de ausencia.",
+  },
+  {
+    key: "absence_request_created",
+    label: "Ausencias: solicitacao enviada",
+    description: "Dispara quando colaborador envia solicitacao de ausencia para aprovacao do gestor.",
+  },
+  {
+    key: "absence_request_updated",
+    label: "Ausencias: solicitacao atualizada",
+    description: "Dispara quando colaborador edita/reenvia uma solicitacao de ausencia.",
+  },
+  {
+    key: "absence_request_cancelled",
+    label: "Ausencias: solicitacao cancelada",
+    description: "Dispara quando colaborador cancela uma solicitacao de ausencia.",
+  },
+  {
+    key: "absence_request_approved",
+    label: "Ausencias: solicitacao aprovada",
+    description: "Dispara quando gestor aprova uma solicitacao de ausencia.",
+  },
+  {
+    key: "absence_request_rejected",
+    label: "Ausencias: solicitacao recusada",
+    description: "Dispara quando gestor recusa uma solicitacao de ausencia.",
+  },
 ];
 
 const NOTIFICATION_LINK_OPTIONS: Array<{ value: string; label: string }> = [
@@ -65,19 +110,24 @@ const NOTIFICATION_LINK_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "/p-d/projetos", label: "P&D - Projetos" },
   { value: "/financeiro/notas-fiscais", label: "Financeiro - Notas fiscais" },
   { value: "/rh/solicitacoes", label: "RH - Solicitacoes" },
+  { value: "/meu-perfil/ausencias-programadas", label: "Meu Perfil - Ausencias programadas" },
 ];
 
 function emptyDraft(eventKey: string): RuleDraft {
   const notifyActorByDefault =
-    eventKey === "project_updated" || eventKey === "deliverable_updated" || eventKey === "pd_deliverable_updated";
+    eventKey === "project_updated" ||
+    eventKey === "deliverable_updated" ||
+    eventKey === "pd_deliverable_updated";
+  const isAbsenceAllowance = eventKey.startsWith("absence_allowance_");
+  const isAbsenceRequest = eventKey.startsWith("absence_request_");
   return {
     event_key: eventKey,
     enabled: true,
     notify_assigned_user: true,
-    notify_project_owner: true,
-    notify_project_managers: true,
-    notify_project_coordinators: true,
-    notify_actor: notifyActorByDefault,
+    notify_project_owner: !(isAbsenceAllowance || isAbsenceRequest),
+    notify_project_managers: isAbsenceRequest ? true : !isAbsenceAllowance,
+    notify_project_coordinators: !(isAbsenceAllowance || isAbsenceRequest),
+    notify_actor: notifyActorByDefault || isAbsenceRequest,
     link_default: null,
   };
 }

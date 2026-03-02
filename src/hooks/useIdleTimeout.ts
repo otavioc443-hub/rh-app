@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { forceClientLogout } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
 const IDLE_TIME = 15 * 60 * 1000; // ✅ 15 minutos
@@ -16,7 +16,7 @@ export function useIdleTimeout() {
     }
 
     timerRef.current = setTimeout(async () => {
-      await supabase.auth.signOut();
+      await forceClientLogout();
       router.replace("/");
     }, IDLE_TIME);
   }, [router]);

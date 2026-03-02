@@ -8,7 +8,13 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import {
+  clearLocalSupabaseSession,
+  forceClientLogout,
+  isPortalLogoutSignalKey,
+  setSessionAuditId,
+  supabase,
+} from "@/lib/supabaseClient";
 import type { AuthState, Role } from "@/lib/auth/types";
 
 type ProfileRow = {
@@ -114,6 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // silencioso
     } finally {
       sessionIdRef.current = null;
+      setSessionAuditId(null);
     }
   }
 
@@ -140,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await closeAuditSession("idle");
 
         // encerra sessão
-        await supabase.auth.signOut();
+        await forceClientLogout();
 
         // redireciona (mais confiável que router aqui)
         window.location.href = "/";
@@ -217,6 +224,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         companyId,
         departmentId,
       });
+      setSessionAuditId(sessionIdRef.current);
     }
 
     // inicia/reset idle sempre que autenticar
@@ -275,11 +283,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.__logoutManual = async () => {
       // encerra auditoria como manual antes do signOut
       await closeAuditSession("manual");
+      await forceClientLogout();
     };
 
     return () => {
       delete window.__logoutManual;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Sincroniza logout entre abas/janelas (quando storage de auth for limpo em outra aba).
+  useEffect(() => {
+    const onStorage = (ev: StorageEvent) => {
+      const key = ev.key ?? "";
+      if (!key) return;
+      if (isPortalLogoutSignalKey(ev.key)) {
+        clearIdleTimer();
+        void closeAuditSession("manual");
+        clearLocalSupabaseSession();
+        void loadAuth();
+        return;
+      }
+      const isAuthKey = key.startsWith("sb-") || key.includes("auth-token") || key.includes("supabase.auth.");
+      if (!isAuthKey) return;
+      if (ev.newValue !== null) return;
+      void loadAuth();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
