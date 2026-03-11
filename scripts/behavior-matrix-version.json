@@ -1,0 +1,27 @@
+{
+  "version": "v1.0.10-calibrada",
+  "frozen_at": "2026-03-05",
+  "matrix_file": "src/lib/behaviorProfile.ts",
+  "cases_file": "scripts/behavior-calibration-cases.json",
+  "metrics": {
+    "mae_mean": 0.64,
+    "rmse_mean": 0.76,
+    "case_mae": {
+      "lucas-barbosa-rocha-2026-03-04": 0.24,
+      "carlos-vinicius-domingos-da-silva-2026-03-05": 0.52,
+      "isadora-maria-ferreira-de-lima-2026-03-04": 0.66,
+      "rodrigo-augusto-da-c-s-simioni-2026-03-04": 0.16,
+      "jesse-2026-03-05": 0.47,
+      "otavio-victor-ferreira-da-silva-2026-03-05": 0.94,
+      "jefferson-vieira-da-souza-2026-03-05": 1.22,
+      "pedro-navar-nascimento-de-andrade-ramos-2026-03-05": 0.89,
+      "ana-beatriz-lopes-nobre-2026-03-05": 0.65
+    }
+  },
+  "notes": [
+    "Versao atualizada com inclusao oficial do caso Beatriz",
+    "Leitura consolidada com ajuste de consistencia nas selecoes do passo 2/3",
+    "Base atual com 9 casos de calibracao",
+    "Governanca ativa: script check-baseline para bloquear regressao em MAE/RMSE e MAE por caso"
+  ]
+}

@@ -1,0 +1,2 @@
+id;status;expected_executor;expected_comunicador;expected_planejador;expected_analista;self_selected_ids;others_selected_ids;notes
+nome-do-colaborador-YYYY-MM-DD;ativo;0;0;0;0;id1|id2|id3;id1|id2|id3;Opcional sem ponto e virgula

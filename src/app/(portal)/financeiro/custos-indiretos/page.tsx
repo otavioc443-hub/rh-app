@@ -96,7 +96,7 @@ function categoryLabel(v: CostCategory) {
 function typeLabel(v: CostType) {
   if (v === "monthly") return "Mensal";
   if (v === "one_time") return "Pontual";
-  return "% sobre salario";
+  return "% sobre sal?rio";
 }
 
 function indirectAmountLabel(row: Pick<IndirectCostRow, "cost_type" | "amount">) {
@@ -372,7 +372,7 @@ export default function FinanceiroCustosIndiretosPage() {
         };
       }
       return {
-        label: "Nao identificado",
+        label: "N?o identificado",
         hint: `${fmtPctValue(amount)} sem salario/origem valida`,
       };
     },
@@ -619,11 +619,11 @@ export default function FinanceiroCustosIndiretosPage() {
 
   async function saveIndirectCosts() {
     if (!isAllowed) {
-      setMsg("Sem permissao para cadastrar custos indiretos.");
+      setMsg("Sem permiss?o para cadastrar custos indiretos.");
       return;
     }
     if (!editingHistoryId && !activeProjects.length) {
-      setMsg("Nao existem projetos ativos para rateio.");
+      setMsg("N?o existem projetos ativos para rateio.");
       return;
     }
     if (amountNum <= 0) {
@@ -631,15 +631,15 @@ export default function FinanceiroCustosIndiretosPage() {
       return;
     }
     if ((costType === "monthly" || costType === "percentage_payroll") && (!startDate || !endDate)) {
-      setMsg("Custos recorrentes exigem inicio e fim de vigencia.");
+      setMsg("Custos recorrentes exigem in?cio e fim de vig?ncia.");
       return;
     }
     if (!editingHistoryId && costType === "percentage_payroll" && amountNum > 100) {
-      setMsg("Para % sobre salario, informe um percentual entre 0 e 100.");
+      setMsg("Para % sobre sal?rio, informe um percentual entre 0 e 100.");
       return;
     }
     if (startDate && endDate && startDate > endDate) {
-      setMsg("A data final nao pode ser menor que a data inicial.");
+      setMsg("A data final n?o pode ser menor que a data inicial.");
       return;
     }
 
@@ -684,7 +684,7 @@ export default function FinanceiroCustosIndiretosPage() {
     if (editingHistoryId) {
       const currentRow = historyRows.find((r) => r.id === editingHistoryId);
       if (!currentRow) {
-        setMsg("Lancamento nao encontrado para edicao.");
+        setMsg("Lan?amento n?o encontrado para edi??o.");
         return;
       }
 
@@ -716,14 +716,14 @@ export default function FinanceiroCustosIndiretosPage() {
           indirect_cost_id: currentRow.id,
           project_id: currentRow.project_id,
           action: "update",
-          reason: "Edicao de lancamento",
+          reason: "Edi??o de lan?amento",
           old_row: currentRow,
           new_row: nextRow,
           actor_user_id: meId,
           actor_role: role ?? null,
         });
         if (auditInsert.error) throw new Error(auditInsert.error.message);
-        setMsg("Lancamento indireto atualizado.");
+        setMsg("Lan?amento indireto atualizado.");
         resetForm();
         await load();
       } catch (e: unknown) {
@@ -748,7 +748,7 @@ export default function FinanceiroCustosIndiretosPage() {
       }));
 
     if (!rows.length) {
-      setMsg("Nao foi possivel gerar o rateio.");
+      setMsg("N?o foi poss?vel gerar o rateio.");
       return;
     }
 
@@ -876,11 +876,11 @@ export default function FinanceiroCustosIndiretosPage() {
                 <th>Valor efetivo</th>
                 <th>Origem</th>
                 <th>Rateio</th>
-                <th>Vigencia</th>
+                <th>Vig?ncia</th>
               </tr>
             </thead>
             <tbody>
-              ${rowsHtml || '<tr><td colspan="9">Nenhum lancamento encontrado.</td></tr>'}
+              ${rowsHtml || '<tr><td colspan="9">Nenhum lan?amento encontrado.</td></tr>'}
             </tbody>
           </table>
         </body>
@@ -897,16 +897,16 @@ export default function FinanceiroCustosIndiretosPage() {
 
   async function deleteHistoryRow(rowId: string) {
     if (!canDeleteHistory) {
-      setMsg("Apenas admin pode excluir lancamentos.");
+      setMsg("Apenas admin pode excluir lan?amentos.");
       return;
     }
     const target = historyRows.find((x) => x.id === rowId) ?? null;
     if (!target) {
-      setMsg("Lancamento nao encontrado.");
+      setMsg("Lan?amento n?o encontrado.");
       return;
     }
 
-    const reasonInput = window.prompt("Informe o motivo da exclusao deste lancamento:");
+    const reasonInput = window.prompt("Informe o motivo da exclus?o deste lan?amento:");
     if (reasonInput === null) return;
     const reason = reasonInput.trim();
     if (!reason) {
@@ -930,10 +930,10 @@ export default function FinanceiroCustosIndiretosPage() {
 
       const { error } = await supabase.from("project_indirect_costs").delete().eq("id", rowId);
       if (error) throw new Error(error.message);
-      setMsg("Lancamento excluido com sucesso (auditoria registrada).");
+      setMsg("Lan?amento exclu?do com sucesso (auditoria registrada).");
       await load();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao excluir lancamento.");
+      setMsg(e instanceof Error ? e.message : "Erro ao excluir lan?amento.");
     } finally {
       setSaving(false);
     }
@@ -1107,7 +1107,7 @@ export default function FinanceiroCustosIndiretosPage() {
       <section className="rounded-3xl border border-slate-200 bg-white p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-base font-semibold text-slate-900">
-            {editingHistoryId ? "Editar lancamento indireto" : "Novo custo indireto (rateio automatico)"}
+            {editingHistoryId ? "Editar lan?amento indireto" : "Novo custo indireto (rateio autom?tico)"}
           </h2>
           {editingHistoryId ? (
             <button
@@ -1115,7 +1115,7 @@ export default function FinanceiroCustosIndiretosPage() {
               onClick={resetForm}
               className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
-              Cancelar edicao
+              Cancelar edi??o
             </button>
           ) : null}
         </div>
@@ -1128,7 +1128,7 @@ export default function FinanceiroCustosIndiretosPage() {
               value={sourceMode}
               onChange={(e) => setSourceMode(e.target.value as SourceMode)}
             >
-              <option value="manual">Digitacao manual</option>
+              <option value="manual">Digita??o manual</option>
               <option value="collaborator">Por colaborador</option>
               <option value="sector">Por setor</option>
             </select>
@@ -1162,7 +1162,7 @@ export default function FinanceiroCustosIndiretosPage() {
             >
               <option value="monthly">Mensal</option>
               <option value="one_time">Pontual</option>
-              <option value="percentage_payroll">% sobre salario do colaborador</option>
+              <option value="percentage_payroll">% sobre sal?rio do colaborador</option>
             </select>
           </label>
 
@@ -1258,15 +1258,15 @@ export default function FinanceiroCustosIndiretosPage() {
         <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
           {costType === "one_time" ? (
             <span>
-              Sem vigencia informada, o custo pontual vale apenas no mes do lancamento.
+              Sem vig?ncia informada, o custo pontual vale apenas no m?s do lan?amento.
             </span>
           ) : costType === "monthly" ? (
             <span>
-              Custo mensal exige inicio e fim de vigencia. Sem esse intervalo, o rateio recorrente nao sera salvo.
+              Custo mensal exige in?cio e fim de vig?ncia. Sem esse intervalo, o rateio recorrente n?o ser? salvo.
             </span>
           ) : (
             <span>
-              % sobre salario exige origem por colaborador, inicio e fim de vigencia, e aceita somente valores entre 0 e 100. Valores acima de 100 sao tratados como cadastro legado em valor absoluto.
+              % sobre sal?rio exige origem por colaborador, in?cio e fim de vig?ncia, e aceita somente valores entre 0 e 100. Valores acima de 100 sao tratados como cadastro legado em valor absoluto.
             </span>
           )}
         </div>
@@ -1287,7 +1287,7 @@ export default function FinanceiroCustosIndiretosPage() {
         ) : null}
 
         <label className="mt-3 grid gap-1 text-sm font-semibold text-slate-700">
-          Observacao
+          Observa??o
           <textarea
             className="min-h-[90px] rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-900"
             placeholder="Detalhes para auditoria do custo indireto..."
@@ -1307,14 +1307,14 @@ export default function FinanceiroCustosIndiretosPage() {
             onClick={() => void saveIndirectCosts()}
             className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
           >
-            <Save size={16} /> {editingHistoryId ? "Salvar alteracoes" : "Salvar rateio"}
+            <Save size={16} /> {editingHistoryId ? "Salvar altera??es" : "Salvar rateio"}
           </button>
         </div>
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-6">
         <h2 className="text-base font-semibold text-slate-900">Previa do rateio</h2>
-        <p className="mt-1 text-sm text-slate-600">Distribuicao do valor informado pelos projetos ativos.</p>
+        <p className="mt-1 text-sm text-slate-600">Distribui??o do valor informado pelos projetos ativos.</p>
 
         <div className="mt-4 overflow-x-auto">
           <table className="min-w-[780px] w-full text-left text-sm">
@@ -1360,7 +1360,7 @@ export default function FinanceiroCustosIndiretosPage() {
       <section className="rounded-3xl border border-slate-200 bg-white p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">Historico de lancamentos</h2>
+            <h2 className="text-base font-semibold text-slate-900">Hist?rico de lan?amentos</h2>
             <p className="mt-1 text-sm text-slate-600">Acompanhe custos indiretos registrados e aplicados nos projetos.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -1557,7 +1557,7 @@ export default function FinanceiroCustosIndiretosPage() {
               ) : (
                 <tr>
                   <td className="p-4 text-slate-500" colSpan={isAllowed ? 7 : 6}>
-                    Nenhum lancamento encontrado para os filtros aplicados.
+                    Nenhum lan?amento encontrado para os filtros aplicados.
                   </td>
                 </tr>
               )}
@@ -1590,7 +1590,7 @@ export default function FinanceiroCustosIndiretosPage() {
                 data-history-actions-root="true"
               >
                 <div className="mb-2 border-b border-slate-100 px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                  Acoes do lancamento
+                  A??es do lan?amento
                 </div>
                 <button
                   type="button"
@@ -1650,7 +1650,7 @@ export default function FinanceiroCustosIndiretosPage() {
             </button>
             <div className="pr-24">
               <div>
-                <h3 className="text-base font-semibold text-slate-900">Base do lancamento indireto</h3>
+                <h3 className="text-base font-semibold text-slate-900">Base do lan?amento indireto</h3>
                 <p className="mt-1 text-sm text-slate-600">
                   {projectNameById[detailHistoryRow.project_id] ?? detailHistoryRow.project_id}
                 </p>
@@ -1684,13 +1684,13 @@ export default function FinanceiroCustosIndiretosPage() {
                 <p className="mt-1 text-sm font-medium text-slate-900">{parseNoteTag(detailHistoryRow.notes, "Rateio")}</p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Vigencia</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Vig?ncia</p>
                 <p className="mt-1 text-sm font-medium text-slate-900">
                   {(detailHistoryRow.start_date ?? "-") + " ate " + (detailHistoryRow.end_date ?? "-")}
                 </p>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 md:col-span-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Observacao</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Observa??o</p>
                 <p className="mt-1 whitespace-pre-wrap text-sm font-medium text-slate-900">
                   {parseNoteTag(detailHistoryRow.notes, "Obs")}
                 </p>
@@ -1713,8 +1713,8 @@ export default function FinanceiroCustosIndiretosPage() {
               <div>
                 <h2 className="text-base font-semibold text-slate-900">Base da auditoria de custos indiretos</h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  Exclusoes ficam registradas abaixo. Edicoes sao visualizadas pelo estado atual do lancamento em
-                  {" "}Ver mais{" "}e pelo formulario de edicao.
+                  Exclus?es ficam registradas abaixo. Edi??es s?o visualizadas pelo estado atual do lan?amento em
+                  {" "}Ver mais{" "}e pelo formul?rio de edi??o.
                 </p>
               </div>
               <button

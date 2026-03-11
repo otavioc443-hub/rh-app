@@ -1,0 +1,70 @@
+{
+  "cases": [
+    {
+      "id": "edmilson-lucas-de-freitas-arquino-2026-03-06-v1",
+      "status": "auditoria",
+      "self_selected_ids": [
+        "alegre",
+        "auto_suficiente",
+        "calmo",
+        "compreensivo",
+        "conservador",
+        "corajoso",
+        "decidido",
+        "dedicado",
+        "desconfiado",
+        "discreto",
+        "egocentrico",
+        "exagerado",
+        "firme",
+        "habilidoso",
+        "idealista",
+        "indeciso",
+        "independente",
+        "influenciador",
+        "inseguro",
+        "leal",
+        "medroso",
+        "modesto",
+        "otimista",
+        "paciente",
+        "pessimista",
+        "procrastinador",
+        "racional",
+        "reservado",
+        "sarcastico",
+        "sensivel",
+        "sentimental",
+        "simpatico",
+        "temeroso",
+        "vaidoso"
+      ],
+      "others_selected_ids": [
+        "bem_humorado",
+        "bom_companheiro",
+        "calmo",
+        "corajoso",
+        "desconfiado",
+        "extrovertido",
+        "habilidoso",
+        "independente",
+        "leal",
+        "medroso",
+        "metodico",
+        "minucioso",
+        "modesto",
+        "procrastinador",
+        "reservado"
+      ],
+      "expected": {
+        "self": {
+          "executor": 16.02,
+          "comunicador": 23.12,
+          "planejador": 32.45,
+          "analista": 28.4
+        }
+      },
+      "notes": "captura por print; variante v1 assume segunda tela como Q1 e primeira como Q2"
+    }
+  ]
+}

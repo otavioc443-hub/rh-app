@@ -156,7 +156,7 @@ const DELIVERABLE_DISCIPLINE_OPTIONS: Array<{ value: DeliverableDiscipline; labe
 ];
 
 function deliverableDisciplineLabel(value?: string | null) {
-  if (!value) return "Nao informada";
+  if (!value) return "N?o informada";
   return DELIVERABLE_DISCIPLINE_OPTIONS.find((opt) => opt.value === value)?.label ?? value;
 }
 
@@ -251,13 +251,13 @@ function normalizeProjectsInsertError(message: string | null | undefined) {
   const text = String(message ?? "");
   const lowered = text.toLowerCase();
   if (lowered.includes("row-level security") && lowered.includes("projects")) {
-    return "Sem permissao para criar projeto na tabela projects. O fluxo agora deve usar a API de diretoria. Recarregue a pagina e tente novamente.";
+    return "Sem permiss?o para criar projeto na tabela projects. O fluxo agora deve usar a API de diretoria. Recarregue a p?gina e tente novamente.";
   }
   if (lowered.includes("projects_project_type_check")) {
-    return "A coluna project_type ainda nao aceita as modalidades novas. Rode a migration supabase/sql/2026-03-02_expand_projects_project_type_check_for_diretoria_modalities.sql no Supabase e tente novamente.";
+    return "A coluna project_type ainda n?o aceita as modalidades novas. Rode a migration supabase/sql/2026-03-02_expand_projects_project_type_check_for_diretoria_modalities.sql no Supabase e tente novamente.";
   }
   if (lowered.includes("project_members_user_id_fkey")) {
-    return "Um dos gestores selecionados nao possui usuario valido no portal. Escolha apenas usuarios com acesso ativo e tente novamente.";
+    return "Um dos gestores selecionados n?o possui usu?rio v?lido no portal. Escolha apenas usu?rios com acesso ativo e tente novamente.";
   }
   return text || "Falha ao criar projeto.";
 }
@@ -266,13 +266,13 @@ function normalizeProjectMutationError(message: string | null | undefined) {
   const text = normalizeProjectsInsertError(message);
   const lowered = text.toLowerCase();
   if (lowered.includes("project_members_user_id_fkey")) {
-    return "Um dos gestores selecionados nao possui acesso ativo ao portal. Escolha apenas usuarios ativos no campo de gestor e tente novamente.";
+    return "Um dos gestores selecionados nao possui acesso ativo ao portal. Escolha apenas usu?rios ativos no campo de gestor e tente novamente.";
   }
-  if (lowered.includes("gestor responsavel invalido")) {
-    return "O gestor responsavel selecionado nao possui acesso ativo ao portal. Escolha um usuario ativo e tente novamente.";
+  if (lowered.includes("gestor respons?vel invalido")) {
+    return "O gestor respons?vel selecionado nao possui acesso ativo ao portal. Escolha um usuario ativo e tente novamente.";
   }
   if (lowered.includes("gestor(es) adicional(is) sem acesso ativo")) {
-    return "Ha gestor(es) adicional(is) sem acesso ativo ao portal. Remova esses usuarios e tente novamente.";
+    return "Ha gestor(es) adicional(is) sem acesso ativo ao portal. Remova esses usu?rios e tente novamente.";
   }
   return text || "Falha ao salvar projeto.";
 }
@@ -520,7 +520,7 @@ export default function DiretoriaNovoProjetoPage() {
     setMsg("");
     try {
       const { data: authData, error: authErr } = await supabase.auth.getUser();
-      if (authErr || !authData?.user) throw new Error("Nao autenticado.");
+      if (authErr || !authData?.user) throw new Error("N?o autenticado.");
       setMeId(authData.user.id);
 
       const { data: sess } = await supabase.auth.getSession();
@@ -841,7 +841,7 @@ export default function DiretoriaNovoProjetoPage() {
 
   function openDeliverableValueEditor(project: ExistingProjectRow, deliverable: ProjectDeliverableLiteRow) {
     if ((deliverable.financial_status ?? "aberto") !== "aberto") {
-      setMsg("Entregavel vinculado a boletim (pendente/baixado) nao pode ser alterado. O valor sera preservado.");
+      setMsg("Entreg?vel vinculado a boletim (pendente/baixado) n?o pode ser alterado. O valor ser? preservado.");
       return;
     }
     const totalDeliverables = Math.max(1, (existingDeliverablesByProjectId[project.id] ?? []).length);
@@ -921,7 +921,7 @@ export default function DiretoriaNovoProjetoPage() {
     setMsg("");
     try {
       if ((deliverable.financial_status ?? "aberto") !== "aberto") {
-        throw new Error("Entregavel vinculado a boletim (pendente/baixado) nao pode ser alterado. O valor sera preservado.");
+        throw new Error("Entreg?vel vinculado a boletim (pendente/baixado) n?o pode ser alterado. O valor ser? preservado.");
       }
       const nextTitle = (values.title ?? "").trim() || (deliverable.title ?? "").trim() || "Entregavel sem titulo";
       const nextCurrency = values.currency_code || "BRL";
@@ -1037,7 +1037,7 @@ export default function DiretoriaNovoProjetoPage() {
 
     const candidateOpenRows = rows.filter((r) => r.id !== deliverable.id && (r.financial_status ?? "aberto") === "aberto");
     if (candidateOpenRows.length === 0) {
-      setMsg("Nao ha entregaveis com status financeiro aberto para absorver o residual. Ajuste os valores manualmente.");
+      setMsg("N?o h? entreg?veis com status financeiro aberto para absorver o residual. Ajuste os valores manualmente.");
       return;
     }
 
@@ -1119,7 +1119,7 @@ export default function DiretoriaNovoProjetoPage() {
     const rows = existingDeliverablesByProjectId[projectId] ?? [];
     const budget = Number(project.budget_total) || 0;
     if (rows.length === 0) {
-      setMsg("Este projeto nao possui entregaveis cadastrados para recalcular.");
+      setMsg("Este projeto n?o possui entreg?veis cadastrados para recalcular.");
       return;
     }
     if (budget <= 0) {
@@ -1136,11 +1136,11 @@ export default function DiretoriaNovoProjetoPage() {
       const remainingBudget = budget - lockedTotal;
 
       if (editableRows.length === 0) {
-        setMsg("Nao ha entregaveis em aberto para recalcular. Itens pendentes/baixados em boletim foram preservados.");
+        setMsg("N?o h? entreg?veis em aberto para recalcular. Itens pendentes/baixados em boletim foram preservados.");
         return;
       }
       if (remainingBudget < -0.009) {
-        throw new Error("O total dos documentos ja baixados ultrapassa o orcamento do projeto. Ajuste os valores manualmente.");
+        throw new Error("O total dos documentos j? baixados ultrapassa o or?amento do projeto. Ajuste os valores manualmente.");
       }
 
       const allocations = allocateEvenlyByCents(Math.max(0, remainingBudget), editableRows.length);
@@ -1166,10 +1166,10 @@ export default function DiretoriaNovoProjetoPage() {
       setMsg(
         lockedRows.length > 0
           ? "Rateio recalculado somente nos documentos em aberto. Entregaveis pendentes/baixados em boletim foram preservados."
-          : "Rateio recalculado com sucesso. O total dos entregaveis agora fecha exatamente com o orcamento do projeto."
+          : "Rateio recalculado com sucesso. O total dos entreg?veis agora fecha exatamente com o orcamento do projeto."
       );
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao recalcular rateio dos entregaveis.");
+      setMsg(e instanceof Error ? e.message : "Erro ao recalcular rateio dos entreg?veis.");
     } finally {
       setSaving(false);
     }
@@ -1240,7 +1240,7 @@ export default function DiretoriaNovoProjetoPage() {
       setNewDeliverablesByProjectId((prev) => ({ ...prev, [projectId]: [] }));
       await load();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao importar CSV de entregaveis.");
+      setMsg(e instanceof Error ? e.message : "Erro ao importar CSV de entreg?veis.");
     } finally {
       setSaving(false);
     }
@@ -1308,7 +1308,7 @@ export default function DiretoriaNovoProjetoPage() {
       setNewProjectDeliverables((prev) => [...prev, ...rows]);
       setMsg(`${rows.length} entregavel(eis) carregado(s) no cadastro do projeto. Verifique a disciplina e clique em Criar projeto para salvar.`);
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao importar CSV de entregaveis.");
+      setMsg(e instanceof Error ? e.message : "Erro ao importar CSV de entreg?veis.");
     } finally {
       setSaving(false);
     }
@@ -1319,11 +1319,11 @@ export default function DiretoriaNovoProjetoPage() {
     if (!newProjectClientId) return setMsg("Selecione o cliente do projeto.");
     if (!newProjectLine) return setMsg("Selecione a linha do projeto.");
     if (!newProjectType) return setMsg("Selecione a modalidade do projeto.");
-    if (!newProjectManagerId) return setMsg("Selecione o gestor responsavel.");
+    if (!newProjectManagerId) return setMsg("Selecione o gestor respons?vel.");
     if (newProjectSecondaryManagerIds.includes(newProjectManagerId)) {
       return setMsg("Gestor adicional deve ser diferente do gestor principal.");
     }
-    if (!meId) return setMsg("Usuario nao identificado.");
+    if (!meId) return setMsg("Usu?rio n?o identificado.");
     setSaving(true);
     setMsg("");
     try {
@@ -1426,7 +1426,7 @@ export default function DiretoriaNovoProjetoPage() {
     const draft = draftByProjectId[projectId];
     if (!draft) return;
     if (!draft.name.trim()) return setMsg("Nome do projeto e obrigatorio.");
-    if (!draft.owner_user_id) return setMsg("Selecione o gestor responsavel.");
+    if (!draft.owner_user_id) return setMsg("Selecione o gestor respons?vel.");
     if (draft.secondary_manager_user_ids.includes(draft.owner_user_id)) {
       return setMsg("Gestor adicional deve ser diferente do gestor principal.");
     }
@@ -1488,7 +1488,7 @@ export default function DiretoriaNovoProjetoPage() {
       }
       if (error) throw error;
       if (!updatedRow?.id) {
-        throw new Error("Sem permissao para atualizar este projeto (verifique role/politicas RLS).");
+        throw new Error("Sem permiss?o para atualizar este projeto (verifique role/politicas RLS).");
       }
 
         for (const d of existingDeliverablesByProjectId[projectId] ?? []) {
@@ -1562,8 +1562,8 @@ export default function DiretoriaNovoProjetoPage() {
         title={isEditView ? "Diretoria - Projetos cadastrados" : "Diretoria - Novo projeto"}
         subtitle={
           isEditView
-            ? "Edite projetos existentes, entregaveis, valores e prazos."
-            : "Cadastro com direcionamento de gestor responsavel."
+            ? "Edite projetos existentes, entreg?veis, valores e prazos."
+            : "Cadastro com direcionamento de gestor respons?vel."
         }
         action={
           <Link
@@ -1607,7 +1607,7 @@ export default function DiretoriaNovoProjetoPage() {
             <div>
               <h2 className="text-base font-semibold">Cadastro de projeto</h2>
               <p className="mt-1 text-xs text-indigo-100">
-                Estruture o cadastro por blocos: contexto, responsaveis, planejamento, escopo e entregaveis.
+                Estruture o cadastro por blocos: contexto, responsaveis, planejamento, escopo e entreg?veis.
               </p>
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs">
@@ -1623,8 +1623,8 @@ export default function DiretoriaNovoProjetoPage() {
           </div>
         </div>
         <p className="mt-3 text-xs text-slate-600">
-          Preencha os campos principais: <b>Empresa</b>, <b>Nome do projeto</b>, <b>Gestor responsavel</b>,{" "}
-          <b>Cliente</b>, <b>Tipo principal</b>, <b>Data de inicio</b> e <b>Previsao de termino</b>.
+          Preencha os campos principais: <b>Empresa</b>, <b>Nome do projeto</b>, <b>Gestor respons?vel</b>,{" "}
+          <b>Cliente</b>, <b>Tipo principal</b>, <b>Data de inicio</b> e <b>Previs?o de t?rmino</b>.
         </p>
         <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border border-indigo-200 bg-white px-3 py-2">
@@ -1638,8 +1638,8 @@ export default function DiretoriaNovoProjetoPage() {
             </div>
           </div>
           <div className="rounded-xl border border-emerald-200 bg-white px-3 py-2">
-            <div className="text-[10px] uppercase tracking-wide text-slate-500">Orcamento</div>
-            <div className="mt-1 text-sm font-semibold text-slate-900">{newProjectBudgetTotal || "Nao informado"}</div>
+            <div className="text-[10px] uppercase tracking-wide text-slate-500">Or?amento</div>
+            <div className="mt-1 text-sm font-semibold text-slate-900">{newProjectBudgetTotal || "N?o informado"}</div>
           </div>
           <div className="rounded-xl border border-violet-200 bg-white px-3 py-2">
             <div className="text-[10px] uppercase tracking-wide text-slate-500">Entregaveis iniciais</div>
@@ -1681,7 +1681,7 @@ export default function DiretoriaNovoProjetoPage() {
           </div>
 
           <div className="rounded-xl border border-indigo-100 bg-white p-3 shadow-sm">
-            <p className="mb-1 text-xs font-semibold text-slate-600">Gestor responsavel</p>
+            <p className="mb-1 text-xs font-semibold text-slate-600">Gestor respons?vel</p>
             <select
               value={newProjectManagerId}
               onChange={(e) => {
@@ -1691,7 +1691,7 @@ export default function DiretoriaNovoProjetoPage() {
               }}
               className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
             >
-              <option value="">Selecione o gestor responsavel...</option>
+              <option value="">Selecione o gestor respons?vel...</option>
               {managers.map((m) => (
                 <option key={m.id} value={m.id}>
                   {managerLabel(m)}
@@ -1721,7 +1721,7 @@ export default function DiretoriaNovoProjetoPage() {
                     </label>
                   ))
               ) : (
-                <p className="text-xs text-slate-500">Nao ha outros gestores disponiveis para adicionar.</p>
+                <p className="text-xs text-slate-500">N?o h? outros gestores dispon?veis para adicionar.</p>
               )}
             </div>
             <p className="mt-1 text-xs text-slate-500">Marque quantos gestores adicionais forem necessarios no mesmo projeto.</p>
@@ -1758,7 +1758,7 @@ export default function DiretoriaNovoProjetoPage() {
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-slate-500">Classificacao da linha: Eolica, Solar ou BESS.</p>
+            <p className="mt-1 text-xs text-slate-500">Classifica??o da linha: E?lica, Solar ou BESS.</p>
           </div>
 
           <div className="rounded-xl border border-indigo-100 bg-white p-3 shadow-sm">
@@ -1800,7 +1800,7 @@ export default function DiretoriaNovoProjetoPage() {
           </div>
 
           <div className="rounded-xl border border-emerald-100 bg-white p-3 shadow-sm">
-            <p className="mb-1 text-xs font-semibold text-slate-600">Orcamento (R$)</p>
+            <p className="mb-1 text-xs font-semibold text-slate-600">Or?amento (R$)</p>
             <input
               value={newProjectBudgetTotal}
               onChange={(e) => setNewProjectBudgetTotal(formatCurrencyInput(e.target.value))}
@@ -1823,14 +1823,14 @@ export default function DiretoriaNovoProjetoPage() {
           </div>
 
           <div className="rounded-xl border border-emerald-100 bg-white p-3 shadow-sm">
-            <p className="mb-1 text-xs font-semibold text-slate-600">Previsao de termino</p>
+            <p className="mb-1 text-xs font-semibold text-slate-600">Previs?o de t?rmino</p>
             <input
               type="date"
               value={newProjectEnd}
               onChange={(e) => setNewProjectEnd(e.target.value)}
               className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm"
             />
-            <p className="mt-1 text-xs text-slate-500">Previsao de termino do projeto.</p>
+            <p className="mt-1 text-xs text-slate-500">Previs?o de t?rmino do projeto.</p>
           </div>
 
           <div className="md:col-span-2 rounded-xl border border-emerald-100 bg-white p-3 shadow-sm">
@@ -1864,7 +1864,7 @@ export default function DiretoriaNovoProjetoPage() {
               <div>
                 <p className="text-xs font-semibold text-slate-700">Entregaveis iniciais (opcional)</p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Cadastre entregaveis ja no momento da criacao. Eles serao criados como pendentes.
+                  Cadastre entreg?veis ja no momento da cria??o. Eles serao criados como pendentes.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -1872,8 +1872,8 @@ export default function DiretoriaNovoProjetoPage() {
                   type="button"
                   onClick={() =>
                     downloadTextFile(
-                      "modelo_entregaveis_diretoria.csv",
-                      "titulo_entregavel;previsao_entrega;descricao;disciplina;moeda;valor_real\nPlano de execucao;28/02/2026;Descricao do documento;civil;BRL;0,00",
+                      "modelo_entreg?veis_diretoria.csv",
+                      "titulo_entregavel;previsao_entrega;descricao;disciplina;moeda;valor_real\nPlano de execucao;28/02/2026;Descri??o do documento;civil;BRL;0,00",
                       "text/csv;charset=utf-8"
                     )
                   }
@@ -2008,7 +2008,7 @@ export default function DiretoriaNovoProjetoPage() {
                 ))}
               </div>
             ) : (
-              <p className="mt-2 text-xs text-slate-500">Nenhum entregavel inicial informado.</p>
+              <p className="mt-2 text-xs text-slate-500">Nenhum entreg?vel inicial informado.</p>
             )}
           </div>
         </div>
@@ -2033,8 +2033,8 @@ export default function DiretoriaNovoProjetoPage() {
       {isEditView ? (
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-          <h2 className="text-sm font-semibold text-slate-900">Projetos cadastrados (edicao)</h2>
-          <p className="mt-1 text-xs text-slate-600">Edite dados, gestores e entregaveis em blocos segmentados.</p>
+          <h2 className="text-sm font-semibold text-slate-900">Projetos cadastrados (edi??o)</h2>
+          <p className="mt-1 text-xs text-slate-600">Edite dados, gestores e entreg?veis em blocos segmentados.</p>
         </div>
         <div className="mt-3 space-y-3">
           {existingProjects.length ? (
@@ -2050,8 +2050,8 @@ export default function DiretoriaNovoProjetoPage() {
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3">
                     <div className="text-xs text-slate-600">
                       {isProjectEditing
-                        ? "Modo de edicao ativo. Ajuste os campos abaixo e salve ao final."
-                        : "Modo de visualizacao. Clique em Editar informacoes para liberar alteracoes."}
+                        ? "Modo de edi??o ativo. Ajuste os campos abaixo e salve ao final."
+                        : "Modo de visualiza??o. Clique em Editar informa??es para liberar altera??es."}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       {!isProjectEditing ? (
@@ -2061,7 +2061,7 @@ export default function DiretoriaNovoProjetoPage() {
                           disabled={saving || loading}
                           className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
                         >
-                          Editar informacoes
+                          Editar informa??es
                         </button>
                       ) : null}
                       <button
@@ -2091,8 +2091,8 @@ export default function DiretoriaNovoProjetoPage() {
                         </div>
                       </div>
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                        <div className="text-[10px] uppercase tracking-wide text-slate-500">Orcamento</div>
-                        <div className="mt-1 text-sm font-semibold text-slate-900">{draft.budget_total || "Nao informado"}</div>
+                        <div className="text-[10px] uppercase tracking-wide text-slate-500">Or?amento</div>
+                        <div className="mt-1 text-sm font-semibold text-slate-900">{draft.budget_total || "N?o informado"}</div>
                       </div>
                       <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                         <div className="text-[10px] uppercase tracking-wide text-slate-500">Entregaveis</div>
@@ -2103,7 +2103,7 @@ export default function DiretoriaNovoProjetoPage() {
                     </div>
                     <div className="md:col-span-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2">
                       <p className="text-xs font-semibold text-indigo-900">Dados e direcionamento</p>
-                      <p className="mt-0.5 text-xs text-indigo-700">Ajuste nome, gestores, cliente e classificacao principal.</p>
+                      <p className="mt-0.5 text-xs text-indigo-700">Ajuste nome, gestores, cliente e classifica??o principal.</p>
                     </div>
                     <div>
                       <p className="mb-1 text-xs font-semibold text-slate-600">Nome do projeto</p>
@@ -2115,7 +2115,7 @@ export default function DiretoriaNovoProjetoPage() {
                       />
                     </div>
                     <div>
-                      <p className="mb-1 text-xs font-semibold text-slate-600">Gestor responsavel</p>
+                      <p className="mb-1 text-xs font-semibold text-slate-600">Gestor respons?vel</p>
                       <select
                         value={draft.owner_user_id}
                         onChange={(e) => {
@@ -2131,7 +2131,7 @@ export default function DiretoriaNovoProjetoPage() {
                         }}
                         className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
                       >
-                        <option value="">Selecione o gestor responsavel...</option>
+                        <option value="">Selecione o gestor respons?vel...</option>
                         {managers.map((m) => (
                           <option key={m.id} value={m.id}>
                             {managerLabel(m)}
@@ -2160,7 +2160,7 @@ export default function DiretoriaNovoProjetoPage() {
                               </label>
                             ))
                         ) : (
-                          <p className="text-xs text-slate-500">Nao ha outros gestores disponiveis para adicionar.</p>
+                          <p className="text-xs text-slate-500">N?o h? outros gestores dispon?veis para adicionar.</p>
                         )}
                       </div>
                     </div>
@@ -2232,7 +2232,7 @@ export default function DiretoriaNovoProjetoPage() {
                       </select>
                     </div>
                     <div>
-                      <p className="mb-1 text-xs font-semibold text-slate-600">Orcamento (R$)</p>
+                      <p className="mb-1 text-xs font-semibold text-slate-600">Or?amento (R$)</p>
                       <input
                         value={draft.budget_total}
                         onChange={(e) =>
@@ -2256,7 +2256,7 @@ export default function DiretoriaNovoProjetoPage() {
                       />
                     </div>
                     <div>
-                      <p className="mb-1 text-xs font-semibold text-slate-600">Previsao de termino</p>
+                      <p className="mb-1 text-xs font-semibold text-slate-600">Previs?o de t?rmino</p>
                       <input
                         type="date"
                         value={draft.end_date}
@@ -2292,7 +2292,7 @@ export default function DiretoriaNovoProjetoPage() {
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <p className="mt-1 text-xs text-slate-500">
-                            Adicione novos entregaveis ao salvar a edicao. Os existentes sao listados abaixo.
+                            Adicione novos entreg?veis ao salvar a edicao. Os existentes sao listados abaixo.
                           </p>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
@@ -2300,8 +2300,8 @@ export default function DiretoriaNovoProjetoPage() {
                             type="button"
                             onClick={() =>
                               downloadTextFile(
-                                "modelo_entregaveis_diretoria.csv",
-                                "titulo_entregavel;previsao_entrega;descricao;disciplina;moeda;valor_real\nPlano de execucao;28/02/2026;Descricao do documento;civil;BRL;0,00",
+                                "modelo_entreg?veis_diretoria.csv",
+                                "titulo_entregavel;previsao_entrega;descricao;disciplina;moeda;valor_real\nPlano de execucao;28/02/2026;Descri??o do documento;civil;BRL;0,00",
                                 "text/csv;charset=utf-8"
                               )
                             }
@@ -2326,7 +2326,7 @@ export default function DiretoriaNovoProjetoPage() {
                             type="button"
                             onClick={() => {
                               const ok = window.confirm(
-                                "Isso vai sobrescrever o valor real de todos os entregaveis deste projeto com um novo rateio exato pelo orcamento. Deseja continuar?"
+                                "Isso vai sobrescrever o valor real de todos os entreg?veis deste projeto com um novo rateio exato pelo orcamento. Deseja continuar?"
                               );
                               if (ok) void recalculateProjectDeliverablesRateio(project);
                             }}
@@ -2480,7 +2480,7 @@ export default function DiretoriaNovoProjetoPage() {
                                   <>
                                   <div className="mt-2 grid gap-2 md:grid-cols-12">
                                     <div className="md:col-span-4 text-xs text-slate-500 flex items-center">
-                                      Deixe o valor em branco para manter vazio. Se nao houver valor e a linha for aberta, o sistema sugere rateio pelo orcamento do projeto.
+                                      Deixe o valor em branco para manter vazio. Se n?o houver valor e a linha for aberta, o sistema sugere rateio pelo or?amento do projeto.
                                     </div>
                                     <input
                                       type="date"
@@ -2655,7 +2655,7 @@ export default function DiretoriaNovoProjetoPage() {
                                               disabled={saving}
                                               className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-700 disabled:opacity-60"
                                             >
-                                              Nao, escolher documentos
+                                              N?o, escolher documentos
                                             </button>
                                             <button
                                               type="button"
@@ -2757,7 +2757,7 @@ export default function DiretoriaNovoProjetoPage() {
                             })()}
                             {(existingDeliverablesByProjectId[project.id] ?? []).length > 8 ? (
                               <p className="text-xs text-slate-500">
-                                Mostrando 8 de {(existingDeliverablesByProjectId[project.id] ?? []).length} entregaveis.
+                                Mostrando 8 de {(existingDeliverablesByProjectId[project.id] ?? []).length} entreg?veis.
                               </p>
                             ) : null}
                           </div>
@@ -2897,7 +2897,7 @@ export default function DiretoriaNovoProjetoPage() {
                           disabled={saving || loading}
                           className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60"
                         >
-                          Salvar edicao
+                          Salvar edi??o
                         </button>
                         <button
                           type="button"
@@ -2905,7 +2905,7 @@ export default function DiretoriaNovoProjetoPage() {
                           disabled={saving || loading}
                           className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                         >
-                          Cancelar edicao
+                          Cancelar edi??o
                         </button>
                       </div>
                     </div>

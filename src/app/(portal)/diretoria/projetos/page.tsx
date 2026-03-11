@@ -1304,7 +1304,7 @@ export default function DiretoriaProjetosPage() {
               onClick={() => setShowProjectInfo(true)}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
             >
-              Ver informacoes do projeto
+              Ver informa??es do projeto
             </button>
             <button
               type="button"
@@ -1549,7 +1549,7 @@ export default function DiretoriaProjetosPage() {
                   : undefined
               }
               disabled={!selectedProjectForStage}
-              placeholder="Observacoes da alteracao (opcional). Descreva o contexto, motivo, impacto e proximo passo."
+              placeholder="Observa??es da altera??o (opcional). Descreva o contexto, motivo, impacto e pr?ximo passo."
               className="min-h-[92px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 disabled:opacity-60"
             />
             <button
@@ -1574,7 +1574,7 @@ export default function DiretoriaProjetosPage() {
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
         <div className="flex items-center justify-between gap-3">
           <p className="text-sm font-semibold text-slate-900">Linha do tempo - avanco do projeto (Diretoria)</p>
-          <p className="text-xs text-slate-500">Atualizacoes de fase/status realizadas pela Diretoria</p>
+          <p className="text-xs text-slate-500">Atualiza??es de fase/status realizadas pela Diretoria</p>
         </div>
         {selectedProjectForStage ? (
           <div className="mt-3 space-y-2">
@@ -1590,7 +1590,7 @@ export default function DiretoriaProjetosPage() {
               ))
             ) : (
               <div className="rounded-xl border border-slate-200 px-3 py-4 text-sm text-slate-500">
-                Ainda nao ha alteracoes de fase para este projeto.
+                Ainda n?o h? altera??es de fase para este projeto.
               </div>
             )}
           </div>
@@ -1605,7 +1605,7 @@ export default function DiretoriaProjetosPage() {
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm font-semibold text-slate-900">Lucratividade consolidada (visao contratual)</p>
+          <p className="text-sm font-semibold text-slate-900">Lucratividade consolidada (vis?o contratual)</p>
           <p className="text-xs text-slate-500">Receita - (Direto + Indireto + Folha alocada no periodo do projeto)</p>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-4">

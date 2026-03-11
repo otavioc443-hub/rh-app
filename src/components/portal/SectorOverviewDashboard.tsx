@@ -271,6 +271,7 @@ const DASHBOARD_CONFIG: Record<SectorKey, { title: string; subtitle: string; lin
     links: [
       { href: "/coordenador/projetos", label: "Projetos" },
       { href: "/coordenador/feedback", label: "Feedbacks" },
+      { href: "/coordenador/feedback?tab=pdi", label: "Gestao de PDI" },
       { href: "/p-d/chamados", label: "Chamados P&D" },
       { href: "/agenda", label: "Agenda e Ausências" },
     ],
@@ -280,6 +281,7 @@ const DASHBOARD_CONFIG: Record<SectorKey, { title: string; subtitle: string; lin
     subtitle: "Visão consolidada dos indicadores críticos do setor e aprovações pendentes.",
     links: [
       { href: "/gestor/projetos", label: "Projetos" },
+      { href: "/gestor/feedback?tab=pdi", label: "Gestao de PDI" },
       { href: "/gestor/pagamentos-extras", label: "Pagamentos extras" },
       { href: "/gestor/ausencias", label: "Aprovar ausências" },
       { href: "/p-d/chamados", label: "Chamados P&D" },
@@ -1201,4 +1203,5 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
     </div>
   );
 }
+
 

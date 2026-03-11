@@ -23,7 +23,7 @@ export default function HomePage() {
 
       let resolved = profile?.full_name?.trim() ?? "";
 
-      // Se o full_name nao existe ou parece email, tenta puxar o "nome" do cadastro de colaboradores.
+      // Se o full_name não existe ou parece e-mail, tenta puxar o "nome" do cadastro de colaboradores.
       if ((!resolved || resolved.includes("@")) && email) {
         const { data: colab } = await supabase
           .from("colaboradores")

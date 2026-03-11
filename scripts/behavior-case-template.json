@@ -1,0 +1,21 @@
+{
+  "cases": [
+    {
+      "id": "nome-do-colaborador-YYYY-MM-DD",
+      "status": "ativo",
+      "expected_executor": 0,
+      "expected_comunicador": 0,
+      "expected_planejador": 0,
+      "expected_analista": 0,
+      "self_selected_ids": [
+        "id1",
+        "id2"
+      ],
+      "others_selected_ids": [
+        "id1",
+        "id2"
+      ],
+      "notes": "Opcional"
+    }
+  ]
+}

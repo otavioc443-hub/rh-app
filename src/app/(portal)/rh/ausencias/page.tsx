@@ -107,7 +107,7 @@ export default function RHAusenciasPage() {
       }
 
       if (histRes.error) {
-        console.error("Erro ao carregar historico de liberacoes:", histRes.error.message);
+        console.error("Erro ao carregar hist?rico de libera??es:", histRes.error.message);
         setHistory([]);
       } else {
         const rows = (histRes.data ?? []) as AllowanceHistoryRow[];
@@ -293,7 +293,7 @@ export default function RHAusenciasPage() {
       if (error) throw error;
       setHistory((data ?? []) as AllowanceHistoryRow[]);
     } catch (e: unknown) {
-      setHistoryMsg(e instanceof Error ? e.message : "Erro ao carregar historico.");
+      setHistoryMsg(e instanceof Error ? e.message : "Erro ao carregar hist?rico.");
     } finally {
       setHistoryLoading(false);
     }
@@ -357,17 +357,17 @@ export default function RHAusenciasPage() {
         }).catch(() => null);
       }
       setEditingId(null);
-      setHistoryMsg("Liberacao atualizada com sucesso.");
+      setHistoryMsg("Libera??o atualizada com sucesso.");
       await refreshHistory();
     } catch (e: unknown) {
-      setHistoryMsg(e instanceof Error ? e.message : "Erro ao atualizar liberacao.");
+      setHistoryMsg(e instanceof Error ? e.message : "Erro ao atualizar libera??o.");
     } finally {
       setHistorySaving(false);
     }
   }
 
   async function deleteHistory(id: string) {
-    if (!window.confirm("Excluir esta liberacao?")) return;
+    if (!window.confirm("Excluir esta libera??o?")) return;
     setHistorySaving(true);
     setHistoryMsg(null);
     try {
@@ -396,10 +396,10 @@ export default function RHAusenciasPage() {
         }).catch(() => null);
       }
       if (editingId === id) setEditingId(null);
-      setHistoryMsg("Liberacao excluida com sucesso.");
+      setHistoryMsg("Libera??o exclu?da com sucesso.");
       await refreshHistory();
     } catch (e: unknown) {
-      setHistoryMsg(e instanceof Error ? e.message : "Erro ao excluir liberacao.");
+      setHistoryMsg(e instanceof Error ? e.message : "Erro ao excluir libera??o.");
     } finally {
       setHistorySaving(false);
     }
@@ -570,9 +570,9 @@ export default function RHAusenciasPage() {
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-semibold text-slate-900">Historico de liberacoes</p>
+            <p className="text-sm font-semibold text-slate-900">Hist?rico de libera??es</p>
             <p className="mt-1 text-sm text-slate-600">
-              Consulte, edite e exclua liberacoes realizadas pelo RH (com auditoria de quem e quando).
+              Consulte, edite e exclua libera??es realizadas pelo RH (com auditoria de quem e quando).
             </p>
           </div>
           <button
@@ -581,7 +581,7 @@ export default function RHAusenciasPage() {
             disabled={historyLoading || historySaving}
             className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-50"
           >
-            {historyLoading ? "Atualizando..." : "Atualizar historico"}
+            {historyLoading ? "Atualizando..." : "Atualizar hist?rico"}
           </button>
         </div>
 
@@ -608,11 +608,11 @@ export default function RHAusenciasPage() {
             <tbody>
               {historyLoading ? (
                 <tr>
-                  <td colSpan={8} className="p-3 text-slate-500">Carregando historico...</td>
+                  <td colSpan={8} className="p-3 text-slate-500">Carregando hist?rico...</td>
                 </tr>
               ) : history.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="p-3 text-slate-500">Nenhuma liberacao encontrada.</td>
+                  <td colSpan={8} className="p-3 text-slate-500">Nenhuma libera??o encontrada.</td>
                 </tr>
               ) : (
                 history.map((r) => {
@@ -686,7 +686,7 @@ export default function RHAusenciasPage() {
                       <td className="p-3">
                         <div className="min-w-[220px] rounded-xl border border-slate-200 bg-slate-50 p-2">
                           <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                            Acoes da liberacao
+                            A??es da libera??o
                           </div>
                         {isEditing ? (
                           <div className="flex flex-wrap gap-2">

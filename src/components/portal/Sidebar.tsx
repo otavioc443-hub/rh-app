@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -30,6 +30,7 @@ import {
   Wallet,
   Wrench,
   Trash2,
+  ChevronLeft,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { forceClientLogout, supabase } from "@/lib/supabaseClient";
@@ -65,6 +66,7 @@ type SidebarProps = {
   companyLogoUrl: string | null;
   departmentName: string | null;
   jobTitle: string | null;
+  onCollapse?: () => void;
 };
 
 export default function Sidebar({
@@ -75,6 +77,7 @@ export default function Sidebar({
   companyLogoUrl,
   departmentName,
   jobTitle,
+  onCollapse,
 }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
@@ -106,12 +109,14 @@ export default function Sidebar({
         roles: ["colaborador", "coordenador", "gestor", "rh", "admin"],
         children: [
           { label: "Meus dados", icon: UserRound, href: "/meu-perfil/meus-dados" },
+          { label: "Chamados", icon: ClipboardList, href: "/meu-perfil/chamados" },
           { label: "Projetos", icon: ClipboardList, href: "/meu-perfil/projetos" },
           { label: "Nota fiscal", icon: Wallet, href: "/meu-perfil/nota-fiscal" },
           { label: "Linha do tempo", icon: GitBranch, href: "/meu-perfil/linha-do-tempo" },
           { label: "Feedbacks", icon: MessageSquareText, href: "/meu-perfil/feedback" },
           { label: "PDI", icon: LineChart, href: "/meu-perfil/pdi" },
           { label: "Competências", icon: BadgeCheck, href: "/meu-perfil/competencias" },
+          { label: "Mapa comportamental", icon: BadgeCheck, href: "/meu-perfil/mapa-comportamental" },
           { label: "Avaliação de desempenho", icon: ClipboardList, href: "/meu-perfil/avaliacao-desempenho" },
         ],
       },
@@ -123,7 +128,7 @@ export default function Sidebar({
         children: [
           { label: "Aniversariantes", icon: Cake, href: "/agenda/aniversariantes" },
           { label: "Agenda institucional", icon: CalendarClock, href: "/agenda/agenda-institucional" },
-          { label: "Ausencias programadas", icon: CalendarClock, href: "/meu-perfil/ausencias-programadas" },
+          { label: "Ausências programadas", icon: CalendarClock, href: "/meu-perfil/ausencias-programadas" },
         ],
       },
 
@@ -134,6 +139,7 @@ export default function Sidebar({
         children: [
           { label: "Painel Coordenador", icon: LayoutDashboard, href: "/coordenador", exact: true },
           { label: "Aplicar Feedback", icon: MessageSquareText, href: "/coordenador/feedback" },
+          { label: "Gestão de PDI", icon: LineChart, href: "/coordenador/feedback?tab=pdi" },
           { label: "Projetos", icon: ClipboardList, href: "/coordenador/projetos" },
         ],
       },
@@ -145,6 +151,7 @@ export default function Sidebar({
         children: [
           { label: "Painel Gestor", icon: LayoutDashboard, href: "/gestor", exact: true },
           { label: "Aplicar Feedback", icon: MessageSquareText, href: "/gestor/feedback" },
+          { label: "Gestão de PDI", icon: LineChart, href: "/gestor/feedback?tab=pdi" },
           { label: "Projetos", icon: ClipboardList, href: "/gestor/projetos" },
           { label: "Pagamentos extras", icon: Wallet, href: "/gestor/pagamentos-extras" },
           { label: "Ausências", icon: CalendarClock, href: "/gestor/ausencias" },
@@ -157,9 +164,9 @@ export default function Sidebar({
         roles: ["financeiro", "admin"],
         children: [
           { label: "Painel Financeiro", icon: LayoutDashboard, href: "/financeiro", exact: true },
-          { label: "Visao gerencial", icon: LineChart, href: "/financeiro/gerencial" },
+          { label: "Visão gerencial", icon: LineChart, href: "/financeiro/gerencial" },
           { label: "Custos indiretos", icon: Layers, href: "/financeiro/custos-indiretos" },
-          { label: "Solicitacoes", icon: ClipboardList, href: "/financeiro/solicitacoes" },
+          { label: "Solicitações", icon: ClipboardList, href: "/financeiro/solicitacoes" },
           { label: "Aprovar extras", icon: ShieldCheck, href: "/financeiro/pagamentos-extras" },
           { label: "Notas fiscais", icon: Wallet, href: "/financeiro/notas-fiscais" },
           { label: "Remessas", icon: Wallet, href: "/financeiro/remessas" },
@@ -205,12 +212,13 @@ export default function Sidebar({
           { label: "Painel RH", icon: LayoutDashboard, href: "/rh", exact: true },
           { label: "Dashboard RH", icon: LineChart, href: "/rh/dashboard" },
           { label: "Demografia", icon: Users, href: "/rh/demografia" },
-          { label: "Solicitacoes", icon: ClipboardList, href: "/rh/solicitacoes" },
+          { label: "Solicitações", icon: ClipboardList, href: "/rh/solicitacoes" },
           { label: "Colaboradores", icon: Users, href: "/rh/colaboradores" },
           { label: "Adicionar Colaborador", icon: UserPlus, href: "/rh/adicionar-colaborador" },
           { label: "Inclusão Cargos", icon: Briefcase, href: "/rh/cargos" },
           { label: "Institucional", icon: Building2, href: "/rh/institucional" },
           { label: "Governança Feedback", icon: MessageSquareText, href: "/rh/feedbacks" },
+          { label: "Mapa comportamental", icon: BadgeCheck, href: "/rh/mapa-comportamental" },
           { label: "Ausências", icon: CalendarClock, href: "/rh/ausencias" },
         ],
       },
@@ -223,7 +231,7 @@ export default function Sidebar({
           { label: "Acompanhamento", icon: ClipboardList, href: "/diretoria/projetos", exact: true },
           { label: "Novo projeto", icon: Briefcase, href: "/diretoria/projetos/novo" },
           { label: "Projetos cadastrados", icon: FolderOpen, href: "/diretoria/projetos/cadastrados" },
-          { label: "Medicoes/Boletins", icon: ClipboardList, href: "/diretoria/medicoes" },
+          { label: "Medições/Boletins", icon: ClipboardList, href: "/diretoria/medicoes" },
           { label: "Aditivos/Contratos", icon: ClipboardList, href: "/diretoria/contratos" },
           { label: "Clientes", icon: Building2, href: "/diretoria/clientes" },
         ],
@@ -236,8 +244,8 @@ export default function Sidebar({
         children: [
           { label: "Painel Admin", icon: LayoutDashboard, href: "/admin", exact: true },
           { label: "Cadastro de empresas", icon: Building2, href: "/admin/empresas" },
-          { label: "Configuracao SLA", icon: CalendarClock, href: "/admin/sla" },
-          { label: "Notificacoes", icon: MessageSquareText, href: "/admin/notificacoes" },
+          { label: "Configuração SLA", icon: CalendarClock, href: "/admin/sla" },
+          { label: "Notificações", icon: MessageSquareText, href: "/admin/notificacoes" },
           { label: "Visibilidade", icon: Layers, href: "/admin/funcionalidades" },
           { label: "Limpeza de dados", icon: Trash2, href: "/admin/limpeza-dados" },
           { label: "Sessões", icon: MonitorCheck, href: "/admin/sessoes" },
@@ -339,6 +347,17 @@ export default function Sidebar({
   return (
     <aside className="sticky top-0 flex h-screen w-[280px] flex-col border-r border-slate-200 bg-white">
       <div className="border-b border-slate-200 px-5 py-4">
+        <div className="mb-3 flex items-center justify-end">
+          <button
+            type="button"
+            onClick={onCollapse}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            title="Ocultar menu lateral"
+            aria-label="Ocultar menu lateral"
+          >
+            <ChevronLeft size={16} />
+          </button>
+        </div>
         <div className="flex items-center gap-3">
           {companyLogoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -459,6 +478,8 @@ export default function Sidebar({
     </aside>
   );
 }
+
+
 
 
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { ChevronRight } from "lucide-react";
 import {
   clearLocalSupabaseSession,
   clearPortalExitIntent,
@@ -80,9 +81,29 @@ export default function PortalShell({ children }: { children: React.ReactNode })
   const [jobTitle, setJobTitle] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [hiddenRoutes, setHiddenRoutes] = useState<Set<string>>(new Set());
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const inFlight = useRef(false);
   const alive = useRef(true);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const saved = window.localStorage.getItem("portal_sidebar_collapsed");
+      setSidebarCollapsed(saved === "1");
+    } catch {
+      // noop
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem("portal_sidebar_collapsed", sidebarCollapsed ? "1" : "0");
+    } catch {
+      // noop
+    }
+  }, [sidebarCollapsed]);
 
   useEffect(() => {
     alive.current = true;
@@ -169,19 +190,19 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         if (!alive.current) return;
 
         if (profileErr) {
-          setFatalError("Nao foi possivel ler profiles. Verifique RLS/Policy/GRANT ou cadastro.");
+          setFatalError("Não foi possível ler profiles. Verifique RLS/Policy/GRANT ou cadastro.");
           setDebugErr(profileErr.message);
           return;
         }
 
         if (!profile) {
-          setFatalError("Perfil nao encontrado na tabela profiles para este usuario.");
+          setFatalError("Perfil não encontrado na tabela profiles para este usuário.");
           setDebugErr(`Nenhuma linha encontrada para id=${userId}`);
           return;
         }
 
         if (profile.active === false) {
-          setFatalError("Usuario inativo. Procure o administrador do sistema.");
+          setFatalError("Usuário inativo. Procure o administrador do sistema.");
           return;
         }
 
@@ -196,7 +217,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         }
 
         if (!r) {
-          setFatalError("Perfil sem funcao (role). Defina role = colaborador/coordenador/gestor/diretoria/rh/financeiro/pd/admin.");
+          setFatalError("Perfil sem função (role). Defina role = colaborador/coordenador/gestor/diretoria/rh/financeiro/pd/admin.");
           return;
         }
 
@@ -245,7 +266,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         if (!alive.current) return;
 
         if (err instanceof Error && err.message === "timeout") {
-          setFatalError("Tempo esgotado ao validar sessao. Verifique conexao e Supabase.");
+          setFatalError("Tempo esgotado ao validar sessão. Verifique conexão e Supabase.");
           return;
         }
 
@@ -394,7 +415,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       <div className="min-h-screen grid place-items-center bg-slate-50 p-6">
         <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6">
           <h1 className="text-lg font-semibold text-slate-900">Carregamento incompleto</h1>
-          <p className="mt-2 text-sm text-slate-700">Nao foi possivel identificar sua funcao (role).</p>
+          <p className="mt-2 text-sm text-slate-700">Não foi possível identificar sua função (role).</p>
           <div className="mt-4 flex gap-3">
             <button
               onClick={() => router.replace("/")}
@@ -411,18 +432,35 @@ export default function PortalShell({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="flex">
-        <Sidebar
-          role={role}
-          fullName={fullName}
-          avatarUrl={avatarUrl}
-          companyName={company?.name ?? null}
-          companyLogoUrl={company?.logo_url ?? null}
-          departmentName={department?.name ?? null}
-          jobTitle={jobTitle}
-        />
+        {!sidebarCollapsed ? (
+          <Sidebar
+            role={role}
+            fullName={fullName}
+            avatarUrl={avatarUrl}
+            companyName={company?.name ?? null}
+            companyLogoUrl={company?.logo_url ?? null}
+            departmentName={department?.name ?? null}
+            jobTitle={jobTitle}
+            onCollapse={() => setSidebarCollapsed(true)}
+          />
+        ) : null}
 
         <main className="flex-1">
           <div className="mx-auto w-full max-w-[1400px] px-6 py-6">
+            {sidebarCollapsed ? (
+              <div className="mb-4">
+                <button
+                  type="button"
+                  onClick={() => setSidebarCollapsed(false)}
+                  className="inline-flex h-9 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  title="Mostrar menu lateral"
+                  aria-label="Mostrar menu lateral"
+                >
+                  <ChevronRight size={16} />
+                  Menu
+                </button>
+              </div>
+            ) : null}
             <div className="mb-4 flex items-center justify-end">
               <NotificationBell />
             </div>

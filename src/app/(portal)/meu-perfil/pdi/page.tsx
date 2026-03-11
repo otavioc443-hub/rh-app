@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, CheckCircle2, Clock3, Trash2, RefreshCcw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { useUserRole } from "@/hooks/useUserRole";
 
 type PdiStatus = "planejado" | "em_andamento" | "concluido";
 
@@ -29,6 +30,7 @@ function statusClass(status: PdiStatus) {
 }
 
 export default function PdiPage() {
+  const { loading: roleLoading, role } = useUserRole();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
@@ -39,6 +41,7 @@ export default function PdiPage() {
   const [action, setAction] = useState("");
   const [targetDate, setTargetDate] = useState("");
   const isSetupHint = msg.toLowerCase().includes("supabase/sql/");
+  const canManagePdi = role !== "colaborador";
 
   async function load() {
     setLoading(true);
@@ -162,6 +165,13 @@ export default function PdiPage() {
         </div>
       </div>
 
+      {!roleLoading && !canManagePdi ? (
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800">
+          Como colaborador, voce pode apenas acompanhar seus itens de PDI. Inclusao e alteracoes sao realizadas por
+          gestor/coordenador/RH.
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
           <p className="text-sm text-slate-500">Total</p>
@@ -177,39 +187,41 @@ export default function PdiPage() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <p className="text-sm font-semibold text-slate-900">Novo item do PDI</p>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Objetivo"
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-300"
-          />
-          <input
-            value={action}
-            onChange={(e) => setAction(e.target.value)}
-            placeholder="Acao (opcional)"
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-300"
-          />
-          <input
-            type="date"
-            value={targetDate}
-            onChange={(e) => setTargetDate(e.target.value)}
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-300"
-          />
+      {canManagePdi ? (
+        <div className="rounded-2xl border border-slate-200 bg-white p-6">
+          <p className="text-sm font-semibold text-slate-900">Novo item do PDI</p>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Objetivo"
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-300"
+            />
+            <input
+              value={action}
+              onChange={(e) => setAction(e.target.value)}
+              placeholder="Acao (opcional)"
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-300"
+            />
+            <input
+              type="date"
+              value={targetDate}
+              onChange={(e) => setTargetDate(e.target.value)}
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-300"
+            />
+          </div>
+          <div className="mt-3">
+            <button
+              onClick={() => void addItem()}
+              disabled={saving || loading || !userId}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60"
+            >
+              <Plus size={16} />
+              {saving ? "Salvando..." : "Adicionar"}
+            </button>
+          </div>
         </div>
-        <div className="mt-3">
-          <button
-            onClick={() => void addItem()}
-            disabled={saving || loading || !userId}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60"
-          >
-            <Plus size={16} />
-            {saving ? "Salvando..." : "Adicionar"}
-          </button>
-        </div>
-      </div>
+      ) : null}
 
       {msg ? (
         <div
@@ -251,27 +263,31 @@ export default function PdiPage() {
                       {statusLabel(item.status)}
                     </span>
 
-                    <button
-                      onClick={() => void setStatus(item.id, "em_andamento")}
-                      className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                    >
-                      <Clock3 size={14} />
-                      Em andamento
-                    </button>
-                    <button
-                      onClick={() => void setStatus(item.id, "concluido")}
-                      className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
-                    >
-                      <CheckCircle2 size={14} />
-                      Concluir
-                    </button>
-                    <button
-                      onClick={() => void removeItem(item.id)}
-                      className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
-                    >
-                      <Trash2 size={14} />
-                      Excluir
-                    </button>
+                    {canManagePdi ? (
+                      <>
+                        <button
+                          onClick={() => void setStatus(item.id, "em_andamento")}
+                          className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                        >
+                          <Clock3 size={14} />
+                          Em andamento
+                        </button>
+                        <button
+                          onClick={() => void setStatus(item.id, "concluido")}
+                          className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                        >
+                          <CheckCircle2 size={14} />
+                          Concluir
+                        </button>
+                        <button
+                          onClick={() => void removeItem(item.id)}
+                          className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                        >
+                          <Trash2 size={14} />
+                          Excluir
+                        </button>
+                      </>
+                    ) : null}
                   </div>
                 </div>
               </div>

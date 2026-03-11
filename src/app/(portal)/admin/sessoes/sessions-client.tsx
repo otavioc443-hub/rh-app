@@ -317,7 +317,7 @@ export default function SessionsClient() {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <h1 className="text-lg font-semibold text-slate-900">Sessoes</h1>
-        <p className="mt-2 text-sm text-slate-700">Voce nao tem permissao para acessar esta pagina.</p>
+        <p className="mt-2 text-sm text-slate-700">Você não tem permissão para acessar esta página.</p>
       </div>
     );
   }
@@ -562,7 +562,7 @@ export default function SessionsClient() {
                           <span className="text-sm font-semibold text-slate-900">
                             {r.full_name?.trim() || r.email?.trim() || "Usuario"}
                           </span>
-                          <span className="text-xs text-slate-600">{r.email ?? "E-mail nao informado"}</span>
+                          <span className="text-xs text-slate-600">{r.email ?? "E-mail não informado"}</span>
                           {r.department_name ? (
                             <span className="text-xs text-slate-500">Departamento: {r.department_name}</span>
                           ) : null}
@@ -628,7 +628,7 @@ export default function SessionsClient() {
                 disabled={page >= totalPages}
                 className="rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 disabled:opacity-50"
               >
-                Proxima
+                Pr?xima
               </button>
             </div>
           </div>

@@ -79,7 +79,7 @@ export default function CargosPage() {
 
         if (portalRoleMissing) {
           setSupportsPortalRole(false);
-          setMsg("Seu banco ainda nao tem o campo de permissoes por cargo. Execute a migration de cargos (portal_role).");
+          setMsg("Seu banco ainda n?o tem o campo de permiss?es por cargo. Execute a migration de cargos (portal_role).");
 
           const retry = await supabase
             .from("cargos")
@@ -239,13 +239,13 @@ export default function CargosPage() {
               </div>
               {supportsPortalRole ? (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600">Permissao no portal (role)</label>
+                  <label className="block text-xs font-semibold text-slate-600">Permiss?o no portal (role)</label>
                   <select
                     value={portalRole}
                     onChange={(e) => setPortalRole(e.target.value as PortalRole | "")}
                     className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-300"
                   >
-                    <option value="">-- Nao altera o acesso --</option>
+                    <option value="">-- N?o altera o acesso --</option>
                     {PORTAL_ROLE_OPTIONS.map((o, idx) => (
                       <option key={o.key ?? `${o.value}-${idx}`} value={o.value}>
                         {o.label}
@@ -352,7 +352,7 @@ export default function CargosPage() {
 	                              onChange={(e) => setEditPortalRole(e.target.value as PortalRole | "")}
 	                              className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-300"
 	                            >
-	                              <option value="">-- Nao altera o acesso --</option>
+	                              <option value="">-- N?o altera o acesso --</option>
 	                              {PORTAL_ROLE_OPTIONS.map((o, idx) => (
 	                                <option key={o.key ?? `${o.value}-${idx}`} value={o.value}>
 	                                  {o.label}

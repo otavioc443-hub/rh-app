@@ -83,16 +83,16 @@ function fmtMoney(value: number) {
 
 function eventTypeLabel(value: ContractEventType) {
   if (value === "aditivo_valor") return "Aditivo de valor";
-  if (value === "prorrogacao_prazo") return "Prorrogacao de prazo";
+  if (value === "prorrogacao_prazo") return "Prorroga??o de prazo";
   if (value === "aditivo_escopo") return "Aditivo de escopo";
-  if (value === "notificacao") return "Notificacao";
+  if (value === "notificacao") return "Notifica??o";
   if (value === "rescisao") return "Rescisao";
   return "Outro";
 }
 
 function statusLabel(value: ContractEventStatus) {
   if (value === "registrado") return "Registrado";
-  if (value === "em_analise") return "Em analise";
+  if (value === "em_analise") return "Em an?lise";
   if (value === "aprovado") return "Aprovado";
   if (value === "rejeitado") return "Rejeitado";
   if (value === "executado") return "Executado";
@@ -107,12 +107,12 @@ function statusClass(value: ContractEventStatus) {
 }
 
 function auditActionLabel(value: ContractAuditRow["action_type"]) {
-  if (value === "created") return "Criacao";
+  if (value === "created") return "Cria??o";
   if (value === "finance_decision") return "Decisao financeira";
   if (value === "applied_to_project") return "Aplicado no projeto";
   if (value === "status_changed") return "Mudanca de status";
-  if (value === "notification_dispatched") return "Notificacao enviada";
-  return "Atualizacao";
+  if (value === "notification_dispatched") return "Notifica??o enviada";
+  return "Atualiza??o";
 }
 
 export default function DiretoriaContratosPage() {
@@ -321,7 +321,7 @@ export default function DiretoriaContratosPage() {
       <DiretoriaPageHeader
         icon={FileSignature}
         title="Diretoria - Aditivos e eventos contratuais"
-        subtitle="Registre aditivos de valor, prorrogacoes de prazo, notificacoes e rescisoes por projeto."
+        subtitle="Registre aditivos de valor, prorroga??es de prazo, notifica??es e rescis?es por projeto."
         action={
           <button
             type="button"
@@ -371,9 +371,9 @@ export default function DiretoriaContratosPage() {
               className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
             >
               <option value="aditivo_valor">Aditivo de valor</option>
-              <option value="prorrogacao_prazo">Prorrogacao de prazo</option>
+              <option value="prorrogacao_prazo">Prorroga??o de prazo</option>
               <option value="aditivo_escopo">Aditivo de escopo</option>
-              <option value="notificacao">Notificacao</option>
+              <option value="notificacao">Notifica??o</option>
               <option value="rescisao">Rescisao</option>
               <option value="outro">Outro</option>
             </select>
@@ -388,7 +388,7 @@ export default function DiretoriaContratosPage() {
               className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
             >
               <option value="registrado">Registrado</option>
-              <option value="em_analise">Em analise</option>
+              <option value="em_analise">Em an?lise</option>
               <option value="aprovado">Aprovado</option>
               <option value="rejeitado">Rejeitado</option>
               <option value="executado">Executado</option>
@@ -471,7 +471,7 @@ export default function DiretoriaContratosPage() {
             onChange={(e) => setApplyToProject(e.target.checked)}
           />
           {eventType === "aditivo_valor"
-            ? "Aplicar no projeto apos aprovacao financeira"
+            ? "Aplicar no projeto ap?s aprova??o financeira"
             : "Aplicar automaticamente no projeto (valor/prazo quando aplicavel)"}
         </label>
 
@@ -514,9 +514,9 @@ export default function DiretoriaContratosPage() {
             >
               <option value="all">Todos</option>
               <option value="aditivo_valor">Aditivo de valor</option>
-              <option value="prorrogacao_prazo">Prorrogacao de prazo</option>
+              <option value="prorrogacao_prazo">Prorroga??o de prazo</option>
               <option value="aditivo_escopo">Aditivo de escopo</option>
-              <option value="notificacao">Notificacao</option>
+              <option value="notificacao">Notifica??o</option>
               <option value="rescisao">Rescisao</option>
               <option value="outro">Outro</option>
             </select>
@@ -531,7 +531,7 @@ export default function DiretoriaContratosPage() {
             >
               <option value="all">Todos</option>
               <option value="registrado">Registrado</option>
-              <option value="em_analise">Em analise</option>
+              <option value="em_analise">Em an?lise</option>
               <option value="aprovado">Aprovado</option>
               <option value="rejeitado">Rejeitado</option>
               <option value="executado">Executado</option>
@@ -582,7 +582,7 @@ export default function DiretoriaContratosPage() {
                         <div>Decisao financeira: {e.finance_decided_at}</div>
                       ) : null}
                       {e.finance_decision_note ? <div>Obs. CEO: {e.finance_decision_note}</div> : null}
-                      <div>{e.applied_to_project ? "Aplicado no projeto" : "Nao aplicado automaticamente"}</div>
+                      <div>{e.applied_to_project ? "Aplicado no projeto" : "N?o aplicado automaticamente"}</div>
                     </td>
                     <td className="p-3">
                       <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusClass(e.status)}`}>

@@ -194,7 +194,7 @@ export default function FuncionalidadesClient() {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <h1 className="text-lg font-semibold text-slate-900">Visibilidade de funcionalidades</h1>
-        <p className="mt-2 text-sm text-slate-700">Voce nao tem permissao para acessar esta pagina.</p>
+        <p className="mt-2 text-sm text-slate-700">Você não tem permissão para acessar esta página.</p>
       </div>
     );
   }

@@ -64,11 +64,11 @@ export default function Page() {
       const ativosRes = await supabase
         .from("colaboradores")
         .select("id", { count: "exact", head: true })
-        .is("data_demissao", null);
+        .is("data_demiss?o", null);
       const inativosRes = await supabase
         .from("colaboradores")
         .select("id", { count: "exact", head: true })
-        .not("data_demissao", "is", null);
+        .not("data_demiss?o", "is", null);
 
       setStats({
         total: totalRes.count ?? 0,
@@ -119,7 +119,7 @@ export default function Page() {
         .upsert(mapped as Record<string, unknown>[], { onConflict: "cpf" });
       if (error) throw error;
 
-      setMsg(`Importacao concluida: ${mapped.length} colaborador(es).`);
+      setMsg(`Importa??o conclu?da: ${mapped.length} colaborador(es).`);
       await loadStats();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao importar.");
@@ -167,8 +167,8 @@ export default function Page() {
 
           <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
             <StatCard icon={<Users size={18} />} label="Total" value={stats.total} helper="Colaboradores cadastrados" />
-            <StatCard icon={<BadgeCheck size={18} />} label="Ativos" value={stats.ativos} helper="Sem data de demissao" />
-            <StatCard icon={<AlertTriangle size={18} />} label="Inativos" value={stats.inativos} helper="Com data de demissao" />
+            <StatCard icon={<BadgeCheck size={18} />} label="Ativos" value={stats.ativos} helper="Sem data de demiss?o" />
+            <StatCard icon={<AlertTriangle size={18} />} label="Inativos" value={stats.inativos} helper="Com data de demiss?o" />
           </div>
         </CardBody>
       </Card>

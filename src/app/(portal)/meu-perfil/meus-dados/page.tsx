@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Camera, RefreshCcw, Save } from "lucide-react";
+import { Camera, RefreshCcw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
 type CollaboratorRow = {
@@ -36,16 +36,6 @@ type CollaboratorRow = {
   empresa: string | null;
 };
 
-type ProfileRequestRow = {
-  id: string;
-  request_type: "financial" | "personal" | "contractual" | "avatar" | "other";
-  title: string;
-  details: string;
-  status: "pending" | "in_review" | "approved" | "rejected" | "implemented" | "cancelled";
-  review_notes: string | null;
-  created_at: string;
-};
-
 function formatCurrency(value: number | null) {
   if (value === null || !Number.isFinite(value)) return "-";
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -56,32 +46,6 @@ function formatDate(value: string | null | undefined) {
   const dt = new Date(value);
   if (Number.isNaN(dt.getTime())) return value;
   return dt.toLocaleDateString("pt-BR");
-}
-
-function requestTypeLabel(t: ProfileRequestRow["request_type"]) {
-  if (t === "financial") return "Financeiro";
-  if (t === "personal") return "Pessoal";
-  if (t === "contractual") return "Contratual";
-  if (t === "avatar") return "Foto";
-  return "Outro";
-}
-
-function statusLabel(status: ProfileRequestRow["status"]) {
-  if (status === "pending") return "Pendente";
-  if (status === "in_review") return "Em analise";
-  if (status === "approved") return "Aprovada";
-  if (status === "rejected") return "Recusada";
-  if (status === "implemented") return "Implementada";
-  return "Cancelada";
-}
-
-function statusClass(status: ProfileRequestRow["status"]) {
-  if (status === "pending") return "bg-amber-50 text-amber-700";
-  if (status === "in_review") return "bg-sky-50 text-sky-700";
-  if (status === "approved") return "bg-emerald-50 text-emerald-700";
-  if (status === "implemented") return "bg-emerald-50 text-emerald-700";
-  if (status === "rejected") return "bg-rose-50 text-rose-700";
-  return "bg-slate-100 text-slate-700";
 }
 
 function strOrNull(value: unknown) {
@@ -134,18 +98,12 @@ function mapCollaboratorRow(raw: Record<string, unknown> | null): CollaboratorRo
 
 export default function MeusDadosPage() {
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [msg, setMsg] = useState("");
 
   const [userId, setUserId] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState("");
   const [collaborator, setCollaborator] = useState<CollaboratorRow | null>(null);
-  const [requests, setRequests] = useState<ProfileRequestRow[]>([]);
-
-  const [requestType, setRequestType] = useState<ProfileRequestRow["request_type"]>("financial");
-  const [fieldName, setFieldName] = useState("");
-  const [details, setDetails] = useState("");
 
   const fullAddress = useMemo(() => {
     if (!collaborator) return "-";
@@ -172,7 +130,6 @@ export default function MeusDadosPage() {
       if (!user) {
         setUserId(null);
         setCollaborator(null);
-        setRequests([]);
         setMsg("Sessao invalida. Faca login novamente.");
         return;
       }
@@ -181,38 +138,16 @@ export default function MeusDadosPage() {
       const md = (user.user_metadata ?? {}) as Record<string, unknown>;
       setAvatarUrl(String(md.avatar_url ?? md.picture ?? ""));
 
-      const [colabRes, reqRes] = await Promise.all([
-        supabase
-          .from("colaboradores")
-          .select("*")
-          .eq("user_id", user.id)
-          .maybeSingle<Record<string, unknown>>(),
-        supabase
-          .from("profile_update_requests")
-          .select("id,request_type,title,details,status,review_notes,created_at")
-          .eq("requester_user_id", user.id)
-          .order("created_at", { ascending: false }),
-      ]);
+      const colabRes = await supabase
+        .from("colaboradores")
+        .select("*")
+        .eq("user_id", user.id)
+        .maybeSingle<Record<string, unknown>>();
 
       if (colabRes.error) throw colabRes.error;
       setCollaborator(mapCollaboratorRow(colabRes.data ?? null));
-
-      if (reqRes.error) {
-        const text = reqRes.error.message.toLowerCase();
-        if (text.includes("does not exist") || text.includes("relation") || text.includes("schema cache")) {
-          setRequests([]);
-          setMsg(
-            "Modulo de solicitacao de adequacao ainda nao disponivel. Rode supabase/sql/2026-02-16_create_profile_update_requests.sql."
-          );
-        } else {
-          throw reqRes.error;
-        }
-      } else {
-        setRequests((reqRes.data ?? []) as ProfileRequestRow[]);
-      }
     } catch (e: unknown) {
       setCollaborator(null);
-      setRequests([]);
       setMsg(e instanceof Error ? e.message : "Erro ao carregar meus dados.");
     } finally {
       setLoading(false);
@@ -271,49 +206,6 @@ export default function MeusDadosPage() {
       setMsg(e instanceof Error ? e.message : "Erro ao atualizar foto.");
     } finally {
       setUploadingPhoto(false);
-    }
-  }
-
-  async function submitRequest() {
-    setMsg("");
-    if (!userId) {
-      setMsg("Sessao invalida. Faca login novamente.");
-      return;
-    }
-    if (!details.trim()) {
-      setMsg("Descreva o ajuste solicitado.");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const title = fieldName.trim()
-        ? `Adequacao de ${fieldName.trim()}`
-        : `Solicitacao ${requestTypeLabel(requestType).toLowerCase()}`;
-
-      const payload = {
-        requester_user_id: userId,
-        collaborator_id: collaborator?.id ?? null,
-        request_type: requestType,
-        title,
-        details: details.trim(),
-        requested_changes: {
-          field: fieldName.trim() || null,
-          assigned_area: requestType === "financial" ? "financeiro" : "rh",
-        },
-      };
-
-      const { error } = await supabase.from("profile_update_requests").insert(payload);
-      if (error) throw error;
-
-      setFieldName("");
-      setDetails("");
-      setMsg("Solicitacao registrada com sucesso.");
-      await load();
-    } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao registrar solicitacao.");
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -403,101 +295,16 @@ export default function MeusDadosPage() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <p className="text-sm font-semibold text-slate-900">Solicitar adequacao de dados</p>
+        <p className="text-sm font-semibold text-slate-900">Solicitacoes centralizadas</p>
         <p className="mt-1 text-sm text-slate-600">
-          Use este formulario para ajustes financeiros, pessoais, contratuais ou outros dados.
+          As solicitacoes para RH, Financeiro e P&D foram movidas para um unico local.
         </p>
-
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          <label className="grid gap-1 text-xs font-semibold text-slate-700">
-            Tipo de solicitacao
-            <select
-              value={requestType}
-              onChange={(e) => setRequestType(e.target.value as ProfileRequestRow["request_type"])}
-              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-            >
-              <option value="financial">Financeiro</option>
-              <option value="personal">Pessoal</option>
-              <option value="contractual">Contratual</option>
-              <option value="other">Outro</option>
-            </select>
-          </label>
-          <label className="grid gap-1 text-xs font-semibold text-slate-700">
-            Campo a ajustar
-            <input
-              value={fieldName}
-              onChange={(e) => setFieldName(e.target.value)}
-              className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
-              placeholder="Ex.: banco, salario, endereco, cargo"
-            />
-          </label>
-        </div>
-
-        <label className="mt-3 grid gap-1 text-xs font-semibold text-slate-700">
-          Descricao da solicitacao
-          <textarea
-            value={details}
-            onChange={(e) => setDetails(e.target.value)}
-            className="min-h-[96px] rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-900"
-            placeholder="Explique o ajuste solicitado e o motivo."
-          />
-        </label>
-
-        <div className="mt-3">
-          <button
-            type="button"
-            onClick={() => void submitRequest()}
-            disabled={saving || loading}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60"
-          >
-            <Save size={16} />
-            {saving ? "Enviando..." : "Enviar solicitacao"}
-          </button>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <p className="text-sm font-semibold text-slate-900">Minhas solicitacoes</p>
-        <div className="mt-4 overflow-x-auto">
-          <table className="min-w-[880px] w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-700">
-              <tr>
-                <th className="p-3">Tipo</th>
-                <th className="p-3">Titulo</th>
-                <th className="p-3">Status</th>
-                <th className="p-3">Descricao</th>
-                <th className="p-3">Retorno RH/Financeiro</th>
-                <th className="p-3">Criada em</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="p-3 text-slate-500">Carregando...</td>
-                </tr>
-              ) : requests.length ? (
-                requests.map((r) => (
-                  <tr key={r.id} className="border-t">
-                    <td className="p-3">{requestTypeLabel(r.request_type)}</td>
-                    <td className="p-3">{r.title}</td>
-                    <td className="p-3">
-                      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusClass(r.status)}`}>
-                        {statusLabel(r.status)}
-                      </span>
-                    </td>
-                    <td className="p-3">{r.details}</td>
-                    <td className="p-3">{r.review_notes ?? "-"}</td>
-                    <td className="p-3">{new Date(r.created_at).toLocaleString("pt-BR")}</td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={6} className="p-3 text-slate-500">Nenhuma solicitacao registrada.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <a
+          href="/meu-perfil/chamados"
+          className="mt-4 inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+        >
+          Ir para Chamados
+        </a>
       </div>
     </div>
   );

@@ -137,7 +137,7 @@ export default function FinanceiroCnabBradescoPage() {
       setProjectById({});
       setCollabByUserId({});
       setSelectedById({});
-      setMsg(e instanceof Error ? e.message : "Erro ao carregar configuracao CNAB.");
+      setMsg(e instanceof Error ? e.message : "Erro ao carregar configura??o CNAB.");
     } finally {
       setLoading(false);
     }
@@ -166,7 +166,7 @@ export default function FinanceiroCnabBradescoPage() {
       setMsg("Configuracao CNAB salva.");
       await load();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao salvar configuracao CNAB.");
+      setMsg(e instanceof Error ? e.message : "Erro ao salvar configura??o CNAB.");
     } finally {
       setSaving(false);
     }
@@ -174,13 +174,13 @@ export default function FinanceiroCnabBradescoPage() {
 
   function validateForRemittance() {
     const errors: string[] = [];
-    if (!settings) errors.push("Configuracao CNAB nao encontrada (rode a migration).");
+    if (!settings) errors.push("Configura??o CNAB n?o encontrada (rode a migration).");
     if (!settings?.company_name?.trim()) errors.push("Preencha razao social da empresa.");
     if (onlyDigits(settings?.company_cnpj).length !== 14) errors.push("Preencha CNPJ da empresa com 14 digitos.");
     if (!onlyDigits(settings?.debit_agency)) errors.push("Preencha agencia de debito.");
     if (!onlyDigits(settings?.debit_account)) errors.push("Preencha conta de debito.");
     if (!settings?.agreement_code?.trim()) errors.push("Preencha codigo do convenio.");
-    if (!settings?.transmission_code?.trim()) errors.push("Preencha codigo de transmissao.");
+    if (!settings?.transmission_code?.trim()) errors.push("Preencha c?digo de transmiss?o.");
     if (!selectedPayments.length) errors.push("Selecione ao menos um pagamento aprovado.");
     return errors;
   }
@@ -369,7 +369,7 @@ export default function FinanceiroCnabBradescoPage() {
     URL.revokeObjectURL(url);
 
     setMsg(
-      `Arquivo gerado para homologacao: ${validPayments.length} pagamento(s) incluidos, ${skipped} ignorado(s) por dados incompletos.`
+      `Arquivo gerado para homologa??o: ${validPayments.length} pagamento(s) incluidos, ${skipped} ignorado(s) por dados incompletos.`
     );
   }
 
@@ -385,7 +385,7 @@ export default function FinanceiroCnabBradescoPage() {
           <div>
             <h1 className="text-xl font-semibold text-slate-900">CNAB Bradesco - Pagamentos em massa</h1>
             <p className="mt-1 text-sm text-slate-600">
-              Estrutura inicial para homologacao CNAB240. Ajuste os dados oficiais do convenio antes de uso em producao.
+              Estrutura inicial para homologa??o CNAB240. Ajuste os dados oficiais do convenio antes de uso em produ??o.
             </p>
           </div>
           <button
@@ -403,7 +403,7 @@ export default function FinanceiroCnabBradescoPage() {
       {msg ? <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700">{msg}</div> : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5">
-        <p className="text-sm font-semibold text-slate-900">Configuracao do convenio Bradesco</p>
+        <p className="text-sm font-semibold text-slate-900">Configura??o do conv?nio Bradesco</p>
         {settings ? (
           <div className="mt-3 grid gap-3 md:grid-cols-3">
             <Field label="Codigo banco" value={settings.bank_code} onChange={(v) => setSettings((p) => (p ? { ...p, bank_code: v } : p))} />
@@ -419,7 +419,7 @@ export default function FinanceiroCnabBradescoPage() {
             <Field label="Codigo transmissao" value={settings.transmission_code ?? ""} onChange={(v) => setSettings((p) => (p ? { ...p, transmission_code: v } : p))} />
           </div>
         ) : (
-          <p className="mt-2 text-sm text-slate-600">Configuracao nao encontrada. Rode a migration de CNAB.</p>
+          <p className="mt-2 text-sm text-slate-600">Configura??o n?o encontrada. Rode a migration de CNAB.</p>
         )}
         <div className="mt-3">
           <button
@@ -429,7 +429,7 @@ export default function FinanceiroCnabBradescoPage() {
             className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60"
           >
             <Save size={16} />
-            {saving ? "Salvando..." : "Salvar configuracao"}
+            {saving ? "Salvando..." : "Salvar configura??o"}
           </button>
         </div>
       </div>

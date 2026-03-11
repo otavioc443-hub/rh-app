@@ -63,7 +63,7 @@ type ExtraPaymentPendingRow = {
 
 function statusLabel(status: RequestStatus) {
   if (status === "pending") return "Pendente";
-  if (status === "in_review") return "Em analise";
+  if (status === "in_review") return "Em an?lise";
   if (status === "approved") return "Aprovada";
   if (status === "rejected") return "Recusada";
   if (status === "implemented") return "Implementada";
@@ -208,7 +208,7 @@ export default function FinanceiroSolicitacoesPage() {
       setProfileById({});
       setExtraPaymentsPending([]);
       setSelectedId("");
-      setMsg(e instanceof Error ? e.message : "Erro ao carregar solicitacoes.");
+      setMsg(e instanceof Error ? e.message : "Erro ao carregar solicita??es.");
     } finally {
       setLoading(false);
     }
@@ -230,7 +230,7 @@ export default function FinanceiroSolicitacoesPage() {
       const missing = text.includes("does not exist") || text.includes("relation") || text.includes("schema cache");
       if (missing) {
         setMsg(
-          "Auditoria ainda nao disponivel. Rode supabase/sql/2026-02-16_create_profile_update_request_audit.sql."
+          "Auditoria ainda n?o dispon?vel. Rode supabase/sql/2026-02-16_create_profile_update_request_audit.sql."
         );
         setAuditRows([]);
       } else {
@@ -399,9 +399,9 @@ export default function FinanceiroSolicitacoesPage() {
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold text-slate-900">Solicitacoes para analise financeira</h1>
+            <h1 className="text-xl font-semibold text-slate-900">Solicita??es para an?lise financeira</h1>
             <p className="mt-1 text-sm text-slate-600">
-              Governanca de solicitacoes de adequacao com decisao e trilha de auditoria.
+              Governan?a de solicita??es de adequa??o com decis?o e trilha de auditoria.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -437,16 +437,16 @@ export default function FinanceiroSolicitacoesPage() {
       <div className="grid gap-4 md:grid-cols-7">
         <StatCard label="Total" value={stats.total} />
         <StatCard label="Pendentes" value={stats.pending} />
-        <StatCard label="Em analise" value={stats.in_review} />
+        <StatCard label="Em an?lise" value={stats.in_review} />
         <StatCard label="Concluidas" value={stats.done} />
         <StatCard label="Recusadas" value={stats.rejected} />
         <StatCard label="Atrasadas (SLA)" value={stats.overdue} />
-        <StatCard label="Tempo medio analise" value={formatHoursAsHm(stats.avgHours)} />
+        <StatCard label="Tempo m?dio an?lise" value={formatHoursAsHm(stats.avgHours)} />
       </div>
 
       {stats.overdue > 0 ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          Existem {stats.overdue} solicitacoes da fila Financeiro acima de {slaHours}h.
+          Existem {stats.overdue} solicita??es da fila Financeiro acima de {slaHours}h.
         </div>
       ) : null}
 
@@ -454,7 +454,7 @@ export default function FinanceiroSolicitacoesPage() {
         <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              Existem <b>{extrasPendingStats.count}</b> pagamento(s) extra(s) pendente(s) de aprovacao, totalizando{" "}
+              Existem <b>{extrasPendingStats.count}</b> pagamento(s) extra(s) pendente(s) de aprova??o, totalizando{" "}
               <b>{fmtMoney(extrasPendingStats.amount)}</b>.
             </div>
             <Link
@@ -492,7 +492,7 @@ export default function FinanceiroSolicitacoesPage() {
             >
               <option value="all">Todos</option>
               <option value="pending">Pendente</option>
-              <option value="in_review">Em analise</option>
+              <option value="in_review">Em an?lise</option>
               <option value="approved">Aprovada</option>
               <option value="rejected">Recusada</option>
               <option value="implemented">Implementada</option>
@@ -542,7 +542,7 @@ export default function FinanceiroSolicitacoesPage() {
             <table className="min-w-[980px] w-full text-left text-sm">
               <thead className="bg-slate-50 text-slate-700">
                 <tr>
-                  <th className="p-3">Solicitacao</th>
+                  <th className="p-3">Solicita??o</th>
                   <th className="p-3">Colaborador</th>
                   <th className="p-3">Empresa</th>
                   <th className="p-3">Tipo</th>
@@ -585,7 +585,7 @@ export default function FinanceiroSolicitacoesPage() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={6} className="p-3 text-slate-500">Nenhuma solicitacao encontrada.</td>
+                    <td colSpan={6} className="p-3 text-slate-500">Nenhuma solicita??o encontrada.</td>
                   </tr>
                 )}
               </tbody>
@@ -597,7 +597,7 @@ export default function FinanceiroSolicitacoesPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
               <ShieldCheck size={16} />
-              Analise da solicitacao
+              An?lise da solicita??o
             </div>
 
             {selected ? (
@@ -623,7 +623,7 @@ export default function FinanceiroSolicitacoesPage() {
                     className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
                   >
                     <option value="pending">Pendente</option>
-                    <option value="in_review">Em analise</option>
+                    <option value="in_review">Em an?lise</option>
                     <option value="approved">Aprovada</option>
                     <option value="rejected">Recusada</option>
                     <option value="implemented">Implementada</option>
@@ -632,7 +632,7 @@ export default function FinanceiroSolicitacoesPage() {
                 </label>
 
                 <label className="grid gap-1 text-xs font-semibold text-slate-700">
-                  Observacoes da analise
+                  Observa??es da an?lise
                   <textarea
                     value={decisionNotes}
                     onChange={(e) => setDecisionNotes(e.target.value)}
@@ -650,7 +650,7 @@ export default function FinanceiroSolicitacoesPage() {
                 </button>
               </div>
             ) : (
-              <p className="mt-3 text-sm text-slate-600">Selecione uma solicitacao para analisar.</p>
+              <p className="mt-3 text-sm text-slate-600">Selecione uma solicita??o para analisar.</p>
             )}
           </div>
 
@@ -671,7 +671,7 @@ export default function FinanceiroSolicitacoesPage() {
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-slate-600">Sem eventos de auditoria para esta solicitacao.</p>
+                <p className="text-sm text-slate-600">Sem eventos de auditoria para esta solicita??o.</p>
               )}
             </div>
           </div>

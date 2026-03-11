@@ -80,7 +80,7 @@ export default function FinanceiroPagamentosExtrasPage() {
     setMsg("");
     try {
       const { data: authData, error: authErr } = await supabase.auth.getUser();
-      if (authErr || !authData?.user) throw new Error("Nao autenticado.");
+      if (authErr || !authData?.user) throw new Error("N?o autenticado.");
       setMeId(authData.user.id);
 
       const res = await supabase
@@ -167,7 +167,7 @@ export default function FinanceiroPagamentosExtrasPage() {
   async function decide() {
     if (!selected) return;
     if (decisionStatus === "rejected" && !decisionNote.trim()) {
-      setMsg("Informe observacao ao recusar.");
+      setMsg("Informe observa??o ao recusar.");
       return;
     }
 
@@ -202,7 +202,7 @@ export default function FinanceiroPagamentosExtrasPage() {
       <section className="rounded-2xl border border-slate-200 bg-white p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold text-slate-900">Aprovacao de pagamentos extras</h1>
+            <h1 className="text-xl font-semibold text-slate-900">Aprova??o de pagamentos extras</h1>
             <p className="mt-1 text-sm text-slate-600">Fila gerada pelos gestores em pagamentos extras.</p>
           </div>
           <button
@@ -281,7 +281,7 @@ export default function FinanceiroPagamentosExtrasPage() {
                 </tr>
               ))}
               {filtered.length === 0 ? (
-                <tr><td colSpan={5} className="p-3 text-slate-500">Nenhuma solicitacao encontrada.</td></tr>
+                <tr><td colSpan={5} className="p-3 text-slate-500">Nenhuma solicita??o encontrada.</td></tr>
               ) : null}
             </tbody>
           </table>
@@ -290,7 +290,7 @@ export default function FinanceiroPagamentosExtrasPage() {
         <div className="rounded-2xl border border-slate-200 bg-white p-4">
           {selected ? (
             <div className="space-y-3">
-              <p className="text-sm font-semibold text-slate-900">Detalhe da solicitacao</p>
+              <p className="text-sm font-semibold text-slate-900">Detalhe da solicita??o</p>
               <p className="text-sm text-slate-700"><b>Projeto:</b> {projectsById[selected.project_id] ?? selected.project_id}</p>
               <p className="text-sm text-slate-700"><b>Colaborador:</b> {personLabel(selected.user_id)}</p>
               <p className="text-sm text-slate-700"><b>Solicitado por:</b> {personLabel(selected.requested_by)}</p>
@@ -308,7 +308,7 @@ export default function FinanceiroPagamentosExtrasPage() {
               <textarea
                 value={decisionNote}
                 onChange={(e) => setDecisionNote(e.target.value)}
-                placeholder="Observacao do financeiro..."
+                placeholder="Observa??o do financeiro..."
                 rows={4}
                 className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
               />
@@ -322,7 +322,7 @@ export default function FinanceiroPagamentosExtrasPage() {
               </button>
             </div>
           ) : (
-            <p className="text-sm text-slate-500">Selecione uma solicitacao para revisar.</p>
+            <p className="text-sm text-slate-500">Selecione uma solicita??o para revisar.</p>
           )}
         </div>
       </section>

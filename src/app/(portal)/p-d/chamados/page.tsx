@@ -42,12 +42,11 @@ type ProfileRow = {
 };
 
 function typeLabel(value: TicketType) {
-  if (value === "solidarvt") return "SolidaRVT";
-  if (value === "solides") return "Solides";
-  if (value === "server_access") return "Acesso ao servidor";
-  if (value === "equipment") return "Equipamentos";
-  if (value === "system_improvement") return "Melhoria de sistema";
-  return "Outros";
+  if (value === "server_access") return "TI - Acessos e infraestrutura";
+  if (value === "system_improvement") return "Sistemas internos";
+  if (value === "equipment") return "Equipamentos (computador e perifericos)";
+  if (value === "solidarvt" || value === "solides") return "Sistemas internos";
+  return "Outros de TI";
 }
 
 function statusLabel(value: TicketStatus) {
@@ -274,12 +273,10 @@ export default function PdChamadosPage() {
               onChange={(e) => setFormType(e.target.value as TicketType)}
               className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
             >
-              <option value="solidarvt">SolidaRVT</option>
-              <option value="solides">Solides</option>
-              <option value="server_access">Acesso ao servidor</option>
-              <option value="equipment">Equipamentos</option>
-              <option value="system_improvement">Melhoria de sistema</option>
-              <option value="other">Outro</option>
+              <option value="server_access">TI - Acessos e infraestrutura</option>
+              <option value="system_improvement">Sistemas internos</option>
+              <option value="equipment">Equipamentos (computador e perifericos)</option>
+              <option value="other">Outros de TI</option>
             </select>
           </label>
 

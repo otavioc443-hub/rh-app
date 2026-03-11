@@ -518,7 +518,7 @@ export default function RHInstitucionalPage() {
       if (!pub.error && pub.data?.published_at) setPublishedAt(pub.data.published_at);
       else setPublishedAt(null);
 
-      // Historico de alteracoes
+      // Hist?rico de altera??es
       const histQ = supabase
         .from("institutional_content_versions")
         .select("id,company_id,status,action,created_at,created_by,snapshot")
@@ -527,7 +527,7 @@ export default function RHInstitucionalPage() {
 
       const hist = companyScopeId ? await histQ.eq("company_id", companyScopeId) : await histQ.is("company_id", null);
       if (hist.error) {
-        // Se a tabela ainda nao foi criada no Supabase, nao bloqueia o editor.
+        // Se a tabela ainda n?o foi criada no Supabase, nao bloqueia o editor.
         setVersions([]);
         setProfilesById({});
         return;
@@ -930,7 +930,7 @@ export default function RHInstitucionalPage() {
                         className={buttonClass("outline")}
                         onClick={() => void restoreDraftFromVersion(v.id)}
                         disabled={!!restoringId}
-                        title="Restaura esta versao como rascunho (nao publica automaticamente)"
+                        title="Restaura esta vers?o como rascunho (n?o publica automaticamente)"
                       >
                         {restoringId === v.id ? "Restaurando..." : "Restaurar"}
                       </button>

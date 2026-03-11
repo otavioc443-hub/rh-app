@@ -89,10 +89,10 @@ function fmtDateBr(v?: string | null) {
 }
 
 function statusLabel(v: BulletinStatus) {
-  if (v === "em_analise") return "Em analise";
+  if (v === "em_analise") return "Em an?lise";
   if (v === "faturado") return "Faturado";
   if (v === "enviado_cliente") return "Enviado ao cliente";
-  if (v === "previsao_pagamento") return "Previsao de pagamento";
+  if (v === "previsao_pagamento") return "Previs?o de pagamento";
   if (v === "pago") return "Pago";
   if (v === "parcialmente_pago") return "Parcialmente pago";
   if (v === "atrasado") return "Atrasado";
@@ -545,7 +545,7 @@ export default function DiretoriaMedicoesPage() {
       }
       await loadBulletinHistory(row.id, row.project_id);
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao abrir edicao do boletim.");
+      setMsg(e instanceof Error ? e.message : "Erro ao abrir edi??o do boletim.");
     }
   }
 
@@ -631,11 +631,11 @@ export default function DiretoriaMedicoesPage() {
       setNotes("");
       setSelectedDeliverableIds([]);
       setDeliverableStatusFilter("all");
-      setMsg(`Medicao/boletim registrado. Status atual: ${statusLabel(status)}.`);
+      setMsg(`Medi??o/boletim registrado. Status atual: ${statusLabel(status)}.`);
       await load();
       await loadProjectDeliverables(projectId);
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao registrar medicao/boletim.");
+      setMsg(e instanceof Error ? e.message : "Erro ao registrar medi??o/boletim.");
     } finally {
       setSaving(false);
     }
@@ -695,7 +695,7 @@ export default function DiretoriaMedicoesPage() {
         throw new Error("Selecione ao menos 1 entregavel para manter o boletim.");
       }
       if ((editingBulletinStatus === "previsao_pagamento" || editingBulletinStatus === "atrasado") && !editingExpectedPaymentDate) {
-        throw new Error("Informe a previsao de pagamento para o status selecionado.");
+        throw new Error("Informe a previs?o de pagamento para o status selecionado.");
       }
       if ((editingBulletinStatus === "pago" || editingBulletinStatus === "parcialmente_pago") && !editingPaidAt) {
         throw new Error("Informe a data de pagamento para o status selecionado.");
@@ -797,7 +797,7 @@ export default function DiretoriaMedicoesPage() {
       <DiretoriaPageHeader
         icon={ReceiptText}
         title="Diretoria - Medicoes e boletins"
-        subtitle="Gere medicao/boletim para faturamento ao cliente e acompanhe previsao e pagamento."
+        subtitle="Gere medi??o/boletim para faturamento ao cliente e acompanhe previsao e pagamento."
         action={
           <button
             type="button"
@@ -815,7 +815,7 @@ export default function DiretoriaMedicoesPage() {
       ) : null}
 
       <section className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
-        <h2 className="text-sm font-semibold text-slate-900">Gerar medicao/boletim</h2>
+        <h2 className="text-sm font-semibold text-slate-900">Gerar medi??o/boletim</h2>
         <div className="grid gap-3 md:grid-cols-3">
           <label className="grid gap-1 text-xs font-semibold text-slate-700">
             Projeto
@@ -833,10 +833,10 @@ export default function DiretoriaMedicoesPage() {
           <label className="grid gap-1 text-xs font-semibold text-slate-700">
             Status
             <select className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm" value={status} onChange={(e) => setStatus(e.target.value as BulletinStatus)}>
-              <option value="em_analise">Em analise</option>
+              <option value="em_analise">Em an?lise</option>
               <option value="faturado">Faturado</option>
               <option value="enviado_cliente">Enviado ao cliente</option>
-              <option value="previsao_pagamento">Previsao de pagamento</option>
+              <option value="previsao_pagamento">Previs?o de pagamento</option>
               <option value="pago">Pago</option>
               <option value="parcialmente_pago">Parcialmente pago</option>
               <option value="atrasado">Atrasado</option>
@@ -973,11 +973,11 @@ export default function DiretoriaMedicoesPage() {
             />
           </label>
           <label className="grid gap-1 text-xs font-semibold text-slate-700">
-            Data emissao
+            Data emiss?o
             <input type="date" className="h-11 rounded-xl border border-slate-200 px-3 text-sm" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
           </label>
           <label className="grid gap-1 text-xs font-semibold text-slate-700">
-            Previsao pagamento
+            Previs?o pagamento
             <input type="date" className="h-11 rounded-xl border border-slate-200 px-3 text-sm" value={expectedPaymentDate} onChange={(e) => setExpectedPaymentDate(e.target.value)} />
           </label>
           <label className="grid gap-1 text-xs font-semibold text-slate-700">
@@ -990,8 +990,8 @@ export default function DiretoriaMedicoesPage() {
           </label>
         </div>
         <label className="grid gap-1 text-xs font-semibold text-slate-700">
-          Observacoes
-          <textarea className="min-h-[88px] rounded-xl border border-slate-200 p-3 text-sm" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Informacoes complementares da medicao/boletim..." />
+          Observa??es
+          <textarea className="min-h-[88px] rounded-xl border border-slate-200 p-3 text-sm" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Informa??es complementares da medi??o/boletim..." />
         </label>
         <button
           type="button"
@@ -1039,10 +1039,10 @@ export default function DiretoriaMedicoesPage() {
             Status
             <select className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as "all" | BulletinStatus)}>
               <option value="all">Todos</option>
-              <option value="em_analise">Em analise</option>
+              <option value="em_analise">Em an?lise</option>
               <option value="faturado">Faturado</option>
               <option value="enviado_cliente">Enviado ao cliente</option>
-              <option value="previsao_pagamento">Previsao de pagamento</option>
+              <option value="previsao_pagamento">Previs?o de pagamento</option>
               <option value="pago">Pago</option>
               <option value="parcialmente_pago">Parcialmente pago</option>
               <option value="atrasado">Atrasado</option>
@@ -1062,7 +1062,7 @@ export default function DiretoriaMedicoesPage() {
                 <th className="p-3">Boletim/NF</th>
                 <th className="p-3 text-right">Valor</th>
                 <th className="p-3 text-right">Pago</th>
-                <th className="p-3">Previsao</th>
+                <th className="p-3">Previs?o</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Acoes</th>
               </tr>
@@ -1148,7 +1148,7 @@ export default function DiretoriaMedicoesPage() {
                                     <div className="rounded-lg border border-indigo-200 bg-indigo-50/70 p-2">
                                       <label className="grid gap-1 text-xs font-semibold text-indigo-900">Status do boletim
                                         <select className="h-10 rounded-lg border border-indigo-200 bg-white px-3 text-sm text-slate-900" value={editingBulletinStatus} onChange={(e) => setEditingBulletinStatus(e.target.value as BulletinStatus)}>
-                                          <option value="em_analise">Em analise</option><option value="faturado">Faturado</option><option value="enviado_cliente">Enviado ao cliente</option><option value="previsao_pagamento">Previsao de pagamento</option><option value="pago">Pago</option><option value="parcialmente_pago">Parcialmente pago</option><option value="atrasado">Atrasado</option><option value="cancelado">Cancelado</option><option value="outro">Outro</option>
+                                          <option value="em_analise">Em an?lise</option><option value="faturado">Faturado</option><option value="enviado_cliente">Enviado ao cliente</option><option value="previsao_pagamento">Previs?o de pagamento</option><option value="pago">Pago</option><option value="parcialmente_pago">Parcialmente pago</option><option value="atrasado">Atrasado</option><option value="cancelado">Cancelado</option><option value="outro">Outro</option>
                                         </select>
                                       </label>
                                       <p className="mt-1 text-[11px] font-medium text-indigo-800/80">Alteracao aplicada ao salvar acompanhamento.</p>
@@ -1160,7 +1160,7 @@ export default function DiretoriaMedicoesPage() {
                                           : ""
                                       }
                                     >
-                                      <label className="grid gap-1 text-xs font-semibold text-slate-700">Previsao pagamento
+                                      <label className="grid gap-1 text-xs font-semibold text-slate-700">Previs?o pagamento
                                         <input
                                           type="date"
                                           className={`h-10 rounded-lg px-3 text-sm ${
@@ -1212,7 +1212,7 @@ export default function DiretoriaMedicoesPage() {
                                       Ao adicionar/remover documentos, o valor total do boletim sera ajustado automaticamente ao salvar.
                                     </div>
                                   </div>
-                                  <label className="grid gap-1 text-xs font-semibold text-slate-700">Observacoes
+                                  <label className="grid gap-1 text-xs font-semibold text-slate-700">Observa??es
                                     <textarea className="min-h-[70px] rounded-lg border border-slate-200 p-2 text-sm" value={editingNotes} onChange={(e) => setEditingNotes(e.target.value)} />
                                   </label>
                                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
@@ -1350,7 +1350,7 @@ export default function DiretoriaMedicoesPage() {
               </button>
               <div className="mb-3 pr-20">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">Base do historico do boletim</p>
+                  <p className="text-sm font-semibold text-slate-900">Base do hist?rico do boletim</p>
                   <p className="text-xs text-slate-500">
                     Ref.: {activeHistoryBulletinRow.reference_month} | Boletim/NF: {activeHistoryBulletinRow.bulletin_number ?? "-"} / {activeHistoryBulletinRow.invoice_number ?? "-"}
                   </p>
@@ -1402,7 +1402,7 @@ export default function DiretoriaMedicoesPage() {
                                 </li>
                               ) : null}
                               {(prevExp || nextExp) && prevExp !== nextExp ? (
-                                <li>Previsao pagamento: {fmtDateBr(prevExp)} {"->"} {fmtDateBr(nextExp)}</li>
+                                <li>Previs?o pagamento: {fmtDateBr(prevExp)} {"->"} {fmtDateBr(nextExp)}</li>
                               ) : null}
                               {(prevPaidAt || nextPaidAt) && prevPaidAt !== nextPaidAt ? (
                                 <li>Data pagamento: {fmtDateBr(prevPaidAt)} {"->"} {fmtDateBr(nextPaidAt)}</li>
@@ -1430,7 +1430,7 @@ export default function DiretoriaMedicoesPage() {
                     </ul>
                   </div>
                 ) : (
-                  <div className="text-xs text-slate-500">Sem historico registrado (ou migration ainda nao aplicada).</div>
+                  <div className="text-xs text-slate-500">Sem hist?rico registrado (ou migration ainda nao aplicada).</div>
                 );
               })()}
             </div>

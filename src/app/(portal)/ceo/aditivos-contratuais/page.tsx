@@ -180,7 +180,7 @@ export default function CeoAditivosContratuaisPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold text-slate-900">CEO - Aprovacao de aditivos contratuais</h1>
-            <p className="mt-1 text-sm text-slate-600">Aprovacao exclusiva dos aditivos de valor enviados pela Diretoria.</p>
+            <p className="mt-1 text-sm text-slate-600">Aprova??o exclusiva dos aditivos de valor enviados pela Diretoria.</p>
           </div>
           <button
             type="button"
@@ -204,7 +204,7 @@ export default function CeoAditivosContratuaisPage() {
 
       <div className="grid gap-4 md:grid-cols-4">
         <StatCard label="Total de aditivos" value={rows.length} />
-        <StatCard label="Pendentes de aprovacao" value={pendingCount} />
+        <StatCard label="Pendentes de aprova??o" value={pendingCount} />
         <StatCard label="Valor pendente" value={fmtMoney(totalPendingValue)} />
         <StatCard label="Atrasados (SLA)" value={overdueCount} />
       </div>
@@ -273,7 +273,7 @@ export default function CeoAditivosContratuaisPage() {
                   Orcamento: {fmtMoney(Number(selected.from_budget_total) || 0)} -&gt; {fmtMoney(Number(selected.to_budget_total) || 0)}
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Aplicar ao aprovar: {selected.apply_on_approval ? "Sim" : "Nao"}
+                  Aplicar ao aprovar: {selected.apply_on_approval ? "Sim" : "N?o"}
                 </p>
               </div>
 
@@ -292,7 +292,7 @@ export default function CeoAditivosContratuaisPage() {
               </label>
 
               <label className="grid gap-1 text-xs font-semibold text-slate-700">
-                Observacao
+                Observa??o
                 <textarea
                   value={decisionNote}
                   onChange={(e) => setDecisionNote(e.target.value)}
@@ -312,7 +312,7 @@ export default function CeoAditivosContratuaisPage() {
 
               {selected.finance_decision_note ? (
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-                  Ultima observacao: {selected.finance_decision_note}
+                  ?ltima observa??o: {selected.finance_decision_note}
                 </div>
               ) : null}
             </div>

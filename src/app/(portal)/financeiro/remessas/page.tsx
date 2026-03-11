@@ -433,7 +433,7 @@ export default function FinanceiroRemessasPage() {
   }
 
   if (roleLoading) return <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">Carregando...</div>;
-  if (!canAccess) return <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-700">Sem permissao para esta tela.</div>;
+  if (!canAccess) return <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-700">Sem permiss?o para esta tela.</div>;
 
   return (
     <div className="space-y-6">
@@ -458,7 +458,7 @@ export default function FinanceiroRemessasPage() {
       {msg ? <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">{msg}</div> : null}
 
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-        <p className="font-semibold">Configuracao para remessas (Financeiro)</p>
+        <p className="font-semibold">Configura??o para remessas (Financeiro)</p>
         <p className="mt-1">1. Rode as migrations de remessas e comprovantes.</p>
         <p>2. Boleto API: `BOLETO_PROVIDER_API_URL` e `BOLETO_PROVIDER_API_TOKEN`.</p>
         <p>3. PIX API: `PIX_PROVIDER_API_URL` e `PIX_PROVIDER_API_TOKEN`.</p>
@@ -559,7 +559,7 @@ export default function FinanceiroRemessasPage() {
                           {r.pix_qr_code_url ? (
                             <a href={r.pix_qr_code_url} target="_blank" rel="noreferrer" className="text-sky-700 underline">Abrir QR PIX</a>
                           ) : (
-                            <span className="text-slate-500">PIX nao gerado</span>
+                            <span className="text-slate-500">PIX n?o gerado</span>
                           )}
                           {r.pix_copy_paste ? <p className="mt-1 break-all text-xs text-slate-500">{r.pix_copy_paste}</p> : null}
                         </>
@@ -568,7 +568,7 @@ export default function FinanceiroRemessasPage() {
                           {r.boleto_url ? (
                             <a href={r.boleto_url} target="_blank" rel="noreferrer" className="text-sky-700 underline">Abrir boleto</a>
                           ) : (
-                            <span className="text-slate-500">Boleto nao gerado</span>
+                            <span className="text-slate-500">Boleto n?o gerado</span>
                           )}
                           {r.boleto_digitable_line ? <p className="mt-1 break-all text-xs text-slate-500">{r.boleto_digitable_line}</p> : null}
                         </>

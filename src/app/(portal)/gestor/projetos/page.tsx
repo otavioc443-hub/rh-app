@@ -31,7 +31,7 @@ type ProjectType =
   | "basico"
   | "estrutural"
   | "civil"
-  | "eletromecanico"
+  | "eletromec?nico"
   | "eletrico"
   | "hidraulico"
   | "outro";
@@ -66,7 +66,7 @@ type Deliverable = {
   description: string | null;
   due_date: string | null;
   review_due_at?: string | null;
-  discipline_code?: "civil" | "eletromecanico" | null;
+  discipline_code?: "civil" | "eletromec?nico" | null;
   financial_status?: "aberto" | "pendente" | "baixado" | null;
   assigned_to: string | null;
   status: "pending" | "in_progress" | "sent" | "approved" | "approved_with_comments";
@@ -171,7 +171,7 @@ const PROJECT_TYPE_OPTIONS: Array<{ value: ProjectType; label: string }> = [
   { value: "basico", label: "Basico" },
   { value: "estrutural", label: "Estrutural" },
   { value: "civil", label: "Civil" },
-  { value: "eletromecanico", label: "Eletromecanico" },
+  { value: "eletromec?nico", label: "Eletromecanico" },
   { value: "eletrico", label: "Eletrico" },
   { value: "hidraulico", label: "Hidraulico" },
   { value: "outro", label: "Outro" },
@@ -205,8 +205,8 @@ function deliverableEventLabel(eventType: string) {
   if (eventType === "contribution_added") return "Contribuicao registrada";
   if (eventType === "contribution_approved") return "Contribuicao aprovada (interna)";
   if (eventType === "contribution_returned") return "Contribuicao retornada para ajuste (interna)";
-  if (eventType === "assignee_added") return "Responsavel adicionado";
-  if (eventType === "assignee_removed") return "Responsavel removido";
+  if (eventType === "assignee_added") return "Respons?vel adicionado";
+  if (eventType === "assignee_removed") return "Respons?vel removido";
   if (eventType === "document_uploaded") return "Documento enviado";
   if (eventType === "document_linked") return "Link de documento atualizado";
   if (eventType === "document_link_updated") return "Link de documento atualizado";
@@ -418,7 +418,7 @@ export default function GestorProjetosPage() {
   const [newTeamName, setNewTeamName] = useState("");
   const [assignTeamId, setAssignTeamId] = useState("");
   const [deliverableTeamId, setDeliverableTeamId] = useState("");
-  const [deliverableDisciplineDirectionFilter, setDeliverableDisciplineDirectionFilter] = useState<"all" | "civil" | "eletromecanico">("all");
+  const [deliverableDisciplineDirectionFilter, setDeliverableDisciplineDirectionFilter] = useState<"all" | "civil" | "eletromec?nico">("all");
   const [deliverableDirectionPanelOpen, setDeliverableDirectionPanelOpen] = useState(false);
   const [deliverableDirectionSelectedIds, setDeliverableDirectionSelectedIds] = useState<string[]>([]);
   const [assignUserId, setAssignUserId] = useState("");
@@ -454,7 +454,7 @@ export default function GestorProjetosPage() {
     const name = (d?.display_name ?? "").trim();
     if (name && !isEmailLike(name)) return name;
 
-    // Se ainda nao carregou o diretorio, usa apenas full_name (nunca email como label).
+    // Se ainda n?o carregou o diretorio, usa apenas full_name (nunca email como label).
     const p = profilesById[userId];
     const n = (p?.full_name ?? "").trim();
     if (n && !isEmailLike(n)) return n;
@@ -468,7 +468,7 @@ export default function GestorProjetosPage() {
   const personCargo = useCallback((userId: string) => {
     const d = directoryById[userId];
     const cargo = (d?.cargo ?? "").trim();
-    return cargo || "Cargo nao informado";
+    return cargo || "Cargo n?o informado";
   }, [directoryById]);
 
   const personAvatar = useCallback((userId: string) => {
@@ -516,11 +516,11 @@ export default function GestorProjetosPage() {
     setMsg("");
     try {
       const { data: authData, error: authErr } = await supabase.auth.getUser();
-      if (authErr || !authData?.user) throw new Error("Nao autenticado.");
+      if (authErr || !authData?.user) throw new Error("N?o autenticado.");
       const userId = authData.user.id;
       setMeId(userId);
 
-      // Admin deve enxergar tudo (nao depender de membership/owner).
+      // Admin deve enxergar tudo (n?o depender de membership/owner).
       let effectiveRole: Role | null = null;
       try {
         const { data: cr, error: crErr } = await supabase.rpc("current_role");
@@ -965,7 +965,7 @@ export default function GestorProjetosPage() {
       setAssignTeamId((prev) => (prev && (tRes.data ?? []).some((t) => t.id === prev) ? prev : String((tRes.data ?? [])[0]?.id ?? "")));
       setDeliverableTeamId((prev) => (prev && (tRes.data ?? []).some((t) => t.id === prev) ? prev : String((tRes.data ?? [])[0]?.id ?? "")));
     } catch {
-      // tabela pode nao existir ainda (SQL nao aplicado)
+      // tabela pode n?o existir ainda (SQL nao aplicado)
       setTeams([]);
       setTeamMembers([]);
       setDeliverableTeamId("");
@@ -1014,7 +1014,7 @@ export default function GestorProjetosPage() {
   const selectedProjectClientLabel = useMemo(() => {
     if (!selectedProject?.client_id) return "-";
     if (!clientsLoaded) return "Carregando...";
-    return clientNameById[selectedProject.client_id] ?? "Cliente nao encontrado";
+    return clientNameById[selectedProject.client_id] ?? "Cliente n?o encontrado";
   }, [selectedProject?.client_id, clientsLoaded, clientNameById]);
 
   async function addMember() {
@@ -1024,7 +1024,7 @@ export default function GestorProjetosPage() {
     setMsg("");
     try {
       const selected = companyUsers.find((u) => u.id === memberUserId);
-      if (!selected) throw new Error("Usuario selecionado nao encontrado.");
+      if (!selected) throw new Error("Usu?rio selecionado n?o encontrado.");
       const insertRes = await supabase.from("project_members").insert({
         project_id: selectedProjectId,
         user_id: selected.id,
@@ -1053,7 +1053,7 @@ export default function GestorProjetosPage() {
         title: docTitle.trim(),
         description: docDescription.trim() || null,
         due_date: docDueDate || null,
-        // Gestor cria o entregavel; direcionamento de responsavel e' do Coordenador.
+        // Gestor cria o entregavel; direcionamento de respons?vel e' do Coordenador.
         assigned_to: null,
         status: "pending",
       };
@@ -1068,7 +1068,7 @@ export default function GestorProjetosPage() {
       setDocTitle("");
       setDocDescription("");
       setDocDueDate("");
-      setMsg("Entregavel criado.");
+      setMsg("Entreg?vel criado.");
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao criar entregavel.");
@@ -1145,7 +1145,7 @@ export default function GestorProjetosPage() {
       });
       const json = (await response.json()) as { ok?: boolean; error?: string };
       if (!response.ok || !json.ok) {
-        throw new Error(json.error || "Nao foi possivel atualizar o link do documento.");
+        throw new Error(json.error || "N?o foi poss?vel atualizar o link do documento.");
       }
 
       await logDeliverableEvent({
@@ -1178,9 +1178,9 @@ export default function GestorProjetosPage() {
           deliverableId,
           projectId: current?.project_id ?? selectedProjectId,
           eventType: "edited",
-          comment: "Entregavel atualizado (titulo/descricao/prazo).",
+          comment: "Entreg?vel atualizado (t?tulo/descri??o/prazo).",
         });
-        setMsg("Entregavel atualizado.");
+        setMsg("Entreg?vel atualizado.");
         setOpenedDeliverableId(null);
         await load();
       } catch (e: unknown) {
@@ -1192,8 +1192,8 @@ export default function GestorProjetosPage() {
 
   async function updateMemberRole(projectMemberId: string) {
     const member = members.find((m) => m.id === projectMemberId) ?? null;
-    if (!member) return setMsg("Membro nao encontrado.");
-    if (member.member_role === "gestor") return setMsg("O papel de gestor nao pode ser alterado nesta tela.");
+    if (!member) return setMsg("Membro n?o encontrado.");
+    if (member.member_role === "gestor") return setMsg("O papel de gestor n?o pode ser alterado nesta tela.");
     const nextRole = memberRoleByMemberId[projectMemberId] ?? (member.member_role as "coordenador" | "colaborador");
     if (nextRole === member.member_role) return setMsg("Nenhuma alteracao de funcao para salvar.");
     setSaving(true);
@@ -1253,9 +1253,9 @@ export default function GestorProjetosPage() {
 
   async function removeMember(projectMemberId: string) {
     const member = members.find((m) => m.id === projectMemberId) ?? null;
-    if (!member) return setMsg("Membro nao encontrado.");
-    if (member.member_role === "gestor") return setMsg("O gestor do projeto nao pode ser removido nesta tela.");
-    if (member.user_id === meId) return setMsg("Voce nao pode remover o proprio acesso.");
+    if (!member) return setMsg("Membro n?o encontrado.");
+    if (member.member_role === "gestor") return setMsg("O gestor do projeto n?o pode ser removido nesta tela.");
+    if (member.user_id === meId) return setMsg("Voc? n?o pode remover o pr?prio acesso.");
     if (!confirm(`Remover ${personLabel(member.user_id)} deste projeto?`)) return;
     setSaving(true);
     setMsg("");
@@ -1287,7 +1287,7 @@ export default function GestorProjetosPage() {
   async function reviewContribution(deliverable: Deliverable, decision: "approve" | "return") {
     const comment = (contribReviewCommentByDeliverableId[deliverable.id] ?? "").trim();
     if (decision === "return" && !comment) {
-      return setMsg("Informe comentario para retornar a contribuicao.");
+      return setMsg("Informe coment?rio para retornar a contribui??o.");
     }
     setSaving(true);
     setMsg("");
@@ -1309,20 +1309,20 @@ export default function GestorProjetosPage() {
       setMsg(decision === "approve" ? "Contribuicao aprovada internamente." : "Contribuicao retornada para ajuste.");
       await load();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao validar contribuicao.");
+      setMsg(e instanceof Error ? e.message : "Erro ao validar contribui??o.");
     } finally {
       setSaving(false);
     }
   }
 
   async function deleteDeliverable(deliverableId: string) {
-    if (!confirm("Excluir este entregavel? Esta acao nao pode ser desfeita.")) return;
+    if (!confirm("Excluir este entregavel? Esta a??o n?o pode ser desfeita.")) return;
     setSaving(true);
     setMsg("");
     try {
       const res = await supabase.from("project_deliverables").delete().eq("id", deliverableId);
       if (res.error) throw new Error(res.error.message);
-        setMsg("Entregavel excluido.");
+        setMsg("Entreg?vel exclu?do.");
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao excluir entregavel.");
@@ -1398,7 +1398,7 @@ export default function GestorProjetosPage() {
             project_id: r.project_id,
             event_type: "created",
             status_to: "pending",
-            comment: "Entregavel criado via importacao CSV.",
+            comment: "Entreg?vel criado via importa??o CSV.",
             actor_user_id: meId || null,
           }))
         );
@@ -1407,7 +1407,7 @@ export default function GestorProjetosPage() {
       setMsg(`${created.length} entregavel(eis) importado(s) com sucesso.`);
       await load();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao importar CSV de entregaveis.");
+      setMsg(e instanceof Error ? e.message : "Erro ao importar CSV de entreg?veis.");
     } finally {
       setSaving(false);
     }
@@ -1432,7 +1432,7 @@ export default function GestorProjetosPage() {
         actor_user_id: meId || null,
       });
     } catch {
-      // nao bloqueia o fluxo principal
+      // n?o bloqueia o fluxo principal
     }
   }
 
@@ -1560,14 +1560,14 @@ export default function GestorProjetosPage() {
     if (targetDeliverables.length === 0) return setMsg("Selecione ao menos um entregavel.");
 
     const team = teams.find((t) => t.id === deliverableTeamId) ?? null;
-    if (!team) return setMsg("Equipe selecionada nao encontrada.");
+    if (!team) return setMsg("Equipe selecionada n?o encontrada.");
     const memberIds = Array.from(
       new Set([
         ...teamMembers.filter((tm) => tm.team_id === deliverableTeamId).map((tm) => tm.user_id),
         ...(team.coordinator_user_id ? [team.coordinator_user_id] : []),
       ])
     );
-    if (memberIds.length === 0) return setMsg("A equipe selecionada nao possui membros.");
+    if (memberIds.length === 0) return setMsg("A equipe selecionada n?o possui membros.");
     const primaryAssigneeId = team.coordinator_user_id && memberIds.includes(team.coordinator_user_id)
       ? team.coordinator_user_id
       : memberIds[0];
@@ -1618,7 +1618,7 @@ export default function GestorProjetosPage() {
       setDeliverableDirectionPanelOpen(false);
       await load();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao direcionar entregaveis selecionados.");
+      setMsg(e instanceof Error ? e.message : "Erro ao direcionar entreg?veis selecionados.");
     } finally {
       setSaving(false);
     }
@@ -1653,11 +1653,11 @@ export default function GestorProjetosPage() {
   async function promoteTeamMemberToCoordinator(teamId: string, userId: string) {
     if (!selectedProjectId) return setMsg("Selecione um projeto.");
     const team = teams.find((t) => t.id === teamId) ?? null;
-    if (!team) return setMsg("Equipe nao encontrada.");
+    if (!team) return setMsg("Equipe n?o encontrada.");
     if (team.coordinator_user_id === userId) return setMsg("Este membro ja e o coordenador da equipe.");
 
     const member = selectedMembers.find((m) => m.user_id === userId) ?? null;
-    if (!member) return setMsg("Membro do projeto nao encontrado.");
+    if (!member) return setMsg("Membro do projeto n?o encontrado.");
 
     setSaving(true);
     setMsg("");
@@ -1683,8 +1683,8 @@ export default function GestorProjetosPage() {
   async function clearTeamCoordinator(teamId: string, userId: string) {
     if (!selectedProjectId) return setMsg("Selecione um projeto.");
     const team = teams.find((t) => t.id === teamId) ?? null;
-    if (!team) return setMsg("Equipe nao encontrada.");
-    if (team.coordinator_user_id !== userId) return setMsg("Este membro nao e o coordenador atual da equipe.");
+    if (!team) return setMsg("Equipe n?o encontrada.");
+    if (team.coordinator_user_id !== userId) return setMsg("Este membro n?o ? o coordenador atual da equipe.");
 
     setSaving(true);
     setMsg("");
@@ -1782,7 +1782,7 @@ export default function GestorProjetosPage() {
                     ).length,
                     sent: selectedDocs.filter(
                       (d) =>
-                        d.discipline_code === "eletromecanico" &&
+                        d.discipline_code === "eletromec?nico" &&
                         (d.status === "sent" || d.status === "approved" || d.status === "approved_with_comments")
                     ).length,
                   },
@@ -2026,12 +2026,12 @@ export default function GestorProjetosPage() {
                               <div className="min-w-0">
                                 <div className="text-sm font-semibold text-slate-900">{t.name}</div>
                                 <div className="text-xs text-slate-500">
-                                  Coordenador: {t.coordinator_user_id ? personLabel(t.coordinator_user_id) : "Nao definido"} | {rows.length} membro(s)
+                                  Coordenador: {t.coordinator_user_id ? personLabel(t.coordinator_user_id) : "N?o definido"} | {rows.length} membro(s)
                                 </div>
                               </div>
                               <details className="relative">
                                 <summary className="cursor-pointer rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700">
-                                  Acoes
+                                  A??es
                                 </summary>
                                 <div className="absolute right-0 z-10 mt-1 w-52 rounded-lg border border-slate-200 bg-white p-2 shadow">
                                   <button
@@ -2120,7 +2120,7 @@ export default function GestorProjetosPage() {
                                   value={assignProjectRole}
                                   onChange={(e) => setAssignProjectRole(e.target.value as "coordenador" | "colaborador")}
                                   className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm"
-                                  title="Papel no projeto (se ainda nao for membro, sera criado com este papel)"
+                                  title="Papel no projeto (se ainda n?o for membro, ser? criado com este papel)"
                                 >
                                   <option value="colaborador">Colaborador</option>
                                   <option value="coordenador">Coordenador</option>
@@ -2194,7 +2194,7 @@ export default function GestorProjetosPage() {
                   </div>
                 ) : (
                   <div className="rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
-                    Nenhuma equipe criada ainda (ou SQL de equipes ainda nao foi aplicado).
+                    Nenhuma equipe criada ainda (ou SQL de equipes ainda n?o foi aplicado).
                   </div>
                 )}
 
@@ -2225,7 +2225,7 @@ export default function GestorProjetosPage() {
           </section>
 
           <section className="rounded-2xl border border-indigo-200 bg-indigo-50/30 p-6 space-y-4">
-            <h2 className="text-sm font-semibold text-slate-900">Lista de documentos entregaveis</h2>
+            <h2 className="text-sm font-semibold text-slate-900">Lista de documentos entreg?veis</h2>
           {assigneeFilter ? (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-900">
               <span>Filtro ativo por colaborador: <b>{assigneeLabel || assigneeFilter.slice(0, 8)}</b></span>
@@ -2251,7 +2251,7 @@ export default function GestorProjetosPage() {
               type="button"
               onClick={() =>
                 downloadTextFile(
-                  "modelo_entregaveis_gestor.csv",
+                  "modelo_entreg?veis_gestor.csv",
                   "titulo_entregavel,previsao_entrega,descricao\nPlano de execucao,28/02/2026,Descricao do documento",
                   "text/csv;charset=utf-8"
                 )
@@ -2278,9 +2278,9 @@ export default function GestorProjetosPage() {
           <div className="rounded-xl border border-indigo-200 bg-white p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <p className="text-xs font-semibold text-slate-700">Direcionar entregaveis por equipe</p>
+                <p className="text-xs font-semibold text-slate-700">Direcionar entreg?veis por equipe</p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Filtre por disciplina, selecione os entregaveis e direcione em lote para uma equipe responsavel.
+                  Filtre por disciplina, selecione os entreg?veis e direcione em lote para uma equipe respons?vel.
                 </p>
               </div>
               <button
@@ -2291,7 +2291,7 @@ export default function GestorProjetosPage() {
                 }}
                 className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-800"
               >
-                {deliverableDirectionPanelOpen ? "Fechar direcionamento" : "Direcionar entregaveis"}
+                {deliverableDirectionPanelOpen ? "Fechar direcionamento" : "Direcionar entreg?veis"}
               </button>
             </div>
             {deliverableDirectionPanelOpen ? (
@@ -2300,21 +2300,21 @@ export default function GestorProjetosPage() {
                   <select
                     value={deliverableDisciplineDirectionFilter}
                     onChange={(e) => {
-                      setDeliverableDisciplineDirectionFilter(e.target.value as "all" | "civil" | "eletromecanico");
+                      setDeliverableDisciplineDirectionFilter(e.target.value as "all" | "civil" | "eletromec?nico");
                       setDeliverableDirectionSelectedIds([]);
                     }}
                     className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm"
                   >
                     <option value="all">Todas disciplinas</option>
                     <option value="civil">Civil</option>
-                    <option value="eletromecanico">Eletromecanico</option>
+                    <option value="eletromec?nico">Eletromecanico</option>
                   </select>
                   <select
                     value={deliverableTeamId}
                     onChange={(e) => setDeliverableTeamId(e.target.value)}
                     className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm"
                   >
-                    <option value="">Selecione a equipe responsavel...</option>
+                    <option value="">Selecione a equipe respons?vel...</option>
                     {teams.map((t) => (
                       <option key={t.id} value={t.id}>
                         {t.name}
@@ -2362,7 +2362,7 @@ export default function GestorProjetosPage() {
                             <div className="min-w-0">
                               <p className="truncate text-xs font-semibold text-slate-800">{d.title}</p>
                               <p className="text-[11px] text-slate-500">
-                                Disciplina: {d.discipline_code === "civil" ? "Civil" : d.discipline_code === "eletromecanico" ? "Eletromecanico" : "Nao informada"} | Status: {deliverableStatusLabel(d.status)}
+                                Disciplina: {d.discipline_code === "civil" ? "Civil" : d.discipline_code === "eletromec?nico" ? "Eletromecanico" : "N?o informada"} | Status: {deliverableStatusLabel(d.status)}
                               </p>
                             </div>
                           </div>
@@ -2475,9 +2475,9 @@ export default function GestorProjetosPage() {
               const disciplineLabel =
                 d.discipline_code === "civil"
                   ? "Civil"
-                  : d.discipline_code === "eletromecanico"
+                  : d.discipline_code === "eletromec?nico"
                     ? "Eletromecanico"
-                    : "Nao informada";
+                    : "N?o informada";
               const financialStatus = d.financial_status ?? "aberto";
               const financialLocked = financialStatus !== "aberto";
               const financialStatusLabel = financialStatus === "baixado" ? "Baixado" : financialStatus === "pendente" ? "Pendente" : "Aberto";
@@ -2497,7 +2497,7 @@ export default function GestorProjetosPage() {
                 ? personLabel(d.assigned_to)
                 : assigneeNames.length
                   ? assigneeNames.join(", ")
-                  : "Nao definido";
+                  : "N?o definido";
               const overdueAwaitingInternalApproval = (() => {
                 const dueDate = parseDueDate(d.due_date);
                 if (!dueDate) return false;
@@ -2530,7 +2530,7 @@ export default function GestorProjetosPage() {
                         <p className="text-xs text-slate-500">
                           Status: {deliverableStatusLabel(d.status)} | Prazo:{" "}
                           {dueDateLabel} | Disciplina:{" "}
-                          {disciplineLabel} | Financeiro: {financialStatusLabel} | Responsavel: {summaryResponsibleLabel}
+                          {disciplineLabel} | Financeiro: {financialStatusLabel} | Respons?vel: {summaryResponsibleLabel}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -2540,7 +2540,7 @@ export default function GestorProjetosPage() {
                         {pendingContributionReview ? (
                           <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-800">
                             <BellRing size={13} />
-                            Pendente validacao interna
+                            Pendente valida??o interna
                           </span>
                         ) : null}
                         {overdueAwaitingInternalApproval ? (
@@ -2569,7 +2569,7 @@ export default function GestorProjetosPage() {
                             }}
                             className="inline-flex cursor-pointer items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
                           >
-                            <MoreHorizontal size={14} /> Acoes
+                            <MoreHorizontal size={14} /> A??es
                           </button>
                           {openedActionMenuDeliverableId === d.id ? (
                           <>
@@ -2586,7 +2586,7 @@ export default function GestorProjetosPage() {
                             data-action-menu-root="true"
                           >
                             <div className="mb-2 border-b border-slate-100 px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                              Acoes do entregavel
+                              A??es do entregavel
                             </div>
                             <button
                               type="button"
@@ -2594,7 +2594,7 @@ export default function GestorProjetosPage() {
                                 e.preventDefault();
                                 e.stopPropagation();
                                 if (financialLocked) {
-                                  setMsg("Entregavel em boletim (pendente/baixado) nao pode ser alterado.");
+                                  setMsg("Entreg?vel em boletim (pendente/baixado) n?o pode ser alterado.");
                                   return;
                                 }
                                 setOpenedDeliverableId(d.id);
@@ -2613,7 +2613,7 @@ export default function GestorProjetosPage() {
                                 e.preventDefault();
                                 e.stopPropagation();
                                 if (financialLocked) {
-                                  setMsg("Entregavel em boletim (pendente/baixado) nao pode ser alterado.");
+                                  setMsg("Entreg?vel em boletim (pendente/baixado) n?o pode ser alterado.");
                                   return;
                                 }
                                 setOpenedDeliverableId(d.id);
@@ -2632,7 +2632,7 @@ export default function GestorProjetosPage() {
                                 e.preventDefault();
                                 e.stopPropagation();
                                 if (financialLocked) {
-                                  setMsg("Entregavel em boletim (pendente/baixado) nao pode ser alterado.");
+                                  setMsg("Entreg?vel em boletim (pendente/baixado) n?o pode ser alterado.");
                                   return;
                                 }
                                 setOpenedDeliverableId(d.id);
@@ -2655,12 +2655,12 @@ export default function GestorProjetosPage() {
                   <div className="space-y-3 border-t border-slate-100 px-3 py-3">
                     {overdueAwaitingInternalApproval ? (
                       <div className="rounded-lg border border-rose-300 bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-800">
-                        Entregavel atrasado: encaminhe e conclua a validacao interna da contribuicao.
+                        Entreg?vel atrasado: encaminhe e conclua a valida??o interna da contribui??o.
                       </div>
                     ) : null}
                     {selectedAction && financialLocked ? (
                     <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
-                      Entregavel vinculado a boletim (financeiro {financialStatusLabel.toLowerCase()}) nao permite alteracoes.
+                      Entreg?vel vinculado a boletim (financeiro {financialStatusLabel.toLowerCase()}) n?o permite altera??es.
                     </div>
                     ) : null}
 
@@ -2710,7 +2710,7 @@ export default function GestorProjetosPage() {
                         className="h-9 w-full rounded-lg border border-slate-200 px-2 text-xs"
                       />
                       <p className="text-xs text-slate-500">
-                        Responsavel: {d.assigned_to ? personLabel(d.assigned_to) : "Nao definido"}
+                        Respons?vel: {d.assigned_to ? personLabel(d.assigned_to) : "N?o definido"}
                       </p>
                       {d.status === "approved_with_comments" ? (
                         <p className="text-xs text-amber-700">Comentario: {d.approval_comment ?? "-"}</p>
@@ -2864,7 +2864,7 @@ export default function GestorProjetosPage() {
                         {pendingContributionReview ? (
                           <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 p-2">
                             <p className="text-xs font-semibold text-amber-800">
-                              Nova contribuicao aguardando aprovacao/retorno interno.
+                              Nova contribui??o aguardando aprova??o/retorno interno.
                             </p>
                             <div className="mt-2 grid gap-2 md:grid-cols-[1fr_auto_auto]">
                               <input
@@ -2881,7 +2881,7 @@ export default function GestorProjetosPage() {
                                 disabled={saving}
                                 className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 disabled:opacity-60"
                               >
-                                Aprovar contribuicao
+                                Aprovar contribui??o
                               </button>
                               <button
                                 type="button"
@@ -2935,20 +2935,20 @@ export default function GestorProjetosPage() {
 
           <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
             <summary className="cursor-pointer text-xs font-semibold text-slate-700">
-              Itens excluidos ({selectedDeletedDeliverables.length})
+              Itens exclu?dos ({selectedDeletedDeliverables.length})
             </summary>
             <div className="mt-2 space-y-2">
               {selectedDeletedDeliverables.length ? (
                 selectedDeletedDeliverables.map((d) => (
                   <div key={d.id} className="rounded-lg border border-slate-200 bg-white p-2 text-xs text-slate-700">
-                    <p className="font-semibold">{d.title ?? `Entregavel ${d.deliverable_ref_id.slice(0, 8)}`}</p>
+                    <p className="font-semibold">{d.title ?? `Entreg?vel ${d.deliverable_ref_id.slice(0, 8)}`}</p>
                     <p>Excluido em: {new Date(d.deleted_at).toLocaleString("pt-BR")}</p>
                     <p>Prazo: {d.due_date ?? "-"}</p>
                     <p>Status anterior: {d.status ?? "-"}</p>
                   </div>
                 ))
               ) : (
-                <p className="text-xs text-slate-500">Nenhum item excluido neste projeto.</p>
+                <p className="text-xs text-slate-500">Nenhum item exclu?do neste projeto.</p>
               )}
             </div>
           </details>

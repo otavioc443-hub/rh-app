@@ -1,0 +1,54 @@
+{
+  "cases": [
+    {
+      "id": "afonso-nonato-andrade-pontes-2026-03-06-v1",
+      "status": "auditoria",
+      "self_selected_ids": [
+        "otimista",
+        "tranquilo",
+        "racional",
+        "paciente",
+        "leal",
+        "reservado",
+        "perfeccionista",
+        "entusiasta",
+        "bom_companheiro",
+        "equilibrado",
+        "persistente",
+        "resoluto",
+        "habilidoso",
+        "discreto",
+        "calmo",
+        "compreensivo",
+        "dedicado",
+        "modesto"
+      ],
+      "others_selected_ids": [
+        "tranquilo",
+        "leal",
+        "paciente",
+        "resoluto",
+        "persistente",
+        "equilibrado",
+        "bom_companheiro",
+        "ativo",
+        "cumpridor",
+        "habilidoso",
+        "calmo",
+        "decidido",
+        "dedicado",
+        "eficiente",
+        "comunicativo"
+      ],
+      "expected": {
+        "self": {
+          "executor": 13.21,
+          "comunicador": 14.64,
+          "planejador": 35.36,
+          "analista": 36.79
+        }
+      },
+      "notes": "captura por print; passo 2 como Q1 e passo 3 como Q2"
+    }
+  ]
+}

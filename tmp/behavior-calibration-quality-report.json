@@ -1,0 +1,128 @@
+{
+  "generated_at": "2026-03-09T19:33:24.650Z",
+  "source_file": "scripts\\behavior-calibration-cases.json",
+  "matrix_mode": "atual",
+  "blend_alpha": null,
+  "summary": {
+    "comparisons": 14,
+    "mae_mean": 0.81,
+    "rmse_mean": 0.98,
+    "critical_cases": 0,
+    "high_cases": 0,
+    "medium_cases": 3
+  },
+  "ranking": [
+    {
+      "id": "clycia-jennifer-simao-2026-03-06-v1",
+      "mae": 1.67,
+      "rmse": 2.03,
+      "risk": "medio",
+      "selfCount": 36,
+      "othersCount": 34
+    },
+    {
+      "id": "afonso-nonato-andrade-pontes-2026-03-06-v1",
+      "mae": 1.24,
+      "rmse": 1.52,
+      "risk": "medio",
+      "selfCount": 18,
+      "othersCount": 15
+    },
+    {
+      "id": "isabella-fernandes-da-silva-2026-03-06-v1",
+      "mae": 1.12,
+      "rmse": 1.41,
+      "risk": "medio",
+      "selfCount": 17,
+      "othersCount": 17
+    },
+    {
+      "id": "adriano-ighor-moura-soares-2026-03-06-v1",
+      "mae": 0.99,
+      "rmse": 1.16,
+      "risk": "baixo",
+      "selfCount": 36,
+      "othersCount": 27
+    },
+    {
+      "id": "pedro-navar-nascimento-de-andrade-ramos-2026-03-05",
+      "mae": 0.89,
+      "rmse": 1.08,
+      "risk": "baixo",
+      "selfCount": 8,
+      "othersCount": 13
+    },
+    {
+      "id": "jefferson-vieira-da-souza-2026-03-05",
+      "mae": 0.74,
+      "rmse": 0.93,
+      "risk": "baixo",
+      "selfCount": 20,
+      "othersCount": 8
+    },
+    {
+      "id": "jesse-2026-03-05",
+      "mae": 0.73,
+      "rmse": 0.75,
+      "risk": "baixo",
+      "selfCount": 16,
+      "othersCount": 23
+    },
+    {
+      "id": "rodrigo-augusto-da-c-s-simioni-2026-03-04",
+      "mae": 0.73,
+      "rmse": 0.94,
+      "risk": "baixo",
+      "selfCount": 30,
+      "othersCount": 17
+    },
+    {
+      "id": "ana-beatriz-lopes-nobre-2026-03-05",
+      "mae": 0.65,
+      "rmse": 0.76,
+      "risk": "baixo",
+      "selfCount": 21,
+      "othersCount": 9
+    },
+    {
+      "id": "isadora-maria-ferreira-de-lima-2026-03-04",
+      "mae": 0.6,
+      "rmse": 0.8,
+      "risk": "baixo",
+      "selfCount": 36,
+      "othersCount": 37
+    },
+    {
+      "id": "otavio-victor-ferreira-da-silva-2026-03-05",
+      "mae": 0.56,
+      "rmse": 0.69,
+      "risk": "baixo",
+      "selfCount": 36,
+      "othersCount": 16
+    },
+    {
+      "id": "lucas-barbosa-rocha-2026-03-04",
+      "mae": 0.55,
+      "rmse": 0.67,
+      "risk": "baixo",
+      "selfCount": 29,
+      "othersCount": 24
+    },
+    {
+      "id": "edmilson-lucas-de-freitas-arquino-2026-03-06-v1",
+      "mae": 0.54,
+      "rmse": 0.65,
+      "risk": "baixo",
+      "selfCount": 34,
+      "othersCount": 15
+    },
+    {
+      "id": "carlos-vinicius-domingos-da-silva-2026-03-05",
+      "mae": 0.28,
+      "rmse": 0.34,
+      "risk": "baixo",
+      "selfCount": 20,
+      "othersCount": 20
+    }
+  ]
+}
