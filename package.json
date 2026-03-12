@@ -14,6 +14,7 @@
     "calibrate:behavior:optimize": "node --preserve-symlinks-main scripts/optimize-behavior-matrix.mjs",
     "calibrate:behavior:diagnose": "node --preserve-symlinks-main scripts/diagnose-behavior-cases.mjs",
     "calibrate:behavior:quality": "node --preserve-symlinks-main scripts/report-behavior-calibration-quality.mjs",
+    "calibrate:behavior:medium": "node --preserve-symlinks-main scripts/report-behavior-medium-cases.mjs",
     "calibrate:behavior:quality:disc": "node --preserve-symlinks-main scripts/report-behavior-calibration-quality.mjs --matrix disc",
     "calibrate:behavior:quality:blend": "node --preserve-symlinks-main scripts/report-behavior-calibration-quality.mjs --matrix blend --blend-alpha 0.7",
     "calibrate:behavior:impact": "node --preserve-symlinks-main scripts/analyze-behavior-case-impact.mjs",

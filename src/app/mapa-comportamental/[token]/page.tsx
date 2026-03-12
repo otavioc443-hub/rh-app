@@ -1,20 +1,29 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Search } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { CheckCircle2, Layers3 } from "lucide-react";
 import { useParams } from "next/navigation";
 import {
   BEHAVIOR_ADJECTIVES,
   BEHAVIOR_AXIS_META,
   calculateBehaviorAxisResults,
+  calculateBehaviorCompetencies,
+  calculateBehaviorFactorResults,
+  calculateBehaviorIsolatedProfile,
+  calculateBehaviorLeadershipProfile,
+  combineBehaviorAxisResults,
   getBehaviorConfidence,
   getBehaviorClassificationLabel,
   getBehaviorSummaryLine,
   getPredominantBehaviorAxes,
+  type BehaviorCompetencyPoint,
+  type BehaviorFactorResult,
+  type BehaviorIsolatedProfilePoint,
+  type BehaviorLeadershipPoint,
   type BehaviorAxisResult,
 } from "@/lib/behaviorProfile";
 
-type Step = 1 | 2 | 3;
+type Step = 2 | 3;
 
 function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -31,13 +40,12 @@ export default function PublicBehaviorMapPage({
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState("");
-  const [step, setStep] = useState<Step>(1);
+  const [step, setStep] = useState<Step>(2);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [inviteStatus, setInviteStatus] = useState<
     "pending" | "completed" | "expired" | "cancelled" | null
   >(null);
-  const [search, setSearch] = useState("");
   const [selfSelected, setSelfSelected] = useState<string[]>([]);
   const [othersSelected, setOthersSelected] = useState<string[]>([]);
 
@@ -80,14 +88,25 @@ export default function PublicBehaviorMapPage({
     };
   }, [params]);
 
-  const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
-    if (!term) return BEHAVIOR_ADJECTIVES;
-    return BEHAVIOR_ADJECTIVES.filter((item) => item.label.toLowerCase().includes(term));
-  }, [search]);
-
   const selfResults = useMemo(() => calculateBehaviorAxisResults(selfSelected), [selfSelected]);
   const othersResults = useMemo(() => calculateBehaviorAxisResults(othersSelected), [othersSelected]);
+  const consolidatedResults = useMemo(
+    () => combineBehaviorAxisResults(selfResults, othersResults, 0.7),
+    [selfResults, othersResults]
+  );
+  const factorResults = useMemo(() => calculateBehaviorFactorResults(othersSelected), [othersSelected]);
+  const isolatedProfile = useMemo(
+    () => calculateBehaviorIsolatedProfile(selfResults, othersResults),
+    [selfResults, othersResults]
+  );
+  const leadershipProfile = useMemo(
+    () => calculateBehaviorLeadershipProfile(selfResults, othersResults),
+    [selfResults, othersResults]
+  );
+  const competencyProfile = useMemo(
+    () => calculateBehaviorCompetencies(consolidatedResults, factorResults, leadershipProfile),
+    [consolidatedResults, factorResults, leadershipProfile]
+  );
 
   const sortedSelf = useMemo(
     () => [...selfResults].sort((a, b) => b.percent - a.percent),
@@ -97,13 +116,13 @@ export default function PublicBehaviorMapPage({
     () => [...othersResults].sort((a, b) => b.percent - a.percent),
     [othersResults]
   );
+  const sortedConsolidated = useMemo(
+    () => [...consolidatedResults].sort((a, b) => b.percent - a.percent),
+    [consolidatedResults]
+  );
 
   async function submit() {
     if (!token) return;
-    if (!fullName.trim() || !email.trim()) {
-      setMsg("Preencha nome e e-mail.");
-      return;
-    }
     if (!selfSelected.length || !othersSelected.length) {
       setMsg("Selecione adjetivos nas etapas 2 e 3.");
       return;
@@ -117,8 +136,8 @@ export default function PublicBehaviorMapPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           token,
-          fullName: fullName.trim(),
-          email: email.trim(),
+          fullName: fullName.trim() || "Colaborador",
+          email: email.trim() || "sem-email@local",
           selfSelectedIds: selfSelected,
           othersSelectedIds: othersSelected,
         }),
@@ -164,17 +183,7 @@ export default function PublicBehaviorMapPage({
         ) : (
           <>
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-                <button
-                  type="button"
-                  onClick={() => setStep(1)}
-                  className={cx(
-                    "rounded-xl border px-4 py-3 text-left text-sm",
-                    step === 1 ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"
-                  )}
-                >
-                  1. Identificacao
-                </button>
+              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 <button
                   type="button"
                   onClick={() => setStep(2)}
@@ -183,7 +192,7 @@ export default function PublicBehaviorMapPage({
                     step === 2 ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"
                   )}
                 >
-                  2. Como eu sou
+                  1. Como eu sou
                 </button>
                 <button
                   type="button"
@@ -193,58 +202,26 @@ export default function PublicBehaviorMapPage({
                     step === 3 ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"
                   )}
                 >
-                  3. Como o meio me percebe
+                  2. Como o meio me percebe
                 </button>
               </div>
             </div>
 
-            {step === 1 ? (
-              <section className="rounded-2xl border border-slate-200 bg-white p-6">
-                <div className="grid gap-3 md:grid-cols-2">
-                  <label className="grid gap-1 text-xs font-semibold text-slate-700">
-                    Nome completo
-                    <input
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      className="h-11 rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-slate-300"
-                    />
-                  </label>
-                  <label className="grid gap-1 text-xs font-semibold text-slate-700">
-                    E-mail
-                    <input
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="h-11 rounded-xl border border-slate-200 px-3 text-sm text-slate-900 outline-none focus:border-slate-300"
-                      type="email"
-                    />
-                  </label>
-                </div>
-              </section>
-            ) : (
-              <section className="space-y-4">
+            <section className="space-y-4">
                 <div className="rounded-2xl border border-slate-200 bg-white p-6">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                  <h2 className="text-sm font-semibold text-slate-900">
-                    {step === 2
-                      ? "Marque os adjetivos que melhor te representam"
-                      : "Marque como os outros esperam que voce seja"}
-                  </h2>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Nao existem respostas certas. O objetivo e identificar predominancia relativa entre os perfis.
-                  </p>
-                    <div className="flex h-11 w-full max-w-sm items-center gap-2 rounded-xl border border-slate-200 bg-white px-3">
-                      <Search size={15} className="text-slate-400" />
-                      <input
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="w-full bg-transparent text-sm text-slate-900 outline-none"
-                        placeholder="Buscar adjetivo"
-                      />
-                    </div>
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-900">
+                      {step === 2
+                        ? "Marque os adjetivos que melhor te representam"
+                        : "Agora marque como os outros pensam que voce deveria ser"}
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Nao existem respostas certas. O objetivo e identificar predominancia relativa entre os perfis.
+                    </p>
                   </div>
 
-                  <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                    {filtered.map((item) => {
+                  <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-10 2xl:grid-cols-10">
+                    {BEHAVIOR_ADJECTIVES.map((item) => {
                       const selected =
                         step === 2
                           ? selfSelected.includes(item.id)
@@ -259,13 +236,13 @@ export default function PublicBehaviorMapPage({
                               : setOthersSelected((prev) => toggle(prev, item.id))
                           }
                           className={cx(
-                            "rounded-xl border px-3 py-2 text-left text-sm transition",
+                            "flex min-h-[56px] items-center justify-center rounded-xl border px-2 py-2 text-center text-[15px] font-medium leading-snug transition",
                             selected
                               ? "border-slate-900 bg-slate-900 text-white"
                               : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                           )}
                         >
-                          {item.label}
+                          <span className="break-words">{item.label}</span>
                         </button>
                       );
                     })}
@@ -274,6 +251,27 @@ export default function PublicBehaviorMapPage({
                     Selecionados nesta etapa:{" "}
                     <b>{step === 2 ? selfSelected.length : othersSelected.length}</b>
                   </p>
+
+                  <div className="mt-4 flex justify-end">
+                    {step === 2 ? (
+                      <button
+                        type="button"
+                        onClick={() => setStep(3)}
+                        disabled={!selfSelected.length}
+                        className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60"
+                      >
+                        Ir para etapa 3
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setStep(2)}
+                        className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                      >
+                        Voltar etapa 2
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid gap-4 xl:grid-cols-2">
@@ -290,8 +288,35 @@ export default function PublicBehaviorMapPage({
                     results={sortedOthers}
                   />
                 </div>
-              </section>
-            )}
+                <SimpleResultCard
+                  title="Perfil consolidado (leitura complementar)"
+                  personName={fullName || "O colaborador"}
+                  selectedCount={selfSelected.length + othersSelected.length}
+                  helperText="Consolidado com 70% de Q1 e 30% de Q2. Use como leitura complementar."
+                  icon={<Layers3 size={16} />}
+                  results={sortedConsolidated}
+                />
+                <FactorCard
+                  title="Fatores positivos e negativos por perfil"
+                  helperText="Leitura derivada de Q2 para analise complementar."
+                  results={factorResults}
+                />
+                <TrendComparisonCard
+                  title="Perfil isolado"
+                  helperText="Comparativo entre perfil atual, exigencia do meio e forca de adaptacao."
+                  points={isolatedProfile}
+                />
+                <TrendComparisonCard
+                  title="Estilo de lideranca x lideranca atual"
+                  helperText="Comparativo derivado dos eixos de dominancia, informalidade, condescendencia e formalidade."
+                  points={leadershipProfile}
+                />
+                <CompetencyRadarCard
+                  title="Grafico de competencias"
+                  helperText="Radar derivado do consolidado, fatores e estilo de lideranca."
+                  points={competencyProfile}
+                />
+            </section>
 
             <div className="flex justify-end">
               <button
@@ -319,15 +344,123 @@ export default function PublicBehaviorMapPage({
   );
 }
 
+function FactorCard({
+  title,
+  helperText,
+  results,
+}: {
+  title: string;
+  helperText: string;
+  results: BehaviorFactorResult[];
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+      <p className="text-sm font-semibold text-slate-900">{title}</p>
+      <p className="mt-2 text-xs text-slate-500">{helperText}</p>
+      <div className="mt-4 space-y-4">
+        {results.map((item) => (
+          <div key={item.key} className="rounded-xl border border-slate-200 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-semibold text-slate-900">{item.label}</span>
+              <div className="flex items-center gap-2 text-xs font-semibold">
+                <span className="text-emerald-700">+{item.positivePercent.toFixed(1)}%</span>
+                <span className="text-rose-700">-{item.negativePercent.toFixed(1)}%</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TrendComparisonCard({
+  title,
+  helperText,
+  points,
+}: {
+  title: string;
+  helperText: string;
+  points: Array<BehaviorIsolatedProfilePoint | BehaviorLeadershipPoint>;
+}) {
+  const width = 820;
+  const height = 260;
+  const margin = { top: 28, right: 24, bottom: 44, left: 24 };
+  const innerWidth = width - margin.left - margin.right;
+  const innerHeight = height - margin.top - margin.bottom;
+  const maxAbs = 20;
+  const centerY = margin.top + innerHeight / 2;
+  const stepX = points.length > 1 ? innerWidth / (points.length - 1) : innerWidth;
+  const valueToY = (value: number) => centerY - (value / maxAbs) * (innerHeight / 2);
+  const pointX = (index: number) => margin.left + stepX * index;
+  const toPolyline = (values: number[]) => values.map((value, index) => `${pointX(index)},${valueToY(value)}`).join(" ");
+  const currentLine = toPolyline(points.map((item) => item.profileCurrent));
+  const demandLine = toPolyline(points.map((item) => item.environmentDemand));
+  const adaptationLine = toPolyline(points.map((item) => item.adaptationStrength));
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+      <p className="text-sm font-semibold text-slate-900">{title}</p>
+      <p className="mt-2 text-xs text-slate-500">{helperText}</p>
+      <div className="mt-4 overflow-x-auto">
+        <svg viewBox={`0 0 ${width} ${height}`} className="min-w-[720px]">
+          <polyline fill="none" stroke="#7c3aed" strokeWidth="2.5" points={currentLine} />
+          <polyline fill="none" stroke="#e11d48" strokeWidth="2.5" points={demandLine} />
+          <polyline fill="none" stroke="#111827" strokeWidth="2.5" points={adaptationLine} />
+          {points.map((item, index) => {
+            const x = pointX(index);
+            return (
+              <text key={item.key} x={x} y={height - 16} textAnchor="middle" fontSize="12" fill="#334155">
+                {item.label}
+              </text>
+            );
+          })}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function CompetencyRadarCard({
+  title,
+  helperText,
+  points,
+}: {
+  title: string;
+  helperText: string;
+  points: BehaviorCompetencyPoint[];
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5">
+      <p className="text-sm font-semibold text-slate-900">{title}</p>
+      <p className="mt-2 text-xs text-slate-500">{helperText}</p>
+      <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+        {points.map((item) => (
+          <div key={item.order} className="rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-600">
+            <span className="font-semibold text-slate-900">{item.order}. {item.label}</span>
+            <span className="ml-2 rounded-full bg-violet-50 px-2 py-0.5 font-semibold text-violet-700">
+              {item.score.toFixed(1)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SimpleResultCard({
   title,
   personName,
   selectedCount,
+  helperText,
+  icon,
   results,
 }: {
   title: string;
   personName: string;
   selectedCount: number;
+  helperText?: string;
+  icon?: ReactNode;
   results: BehaviorAxisResult[];
 }) {
   const predominant = getPredominantBehaviorAxes(results);
@@ -340,8 +473,12 @@ function SimpleResultCard({
         : "border-rose-200 bg-rose-50 text-rose-700";
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5">
-      <p className="text-sm font-semibold text-slate-900">{title}</p>
+      <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
+        {icon}
+        {title}
+      </div>
       <p className="mt-2 text-xs text-slate-500">{getBehaviorSummaryLine(results, personName)}</p>
+      {helperText ? <p className="mt-1 text-xs text-slate-500">{helperText}</p> : null}
       <span className={cx("mt-2 inline-flex rounded-full border px-2 py-1 text-[11px] font-semibold", confidenceChipClass)}>
         {confidence.label}
       </span>

@@ -294,6 +294,11 @@ function main() {
       risk: classifyRisk(caseMae),
       selfCount: Array.isArray(c.self_selected_ids) ? c.self_selected_ids.length : 0,
       othersCount: Array.isArray(c.others_selected_ids) ? c.others_selected_ids.length : 0,
+      actual,
+      expected,
+      diff: Object.fromEntries(
+        AXES.map((axis) => [axis, Number(((actual[axis] ?? 0) - (expected[axis] ?? 0)).toFixed(2))])
+      ),
     });
   }
 
