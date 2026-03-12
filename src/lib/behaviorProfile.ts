@@ -24,6 +24,43 @@ export type BehaviorAxisResult = {
   isPredominant: boolean;
 };
 
+export type BehaviorFactorResult = {
+  key: BehaviorAxisKey;
+  label: string;
+  positiveScore: number;
+  negativeScore: number;
+  positivePercent: number;
+  negativePercent: number;
+};
+
+export type BehaviorIsolatedProfilePoint = {
+  key: BehaviorAxisKey;
+  label: string;
+  profileCurrent: number;
+  environmentDemand: number;
+  adaptationStrength: number;
+};
+
+export type BehaviorLeadershipKey =
+  | "dominante"
+  | "informal"
+  | "condescendente"
+  | "formal";
+
+export type BehaviorLeadershipPoint = {
+  key: BehaviorLeadershipKey;
+  label: string;
+  profileCurrent: number;
+  environmentDemand: number;
+  adaptationStrength: number;
+};
+
+export type BehaviorCompetencyPoint = {
+  order: number;
+  label: string;
+  score: number;
+};
+
 export type BehaviorConfidenceLevel = "baixa" | "media" | "alta";
 
 export const BEHAVIOR_AXIS_META: Record<
@@ -284,6 +321,154 @@ export function calculateBehaviorAxisResults(selectedIds: string[]): BehaviorAxi
       isPredominant: percent >= 25,
     };
   });
+}
+
+export function calculateBehaviorFactorResults(selectedIds: string[]): BehaviorFactorResult[] {
+  const found = BEHAVIOR_ADJECTIVES.filter((item) => selectedIds.includes(item.id));
+  const positiveTotals: BehaviorWeights = { executor: 0, comunicador: 0, planejador: 0, analista: 0 };
+  const negativeTotals: BehaviorWeights = { executor: 0, comunicador: 0, planejador: 0, analista: 0 };
+
+  for (const item of found) {
+    const target = item.attention ? negativeTotals : positiveTotals;
+    target.executor += item.weights.executor;
+    target.comunicador += item.weights.comunicador;
+    target.planejador += item.weights.planejador;
+    target.analista += item.weights.analista;
+  }
+
+  return (Object.keys(BEHAVIOR_AXIS_META) as BehaviorAxisKey[]).map((key) => {
+    const positiveScore = positiveTotals[key];
+    const negativeScore = negativeTotals[key];
+    const total = positiveScore + negativeScore || 1;
+    return {
+      key,
+      label: BEHAVIOR_AXIS_META[key].label,
+      positiveScore,
+      negativeScore,
+      positivePercent: Number(((positiveScore / total) * 100).toFixed(2)),
+      negativePercent: Number(((negativeScore / total) * 100).toFixed(2)),
+    };
+  });
+}
+
+export function combineBehaviorAxisResults(
+  primary: BehaviorAxisResult[],
+  secondary: BehaviorAxisResult[],
+  primaryWeight = 0.7
+): BehaviorAxisResult[] {
+  const secondaryWeight = 1 - primaryWeight;
+  return (Object.keys(BEHAVIOR_AXIS_META) as BehaviorAxisKey[]).map((key) => {
+    const primaryItem = primary.find((item) => item.key === key);
+    const secondaryItem = secondary.find((item) => item.key === key);
+    const score = Number(
+      (((primaryItem?.score ?? 0) * primaryWeight) + ((secondaryItem?.score ?? 0) * secondaryWeight)).toFixed(2)
+    );
+    const percent = Number(
+      (((primaryItem?.percent ?? 0) * primaryWeight) + ((secondaryItem?.percent ?? 0) * secondaryWeight)).toFixed(2)
+    );
+
+    return {
+      key,
+      label: BEHAVIOR_AXIS_META[key].label,
+      score,
+      percent,
+      classification: classifyBehaviorPercent(percent),
+      isPredominant: percent >= 25,
+    };
+  });
+}
+
+export function calculateBehaviorIsolatedProfile(
+  selfResults: BehaviorAxisResult[],
+  othersResults: BehaviorAxisResult[]
+): BehaviorIsolatedProfilePoint[] {
+  return (Object.keys(BEHAVIOR_AXIS_META) as BehaviorAxisKey[]).map((key) => {
+    const self = selfResults.find((item) => item.key === key)?.percent ?? 25;
+    const others = othersResults.find((item) => item.key === key)?.percent ?? 25;
+
+    return {
+      key,
+      label: BEHAVIOR_AXIS_META[key].label,
+      profileCurrent: Number((self - 25).toFixed(2)),
+      environmentDemand: Number((others - 25).toFixed(2)),
+      // Keeps the adaptation line readable and centered between self and demand,
+      // with more weight on the person's natural profile.
+      adaptationStrength: Number((((self * 2 + others) / 3) - 25).toFixed(2)),
+    };
+  });
+}
+
+export function calculateBehaviorLeadershipProfile(
+  selfResults: BehaviorAxisResult[],
+  othersResults: BehaviorAxisResult[]
+): BehaviorLeadershipPoint[] {
+  const selfMap = Object.fromEntries(selfResults.map((item) => [item.key, item.percent])) as Record<
+    BehaviorAxisKey,
+    number
+  >;
+  const othersMap = Object.fromEntries(
+    othersResults.map((item) => [item.key, item.percent])
+  ) as Record<BehaviorAxisKey, number>;
+
+  function derive(source: Record<BehaviorAxisKey, number>) {
+    return {
+      dominante: Number((((source.executor * 0.7) + (source.comunicador * 0.3)) - 25).toFixed(2)),
+      informal: Number((((source.comunicador * 0.65) + (source.planejador * 0.35)) - 25).toFixed(2)),
+      condescendente: Number((((source.planejador * 0.6) + (source.analista * 0.4)) - 25).toFixed(2)),
+      formal: Number((((source.analista * 0.7) + (source.executor * 0.3)) - 25).toFixed(2)),
+    };
+  }
+
+  const current = derive(selfMap);
+  const demand = derive(othersMap);
+
+  return [
+    { key: "dominante", label: "Dominante", profileCurrent: current.dominante, environmentDemand: demand.dominante, adaptationStrength: Number((((current.dominante * 2) + demand.dominante) / 3).toFixed(2)) },
+    { key: "informal", label: "Informal", profileCurrent: current.informal, environmentDemand: demand.informal, adaptationStrength: Number((((current.informal * 2) + demand.informal) / 3).toFixed(2)) },
+    { key: "condescendente", label: "Condescendente", profileCurrent: current.condescendente, environmentDemand: demand.condescendente, adaptationStrength: Number((((current.condescendente * 2) + demand.condescendente) / 3).toFixed(2)) },
+    { key: "formal", label: "Formal", profileCurrent: current.formal, environmentDemand: demand.formal, adaptationStrength: Number((((current.formal * 2) + demand.formal) / 3).toFixed(2)) },
+  ];
+}
+
+export function calculateBehaviorCompetencies(
+  consolidatedResults: BehaviorAxisResult[],
+  factorResults: BehaviorFactorResult[],
+  leadershipResults: BehaviorLeadershipPoint[]
+): BehaviorCompetencyPoint[] {
+  const consolidated = Object.fromEntries(
+    consolidatedResults.map((item) => [item.key, item.percent / 10])
+  ) as Record<BehaviorAxisKey, number>;
+  const factors = Object.fromEntries(
+    factorResults.map((item) => [item.key, (item.positivePercent - item.negativePercent) / 20])
+  ) as Record<BehaviorAxisKey, number>;
+  const leadership = Object.fromEntries(
+    leadershipResults.map((item) => [item.key, item.adaptationStrength / 10])
+  ) as Record<BehaviorLeadershipKey, number>;
+
+  const metric = (value: number) => Number(Math.max(2.5, Math.min(9.5, value)).toFixed(2));
+
+  return [
+    { order: 1, label: "Tolerancia", score: metric(5 + consolidated.planejador * 0.5 + factors.planejador * 0.4) },
+    { order: 2, label: "Planejamento", score: metric(5 + consolidated.planejador * 0.8 + leadership.formal * 0.3) },
+    { order: 3, label: "Empatia", score: metric(5 + consolidated.comunicador * 0.5 + consolidated.planejador * 0.3 + factors.comunicador * 0.3) },
+    { order: 4, label: "Capacidade de ouvir", score: metric(5 + consolidated.planejador * 0.4 + consolidated.analista * 0.4) },
+    { order: 5, label: "Concentracao", score: metric(5 + consolidated.analista * 0.7 + leadership.formal * 0.2) },
+    { order: 6, label: "Condescendencia", score: metric(5 + consolidated.planejador * 0.5 + leadership.condescendente * 0.5) },
+    { order: 7, label: "Perfil Tecnico", score: metric(5 + consolidated.analista * 0.8 + factors.analista * 0.3) },
+    { order: 8, label: "Organizacao", score: metric(5 + consolidated.analista * 0.5 + consolidated.planejador * 0.5) },
+    { order: 9, label: "Detalhismo", score: metric(5 + consolidated.analista * 0.8) },
+    { order: 10, label: "Rigorosidade", score: metric(5 + consolidated.analista * 0.7 + leadership.formal * 0.3) },
+    { order: 11, label: "Orientado por resultado", score: metric(5 + consolidated.executor * 0.8 + leadership.dominante * 0.2) },
+    { order: 12, label: "Multitarefas", score: metric(5 + consolidated.executor * 0.4 + consolidated.comunicador * 0.4) },
+    { order: 13, label: "Automotivacao", score: metric(5 + consolidated.executor * 0.7 + factors.executor * 0.2) },
+    { order: 14, label: "Proatividade", score: metric(5 + consolidated.executor * 0.7 + consolidated.comunicador * 0.2) },
+    { order: 15, label: "Dinamismo", score: metric(5 + consolidated.executor * 0.5 + consolidated.comunicador * 0.5) },
+    { order: 16, label: "Dominancia", score: metric(5 + leadership.dominante * 0.8 + consolidated.executor * 0.3) },
+    { order: 17, label: "Extroversao", score: metric(5 + consolidated.comunicador * 0.8 + leadership.informal * 0.2) },
+    { order: 18, label: "Relacionamento interpessoal", score: metric(5 + consolidated.comunicador * 0.6 + consolidated.planejador * 0.2) },
+    { order: 19, label: "Sociabilidade", score: metric(5 + consolidated.comunicador * 0.8 + factors.comunicador * 0.2) },
+    { order: 20, label: "Orientado por relacionamento", score: metric(5 + consolidated.comunicador * 0.5 + consolidated.planejador * 0.4) },
+  ];
 }
 
 export function getPredominantBehaviorAxes(results: BehaviorAxisResult[]) {
