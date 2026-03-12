@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-09T19:33:24.650Z",
+  "generated_at": "2026-03-12T04:16:00.586Z",
   "source_file": "scripts\\behavior-calibration-cases.json",
   "matrix_mode": "atual",
   "blend_alpha": null,
@@ -18,7 +18,25 @@
       "rmse": 2.03,
       "risk": "medio",
       "selfCount": 36,
-      "othersCount": 34
+      "othersCount": 34,
+      "actual": {
+        "executor": 22.5,
+        "comunicador": 18.33,
+        "planejador": 30,
+        "analista": 29.17
+      },
+      "expected": {
+        "executor": 23.36,
+        "comunicador": 20.8,
+        "planejador": 29.76,
+        "analista": 26.08
+      },
+      "diff": {
+        "executor": -0.86,
+        "comunicador": -2.47,
+        "planejador": 0.24,
+        "analista": 3.09
+      }
     },
     {
       "id": "afonso-nonato-andrade-pontes-2026-03-06-v1",
@@ -26,7 +44,25 @@
       "rmse": 1.52,
       "risk": "medio",
       "selfCount": 18,
-      "othersCount": 15
+      "othersCount": 15,
+      "actual": {
+        "executor": 15.69,
+        "comunicador": 13.73,
+        "planejador": 35.29,
+        "analista": 35.29
+      },
+      "expected": {
+        "executor": 13.21,
+        "comunicador": 14.64,
+        "planejador": 35.36,
+        "analista": 36.79
+      },
+      "diff": {
+        "executor": 2.48,
+        "comunicador": -0.91,
+        "planejador": -0.07,
+        "analista": -1.5
+      }
     },
     {
       "id": "isabella-fernandes-da-silva-2026-03-06-v1",
@@ -34,7 +70,25 @@
       "rmse": 1.41,
       "risk": "medio",
       "selfCount": 17,
-      "othersCount": 17
+      "othersCount": 17,
+      "actual": {
+        "executor": 14.29,
+        "comunicador": 25,
+        "planejador": 30.36,
+        "analista": 30.36
+      },
+      "expected": {
+        "executor": 14.13,
+        "comunicador": 26.86,
+        "planejador": 28.27,
+        "analista": 30.74
+      },
+      "diff": {
+        "executor": 0.16,
+        "comunicador": -1.86,
+        "planejador": 2.09,
+        "analista": -0.38
+      }
     },
     {
       "id": "adriano-ighor-moura-soares-2026-03-06-v1",
@@ -42,7 +96,25 @@
       "rmse": 1.16,
       "risk": "baixo",
       "selfCount": 36,
-      "othersCount": 27
+      "othersCount": 27,
+      "actual": {
+        "executor": 26.36,
+        "comunicador": 20.91,
+        "planejador": 24.55,
+        "analista": 28.18
+      },
+      "expected": {
+        "executor": 26.74,
+        "comunicador": 18.92,
+        "planejador": 25.35,
+        "analista": 28.99
+      },
+      "diff": {
+        "executor": -0.38,
+        "comunicador": 1.99,
+        "planejador": -0.8,
+        "analista": -0.81
+      }
     },
     {
       "id": "pedro-navar-nascimento-de-andrade-ramos-2026-03-05",
@@ -50,7 +122,25 @@
       "rmse": 1.08,
       "risk": "baixo",
       "selfCount": 8,
-      "othersCount": 13
+      "othersCount": 13,
+      "actual": {
+        "executor": 29.17,
+        "comunicador": 16.67,
+        "planejador": 25,
+        "analista": 29.17
+      },
+      "expected": {
+        "executor": 29.3,
+        "comunicador": 14.88,
+        "planejador": 25.58,
+        "analista": 30.23
+      },
+      "diff": {
+        "executor": -0.13,
+        "comunicador": 1.79,
+        "planejador": -0.58,
+        "analista": -1.06
+      }
     },
     {
       "id": "jefferson-vieira-da-souza-2026-03-05",
@@ -58,7 +148,25 @@
       "rmse": 0.93,
       "risk": "baixo",
       "selfCount": 20,
-      "othersCount": 8
+      "othersCount": 8,
+      "actual": {
+        "executor": 24.19,
+        "comunicador": 12.9,
+        "planejador": 29.03,
+        "analista": 33.87
+      },
+      "expected": {
+        "executor": 23.86,
+        "comunicador": 11.76,
+        "planejador": 29.08,
+        "analista": 35.29
+      },
+      "diff": {
+        "executor": 0.33,
+        "comunicador": 1.14,
+        "planejador": -0.05,
+        "analista": -1.42
+      }
     },
     {
       "id": "jesse-2026-03-05",
@@ -66,7 +174,25 @@
       "rmse": 0.75,
       "risk": "baixo",
       "selfCount": 16,
-      "othersCount": 23
+      "othersCount": 23,
+      "actual": {
+        "executor": 30.43,
+        "comunicador": 32.61,
+        "planejador": 23.91,
+        "analista": 13.04
+      },
+      "expected": {
+        "executor": 29.5,
+        "comunicador": 33.33,
+        "planejador": 23.37,
+        "analista": 13.79
+      },
+      "diff": {
+        "executor": 0.93,
+        "comunicador": -0.72,
+        "planejador": 0.54,
+        "analista": -0.75
+      }
     },
     {
       "id": "rodrigo-augusto-da-c-s-simioni-2026-03-04",
@@ -74,7 +200,25 @@
       "rmse": 0.94,
       "risk": "baixo",
       "selfCount": 30,
-      "othersCount": 17
+      "othersCount": 17,
+      "actual": {
+        "executor": 25.29,
+        "comunicador": 20.69,
+        "planejador": 31.03,
+        "analista": 22.99
+      },
+      "expected": {
+        "executor": 26.56,
+        "comunicador": 20.88,
+        "planejador": 29.67,
+        "analista": 22.89
+      },
+      "diff": {
+        "executor": -1.27,
+        "comunicador": -0.19,
+        "planejador": 1.36,
+        "analista": 0.1
+      }
     },
     {
       "id": "ana-beatriz-lopes-nobre-2026-03-05",
@@ -82,7 +226,25 @@
       "rmse": 0.76,
       "risk": "baixo",
       "selfCount": 21,
-      "othersCount": 9
+      "othersCount": 9,
+      "actual": {
+        "executor": 16.67,
+        "comunicador": 28.33,
+        "planejador": 30,
+        "analista": 25
+      },
+      "expected": {
+        "executor": 15.46,
+        "comunicador": 29.02,
+        "planejador": 30.6,
+        "analista": 24.92
+      },
+      "diff": {
+        "executor": 1.21,
+        "comunicador": -0.69,
+        "planejador": -0.6,
+        "analista": 0.08
+      }
     },
     {
       "id": "isadora-maria-ferreira-de-lima-2026-03-04",
@@ -90,7 +252,25 @@
       "rmse": 0.8,
       "risk": "baixo",
       "selfCount": 36,
-      "othersCount": 37
+      "othersCount": 37,
+      "actual": {
+        "executor": 20.87,
+        "comunicador": 27.83,
+        "planejador": 25.22,
+        "analista": 26.09
+      },
+      "expected": {
+        "executor": 21.91,
+        "comunicador": 27.87,
+        "planejador": 25.32,
+        "analista": 24.89
+      },
+      "diff": {
+        "executor": -1.04,
+        "comunicador": -0.04,
+        "planejador": -0.1,
+        "analista": 1.2
+      }
     },
     {
       "id": "otavio-victor-ferreira-da-silva-2026-03-05",
@@ -98,7 +278,25 @@
       "rmse": 0.69,
       "risk": "baixo",
       "selfCount": 36,
-      "othersCount": 16
+      "othersCount": 16,
+      "actual": {
+        "executor": 20,
+        "comunicador": 20.87,
+        "planejador": 29.57,
+        "analista": 29.57
+      },
+      "expected": {
+        "executor": 21.11,
+        "comunicador": 20.57,
+        "planejador": 29.52,
+        "analista": 28.8
+      },
+      "diff": {
+        "executor": -1.11,
+        "comunicador": 0.3,
+        "planejador": 0.05,
+        "analista": 0.77
+      }
     },
     {
       "id": "lucas-barbosa-rocha-2026-03-04",
@@ -106,7 +304,25 @@
       "rmse": 0.67,
       "risk": "baixo",
       "selfCount": 29,
-      "othersCount": 24
+      "othersCount": 24,
+      "actual": {
+        "executor": 37.21,
+        "comunicador": 12.79,
+        "planejador": 24.42,
+        "analista": 25.58
+      },
+      "expected": {
+        "executor": 37.56,
+        "comunicador": 13.47,
+        "planejador": 23.32,
+        "analista": 25.65
+      },
+      "diff": {
+        "executor": -0.35,
+        "comunicador": -0.68,
+        "planejador": 1.1,
+        "analista": -0.07
+      }
     },
     {
       "id": "edmilson-lucas-de-freitas-arquino-2026-03-06-v1",
@@ -114,7 +330,25 @@
       "rmse": 0.65,
       "risk": "baixo",
       "selfCount": 34,
-      "othersCount": 15
+      "othersCount": 15,
+      "actual": {
+        "executor": 16.81,
+        "comunicador": 22.12,
+        "planejador": 32.74,
+        "analista": 28.32
+      },
+      "expected": {
+        "executor": 16.02,
+        "comunicador": 23.12,
+        "planejador": 32.45,
+        "analista": 28.4
+      },
+      "diff": {
+        "executor": 0.79,
+        "comunicador": -1,
+        "planejador": 0.29,
+        "analista": -0.08
+      }
     },
     {
       "id": "carlos-vinicius-domingos-da-silva-2026-03-05",
@@ -122,7 +356,25 @@
       "rmse": 0.34,
       "risk": "baixo",
       "selfCount": 20,
-      "othersCount": 20
+      "othersCount": 20,
+      "actual": {
+        "executor": 20.69,
+        "comunicador": 20.69,
+        "planejador": 20.69,
+        "analista": 37.93
+      },
+      "expected": {
+        "executor": 20.13,
+        "comunicador": 21.07,
+        "planejador": 20.75,
+        "analista": 38.05
+      },
+      "diff": {
+        "executor": 0.56,
+        "comunicador": -0.38,
+        "planejador": -0.06,
+        "analista": -0.12
+      }
     }
   ]
 }

@@ -1,0 +1,252 @@
+{
+  "generated_at": "2026-03-12T04:39:54.801Z",
+  "medium_cases": [
+    {
+      "id": "clycia-jennifer-simao-2026-03-06-v1",
+      "status": "ativo",
+      "mae": 1.67,
+      "selfCount": 36,
+      "othersCount": 34,
+      "actual": {
+        "executor": 22.5,
+        "comunicador": 18.33,
+        "planejador": 30,
+        "analista": 29.17
+      },
+      "expected": {
+        "executor": 23.36,
+        "comunicador": 20.8,
+        "planejador": 29.76,
+        "analista": 26.08
+      },
+      "diff": {
+        "executor": -0.86,
+        "comunicador": -2.47,
+        "planejador": 0.24,
+        "analista": 3.09
+      },
+      "self_selected_ids": [
+        "alegre",
+        "animado",
+        "ativo",
+        "auto_disciplinado",
+        "auto_suficiente",
+        "bem_humorado",
+        "calculista",
+        "calmo",
+        "compreensivo",
+        "comunicativo",
+        "critico",
+        "cumpridor",
+        "decidido",
+        "dedicado",
+        "discreto",
+        "eficiente",
+        "entusiasta",
+        "equilibrado",
+        "firme",
+        "habilidoso",
+        "idealista",
+        "independente",
+        "introvertido",
+        "leal",
+        "metodico",
+        "minucioso",
+        "modesto",
+        "paciente",
+        "perfeccionista",
+        "persistente",
+        "pratico",
+        "racional",
+        "reservado",
+        "simpatico",
+        "sincero",
+        "tranquilo"
+      ]
+    },
+    {
+      "id": "afonso-nonato-andrade-pontes-2026-03-06-v1",
+      "status": "auditoria",
+      "mae": 1.24,
+      "selfCount": 18,
+      "othersCount": 15,
+      "actual": {
+        "executor": 15.69,
+        "comunicador": 13.73,
+        "planejador": 35.29,
+        "analista": 35.29
+      },
+      "expected": {
+        "executor": 13.21,
+        "comunicador": 14.64,
+        "planejador": 35.36,
+        "analista": 36.79
+      },
+      "diff": {
+        "executor": 2.48,
+        "comunicador": -0.91,
+        "planejador": -0.07,
+        "analista": -1.5
+      },
+      "self_selected_ids": [
+        "otimista",
+        "tranquilo",
+        "racional",
+        "paciente",
+        "leal",
+        "reservado",
+        "perfeccionista",
+        "entusiasta",
+        "bom_companheiro",
+        "equilibrado",
+        "persistente",
+        "resoluto",
+        "habilidoso",
+        "discreto",
+        "calmo",
+        "compreensivo",
+        "dedicado",
+        "modesto"
+      ]
+    },
+    {
+      "id": "isabella-fernandes-da-silva-2026-03-06-v1",
+      "status": "auditoria",
+      "mae": 1.12,
+      "selfCount": 17,
+      "othersCount": 17,
+      "actual": {
+        "executor": 14.29,
+        "comunicador": 25,
+        "planejador": 30.36,
+        "analista": 30.36
+      },
+      "expected": {
+        "executor": 14.13,
+        "comunicador": 26.86,
+        "planejador": 28.27,
+        "analista": 30.74
+      },
+      "diff": {
+        "executor": 0.16,
+        "comunicador": -1.86,
+        "planejador": 2.09,
+        "analista": -0.38
+      },
+      "self_selected_ids": [
+        "alegre",
+        "ativo",
+        "bom_companheiro",
+        "comunicativo",
+        "dedicado",
+        "eficiente",
+        "empolgante",
+        "equilibrado",
+        "habilidoso",
+        "indeciso",
+        "leal",
+        "sensivel",
+        "sentimental",
+        "simpatico",
+        "sincero",
+        "teorico",
+        "tranquilo"
+      ]
+    }
+  ],
+  "shared_adjectives": [
+    [
+      "dedicado",
+      3
+    ],
+    [
+      "equilibrado",
+      3
+    ],
+    [
+      "habilidoso",
+      3
+    ],
+    [
+      "leal",
+      3
+    ],
+    [
+      "tranquilo",
+      3
+    ],
+    [
+      "alegre",
+      2
+    ],
+    [
+      "ativo",
+      2
+    ],
+    [
+      "bom_companheiro",
+      2
+    ],
+    [
+      "calmo",
+      2
+    ],
+    [
+      "compreensivo",
+      2
+    ],
+    [
+      "comunicativo",
+      2
+    ],
+    [
+      "discreto",
+      2
+    ],
+    [
+      "eficiente",
+      2
+    ],
+    [
+      "entusiasta",
+      2
+    ],
+    [
+      "modesto",
+      2
+    ],
+    [
+      "paciente",
+      2
+    ],
+    [
+      "perfeccionista",
+      2
+    ],
+    [
+      "persistente",
+      2
+    ],
+    [
+      "racional",
+      2
+    ],
+    [
+      "reservado",
+      2
+    ],
+    [
+      "simpatico",
+      2
+    ],
+    [
+      "sincero",
+      2
+    ]
+  ],
+  "heuristic_notes": [
+    "Q1 continua sendo a ancora do perfil natural.",
+    "Casos medios devem ser revisados manualmente antes de qualquer ajuste na matriz principal.",
+    "Se um ajuste melhorar apenas os casos medios, mas piorar a base total, o ajuste nao deve ser aplicado."
+  ]
+}
