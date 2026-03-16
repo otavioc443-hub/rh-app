@@ -33,7 +33,7 @@ import {
   ChevronLeft,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { forceClientLogout, supabase } from "@/lib/supabaseClient";
+import { forceClientLogout } from "@/lib/supabaseClient";
 import { isRouteHidden } from "@/lib/featureVisibility";
 
 type Role = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "financeiro" | "pd" | "admin";
@@ -66,6 +66,7 @@ type SidebarProps = {
   companyLogoUrl: string | null;
   departmentName: string | null;
   jobTitle: string | null;
+  hiddenRoutes: Set<string>;
   onCollapse?: () => void;
 };
 
@@ -77,11 +78,11 @@ export default function Sidebar({
   companyLogoUrl,
   departmentName,
   jobTitle,
+  hiddenRoutes,
   onCollapse,
 }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const [hiddenRoutes, setHiddenRoutes] = useState<Set<string>>(new Set());
 
   const nav = useMemo<NavItem[]>(
     () => [
@@ -255,39 +256,6 @@ export default function Sidebar({
     ],
     []
   );
-
-  useEffect(() => {
-    let mounted = true;
-
-    async function loadHiddenRoutes() {
-      const { data, error } = await supabase
-        .from("portal_feature_visibility")
-        .select("route_path,hidden")
-        .eq("hidden", true);
-      if (!mounted || error) return;
-
-      const routes = new Set<string>();
-      for (const row of data ?? []) {
-        const route = typeof row.route_path === "string" ? row.route_path.trim() : "";
-        if (route) routes.add(route);
-      }
-      setHiddenRoutes(routes);
-    }
-
-    void loadHiddenRoutes();
-    const onVisibilityUpdated = () => {
-      void loadHiddenRoutes();
-    };
-    if (typeof window !== "undefined") {
-      window.addEventListener("portal-feature-visibility-updated", onVisibilityUpdated);
-    }
-    return () => {
-      mounted = false;
-      if (typeof window !== "undefined") {
-        window.removeEventListener("portal-feature-visibility-updated", onVisibilityUpdated);
-      }
-    };
-  }, [role]);
 
   const navByRole = useMemo(() => {
     return nav

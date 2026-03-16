@@ -49,6 +49,11 @@ type Profile = {
   avatar_url: string | null;
 };
 
+type HiddenRouteRow = {
+  route_path: string | null;
+  hidden: boolean | null;
+};
+
 type ColaboradorName = {
   nome: string | null;
   cargo: string | null;
@@ -81,6 +86,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
   const [jobTitle, setJobTitle] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [hiddenRoutes, setHiddenRoutes] = useState<Set<string>>(new Set());
+  const [hiddenRoutesLoaded, setHiddenRoutesLoaded] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const inFlight = useRef(false);
@@ -120,6 +126,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       setLoading(true);
       setFatalError(null);
       setDebugErr(null);
+      setHiddenRoutesLoaded(false);
 
       try {
         if (typeof window !== "undefined") {
@@ -244,6 +251,11 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         setJobTitle(resolvedJobTitle);
         setAvatarUrl(profile.avatar_url ?? null);
 
+        const hiddenRoutesReq = supabase
+          .from("portal_feature_visibility")
+          .select("route_path,hidden")
+          .eq("hidden", true);
+
         const companyReq = profile.company_id
           ? supabase
               .from("companies")
@@ -256,9 +268,21 @@ export default function PortalShell({ children }: { children: React.ReactNode })
           ? supabase.from("departments").select("id, name").eq("id", profile.department_id).maybeSingle()
           : Promise.resolve({ data: null, error: null });
 
-        const [companyRes, departmentRes] = await Promise.all([companyReq, departmentReq]);
+        const [hiddenRoutesRes, companyRes, departmentRes] = await Promise.all([hiddenRoutesReq, companyReq, departmentReq]);
 
         if (!alive.current) return;
+
+        if (!hiddenRoutesRes.error) {
+          const routes = new Set<string>();
+          for (const row of (hiddenRoutesRes.data ?? []) as HiddenRouteRow[]) {
+            const route = typeof row.route_path === "string" ? row.route_path.trim() : "";
+            if (route) routes.add(route);
+          }
+          setHiddenRoutes(routes);
+        } else {
+          setHiddenRoutes(new Set());
+        }
+        setHiddenRoutesLoaded(true);
 
         setCompany(!companyRes.error && companyRes.data ? (companyRes.data as Company) : null);
         setDepartment(!departmentRes.error && departmentRes.data ? (departmentRes.data as Department) : null);
@@ -338,6 +362,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         if (route) routes.add(route);
       }
       setHiddenRoutes(routes);
+      setHiddenRoutesLoaded(true);
     }
 
     void loadHiddenRoutes();
@@ -356,15 +381,15 @@ export default function PortalShell({ children }: { children: React.ReactNode })
   }, [role]);
 
   useEffect(() => {
-    if (!pathname || !role) return;
+    if (!pathname || !role || !hiddenRoutesLoaded) return;
     if (pathname === "/unauthorized") return;
     if (pathname === "/admin/funcionalidades") return;
     if (isRouteHidden(pathname, hiddenRoutes)) {
       router.replace("/unauthorized");
     }
-  }, [hiddenRoutes, pathname, role, router]);
+  }, [hiddenRoutes, hiddenRoutesLoaded, pathname, role, router]);
 
-  if (loading) {
+  if (loading || !hiddenRoutesLoaded) {
     return (
       <div className="min-h-screen grid place-items-center bg-slate-50">
         <div className="rounded-2xl border border-slate-200 bg-white px-6 py-4">
@@ -441,6 +466,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
             companyLogoUrl={company?.logo_url ?? null}
             departmentName={department?.name ?? null}
             jobTitle={jobTitle}
+            hiddenRoutes={hiddenRoutes}
             onCollapse={() => setSidebarCollapsed(true)}
           />
         ) : null}
