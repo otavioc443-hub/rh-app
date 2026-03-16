@@ -184,7 +184,7 @@ export default function Sidebar({
       {
         label: "P&D",
         icon: Wrench,
-        roles: ["colaborador", "coordenador", "gestor", "rh", "financeiro", "pd", "admin"],
+        roles: ["pd"],
         children: [
           { label: "Painel P&D", icon: LayoutDashboard, href: "/p-d", exact: true },
           { label: "Chamados", icon: ClipboardList, href: "/p-d/chamados" },
