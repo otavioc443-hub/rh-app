@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { isRouteHidden } from "@/lib/featureVisibility";
 
 const PUBLIC_PATHS = ["/", "/auth/callback", "/set-password", "/unauthorized"];
 type CookieOptions = Record<string, unknown>;
@@ -24,6 +25,10 @@ function needsRH(pathname: string) {
 }
 function needsOrganograma(pathname: string) {
   return pathname === "/institucional/organograma" || pathname.startsWith("/institucional/organograma/");
+}
+
+function shouldSkipFeatureVisibility(pathname: string) {
+  return pathname === "/unauthorized" || pathname === "/admin/funcionalidades";
 }
 
 export async function proxy(req: NextRequest) {
@@ -109,6 +114,27 @@ export async function proxy(req: NextRequest) {
   }
 
   // ✅ IMPORTANTÍSSIMO: retornar o res (com cookies atualizados)
+  if (!shouldSkipFeatureVisibility(pathname)) {
+    const { data: hiddenFeatures, error: hiddenError } = await supabase
+      .from("portal_feature_visibility")
+      .select("route_path")
+      .eq("hidden", true);
+
+    if (!hiddenError) {
+      const hiddenRoutes = new Set<string>();
+      for (const row of hiddenFeatures ?? []) {
+        const route = typeof row.route_path === "string" ? row.route_path.trim() : "";
+        if (route) hiddenRoutes.add(route);
+      }
+
+      if (isRouteHidden(pathname, hiddenRoutes)) {
+        const url = req.nextUrl.clone();
+        url.pathname = "/unauthorized";
+        return NextResponse.redirect(url);
+      }
+    }
+  }
+
   return res;
 }
 
