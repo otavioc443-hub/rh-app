@@ -86,7 +86,15 @@ export async function proxy(req: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    const role = prof.role as string | null;
+    let role = prof.role as string | null;
+    try {
+      const { data: currentRole, error: currentRoleErr } = await supabase.rpc("current_role");
+      if (!currentRoleErr && typeof currentRole === "string" && currentRole.trim()) {
+        role = currentRole.trim().toLowerCase();
+      }
+    } catch {
+      // fallback silencioso para a role do profile
+    }
 
     if (needsAdmin(pathname) && role !== "admin") {
       const url = req.nextUrl.clone();
