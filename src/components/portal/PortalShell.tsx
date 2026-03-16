@@ -119,14 +119,16 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       router.replace("/?redirectedFrom=%2Fhome");
     }
 
-    async function boot() {
+    async function boot({ resetVisibilityState = true }: { resetVisibilityState?: boolean } = {}) {
       if (inFlight.current) return;
       inFlight.current = true;
 
       setLoading(true);
       setFatalError(null);
       setDebugErr(null);
-      setHiddenRoutesLoaded(false);
+      if (resetVisibilityState) {
+        setHiddenRoutesLoaded(false);
+      }
 
       try {
         if (typeof window !== "undefined") {
@@ -302,10 +304,11 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       }
     }
 
-    boot();
+    void boot();
 
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event === "INITIAL_SESSION") return;
+      if (event === "TOKEN_REFRESHED") return;
       setRole(null);
       setCompany(null);
       setDepartment(null);
@@ -314,7 +317,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       setAvatarUrl(null);
       setFatalError(null);
       setDebugErr(null);
-      boot();
+      void boot();
     });
 
     const markOnLeave = () => {
@@ -326,7 +329,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
     }
 
     const onProfileUpdated = () => {
-      void boot();
+      void boot({ resetVisibilityState: false });
     };
     if (typeof window !== "undefined") {
       window.addEventListener("portal-profile-updated", onProfileUpdated);

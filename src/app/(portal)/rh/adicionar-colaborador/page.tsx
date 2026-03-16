@@ -7,6 +7,21 @@ import EmployeeForm, { ColaboradorPayload } from "@/components/rh/EmployeeForm";
 import EmployeesImport from "@/components/rh/EmployeesImport";
 import { StatCard, Card, CardBody } from "@/components/ui/PageShell";
 
+function normalizeError(error: unknown, fallback: string) {
+  if (!error) return fallback;
+  if (error instanceof Error) return error.message || fallback;
+
+  const err = error as Record<string, unknown>;
+  const message = err.message ? String(err.message) : "";
+  const code = err.code ? ` | code: ${String(err.code)}` : "";
+  const details = err.details ? ` | details: ${String(err.details)}` : "";
+  const hint = err.hint ? ` | hint: ${String(err.hint)}` : "";
+  const status = err.status ? ` | status: ${String(err.status)}` : "";
+
+  const full = `${message}${code}${status}${details}${hint}`.trim();
+  return full || fallback;
+}
+
 function toDb(payload: ColaboradorPayload) {
   const n = (v: unknown) => {
     if (v === null || v === undefined) return "";
@@ -102,7 +117,7 @@ export default function Page() {
       setMsg("Colaborador salvo com sucesso.");
       await loadStats();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao salvar.");
+      setMsg(`Erro ao salvar colaborador: ${normalizeError(e, "Falha desconhecida.")}`);
     } finally {
       setSaving(false);
     }
@@ -122,7 +137,7 @@ export default function Page() {
       setMsg(`Importa??o conclu?da: ${mapped.length} colaborador(es).`);
       await loadStats();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao importar.");
+      setMsg(`Erro ao importar colaboradores: ${normalizeError(e, "Falha desconhecida.")}`);
     } finally {
       setSaving(false);
     }
