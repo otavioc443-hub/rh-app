@@ -24,7 +24,7 @@ type ProjectType =
   | "basico"
   | "estrutural"
   | "civil"
-  | "eletromec?nico"
+  | "eletromecanico"
   | "eletrico"
   | "hidraulico"
   | "outro";
@@ -47,7 +47,7 @@ type Deliverable = {
   description: string | null;
   due_date: string | null;
   review_due_at?: string | null;
-  discipline_code?: "civil" | "eletromec?nico" | null;
+  discipline_code?: "civil" | "eletromecanico" | null;
   financial_status?: "aberto" | "pendente" | "baixado" | null;
   assigned_to: string | null;
   status: "pending" | "in_progress" | "sent" | "approved" | "approved_with_comments";
@@ -153,7 +153,7 @@ function projectTypeLabel(value: ProjectType | null | undefined) {
   if (value === "basico") return "Basico";
   if (value === "estrutural") return "Estrutural";
   if (value === "civil") return "Civil";
-  if (value === "eletromec?nico") return "Eletromecanico";
+  if (value === "eletromecanico") return "Eletromecanico";
   if (value === "eletrico") return "Eletrico";
   if (value === "hidraulico") return "Hidraulico";
   if (value === "outro") return "Outro";
@@ -1333,7 +1333,7 @@ export default function CoordenadorProjetosPage() {
                     ).length,
                     approved: projectDeliverables.filter(
                       (d) =>
-                        d.discipline_code === "eletromec?nico" &&
+                        d.discipline_code === "eletromecanico" &&
                         (d.status === "approved" || d.status === "approved_with_comments")
                     ).length,
                   },
@@ -1706,9 +1706,9 @@ export default function CoordenadorProjetosPage() {
               const disciplineLabel =
                 d.discipline_code === "civil"
                   ? "Civil"
-                  : d.discipline_code === "eletromec?nico"
+                  : d.discipline_code === "eletromecanico"
                     ? "Eletromecanico"
-                    : "N?o informada";
+                    : "Não informada";
               const financialStatus = d.financial_status ?? "aberto";
               const financialLocked = financialStatus !== "aberto";
               const financialStatusLabel = financialStatus === "baixado" ? "Baixado" : financialStatus === "pendente" ? "Pendente" : "Aberto";

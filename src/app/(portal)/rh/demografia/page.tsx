@@ -254,7 +254,7 @@ export default function RhDemografiaPage() {
       const [colRes, profileRes] = await Promise.all([
         supabase
           .from("colaboradores")
-          .select("id,nome,is_active,data_nascimento,sexo,estado_civil,tipo_contrato,departamento,setor,salario,data_admiss?o")
+          .select("id,nome,is_active,data_nascimento,sexo,estado_civil,tipo_contrato,departamento,setor,salario,data_admissao")
           .order("nome", { ascending: true }),
         uid
           ? supabase.from("profiles").select("company_id").eq("id", uid).maybeSingle<{ company_id: string | null }>()

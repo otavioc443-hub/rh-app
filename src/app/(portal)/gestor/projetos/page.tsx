@@ -31,7 +31,7 @@ type ProjectType =
   | "basico"
   | "estrutural"
   | "civil"
-  | "eletromec?nico"
+  | "eletromecanico"
   | "eletrico"
   | "hidraulico"
   | "outro";
@@ -66,7 +66,7 @@ type Deliverable = {
   description: string | null;
   due_date: string | null;
   review_due_at?: string | null;
-  discipline_code?: "civil" | "eletromec?nico" | null;
+  discipline_code?: "civil" | "eletromecanico" | null;
   financial_status?: "aberto" | "pendente" | "baixado" | null;
   assigned_to: string | null;
   status: "pending" | "in_progress" | "sent" | "approved" | "approved_with_comments";
@@ -171,7 +171,7 @@ const PROJECT_TYPE_OPTIONS: Array<{ value: ProjectType; label: string }> = [
   { value: "basico", label: "Basico" },
   { value: "estrutural", label: "Estrutural" },
   { value: "civil", label: "Civil" },
-  { value: "eletromec?nico", label: "Eletromecanico" },
+  { value: "eletromecanico", label: "Eletromecanico" },
   { value: "eletrico", label: "Eletrico" },
   { value: "hidraulico", label: "Hidraulico" },
   { value: "outro", label: "Outro" },
@@ -418,7 +418,7 @@ export default function GestorProjetosPage() {
   const [newTeamName, setNewTeamName] = useState("");
   const [assignTeamId, setAssignTeamId] = useState("");
   const [deliverableTeamId, setDeliverableTeamId] = useState("");
-  const [deliverableDisciplineDirectionFilter, setDeliverableDisciplineDirectionFilter] = useState<"all" | "civil" | "eletromec?nico">("all");
+  const [deliverableDisciplineDirectionFilter, setDeliverableDisciplineDirectionFilter] = useState<"all" | "civil" | "eletromecanico">("all");
   const [deliverableDirectionPanelOpen, setDeliverableDirectionPanelOpen] = useState(false);
   const [deliverableDirectionSelectedIds, setDeliverableDirectionSelectedIds] = useState<string[]>([]);
   const [assignUserId, setAssignUserId] = useState("");
@@ -1782,7 +1782,7 @@ export default function GestorProjetosPage() {
                     ).length,
                     sent: selectedDocs.filter(
                       (d) =>
-                        d.discipline_code === "eletromec?nico" &&
+                        d.discipline_code === "eletromecanico" &&
                         (d.status === "sent" || d.status === "approved" || d.status === "approved_with_comments")
                     ).length,
                   },
@@ -2300,14 +2300,14 @@ export default function GestorProjetosPage() {
                   <select
                     value={deliverableDisciplineDirectionFilter}
                     onChange={(e) => {
-                      setDeliverableDisciplineDirectionFilter(e.target.value as "all" | "civil" | "eletromec?nico");
+                      setDeliverableDisciplineDirectionFilter(e.target.value as "all" | "civil" | "eletromecanico");
                       setDeliverableDirectionSelectedIds([]);
                     }}
                     className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-sm"
                   >
                     <option value="all">Todas disciplinas</option>
                     <option value="civil">Civil</option>
-                    <option value="eletromec?nico">Eletromecanico</option>
+                    <option value="eletromecanico">Eletromecanico</option>
                   </select>
                   <select
                     value={deliverableTeamId}
@@ -2362,7 +2362,7 @@ export default function GestorProjetosPage() {
                             <div className="min-w-0">
                               <p className="truncate text-xs font-semibold text-slate-800">{d.title}</p>
                               <p className="text-[11px] text-slate-500">
-                                Disciplina: {d.discipline_code === "civil" ? "Civil" : d.discipline_code === "eletromec?nico" ? "Eletromecanico" : "N?o informada"} | Status: {deliverableStatusLabel(d.status)}
+                                Disciplina: {d.discipline_code === "civil" ? "Civil" : d.discipline_code === "eletromecanico" ? "Eletromecanico" : "Não informada"} | Status: {deliverableStatusLabel(d.status)}
                               </p>
                             </div>
                           </div>
@@ -2475,9 +2475,9 @@ export default function GestorProjetosPage() {
               const disciplineLabel =
                 d.discipline_code === "civil"
                   ? "Civil"
-                  : d.discipline_code === "eletromec?nico"
+                  : d.discipline_code === "eletromecanico"
                     ? "Eletromecanico"
-                    : "N?o informada";
+                    : "Não informada";
               const financialStatus = d.financial_status ?? "aberto";
               const financialLocked = financialStatus !== "aberto";
               const financialStatusLabel = financialStatus === "baixado" ? "Baixado" : financialStatus === "pendente" ? "Pendente" : "Aberto";

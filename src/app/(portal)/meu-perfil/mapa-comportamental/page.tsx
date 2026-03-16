@@ -426,8 +426,7 @@ function ResultCard({
           <div key={item.key} className="rounded-2xl border border-slate-200 bg-white p-4">
             <p
               className={cx(
-                "text-3xl font-semibold leading-none tracking-tight",
-                BEHAVIOR_AXIS_META[item.key].textClass
+                "text-3xl font-semibold leading-none tracking-tight text-slate-950"
               )}
             >
               {item.percent.toFixed(2)}%
