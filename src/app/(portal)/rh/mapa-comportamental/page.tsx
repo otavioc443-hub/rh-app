@@ -47,6 +47,10 @@ function toDateInput(value: Date) {
   return value.toISOString().slice(0, 10);
 }
 
+function normalizeDateInput(value: string | null) {
+  return String(value ?? "").slice(0, 10);
+}
+
 function endOfDayIso(dateInput: string) {
   return `${dateInput}T23:59:59.999Z`;
 }
@@ -162,7 +166,7 @@ export default function RhMapaComportamentalPage() {
 
   function validateWindow() {
     if (!windowStart || !windowEnd) return "Informe inicio e fim da janela.";
-    if (windowEnd < windowStart) return "A data final n?o pode ser menor que a inicial.";
+    if (windowEnd < windowStart) return "A data final não pode ser menor que a inicial.";
     return null;
   }
 
@@ -273,7 +277,7 @@ export default function RhMapaComportamentalPage() {
       const semVinculoSemEmail = selectedRows.filter((c) => !c.user_id && !c.email).length;
       setMsg(
         [
-          `Libera??es criadas: ${releaseRows.length}.`,
+          `Liberações criadas: ${releaseRows.length}.`,
           inviteRows.length ? `Convites externos gerados: ${inviteRows.length}.` : "",
           semVinculoSemEmail ? `Sem user_id/e-mail: ${semVinculoSemEmail}.` : "",
         ]
@@ -283,7 +287,7 @@ export default function RhMapaComportamentalPage() {
 
       await load();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao liberar avalia??o.");
+      setMsg(e instanceof Error ? e.message : "Erro ao liberar avaliação.");
     } finally {
       setSaving(false);
     }
@@ -297,7 +301,7 @@ export default function RhMapaComportamentalPage() {
 
   function validateRange(start: string, end: string) {
     if (!start || !end) return "Informe inicio e fim da janela.";
-    if (end < start) return "A data final n?o pode ser menor que a inicial.";
+    if (end < start) return "A data final não pode ser menor que a inicial.";
     return null;
   }
 
@@ -312,7 +316,7 @@ export default function RhMapaComportamentalPage() {
 
   async function saveBulkReleaseWindow() {
     if (!selectedReleaseIds.length) {
-      setMsg("Selecione pelo menos uma libera??o.");
+      setMsg("Selecione pelo menos uma liberação.");
       return;
     }
     const err = validateRange(bulkWindowStart, bulkWindowEnd);
@@ -345,7 +349,8 @@ export default function RhMapaComportamentalPage() {
             : row
         )
       );
-      setMsg(`Janela atualizada para ${selectedReleaseIds.length} libera??o(?es).`);
+      await load();
+      setMsg(`Janela atualizada para ${selectedReleaseIds.length} liberação(ões).`);
       setSelectedReleases({});
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao atualizar janela em lote.");
@@ -355,7 +360,7 @@ export default function RhMapaComportamentalPage() {
   }
 
   async function deleteRelease(releaseId: string) {
-    const confirmed = window.confirm("Excluir esta libera??o? Essa a??o n?o pode ser desfeita.");
+    const confirmed = window.confirm("Excluir esta liberação? Essa ação não pode ser desfeita.");
     if (!confirmed) return;
 
     setDeletingReleaseId(releaseId);
@@ -364,16 +369,16 @@ export default function RhMapaComportamentalPage() {
       const { error } = await supabase.from("behavior_assessment_releases").delete().eq("id", releaseId);
       if (error) throw error;
 
-      setReleases((prev) => prev.filter((row) => row.id !== releaseId));
+      await load();
       setSelectedReleases((prev) => {
         const next = { ...prev };
         delete next[releaseId];
         return next;
       });
       if (editingReleaseId === releaseId) cancelEditRelease();
-      setMsg("Libera??o exclu?da com sucesso.");
+      setMsg("Liberação excluída com sucesso.");
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao excluir libera??o.");
+      setMsg(e instanceof Error ? e.message : "Erro ao excluir liberação.");
     } finally {
       setDeletingReleaseId(null);
     }
@@ -381,8 +386,8 @@ export default function RhMapaComportamentalPage() {
 
   function startEditRelease(row: ReleaseRow) {
     setEditingReleaseId(row.id);
-    setEditWindowStart(row.window_start);
-    setEditWindowEnd(row.window_end);
+    setEditWindowStart(normalizeDateInput(row.window_start));
+    setEditWindowEnd(normalizeDateInput(row.window_end));
     setMsg("");
   }
 
@@ -398,7 +403,7 @@ export default function RhMapaComportamentalPage() {
       return;
     }
     if (editWindowEnd < editWindowStart) {
-      setMsg("A data final n?o pode ser menor que a inicial.");
+      setMsg("A data final não pode ser menor que a inicial.");
       return;
     }
 
@@ -415,21 +420,11 @@ export default function RhMapaComportamentalPage() {
 
       if (error) throw error;
 
-      setReleases((prev) =>
-        prev.map((row) =>
-          row.id === releaseId
-            ? {
-                ...row,
-                window_start: editWindowStart,
-                window_end: editWindowEnd,
-              }
-            : row
-        )
-      );
-      setMsg("Janela da libera??o atualizada com sucesso.");
+      await load();
+      setMsg("Janela da liberação atualizada com sucesso.");
       cancelEditRelease();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao atualizar janela da libera??o.");
+      setMsg(e instanceof Error ? e.message : "Erro ao atualizar janela da liberação.");
     } finally {
       setSavingEdit(false);
     }
@@ -442,7 +437,7 @@ export default function RhMapaComportamentalPage() {
           <div>
             <h1 className="text-xl font-semibold text-slate-900">Mapa comportamental</h1>
             <p className="mt-1 text-sm text-slate-600">
-              O colaborador s? pode responder ap?s libera??o do RH, com janela de inicio/fim.
+              O colaborador só pode responder após liberação do RH, com janela de início e fim.
             </p>
           </div>
           <button
@@ -459,7 +454,7 @@ export default function RhMapaComportamentalPage() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
-          <p className="text-sm text-slate-500">Libera??es ativas</p>
+          <p className="text-sm text-slate-500">Liberações ativas</p>
           <p className="mt-2 text-2xl font-semibold text-slate-900">{activeReleases}</p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
@@ -473,10 +468,10 @@ export default function RhMapaComportamentalPage() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <p className="text-sm font-semibold text-slate-900">Janela de libera??o</p>
+        <p className="text-sm font-semibold text-slate-900">Janela de liberação</p>
         <div className="mt-3 grid gap-3 md:grid-cols-2">
           <label className="grid gap-1 text-xs font-semibold text-slate-700">
-            Inicio
+            Início
             <input
               value={windowStart}
               onChange={(e) => setWindowStart(e.target.value)}
@@ -616,11 +611,11 @@ export default function RhMapaComportamentalPage() {
       ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <p className="mb-3 text-sm font-semibold text-slate-900">Hist?rico de libera??es</p>
+        <p className="mb-3 text-sm font-semibold text-slate-900">Histórico de liberações</p>
         <div className="mb-4 rounded-xl border border-slate-200 p-3">
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
             <label className="grid gap-1 text-xs font-semibold text-slate-700">
-              Inicio (lote)
+              Início (lote)
               <input
                 type="date"
                 value={bulkWindowStart}
@@ -672,7 +667,7 @@ export default function RhMapaComportamentalPage() {
                 <th className="p-3">Janela</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Criado em</th>
-                <th className="p-3 text-right">Acoes</th>
+                <th className="p-3 text-right">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -712,8 +707,8 @@ export default function RhMapaComportamentalPage() {
                         </div>
                       ) : (
                         <>
-                          {new Date(`${item.window_start}T00:00:00`).toLocaleDateString("pt-BR")} ate{" "}
-                          {new Date(`${item.window_end}T00:00:00`).toLocaleDateString("pt-BR")}
+                          {new Date(`${normalizeDateInput(item.window_start)}T00:00:00`).toLocaleDateString("pt-BR")} até{" "}
+                          {new Date(`${normalizeDateInput(item.window_end)}T00:00:00`).toLocaleDateString("pt-BR")}
                         </>
                       )}
                     </td>
@@ -767,7 +762,7 @@ export default function RhMapaComportamentalPage() {
               ) : (
                 <tr>
                   <td className="p-3 text-slate-500" colSpan={6}>
-                    Nenhuma libera??o registrada.
+                    Nenhuma liberação registrada.
                   </td>
                 </tr>
               )}
@@ -786,8 +781,8 @@ export default function RhMapaComportamentalPage() {
                 <th className="p-3">Status</th>
                 <th className="p-3">Criado em</th>
                 <th className="p-3">Expira em</th>
-                <th className="p-3">Concluido em</th>
-                <th className="p-3 text-right">Acoes</th>
+                <th className="p-3">Concluído em</th>
+                <th className="p-3 text-right">Ações</th>
               </tr>
             </thead>
             <tbody>

@@ -280,6 +280,17 @@ export function calculateBehaviorAxisResults(selectedIds: string[]): BehaviorAxi
   const found = BEHAVIOR_ADJECTIVES.filter((item) => selectedIds.includes(item.id));
   const totals: BehaviorWeights = { executor: 0, comunicador: 0, planejador: 0, analista: 0 };
 
+  if (!found.length) {
+    return (Object.keys(BEHAVIOR_AXIS_META) as BehaviorAxisKey[]).map((key) => ({
+      key,
+      label: BEHAVIOR_AXIS_META[key].label,
+      score: 0,
+      percent: 0,
+      classification: "presenca_de_apoio",
+      isPredominant: false,
+    }));
+  }
+
   for (const item of found) {
     totals.executor += item.weights.executor;
     totals.comunicador += item.weights.comunicador;
@@ -478,6 +489,10 @@ export function getPredominantBehaviorAxes(results: BehaviorAxisResult[]) {
 }
 
 export function getBehaviorSummaryLine(results: BehaviorAxisResult[], personName = "O colaborador") {
+  if (!results.some((item) => item.score > 0 || item.percent > 0)) {
+    return `${personName} ainda não possui adjetivos selecionados nesta etapa.`;
+  }
+
   const predominant = getPredominantBehaviorAxes(results);
   if (!predominant.length) {
     const highest = [...results].sort((a, b) => b.percent - a.percent)[0];
