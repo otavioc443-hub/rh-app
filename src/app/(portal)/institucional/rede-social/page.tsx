@@ -2673,7 +2673,25 @@ export default function InternalSocialPage() {
                 </div>
               ) : null}
 
-              <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-slate-100 bg-white px-5 py-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setComposerExpanded(false);
+                    setShowComposerEmojiPicker(false);
+                    setPostText("");
+                    setDraftAttachments([]);
+                    setProjectId("");
+                    setScopeType("company");
+                  }}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
                 <label className="inline-flex cursor-pointer items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
                   {uploadingMedia ? "Enviando mídia..." : "Vídeo ou foto"}
                   <input
@@ -2711,24 +2729,6 @@ export default function InternalSocialPage() {
                   ) : null}
                 </div>
               </div>
-              </div>
-            </div>
-
-            <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-slate-100 bg-white px-5 py-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setComposerExpanded(false);
-                  setShowComposerEmojiPicker(false);
-                  setPostText("");
-                  setDraftAttachments([]);
-                  setProjectId("");
-                  setScopeType("company");
-                }}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Cancelar
-              </button>
               <button
                 type="button"
                 disabled={busy || uploadingMedia || (!postText.trim() && !draftAttachments.length) || (scopeType === "project" && !projectId)}
