@@ -270,6 +270,68 @@ function isSchemaCompatError(message: string) {
   return lower.includes("schema cache") || lower.includes("does not exist") || lower.includes("could not find the table") || lower.includes("column");
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function formatInlineRichText(value: string) {
+  const escaped = escapeHtml(value);
+  return escaped
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.+?)\*/g, "<em>$1</em>")
+    .replace(/\+\+(.+?)\+\+/g, "<u>$1</u>")
+    .replace(/~~(.+?)~~/g, "<s>$1</s>");
+}
+
+function renderRichTextHtml(value: string) {
+  const lines = value.split("\n");
+  const parts: string[] = [];
+  let paragraph: string[] = [];
+  let listItems: string[] = [];
+
+  function flushParagraph() {
+    if (!paragraph.length) return;
+    parts.push(`<p>${paragraph.map((line) => formatInlineRichText(line)).join("<br />")}</p>`);
+    paragraph = [];
+  }
+
+  function flushList() {
+    if (!listItems.length) return;
+    parts.push(`<ul>${listItems.map((item) => `<li>${formatInlineRichText(item)}</li>`).join("")}</ul>`);
+    listItems = [];
+  }
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd();
+    if (!line.trim()) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+    if (line.trimStart().startsWith("- ")) {
+      flushParagraph();
+      listItems.push(line.trimStart().slice(2));
+      continue;
+    }
+    flushList();
+    paragraph.push(line);
+  }
+
+  flushParagraph();
+  flushList();
+
+  return parts.join("");
+}
+
+function RichText({ value, className }: { value: string; className?: string }) {
+  return <div className={className} dangerouslySetInnerHTML={{ __html: renderRichTextHtml(value) }} />;
+}
+
 function emojiToCodepoints(value: string) {
   return Array.from(value)
     .map((char) => char.codePointAt(0)?.toString(16))
@@ -306,6 +368,29 @@ type EmojiPickerProps = {
   className?: string;
   panelClassName?: string;
 };
+
+type RichTextAction = "bold" | "italic" | "underline" | "bullet";
+
+function RichTextToolbar({
+  onAction,
+  compact = false,
+}: {
+  onAction: (action: RichTextAction) => void;
+  compact?: boolean;
+}) {
+  const buttonClass = compact
+    ? "rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+    : "rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50";
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button type="button" onClick={() => onAction("bold")} className={buttonClass}>B</button>
+      <button type="button" onClick={() => onAction("italic")} className={`${buttonClass} italic`}>I</button>
+      <button type="button" onClick={() => onAction("underline")} className={`${buttonClass} underline`}>U</button>
+      <button type="button" onClick={() => onAction("bullet")} className={buttonClass}>Lista</button>
+    </div>
+  );
+}
 
 function EmojiPicker({ groups, onSelect, className, panelClassName }: EmojiPickerProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -452,6 +537,7 @@ export default function InternalSocialPage() {
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const messageFileInputRef = useRef<HTMLInputElement | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const editingPostTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   async function load() {
     setLoading(true);
@@ -1039,6 +1125,50 @@ export default function InternalSocialPage() {
       document.removeEventListener("keydown", handleEscape);
     };
   }, [composerExpanded]);
+
+  function applyRichTextAction(
+    action: RichTextAction,
+    value: string,
+    setValue: (nextValue: string) => void,
+    textarea: HTMLTextAreaElement | null
+  ) {
+    if (!textarea) return;
+    const start = textarea.selectionStart ?? value.length;
+    const end = textarea.selectionEnd ?? value.length;
+    const selected = value.slice(start, end);
+
+    let nextValue = value;
+    let nextStart = start;
+    let nextEnd = end;
+
+    if (action === "bullet") {
+      const lineStart = value.lastIndexOf("\n", Math.max(0, start - 1)) + 1;
+      const lineEndCandidate = value.indexOf("\n", end);
+      const lineEnd = lineEndCandidate === -1 ? value.length : lineEndCandidate;
+      const segment = value.slice(lineStart, lineEnd);
+      const updatedSegment = segment
+        .split("\n")
+        .map((line) => (line.trim() ? (line.trimStart().startsWith("- ") ? line : `- ${line}`) : line))
+        .join("\n");
+      nextValue = `${value.slice(0, lineStart)}${updatedSegment}${value.slice(lineEnd)}`;
+      nextStart = lineStart;
+      nextEnd = lineStart + updatedSegment.length;
+    } else {
+      const marker = action === "bold" ? "**" : action === "italic" ? "*" : "++";
+      const fallback = action === "bold" ? "texto em negrito" : action === "italic" ? "texto em itálico" : "texto sublinhado";
+      const content = selected || fallback;
+      nextValue = `${value.slice(0, start)}${marker}${content}${marker}${value.slice(end)}`;
+      const cursorBase = start + marker.length;
+      nextStart = cursorBase;
+      nextEnd = cursorBase + content.length;
+    }
+
+    setValue(nextValue);
+    window.requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(nextStart, nextEnd);
+    });
+  }
 
   async function uploadMedia(file: File) {
     if (!file) return;
@@ -1841,7 +1971,14 @@ export default function InternalSocialPage() {
                       </div>
                       {isEditing ? (
                         <div className="mt-4 space-y-3">
+                          <RichTextToolbar
+                            compact
+                            onAction={(action) =>
+                              applyRichTextAction(action, editingPostText, setEditingPostText, editingPostTextareaRef.current)
+                            }
+                          />
                           <textarea
+                            ref={editingPostTextareaRef}
                             value={editingPostText}
                             onChange={(event) => setEditingPostText(event.target.value)}
                             rows={4}
@@ -1866,7 +2003,7 @@ export default function InternalSocialPage() {
                           </div>
                         </div>
                       ) : post.text ? (
-                        <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-slate-800">{highlightMatch(post.text, searchTerm)}</p>
+                        <RichText className="mt-4 space-y-3 text-sm leading-6 text-slate-800 [&_li]:ml-5 [&_li]:list-disc [&_p]:whitespace-pre-wrap" value={post.text} />
                       ) : null}
                       {post.attachments.length ? (
                         <div className="mt-4 space-y-3">
@@ -1879,12 +2016,12 @@ export default function InternalSocialPage() {
                                   width={1200}
                                   height={900}
                                   unoptimized
-                                  className="max-h-[420px] w-full object-cover"
+                                  className="max-h-[280px] w-full object-cover"
                                 />
                               ) : attachment.type === "video" ? (
                                 <video
                                   controls
-                                  className="max-h-[420px] w-full bg-slate-950"
+                                  className="max-h-[280px] w-full bg-slate-950"
                                   src={attachment.url}
                                 />
                               ) : (
@@ -1897,11 +2034,6 @@ export default function InternalSocialPage() {
                                   {attachment.label || attachment.url}
                                 </a>
                               )}
-                              {attachment.type !== "link" && attachment.label ? (
-                                <div className="border-t border-slate-200 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                  {attachment.label}
-                                </div>
-                              ) : null}
                             </div>
                           ))}
                         </div>
@@ -2638,6 +2770,10 @@ export default function InternalSocialPage() {
                 className="min-h-[180px] w-full resize-none rounded-[1.5rem] border border-transparent bg-white px-2 py-2 text-[16px] leading-7 text-slate-700 outline-none placeholder:text-slate-400 focus:border-transparent focus:ring-0"
               />
 
+              <RichTextToolbar
+                onAction={(action) => applyRichTextAction(action, postText, setPostText, composerTextareaRef.current)}
+              />
+
               {draftAttachments.length ? (
                 <div className={`grid gap-3 ${draftAttachments.length === 1 ? "grid-cols-1" : "sm:grid-cols-2"}`}>
                   {draftAttachments.map((item, index) => (
@@ -2658,8 +2794,7 @@ export default function InternalSocialPage() {
                           className={`${draftAttachments.length === 1 ? "max-h-[360px]" : "h-56"} w-full bg-slate-950 object-cover`}
                         />
                       ) : null}
-                      <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs font-semibold text-slate-600">
-                        <span className="truncate">{item.label}</span>
+                      <div className="flex items-center justify-end gap-3 px-3 py-2 text-xs font-semibold text-slate-600">
                         <button
                           type="button"
                           onClick={() => setDraftAttachments((prev) => prev.filter((_, currentIndex) => currentIndex !== index))}
