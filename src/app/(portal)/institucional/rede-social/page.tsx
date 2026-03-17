@@ -229,6 +229,7 @@ export default function InternalSocialPage() {
   const [projectBoardProjectId, setProjectBoardProjectId] = useState("");
   const [projectNotes, setProjectNotes] = useState<Record<string, string>>({});
   const [composerExpanded, setComposerExpanded] = useState(false);
+  const [showComposerEmojiPicker, setShowComposerEmojiPicker] = useState(false);
   const [activeTab, setActiveTab] = useState<"inicio" | "network" | "projects" | "messages">("inicio");
   const [messageFilter, setMessageFilter] = useState<"all" | "online" | "with_history">("all");
   const [messageSearch, setMessageSearch] = useState("");
@@ -818,6 +819,7 @@ export default function InternalSocialPage() {
     function handleEscape(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
       setComposerExpanded(false);
+      setShowComposerEmojiPicker(false);
     }
     document.body.style.overflow = "hidden";
     document.addEventListener("keydown", handleEscape);
@@ -2372,15 +2374,15 @@ export default function InternalSocialPage() {
       </div>
 
       {composerExpanded ? (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/55 px-4 py-8 backdrop-blur-sm md:items-center">
-          <div className="w-full max-w-3xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_40px_120px_-36px_rgba(15,23,42,0.55)]">
-            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm md:items-center">
+          <div className="w-full max-w-2xl overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_40px_120px_-36px_rgba(15,23,42,0.55)]">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
               <div className="flex min-w-0 items-center gap-4">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-blue-700 text-base font-semibold text-white shadow-[0_16px_32px_-20px_rgba(37,99,235,0.65)]">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-blue-700 text-sm font-semibold text-white shadow-[0_16px_32px_-20px_rgba(37,99,235,0.65)]">
                   {initials(currentName)}
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-xl font-semibold text-slate-900">{currentName}</p>
+                  <p className="truncate text-lg font-semibold text-slate-900">{currentName}</p>
                   <p className="text-sm text-slate-500">
                     Publicar em {scopeType === "project" ? projects.find((item) => item.id === projectId)?.name ?? "equipe de projeto" : "toda a empresa"}
                   </p>
@@ -2396,7 +2398,7 @@ export default function InternalSocialPage() {
               </button>
             </div>
 
-            <div className="space-y-5 px-6 py-6">
+            <div className="space-y-4 px-5 py-5">
               <div className="grid gap-3 md:grid-cols-[1fr,1fr]">
                 <select
                   value={scopeType}
@@ -2430,9 +2432,9 @@ export default function InternalSocialPage() {
                 ref={composerTextareaRef}
                 value={postText}
                 onChange={(event) => setPostText(event.target.value)}
-                rows={8}
+                rows={6}
                 placeholder="Sobre o que você quer falar?"
-                className="min-h-[260px] w-full resize-none rounded-[1.75rem] border border-transparent bg-white px-2 py-2 text-3xl font-light text-slate-700 outline-none placeholder:text-slate-400 focus:border-transparent focus:ring-0"
+                className="min-h-[180px] w-full resize-none rounded-[1.5rem] border border-transparent bg-white px-2 py-2 text-[2rem] font-light leading-tight text-slate-700 outline-none placeholder:text-slate-400 focus:border-transparent focus:ring-0"
               />
 
               {draftAttachments.length ? (
@@ -2440,9 +2442,9 @@ export default function InternalSocialPage() {
                   {draftAttachments.map((item, index) => (
                     <div key={`${item.url}-${index}`} className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50">
                       {item.type === "image" ? (
-                        <Image src={item.url} alt={item.label} width={800} height={500} unoptimized className="h-40 w-full object-cover" />
+                        <Image src={item.url} alt={item.label} width={800} height={500} unoptimized className="h-32 w-full object-cover" />
                       ) : item.type === "video" ? (
-                        <video src={item.url} controls className="h-40 w-full bg-slate-950 object-cover" />
+                        <video src={item.url} controls className="h-32 w-full bg-slate-950 object-cover" />
                       ) : null}
                       <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs font-semibold text-slate-600">
                         <span className="truncate">{item.label}</span>
@@ -2474,29 +2476,45 @@ export default function InternalSocialPage() {
                     }}
                   />
                 </label>
-                <span className="inline-flex items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700">
-                  Humor
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {EMOJIS.map((emoji) => (
-                    <button
-                      key={emoji}
-                      type="button"
-                      onClick={() => setPostText((prev) => `${prev}${emoji}`)}
-                      className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm transition hover:bg-slate-50"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowComposerEmojiPicker((prev) => !prev)}
+                    className="inline-flex items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                  >
+                    Emoji
+                  </button>
+                  {showComposerEmojiPicker ? (
+                    <div className="absolute bottom-[calc(100%+0.75rem)] left-0 z-10 w-64 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_20px_50px_-24px_rgba(15,23,42,0.35)]">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Adicionar emoji</p>
+                      <div className="grid grid-cols-6 gap-2">
+                        {EMOJIS.map((emoji) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            onClick={() => {
+                              setPostText((prev) => `${prev}${emoji}`);
+                              setShowComposerEmojiPicker(false);
+                              composerTextareaRef.current?.focus();
+                            }}
+                            className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-lg transition hover:bg-slate-100"
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-6 py-5">
+            <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-5 py-4">
               <button
                 type="button"
                 onClick={() => {
                   setComposerExpanded(false);
+                  setShowComposerEmojiPicker(false);
                   setPostText("");
                   setDraftAttachments([]);
                   setProjectId("");
@@ -2510,7 +2528,7 @@ export default function InternalSocialPage() {
                 type="button"
                 disabled={busy || uploadingMedia || (!postText.trim() && !draftAttachments.length) || (scopeType === "project" && !projectId)}
                 onClick={() => void submitPost()}
-                className="rounded-full bg-[#0a66c2] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#004182] disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-full bg-[#0a66c2] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#004182] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {busy ? "Publicando..." : "Publicar"}
               </button>
