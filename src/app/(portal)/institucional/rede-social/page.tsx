@@ -2638,13 +2638,24 @@ export default function InternalSocialPage() {
               />
 
               {draftAttachments.length ? (
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className={`grid gap-3 ${draftAttachments.length === 1 ? "grid-cols-1" : "sm:grid-cols-2"}`}>
                   {draftAttachments.map((item, index) => (
                     <div key={`${item.url}-${index}`} className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50">
                       {item.type === "image" ? (
-                        <Image src={item.url} alt={item.label} width={800} height={500} unoptimized className="h-32 w-full object-cover" />
+                        <Image
+                          src={item.url}
+                          alt={item.label}
+                          width={1200}
+                          height={900}
+                          unoptimized
+                          className={`${draftAttachments.length === 1 ? "max-h-[420px]" : "h-56"} w-full object-cover`}
+                        />
                       ) : item.type === "video" ? (
-                        <video src={item.url} controls className="h-32 w-full bg-slate-950 object-cover" />
+                        <video
+                          src={item.url}
+                          controls
+                          className={`${draftAttachments.length === 1 ? "max-h-[420px]" : "h-56"} w-full bg-slate-950 object-cover`}
+                        />
                       ) : null}
                       <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs font-semibold text-slate-600">
                         <span className="truncate">{item.label}</span>
