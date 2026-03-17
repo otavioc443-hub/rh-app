@@ -72,6 +72,10 @@ function withTimeout<T>(p: Promise<T>, ms = 7000): Promise<T> {
   });
 }
 
+function getScrollStorageKey(pathname: string) {
+  return `portal-scroll:${pathname}`;
+}
+
 export default function PortalShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -110,6 +114,15 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       // noop
     }
   }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("scrollRestoration" in window.history)) return;
+    const previous = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+    return () => {
+      window.history.scrollRestoration = previous;
+    };
+  }, []);
 
   useEffect(() => {
     alive.current = true;
@@ -391,6 +404,29 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       router.replace("/unauthorized");
     }
   }, [hiddenRoutes, hiddenRoutesLoaded, pathname, role, router]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !pathname) return;
+
+    const restore = window.requestAnimationFrame(() => {
+      try {
+        const raw = window.sessionStorage.getItem(getScrollStorageKey(pathname));
+        const scrollY = raw ? Number(raw) : 0;
+        window.scrollTo({ top: Number.isFinite(scrollY) ? scrollY : 0, behavior: "auto" });
+      } catch {
+        window.scrollTo({ top: 0, behavior: "auto" });
+      }
+    });
+
+    return () => {
+      window.cancelAnimationFrame(restore);
+      try {
+        window.sessionStorage.setItem(getScrollStorageKey(pathname), String(window.scrollY));
+      } catch {
+        // noop
+      }
+    };
+  }, [pathname]);
 
   if (loading || !hiddenRoutesLoaded) {
     return (
