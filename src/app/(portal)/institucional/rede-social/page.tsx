@@ -94,7 +94,7 @@ function displayName(profile?: Profile | null) {
 
 function profileRoleLine(profile?: Profile | null) {
   const parts = [(profile?.cargo ?? "").trim(), (profile?.setor ?? "").trim()].filter(Boolean);
-  return parts.length ? parts.join(" | ") : "Cargo e setor n?o informados";
+  return parts.length ? parts.join(" | ") : "Cargo e setor nao informados";
 }
 
 function initials(name: string) {
@@ -179,7 +179,7 @@ function inferAttachmentTypeFromUrl(url: string): AttachmentType {
 function normalizeError(message: string) {
   const lower = message.toLowerCase();
   if (lower.includes("could not find the table") || lower.includes("schema cache") || lower.includes("does not exist")) {
-    return `A rede social interna ainda n?o est? configurada no banco. Rode a migration ${MIGRATION} no Supabase e tente novamente.`;
+    return `A rede social interna ainda nao esta configurada no banco. Rode a migration ${MIGRATION} no Supabase e tente novamente.`;
   }
   return message;
 }
@@ -521,7 +521,7 @@ export default function InternalSocialPage() {
     if (activeTab === "network") return "Pesquisar membros da rede";
     if (activeTab === "projects") return "Pesquisar projetos";
     if (activeTab === "messages") return "Pesquisar conversas";
-    return "Pesquisar publica??es na rede";
+    return "Pesquisar publicacoes na rede";
   }, [activeTab]);
   const contacts = useMemo(() => profiles.filter((item) => item.id !== me?.id), [profiles, me?.id]);
   const activeThread = useMemo(() => {
@@ -831,11 +831,11 @@ export default function InternalSocialPage() {
         label?: string;
       };
       if (!res.ok || !json.url || !json.attachmentType) {
-        const message = json.error || "N?o foi poss?vel enviar a m?dia.";
+        const message = json.error || "Nao foi possivel enviar a midia.";
         const lower = message.toLowerCase();
         if (lower.includes("bucket") || lower.includes("not found")) {
           throw new Error(
-            `O bucket de m?dia da rede social ainda nao esta configurado. Rode a migration ${MEDIA_BUCKET_MIGRATION} no Supabase e tente novamente.`
+            `O bucket de midia da rede social ainda nao esta configurado. Rode a migration ${MEDIA_BUCKET_MIGRATION} no Supabase e tente novamente.`
           );
         }
         throw new Error(message);
@@ -882,7 +882,7 @@ export default function InternalSocialPage() {
         const lower = message.toLowerCase();
         if (lower.includes("bucket") || lower.includes("not found")) {
           throw new Error(
-            `O bucket de m?dia da rede social ainda nao esta configurado. Rode a migration ${MEDIA_BUCKET_MIGRATION} no Supabase e tente novamente.`
+            `O bucket de midia da rede social ainda nao esta configurado. Rode a migration ${MEDIA_BUCKET_MIGRATION} no Supabase e tente novamente.`
           );
         }
         throw new Error(message);
@@ -1033,7 +1033,7 @@ export default function InternalSocialPage() {
         if (next) window.localStorage.setItem(PINNED_POST_KEY, next);
         else window.localStorage.removeItem(PINNED_POST_KEY);
       } else {
-        setError(normalizeError(err instanceof Error ? err.message : "Erro ao destacar publica??o."));
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao destacar publicacao."));
         setPinnedPostId(pinnedPostId);
       }
     }
@@ -1103,14 +1103,14 @@ export default function InternalSocialPage() {
       cancelEditPost();
       await load();
     } catch (err) {
-      setError(normalizeError(err instanceof Error ? err.message : "Erro ao editar publica??o."));
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao editar publicacao."));
     } finally {
       setBusy(false);
     }
   }
 
   async function deletePost(post: FeedPost) {
-    const authorAction = post.author_user_id === me?.id ? "excluir sua publica??o" : "excluir esta publica??o";
+    const authorAction = post.author_user_id === me?.id ? "excluir sua publicacao" : "excluir esta publicacao";
     if (!window.confirm(`Deseja ${authorAction}?`)) return;
     setBusy(true);
     setError("");
@@ -1128,7 +1128,7 @@ export default function InternalSocialPage() {
       if (editingPostId === post.id) cancelEditPost();
       await load();
     } catch (err) {
-      setError(normalizeError(err instanceof Error ? err.message : "Erro ao excluir publica??o."));
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao excluir publicacao."));
     } finally {
       setBusy(false);
     }
@@ -1258,7 +1258,7 @@ export default function InternalSocialPage() {
                   ) : null}
                   {searchSuggestions.posts.length ? (
                     <div className="border-b border-slate-100 px-4 py-3">
-                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Publica??es</p>
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Publicacoes</p>
                         <div className="space-y-2">
                           {searchSuggestions.posts.map((post) => (
                             <button
@@ -1432,7 +1432,7 @@ export default function InternalSocialPage() {
                 </div>
               </section>
               <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <p className="text-sm font-semibold text-slate-900">Publica??es</p>
+                <p className="text-sm font-semibold text-slate-900">Publicacoes</p>
                 <div className="mt-3 space-y-3">
                   {globalPostResults.length ? (
                     globalPostResults.slice(0, 6).map((post) => (
@@ -1450,7 +1450,7 @@ export default function InternalSocialPage() {
                       </button>
                     ))
                   ) : (
-                    <p className="text-sm text-slate-500">Nenhuma publica??o encontrada.</p>
+                    <p className="text-sm text-slate-500">Nenhuma publicacao encontrada.</p>
                   )}
                 </div>
               </section>
@@ -1523,7 +1523,7 @@ export default function InternalSocialPage() {
                     }}
                     className="flex h-14 w-full items-center rounded-full border border-slate-300 bg-white px-5 text-left text-base font-medium text-slate-500 hover:bg-slate-50"
                   >
-                    Comecar publica??o
+                    Comecar publicacao
                   </button>
                   {composerExpanded || postText || draftAttachments.length ? (
                     <>
@@ -1532,7 +1532,7 @@ export default function InternalSocialPage() {
                         value={postText}
                         onChange={(event) => setPostText(event.target.value)}
                         rows={4}
-                        placeholder="Compartilhe atualiza??es, alinhamentos, imagens ou v?deos com o time."
+                        placeholder="Compartilhe atualizacoes, alinhamentos, imagens ou videos com o time."
                         className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-blue-300 focus:bg-white"
                       />
                       <div className="flex flex-wrap items-center gap-3">
@@ -1828,7 +1828,7 @@ export default function InternalSocialPage() {
                       </div>
 
                       <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4 text-sm font-semibold text-slate-500">
-                        <span>{post.reactions.length} rea??o(?es)</span>
+                        <span>{post.reactions.length} reacao(oes)</span>
                         <span>{post.comments.length} comentario(s)</span>
                       </div>
 
@@ -1913,7 +1913,7 @@ export default function InternalSocialPage() {
                 })}
               </section>
             ) : (
-              <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">Nenhuma publica??o ainda.</div>
+              <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">Nenhuma publicacao ainda.</div>
             )}
           </main>
         ) : null}
@@ -1970,8 +1970,8 @@ export default function InternalSocialPage() {
                                 )}
                               </div>
                               <p className="mt-3 line-clamp-2 text-sm font-semibold text-slate-900">{highlightMatch(displayName(contact), searchTerm)}</p>
-                              <p className="mt-1 text-xs text-slate-500">{highlightMatch((contact.cargo ?? "").trim() || "Cargo n?o informado", searchTerm)}</p>
-                              <p className="mt-1 text-xs text-slate-400">{highlightMatch((contact.setor ?? "").trim() || "Setor n?o informado", searchTerm)}</p>
+                              <p className="mt-1 text-xs text-slate-500">{highlightMatch((contact.cargo ?? "").trim() || "Cargo nao informado", searchTerm)}</p>
+                              <p className="mt-1 text-xs text-slate-400">{highlightMatch((contact.setor ?? "").trim() || "Setor nao informado", searchTerm)}</p>
                               <span
                                 className={`mt-2 inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${
                                   onlineUserIds.has(contact.id) ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"
@@ -2004,8 +2004,8 @@ export default function InternalSocialPage() {
                                     className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left hover:border-slate-300"
                                   >
                                     <p className="text-sm font-semibold text-slate-900">{highlightMatch(displayName(member), searchTerm)}</p>
-                                    <p className="mt-1 text-xs text-slate-500">{highlightMatch((member.cargo ?? "").trim() || "Cargo n?o informado", searchTerm)}</p>
-                                    <p className="mt-1 text-xs text-slate-400">{highlightMatch((member.setor ?? "").trim() || "Setor n?o informado", searchTerm)}</p>
+                                    <p className="mt-1 text-xs text-slate-500">{highlightMatch((member.cargo ?? "").trim() || "Cargo nao informado", searchTerm)}</p>
+                                    <p className="mt-1 text-xs text-slate-400">{highlightMatch((member.setor ?? "").trim() || "Setor nao informado", searchTerm)}</p>
                                     <span
                                       className={`mt-2 inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${
                                         onlineUserIds.has(member.id) ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"
@@ -2040,7 +2040,7 @@ export default function InternalSocialPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Projetos</p>
-                <p className="mt-1 text-lg font-semibold text-slate-900">Ambiente colaborativo de informa??es</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">Ambiente colaborativo de informacoes</p>
               </div>
               <select
                 value={projectBoardProjectId}
@@ -2060,17 +2060,17 @@ export default function InternalSocialPage() {
               <div className="mt-4 grid gap-4 lg:grid-cols-[320px,1fr]">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-base font-semibold text-slate-900">{selectedProjectBoard.name}</p>
-                  <p className="mt-2 text-xs uppercase tracking-wide text-slate-500">Informa??es b?sicas</p>
+                  <p className="mt-2 text-xs uppercase tracking-wide text-slate-500">Informacoes basicas</p>
                   <div className="mt-3 space-y-2 text-sm text-slate-600">
                     <p>Membros: {(projectTeamMap[selectedProjectBoard.id] ?? []).length}</p>
-                    <p>Publica??es: {posts.filter((item) => item.audience_project_id === selectedProjectBoard.id).length}</p>
+                    <p>Publicacoes: {posts.filter((item) => item.audience_project_id === selectedProjectBoard.id).length}</p>
                     <p>Escopo social: equipe do projeto e feed colaborativo interno.</p>
                   </div>
                 </div>
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-sm font-semibold text-slate-900">Quadro colaborativo do projeto</p>
                   <p className="mt-1 text-xs text-slate-500">
-                    Use este espa?o para registrar contexto, combinados e informa??es compartilhadas sobre o projeto.
+                    Use este espaco para registrar contexto, combinados e informacoes compartilhadas sobre o projeto.
                   </p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     {["Contexto", "Riscos", "Combinados", "Proximos passos"].map((item) => (
@@ -2083,7 +2083,7 @@ export default function InternalSocialPage() {
                     value={projectNotes[selectedProjectBoard.id] ?? ""}
                     onChange={(event) => updateProjectNote(selectedProjectBoard.id, event.target.value)}
                     rows={6}
-                    placeholder="Ex.: status da equipe, informa??es relevantes, combinados internos, riscos e pr?ximas a??es."
+                    placeholder="Ex.: status da equipe, informacoes relevantes, combinados internos, riscos e proximas acoes."
                     className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-blue-300"
                   />
                   <div className="mt-3 flex justify-end gap-2">
@@ -2107,7 +2107,7 @@ export default function InternalSocialPage() {
               </div>
             ) : (
               <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-                Selecione um projeto para visualizar os dados basicos e registrar informa??es colaborativas.
+                Selecione um projeto para visualizar os dados basicos e registrar informacoes colaborativas.
               </div>
             )}
           </section>
@@ -2477,7 +2477,7 @@ export default function InternalSocialPage() {
                   </div>
                 ) : (
                   <div className="flex min-h-[520px] flex-1 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                    Nenhuma mensagem ainda nesta conversa. Selecione um membro da lista para abrir o hist?rico ou iniciar uma nova conversa.
+                            Nenhuma mensagem ainda nesta conversa. Selecione um membro da lista para abrir o historico ou iniciar uma nova conversa.
                   </div>
                 )}
               </div>
