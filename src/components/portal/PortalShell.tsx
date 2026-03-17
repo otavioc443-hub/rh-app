@@ -131,21 +131,32 @@ function collectDraftSnapshot() {
     )
   );
 
-  return fields.flatMap((field, index) => {
+  const snapshot: DraftFieldSnapshot[] = [];
+
+  fields.forEach((field, index) => {
     const tag = field.tagName as DraftFieldSnapshot["tag"];
     if (tag === "INPUT") {
       const type = (field as HTMLInputElement).type?.toLowerCase() || "text";
-      if (["password", "file", "hidden", "submit", "button", "reset"].includes(type)) return [];
-      if ((field as HTMLInputElement).disabled) return [];
+      if (["password", "file", "hidden", "submit", "button", "reset"].includes(type)) return;
+      if ((field as HTMLInputElement).disabled) return;
       if (type === "checkbox" || type === "radio") {
-        return [{ key: getFieldDraftKey(field, index), tag, type, checked: (field as HTMLInputElement).checked }];
+        snapshot.push({
+          key: getFieldDraftKey(field, index),
+          tag,
+          type,
+          checked: (field as HTMLInputElement).checked,
+        });
+        return;
       }
-      return [{ key: getFieldDraftKey(field, index), tag, type, value: field.value }];
+      snapshot.push({ key: getFieldDraftKey(field, index), tag, type, value: field.value });
+      return;
     }
 
-    if (field.disabled) return [];
-    return [{ key: getFieldDraftKey(field, index), tag, value: field.value }];
+    if (field.disabled) return;
+    snapshot.push({ key: getFieldDraftKey(field, index), tag, value: field.value });
   });
+
+  return snapshot;
 }
 
 function persistDraftSnapshot(pathname: string) {
