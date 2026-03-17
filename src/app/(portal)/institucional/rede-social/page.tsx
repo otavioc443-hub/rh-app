@@ -1970,21 +1970,27 @@ export default function InternalSocialPage() {
                         </div>
                       </div>
                       {isEditing ? (
-                        <div className="mt-4 space-y-3">
-                          <RichTextToolbar
-                            compact
-                            onAction={(action) =>
-                              applyRichTextAction(action, editingPostText, setEditingPostText, editingPostTextareaRef.current)
-                            }
-                          />
+                        <div className="mt-4 space-y-4 rounded-[1.75rem] border border-slate-200 bg-slate-50/70 p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Editando publicação</p>
+                              <p className="mt-1 text-sm text-slate-600">Ajuste texto e formatação antes de salvar.</p>
+                            </div>
+                            <RichTextToolbar
+                              compact
+                              onAction={(action) =>
+                                applyRichTextAction(action, editingPostText, setEditingPostText, editingPostTextareaRef.current)
+                              }
+                            />
+                          </div>
                           <textarea
                             ref={editingPostTextareaRef}
                             value={editingPostText}
                             onChange={(event) => setEditingPostText(event.target.value)}
-                            rows={4}
-                            className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-blue-300 focus:bg-white"
+                            rows={6}
+                            className="min-h-[180px] w-full resize-none rounded-[1.5rem] border border-white bg-white px-4 py-4 text-[15px] leading-7 text-slate-800 outline-none transition focus:border-blue-200 focus:shadow-[0_0_0_4px_rgba(59,130,246,0.08)]"
                           />
-                          <div className="flex justify-end gap-2">
+                          <div className="flex items-center justify-end gap-2 border-t border-slate-200/80 pt-3">
                             <button
                               type="button"
                               onClick={cancelEditPost}
