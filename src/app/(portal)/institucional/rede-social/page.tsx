@@ -2634,7 +2634,7 @@ export default function InternalSocialPage() {
                 onChange={(event) => setPostText(event.target.value)}
                 rows={6}
                 placeholder="Sobre o que você quer falar?"
-                className="min-h-[180px] w-full resize-none rounded-[1.5rem] border border-transparent bg-white px-2 py-2 text-[13px] leading-6 text-slate-700 outline-none placeholder:text-slate-400 focus:border-transparent focus:ring-0"
+                className="min-h-[180px] w-full resize-none rounded-[1.5rem] border border-transparent bg-white px-2 py-2 text-[16px] leading-7 text-slate-700 outline-none placeholder:text-slate-400 focus:border-transparent focus:ring-0"
               />
 
               {draftAttachments.length ? (
