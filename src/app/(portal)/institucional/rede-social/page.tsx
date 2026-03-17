@@ -80,7 +80,70 @@ type SearchSuggestionItem = {
   id: string;
 };
 
-const EMOJIS = ["\u{1F44D}", "\u{2764}\u{FE0F}", "\u{1F389}", "\u{1F44F}", "\u{1F525}", "\u{1F680}"] as const;
+type EmojiGroup = {
+  id: string;
+  label: string;
+  icon: string;
+  emojis: string[];
+};
+
+const EMOJI_GROUPS: EmojiGroup[] = [
+  {
+    id: "smileys",
+    label: "Rostos",
+    icon: "😀",
+    emojis: ["😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "🙂", "😉", "😊", "😍", "🥰", "😘", "😎", "🤩", "🥳", "🤗", "🤔", "🫠"],
+  },
+  {
+    id: "feelings",
+    label: "Humor",
+    icon: "🥹",
+    emojis: ["😌", "😴", "😪", "🤤", "😮", "😯", "😲", "😳", "🥺", "😢", "😭", "😤", "😡", "🤯", "😬", "🫣", "🫡", "🤭", "🤫", "😇"],
+  },
+  {
+    id: "people",
+    label: "Pessoas",
+    icon: "🙌",
+    emojis: ["👍", "👎", "👏", "🙌", "🙏", "🤝", "💪", "👀", "🫶", "👋", "🤟", "👌", "✌️", "🤞", "🤜", "🤛", "☝️", "🙋", "💁", "🧑‍💻"],
+  },
+  {
+    id: "hearts",
+    label: "Corações",
+    icon: "❤️",
+    emojis: ["❤️", "🧡", "💛", "💚", "🩵", "💙", "💜", "🖤", "🤍", "🤎", "💔", "❣️", "💕", "💞", "💓", "💗", "💖", "💘", "💝", "💟"],
+  },
+  {
+    id: "nature",
+    label: "Natureza",
+    icon: "🌿",
+    emojis: ["🌞", "🌈", "⭐", "🔥", "⚡", "☁️", "🌧️", "🌊", "🌱", "🌿", "🌳", "🌵", "🌷", "🌹", "🌻", "🍀", "🪴", "🍁", "🦋", "🐝"],
+  },
+  {
+    id: "food",
+    label: "Comidas",
+    icon: "🍕",
+    emojis: ["☕", "🍵", "🧃", "🥤", "🍎", "🍉", "🍓", "🍇", "🥑", "🍔", "🍟", "🍕", "🌮", "🥗", "🍿", "🍩", "🎂", "🍪", "🍫", "🍻"],
+  },
+  {
+    id: "activities",
+    label: "Atividades",
+    icon: "🎉",
+    emojis: ["🎉", "🎊", "🏆", "🥇", "⚽", "🏀", "🎯", "🎮", "🎵", "🎤", "🎬", "📚", "✈️", "🏖️", "🏡", "🛠️", "💡", "📈", "🧠", "🚀"],
+  },
+  {
+    id: "objects",
+    label: "Objetos",
+    icon: "💻",
+    emojis: ["📱", "💻", "⌚", "📷", "🎧", "🔔", "🔒", "🔑", "💡", "📝", "📌", "📎", "📦", "🧾", "💰", "💳", "🛒", "🎁", "🪄", "🧯"],
+  },
+  {
+    id: "symbols",
+    label: "Símbolos",
+    icon: "✅",
+    emojis: ["✅", "☑️", "✔️", "❌", "⚠️", "⛔", "🚫", "❗", "❓", "💯", "🔝", "🔄", "♻️", "➕", "➖", "➗", "➡️", "⬆️", "⬇️", "⭐"],
+  },
+];
+const REACTION_EMOJIS = ["👍", "❤️", "🎉", "👏", "🔥", "🚀"] as const;
 const MIGRATION = "supabase/sql/2026-03-03_create_internal_social_network_tables.sql";
 const MEDIA_BUCKET_MIGRATION = "supabase/sql/2026-03-03_create_internal_social_media_bucket.sql";
 const SOCIAL_BOARD_MIGRATION = "supabase/sql/2026-03-03_add_pinned_post_and_project_board_to_internal_social.sql";
@@ -218,6 +281,7 @@ export default function InternalSocialPage() {
   const [messageAttachments, setMessageAttachments] = useState<Array<{ type: AttachmentType; url: string; label: string }>>([]);
   const [messageDropActive, setMessageDropActive] = useState(false);
   const [showMessageEmojiPicker, setShowMessageEmojiPicker] = useState(false);
+  const [activeMessageEmojiGroup, setActiveMessageEmojiGroup] = useState<string>(EMOJI_GROUPS[0]?.id ?? "smileys");
   const [busy, setBusy] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [editingPostId, setEditingPostId] = useState("");
@@ -230,6 +294,7 @@ export default function InternalSocialPage() {
   const [projectNotes, setProjectNotes] = useState<Record<string, string>>({});
   const [composerExpanded, setComposerExpanded] = useState(false);
   const [showComposerEmojiPicker, setShowComposerEmojiPicker] = useState(false);
+  const [activeComposerEmojiGroup, setActiveComposerEmojiGroup] = useState<string>(EMOJI_GROUPS[0]?.id ?? "smileys");
   const [activeTab, setActiveTab] = useState<"inicio" | "network" | "projects" | "messages">("inicio");
   const [messageFilter, setMessageFilter] = useState<"all" | "online" | "with_history">("all");
   const [messageSearch, setMessageSearch] = useState("");
@@ -242,6 +307,14 @@ export default function InternalSocialPage() {
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const messageFileInputRef = useRef<HTMLInputElement | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const activeComposerEmojiSet = useMemo(
+    () => EMOJI_GROUPS.find((group) => group.id === activeComposerEmojiGroup) ?? EMOJI_GROUPS[0],
+    [activeComposerEmojiGroup]
+  );
+  const activeMessageEmojiSet = useMemo(
+    () => EMOJI_GROUPS.find((group) => group.id === activeMessageEmojiGroup) ?? EMOJI_GROUPS[0],
+    [activeMessageEmojiGroup]
+  );
 
   async function load() {
     setLoading(true);
@@ -1698,7 +1771,7 @@ export default function InternalSocialPage() {
                       ) : null}
 
                       <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
-                        {EMOJIS.map((emoji) => {
+                        {REACTION_EMOJIS.map((emoji) => {
                           const count = post.reactions.filter((item) => item.emoji === emoji).length;
                           const active = !!post.reactions.find((item) => item.user_id === me?.id && item.emoji === emoji);
                           return (
@@ -2268,24 +2341,39 @@ export default function InternalSocialPage() {
                         </button>
                       </div>
                       {showMessageEmojiPicker ? (
-                        <div className="mt-3 grid grid-cols-8 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-10">
-                          {[
-                            "😀","😃","😄","😁","😅","😂","🙂","😉","😊","😍",
-                            "😘","🤩","🥳","😎","🤔","😴","😢","😭","😤","😡",
-                            "👍","👏","🙌","🙏","🔥","🚀","💡","🎉","❤️","💯",
-                          ].map((emoji) => (
-                            <button
-                              key={emoji}
-                              type="button"
-                              onClick={() => {
-                                setMessageText((prev) => `${prev}${prev ? " " : ""}${emoji}`);
-                                setShowMessageEmojiPicker(false);
-                              }}
-                              className="rounded-xl bg-white px-2 py-1 text-lg hover:bg-slate-100"
-                            >
-                              {emoji}
-                            </button>
-                          ))}
+                        <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                          <div className="mb-3 flex flex-wrap gap-2">
+                            {EMOJI_GROUPS.map((group) => (
+                              <button
+                                key={group.id}
+                                type="button"
+                                onClick={() => setActiveMessageEmojiGroup(group.id)}
+                                className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                                  activeMessageEmojiSet.id === group.id
+                                    ? "bg-white text-slate-900 shadow-sm"
+                                    : "bg-transparent text-slate-500 hover:bg-white/70"
+                                }`}
+                              >
+                                <span>{group.icon}</span>
+                                <span>{group.label}</span>
+                              </button>
+                            ))}
+                          </div>
+                          <div className="grid max-h-48 grid-cols-8 gap-2 overflow-y-auto pr-1 sm:grid-cols-10">
+                            {activeMessageEmojiSet.emojis.map((emoji) => (
+                              <button
+                                key={`${activeMessageEmojiSet.id}-${emoji}`}
+                                type="button"
+                                onClick={() => {
+                                  setMessageText((prev) => `${prev}${prev ? " " : ""}${emoji}`);
+                                  setShowMessageEmojiPicker(false);
+                                }}
+                                className="rounded-xl bg-white px-2 py-1 text-lg hover:bg-slate-100"
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       ) : null}
                       {messageAttachments.length ? (
@@ -2485,16 +2573,32 @@ export default function InternalSocialPage() {
                     Emoji
                   </button>
                   {showComposerEmojiPicker ? (
-                    <div className="absolute bottom-[calc(100%+0.75rem)] left-0 z-10 w-64 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_20px_50px_-24px_rgba(15,23,42,0.35)]">
-                      <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Adicionar emoji</p>
-                      <div className="grid grid-cols-6 gap-2">
-                        {EMOJIS.map((emoji) => (
+                    <div className="absolute bottom-[calc(100%+0.75rem)] left-0 z-10 w-[26rem] rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_20px_50px_-24px_rgba(15,23,42,0.35)]">
+                      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Adicionar emoji</p>
+                      <div className="mb-3 flex flex-wrap gap-2">
+                        {EMOJI_GROUPS.map((group) => (
                           <button
-                            key={emoji}
+                            key={group.id}
+                            type="button"
+                            onClick={() => setActiveComposerEmojiGroup(group.id)}
+                            className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                              activeComposerEmojiSet.id === group.id
+                                ? "bg-slate-100 text-slate-900"
+                                : "bg-white text-slate-500 hover:bg-slate-50"
+                            }`}
+                          >
+                            <span>{group.icon}</span>
+                            <span>{group.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="grid max-h-56 grid-cols-7 gap-2 overflow-y-auto pr-1">
+                        {activeComposerEmojiSet.emojis.map((emoji) => (
+                          <button
+                            key={`${activeComposerEmojiSet.id}-${emoji}`}
                             type="button"
                             onClick={() => {
                               setPostText((prev) => `${prev}${emoji}`);
-                              setShowComposerEmojiPicker(false);
                               composerTextareaRef.current?.focus();
                             }}
                             className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2 text-lg transition hover:bg-slate-100"
