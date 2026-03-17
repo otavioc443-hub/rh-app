@@ -1175,11 +1175,11 @@ export default function InternalSocialPage() {
   const currentName = displayName(me);
 
   return (
-    <div className="min-h-screen bg-[#f4f2ee]">
-      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#f8fbff_0%,_#eef4ff_22%,_#f4f2ee_58%,_#f1ede6_100%)]">
+      <header className="sticky top-0 z-20 border-b border-slate-200/80 bg-white/90 shadow-[0_12px_40px_-28px_rgba(15,23,42,0.35)] backdrop-blur-xl">
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 md:px-6">
             <div className="flex min-w-0 items-center gap-3">
-              <div className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm">
+              <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-white to-slate-50 px-4 py-2.5 text-sm font-semibold tracking-[0.01em] text-slate-900 shadow-[0_10px_25px_-18px_rgba(15,23,42,0.45)]">
                 PulseHub
               </div>
               <div ref={searchBoxRef} className="relative hidden md:block">
@@ -1216,7 +1216,7 @@ export default function InternalSocialPage() {
                     }
                   }}
                   placeholder={searchPlaceholder}
-                  className="h-11 min-w-[260px] rounded-full border border-slate-300 bg-slate-50 px-4 pr-10 text-sm text-slate-700 outline-none transition focus:border-blue-300 focus:bg-white"
+                  className="h-12 min-w-[300px] rounded-full border border-slate-300/80 bg-gradient-to-r from-slate-50 to-white px-5 pr-10 text-sm text-slate-700 outline-none transition focus:border-blue-300 focus:bg-white focus:shadow-[0_0_0_4px_rgba(59,130,246,0.08)]"
                 />
                 {search ? (
                   <button
@@ -1233,7 +1233,7 @@ export default function InternalSocialPage() {
                   </button>
                 ) : null}
                 {hasSearchSuggestions ? (
-                  <div className="absolute left-0 top-14 z-30 w-[420px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+                  <div className="absolute left-0 top-14 z-30 w-[440px] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_-32px_rgba(15,23,42,0.45)]">
                   {searchSuggestions.people.length ? (
                     <div className="border-b border-slate-100 px-4 py-3">
                       <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Pessoas</p>
@@ -1338,7 +1338,7 @@ export default function InternalSocialPage() {
                 ) : null}
             </div>
           </div>
-          <nav className="hidden items-center gap-2 text-sm lg:flex">
+          <nav className="hidden items-center gap-2 rounded-full border border-slate-200 bg-white/80 p-1 text-sm shadow-[0_12px_30px_-24px_rgba(15,23,42,0.4)] lg:flex">
             {[
               { id: "inicio", label: "Inicio" },
               { id: "network", label: "Minha rede" },
@@ -1356,7 +1356,7 @@ export default function InternalSocialPage() {
                   }}
                   className={`relative rounded-full px-4 py-2 font-medium transition ${
                     active
-                      ? "bg-slate-900 text-white shadow-sm"
+                      ? "bg-slate-900 text-white shadow-[0_10px_24px_-18px_rgba(15,23,42,0.65)]"
                       : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                   }`}
                 >
@@ -1371,7 +1371,7 @@ export default function InternalSocialPage() {
             })}
           </nav>
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-xs font-semibold text-white">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 text-xs font-semibold text-white shadow-[0_14px_30px_-18px_rgba(59,130,246,0.8)]">
               {initials(currentName)}
             </div>
           </div>
@@ -1380,7 +1380,7 @@ export default function InternalSocialPage() {
 
       <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 md:px-6">
         {activeTab !== "inicio" ? (
-          <section className="rounded-3xl border border-slate-200 bg-gradient-to-r from-slate-950 via-blue-950 to-indigo-900 px-6 py-6 text-white shadow-sm">
+          <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[linear-gradient(120deg,#020617_0%,#0f172a_18%,#102c5c_52%,#312e81_100%)] px-6 py-7 text-white shadow-[0_30px_90px_-40px_rgba(15,23,42,0.75)]">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-200">Institucional</p>
@@ -1396,7 +1396,7 @@ export default function InternalSocialPage() {
         {error ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
 
         {searchSubmitted && searchTerm ? (
-          <section className="mx-auto max-w-5xl rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="mx-auto max-w-5xl rounded-[2rem] border border-slate-200 bg-white/95 p-6 shadow-[0_24px_80px_-44px_rgba(15,23,42,0.35)] backdrop-blur">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Busca geral</p>
@@ -1405,13 +1405,13 @@ export default function InternalSocialPage() {
               <button
                 type="button"
                 onClick={() => setSearchSubmitted(false)}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
               >
                 Fechar resultados
               </button>
             </div>
             <div className="mt-5 grid gap-5 lg:grid-cols-2">
-              <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4">
                 <p className="text-sm font-semibold text-slate-900">Pessoas</p>
                 <div className="mt-3 space-y-3">
                   {globalPeopleResults.length ? (
@@ -1431,7 +1431,7 @@ export default function InternalSocialPage() {
                   )}
                 </div>
               </section>
-              <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4">
                 <p className="text-sm font-semibold text-slate-900">Publicacoes</p>
                 <div className="mt-3 space-y-3">
                   {globalPostResults.length ? (
@@ -1454,7 +1454,7 @@ export default function InternalSocialPage() {
                   )}
                 </div>
               </section>
-              <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4">
                 <p className="text-sm font-semibold text-slate-900">Projetos</p>
                 <div className="mt-3 space-y-3">
                   {globalProjectResults.length ? (
@@ -1478,7 +1478,7 @@ export default function InternalSocialPage() {
                   )}
                 </div>
               </section>
-              <section className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4">
                 <p className="text-sm font-semibold text-slate-900">Mensagens</p>
                 <div className="mt-3 space-y-3">
                   {globalConversationResults.length ? (
@@ -1509,9 +1509,9 @@ export default function InternalSocialPage() {
 
         {!searchSubmitted && activeTab === "inicio" ? (
           <main id="feed" className="mx-auto max-w-3xl space-y-6">
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.35)] backdrop-blur">
               <div className="flex gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-blue-700 text-sm font-semibold text-white">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-blue-700 text-sm font-semibold text-white shadow-[0_16px_32px_-20px_rgba(37,99,235,0.65)]">
                   {initials(currentName)}
                 </div>
                 <div className="min-w-0 flex-1 space-y-4">
@@ -1521,22 +1521,26 @@ export default function InternalSocialPage() {
                       setComposerExpanded(true);
                       document.getElementById("social-post-textarea")?.focus();
                     }}
-                    className="flex h-14 w-full items-center rounded-full border border-slate-300 bg-white px-5 text-left text-base font-medium text-slate-500 hover:bg-slate-50"
+                    className="flex h-14 w-full items-center rounded-full border border-slate-300 bg-gradient-to-r from-slate-50 to-white px-5 text-left text-base font-medium text-slate-500 transition hover:border-slate-400 hover:bg-white hover:shadow-[0_12px_30px_-24px_rgba(15,23,42,0.45)]"
                   >
                     Comecar publicacao
                   </button>
                   {composerExpanded || postText || draftAttachments.length ? (
                     <>
+                      <div className="rounded-3xl border border-slate-200 bg-slate-50/80 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Novo post</p>
+                        <p className="mt-1 text-sm text-slate-600">Compartilhe alinhamentos, marcos do time e comunicados internos.</p>
+                      </div>
                       <textarea
                         id="social-post-textarea"
                         value={postText}
                         onChange={(event) => setPostText(event.target.value)}
                         rows={4}
                         placeholder="Compartilhe atualizacoes, alinhamentos, imagens ou videos com o time."
-                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none focus:border-blue-300 focus:bg-white"
+                        className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-300 focus:bg-white focus:shadow-[0_0_0_4px_rgba(59,130,246,0.08)]"
                       />
                       <div className="flex flex-wrap items-center gap-3">
-                    <label className="inline-flex cursor-pointer items-center rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                    <label className="inline-flex cursor-pointer items-center rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-[0_8px_24px_-22px_rgba(15,23,42,0.45)] hover:bg-slate-50">
                       {uploadingMedia ? "Enviando midia..." : "Video ou foto"}
                       <input
                         type="file"
@@ -1555,7 +1559,7 @@ export default function InternalSocialPage() {
                         {draftAttachments.map((item, index) => (
                           <div
                             key={`${item.url}-${index}`}
-                            className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"
+                            className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50"
                           >
                             {item.type === "image" ? (
                               <Image
@@ -1594,7 +1598,7 @@ export default function InternalSocialPage() {
                             setScopeType(next);
                             if (next !== "project") setProjectId("");
                           }}
-                          className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                          className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-[0_8px_22px_-20px_rgba(15,23,42,0.4)]"
                         >
                           <option value="company">Toda a empresa</option>
                           <option value="project">Equipe de projeto</option>
@@ -1603,7 +1607,7 @@ export default function InternalSocialPage() {
                           value={projectId}
                           onChange={(event) => setProjectId(event.target.value)}
                           disabled={scopeType !== "project"}
-                          className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900 disabled:bg-slate-100"
+                          className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-[0_8px_22px_-20px_rgba(15,23,42,0.4)] disabled:bg-slate-100"
                         >
                           <option value="">Selecione o projeto</option>
                           {projects.map((project) => (
@@ -1615,9 +1619,9 @@ export default function InternalSocialPage() {
                       </div>
                       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-2">
                         <div className="flex flex-wrap gap-2">
-                          <span className="inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold text-[#0a66c2]">Video</span>
-                          <span className="inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold text-[#0a66c2]">Foto</span>
-                          <span className="inline-flex items-center rounded-full px-3 py-1 text-sm font-semibold text-[#0a66c2]">Humor</span>
+                          <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-[#0a66c2]">Video</span>
+                          <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-[#0a66c2]">Foto</span>
+                          <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-[#0a66c2]">Humor</span>
                           {EMOJIS.map((emoji) => (
                             <button
                               key={emoji}
@@ -1660,7 +1664,7 @@ export default function InternalSocialPage() {
             </section>
 
             {activeTab === "inicio" && visiblePinnedPost ? (
-              <section className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 shadow-sm">
+              <section className="rounded-[2rem] border border-amber-200 bg-[linear-gradient(135deg,rgba(255,251,235,0.98),rgba(254,243,199,0.7))] p-5 shadow-[0_24px_70px_-42px_rgba(217,119,6,0.4)]">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">Post em destaque</p>
@@ -1679,7 +1683,7 @@ export default function InternalSocialPage() {
             ) : null}
 
             {loading ? (
-              <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">Carregando feed...</div>
+              <div className="rounded-[2rem] border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.35)]">Carregando feed...</div>
             ) : visibleFeedPosts.length ? (
                 <section className="space-y-4">
                   {visibleFeedPosts.map((post) => {
@@ -1688,7 +1692,7 @@ export default function InternalSocialPage() {
                     const canManagePost = post.author_user_id === me?.id || canModeratePosts;
                     const isEditing = editingPostId === post.id;
                     return (
-                      <article key={post.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                      <article key={post.id} className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_70px_-44px_rgba(15,23,42,0.32)] backdrop-blur">
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3">
                             <div className="relative h-12 w-12 rounded-full">
@@ -1913,7 +1917,7 @@ export default function InternalSocialPage() {
                 })}
               </section>
             ) : (
-              <div className="rounded-3xl border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-sm">Nenhuma publicacao ainda.</div>
+              <div className="rounded-[2rem] border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.3)]">Nenhuma publicacao ainda.</div>
             )}
           </main>
         ) : null}
