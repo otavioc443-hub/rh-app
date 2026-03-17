@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import {
@@ -54,6 +54,16 @@ type ColaboradorName = {
   cargo: string | null;
 };
 
+type PortalShellCache = {
+  role: Role | null;
+  company: Company | null;
+  department: Department | null;
+  fullName: string | null;
+  jobTitle: string | null;
+  avatarUrl: string | null;
+  hiddenRoutes: string[];
+};
+
 function withTimeout<T>(p: Promise<T>, ms = 7000): Promise<T> {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error("timeout")), ms);
@@ -69,6 +79,30 @@ function withTimeout<T>(p: Promise<T>, ms = 7000): Promise<T> {
 
 function getScrollStorageKey(pathname: string) {
   return `portal-scroll:${pathname}`;
+}
+
+const PORTAL_SHELL_CACHE_KEY = "portal-shell-cache";
+
+function readPortalShellCache(): PortalShellCache | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(PORTAL_SHELL_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PortalShellCache;
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writePortalShellCache(cache: PortalShellCache) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(PORTAL_SHELL_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // noop
+  }
 }
 
 export default function PortalShell({ children }: { children: React.ReactNode }) {
@@ -90,6 +124,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
 
   const inFlight = useRef(false);
   const alive = useRef(true);
+  const hydratedFromCache = useRef(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -119,6 +154,22 @@ export default function PortalShell({ children }: { children: React.ReactNode })
     };
   }, []);
 
+  useLayoutEffect(() => {
+    const cached = readPortalShellCache();
+    if (!cached) return;
+
+    hydratedFromCache.current = true;
+    setRole(cached.role);
+    setCompany(cached.company);
+    setDepartment(cached.department);
+    setFullName(cached.fullName);
+    setJobTitle(cached.jobTitle);
+    setAvatarUrl(cached.avatarUrl);
+    setHiddenRoutes(new Set(cached.hiddenRoutes));
+    setHiddenRoutesLoaded(true);
+    setLoading(false);
+  }, []);
+
   useEffect(() => {
     alive.current = true;
 
@@ -127,11 +178,16 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       router.replace("/?redirectedFrom=%2Fhome");
     }
 
-    async function boot({ resetVisibilityState = true }: { resetVisibilityState?: boolean } = {}) {
+    async function boot({
+      resetVisibilityState = true,
+      silent = false,
+    }: { resetVisibilityState?: boolean; silent?: boolean } = {}) {
       if (inFlight.current) return;
       inFlight.current = true;
 
-      setLoading(true);
+      if (!silent) {
+        setLoading(true);
+      }
       setFatalError(null);
       setDebugErr(null);
       if (resetVisibilityState) {
@@ -278,7 +334,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       }
     }
 
-    void boot();
+    void boot({ resetVisibilityState: !hydratedFromCache.current, silent: hydratedFromCache.current });
 
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event === "INITIAL_SESSION") return;
@@ -309,6 +365,19 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       }
     };
   }, [router]);
+
+  useEffect(() => {
+    if (!role || !hiddenRoutesLoaded) return;
+    writePortalShellCache({
+      role,
+      company,
+      department,
+      fullName,
+      jobTitle,
+      avatarUrl,
+      hiddenRoutes: Array.from(hiddenRoutes),
+    });
+  }, [avatarUrl, company, department, fullName, hiddenRoutes, hiddenRoutesLoaded, jobTitle, role]);
 
   useEffect(() => {
     if (!role) return;
