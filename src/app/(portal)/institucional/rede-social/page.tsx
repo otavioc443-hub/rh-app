@@ -833,6 +833,7 @@ export default function InternalSocialPage() {
   const canModeratePosts = me?.role === "admin" || me?.role === "diretoria";
   const pinnedPost = useMemo(() => posts.find((item) => item.id === pinnedPostId) ?? null, [posts, pinnedPostId]);
   const feedPosts = useMemo(() => posts.filter((item) => item.id !== pinnedPostId), [posts, pinnedPostId]);
+  const editingPost = useMemo(() => posts.find((item) => item.id === editingPostId) ?? null, [editingPostId, posts]);
   const selectedProjectBoard = useMemo(
     () => projects.find((item) => item.id === projectBoardProjectId) ?? null,
     [projects, projectBoardProjectId]
@@ -1109,13 +1110,20 @@ export default function InternalSocialPage() {
   }, []);
 
   useEffect(() => {
-    if (!composerExpanded || typeof document === "undefined") return;
+    if ((!composerExpanded && !editingPostId) || typeof document === "undefined") return;
     const previousOverflow = document.body.style.overflow;
-    const frame = window.requestAnimationFrame(() => composerTextareaRef.current?.focus());
+    const frame = window.requestAnimationFrame(() => {
+      if (editingPostId) editingPostTextareaRef.current?.focus();
+      else composerTextareaRef.current?.focus();
+    });
     function handleEscape(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
-      setComposerExpanded(false);
-      setShowComposerEmojiPicker(false);
+      if (editingPostId) {
+        cancelEditPost();
+      } else {
+        setComposerExpanded(false);
+        setShowComposerEmojiPicker(false);
+      }
     }
     document.body.style.overflow = "hidden";
     document.addEventListener("keydown", handleEscape);
@@ -1124,7 +1132,7 @@ export default function InternalSocialPage() {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [composerExpanded]);
+  }, [composerExpanded, editingPostId]);
 
   function applyRichTextAction(
     action: RichTextAction,
@@ -1913,7 +1921,6 @@ export default function InternalSocialPage() {
                     const authorName = post.author_name || displayName(profileById.get(post.author_user_id));
                     const authorAvatar = post.author_avatar_url || profileById.get(post.author_user_id)?.avatar_url || null;
                     const canManagePost = post.author_user_id === me?.id || canModeratePosts;
-                    const isEditing = editingPostId === post.id;
                     return (
                       <article key={post.id} className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_70px_-44px_rgba(15,23,42,0.32)] backdrop-blur">
                         <div className="flex items-center justify-between gap-3">
@@ -1969,46 +1976,7 @@ export default function InternalSocialPage() {
                           ) : null}
                         </div>
                       </div>
-                      {isEditing ? (
-                        <div className="mt-4 space-y-4 rounded-[1.75rem] border border-slate-200 bg-slate-50/70 p-4">
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Editando publicação</p>
-                              <p className="mt-1 text-sm text-slate-600">Ajuste texto e formatação antes de salvar.</p>
-                            </div>
-                            <RichTextToolbar
-                              compact
-                              onAction={(action) =>
-                                applyRichTextAction(action, editingPostText, setEditingPostText, editingPostTextareaRef.current)
-                              }
-                            />
-                          </div>
-                          <textarea
-                            ref={editingPostTextareaRef}
-                            value={editingPostText}
-                            onChange={(event) => setEditingPostText(event.target.value)}
-                            rows={6}
-                            className="min-h-[180px] w-full resize-none rounded-[1.5rem] border border-white bg-white px-4 py-4 text-[15px] leading-7 text-slate-800 outline-none transition focus:border-blue-200 focus:shadow-[0_0_0_4px_rgba(59,130,246,0.08)]"
-                          />
-                          <div className="flex items-center justify-end gap-2 border-t border-slate-200/80 pt-3">
-                            <button
-                              type="button"
-                              onClick={cancelEditPost}
-                              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                            >
-                              Cancelar
-                            </button>
-                            <button
-                              type="button"
-                              disabled={busy}
-                              onClick={() => void saveEditedPost()}
-                              className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
-                            >
-                              Salvar
-                            </button>
-                          </div>
-                        </div>
-                      ) : post.text ? (
+                      {post.text ? (
                         <RichText className="mt-4 space-y-3 text-sm leading-6 text-slate-800 [&_li]:ml-5 [&_li]:list-disc [&_p]:whitespace-pre-wrap" value={post.text} />
                       ) : null}
                       {post.attachments.length ? (
@@ -2710,6 +2678,73 @@ export default function InternalSocialPage() {
           </section>
         ) : null}
       </div>
+
+      {editingPost ? (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/55 px-4 py-6 backdrop-blur-sm">
+          <div className="flex h-[min(92vh,860px)] min-h-0 w-full max-w-2xl flex-col overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_40px_120px_-36px_rgba(15,23,42,0.55)] md:mx-auto">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+              <div className="flex min-w-0 items-center gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-blue-700 text-sm font-semibold text-white shadow-[0_16px_32px_-20px_rgba(37,99,235,0.65)]">
+                  {initials(editingPost.author_name || currentName)}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-lg font-semibold text-slate-900">{editingPost.author_name || currentName}</p>
+                  <p className="text-sm text-slate-500">Editando publicação em {editingPost.audience_label}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={cancelEditPost}
+                className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Fechar edição de publicação"
+              >
+                <span className="text-2xl leading-none">×</span>
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+              <div className="space-y-4 pb-2">
+                <div className="rounded-3xl border border-slate-200 bg-slate-50/80 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Editar publicação</p>
+                  <p className="mt-1 text-sm text-slate-600">Ajuste o texto e a formatação antes de salvar.</p>
+                </div>
+
+                <textarea
+                  ref={editingPostTextareaRef}
+                  value={editingPostText}
+                  onChange={(event) => setEditingPostText(event.target.value)}
+                  rows={8}
+                  className="min-h-[220px] w-full resize-none rounded-[1.5rem] border border-transparent bg-white px-2 py-2 text-[16px] leading-7 text-slate-700 outline-none placeholder:text-slate-400 focus:border-transparent focus:ring-0"
+                />
+
+                <RichTextToolbar
+                  onAction={(action) =>
+                    applyRichTextAction(action, editingPostText, setEditingPostText, editingPostTextareaRef.current)
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-slate-100 bg-white px-5 py-4">
+              <button
+                type="button"
+                onClick={cancelEditPost}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={busy || !editingPostText.trim()}
+                onClick={() => void saveEditedPost()}
+                className="rounded-full bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
+              >
+                {busy ? "Salvando..." : "Salvar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {composerExpanded ? (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/55 px-4 py-6 backdrop-blur-sm">
