@@ -37,6 +37,8 @@ function toDb(payload: ColaboradorPayload) {
   };
 
   const base: Record<string, unknown> = { ...payload };
+  delete base.company_id;
+  delete base.department_id;
 
   base.empresa = n(payload.empresa) || null;
   base.setor = n(payload.setor) || null;
