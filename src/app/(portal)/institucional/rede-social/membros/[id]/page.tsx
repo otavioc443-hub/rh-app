@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 type MemberProfile = {
@@ -29,11 +29,11 @@ function lastSeenLabel(value: string | null | undefined) {
   const ms = date.getTime();
   if (Number.isNaN(ms)) return "Offline";
   const diffMinutes = Math.max(0, Math.round((Date.now() - ms) / (1000 * 60)));
-  if (diffMinutes < 1) return "Offline • ultimo acesso agora";
-  if (diffMinutes < 60) return `Offline • ultimo acesso ha ${diffMinutes} min`;
+  if (diffMinutes < 1) return "Offline • último acesso agora";
+  if (diffMinutes < 60) return `Offline • último acesso há ${diffMinutes} min`;
   const diffHours = Math.round(diffMinutes / 60);
-  if (diffHours < 24) return `Offline • ultimo acesso ha ${diffHours} h`;
-  return `Offline • ultimo acesso em ${date.toLocaleDateString("pt-BR")}`;
+  if (diffHours < 24) return `Offline • último acesso há ${diffHours} h`;
+  return `Offline • último acesso em ${date.toLocaleDateString("pt-BR")}`;
 }
 
 function displayName(profile?: MemberProfile | null) {
@@ -51,7 +51,7 @@ function initials(name: string) {
 
 function roleLine(profile?: MemberProfile | null) {
   const parts = [(profile?.cargo ?? "").trim(), (profile?.setor ?? "").trim()].filter(Boolean);
-  return parts.length ? parts.join(" | ") : "Cargo e setor n?o informados";
+  return parts.length ? parts.join(" | ") : "Cargo e setor não informados";
 }
 
 function when(value: string) {
@@ -82,7 +82,11 @@ export default function InternalSocialMemberProfilePage() {
         const token = sessionRes.data.session?.access_token ?? "";
         const [profileRes, collaboratorRes, postsRes, commentsRes, reactionsRes, messagesRes] = await Promise.all([
           supabase.from("profiles").select("id,full_name,email,avatar_url").eq("id", memberId).maybeSingle<MemberProfile>(),
-          supabase.from("colaboradores").select("nome,cargo,setor").eq("user_id", memberId).maybeSingle<{ nome: string | null; cargo: string | null; setor: string | null }>(),
+          supabase
+            .from("colaboradores")
+            .select("nome,cargo,setor")
+            .eq("user_id", memberId)
+            .maybeSingle<{ nome: string | null; cargo: string | null; setor: string | null }>(),
           supabase
             .from("internal_social_posts")
             .select("id,author_user_id,audience_type,audience_label,text,created_at")
@@ -137,8 +141,10 @@ export default function InternalSocialMemberProfilePage() {
           cargo: (collaborator?.cargo ?? "").trim() || null,
           setor: (collaborator?.setor ?? "").trim() || null,
         });
+
         const nextPosts = (postsRes.data ?? []) as MemberPost[];
         setPosts(nextPosts);
+
         let onlineFromSession = false;
         if (token) {
           const presenceRes = await fetch("/api/institucional/presence", {
@@ -186,7 +192,7 @@ export default function InternalSocialMemberProfilePage() {
     <div className="mx-auto max-w-5xl space-y-6">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Minha rede</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">PulseHub</p>
           <h1 className="mt-1 text-2xl font-semibold text-slate-900">Perfil do membro</h1>
         </div>
         <Link
@@ -247,11 +253,11 @@ export default function InternalSocialMemberProfilePage() {
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Publica??es</p>
-                <p className="mt-1 text-lg font-semibold text-slate-900">Publica??es de {title}</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Publicações</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">Publicações de {title}</p>
               </div>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-                {posts.length} publica??o(?es)
+                {posts.length} {posts.length === 1 ? "publicação" : "publicações"}
               </span>
             </div>
             <div className="mt-4 space-y-4">
@@ -269,7 +275,7 @@ export default function InternalSocialMemberProfilePage() {
                 ))
               ) : (
                 <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                  Este membro ainda n?o publicou na rede interna.
+                  Este membro ainda não publicou na rede interna.
                 </div>
               )}
             </div>
@@ -277,7 +283,7 @@ export default function InternalSocialMemberProfilePage() {
         </>
       ) : (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-          Membro n?o encontrado.
+          Membro não encontrado.
         </div>
       )}
     </div>

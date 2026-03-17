@@ -94,7 +94,7 @@ function displayName(profile?: Profile | null) {
 
 function profileRoleLine(profile?: Profile | null) {
   const parts = [(profile?.cargo ?? "").trim(), (profile?.setor ?? "").trim()].filter(Boolean);
-  return parts.length ? parts.join(" | ") : "Cargo e setor nao informados";
+  return parts.length ? parts.join(" | ") : "Cargo e setor não informados";
 }
 
 function initials(name: string) {
@@ -128,11 +128,11 @@ function lastSeenLabel(value: string | null | undefined) {
   const ms = date.getTime();
   if (Number.isNaN(ms)) return "Offline";
   const diffMinutes = Math.max(0, Math.round((Date.now() - ms) / (1000 * 60)));
-  if (diffMinutes < 1) return "Offline • ultimo acesso agora";
-  if (diffMinutes < 60) return `Offline • ultimo acesso ha ${diffMinutes} min`;
+  if (diffMinutes < 1) return "Offline • último acesso agora";
+  if (diffMinutes < 60) return `Offline • último acesso há ${diffMinutes} min`;
   const diffHours = Math.round(diffMinutes / 60);
-  if (diffHours < 24) return `Offline • ultimo acesso ha ${diffHours} h`;
-  return `Offline • ultimo acesso em ${date.toLocaleDateString("pt-BR")}`;
+  if (diffHours < 24) return `Offline • último acesso há ${diffHours} h`;
+  return `Offline • último acesso em ${date.toLocaleDateString("pt-BR")}`;
 }
 
 function highlightMatch(text: string, term: string) {
@@ -179,7 +179,7 @@ function inferAttachmentTypeFromUrl(url: string): AttachmentType {
 function normalizeError(message: string) {
   const lower = message.toLowerCase();
   if (lower.includes("could not find the table") || lower.includes("schema cache") || lower.includes("does not exist")) {
-    return `A rede social interna ainda nao esta configurada no banco. Rode a migration ${MIGRATION} no Supabase e tente novamente.`;
+    return `A rede social interna ainda não está configurada no banco. Rode a migration ${MIGRATION} no Supabase e tente novamente.`;
   }
   return message;
 }
@@ -240,6 +240,7 @@ export default function InternalSocialPage() {
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const messageFileInputRef = useRef<HTMLInputElement | null>(null);
+  const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   async function load() {
     setLoading(true);
@@ -521,7 +522,7 @@ export default function InternalSocialPage() {
     if (activeTab === "network") return "Pesquisar membros da rede";
     if (activeTab === "projects") return "Pesquisar projetos";
     if (activeTab === "messages") return "Pesquisar conversas";
-    return "Pesquisar publicacoes na rede";
+    return "Pesquisar publicações na rede";
   }, [activeTab]);
   const contacts = useMemo(() => profiles.filter((item) => item.id !== me?.id), [profiles, me?.id]);
   const activeThread = useMemo(() => {
@@ -810,6 +811,23 @@ export default function InternalSocialPage() {
     return () => document.removeEventListener("mousedown", handleDocumentPointerDown);
   }, []);
 
+  useEffect(() => {
+    if (!composerExpanded || typeof document === "undefined") return;
+    const previousOverflow = document.body.style.overflow;
+    const frame = window.requestAnimationFrame(() => composerTextareaRef.current?.focus());
+    function handleEscape(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setComposerExpanded(false);
+    }
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [composerExpanded]);
+
   async function uploadMedia(file: File) {
     if (!file) return;
     setUploadingMedia(true);
@@ -831,11 +849,11 @@ export default function InternalSocialPage() {
         label?: string;
       };
       if (!res.ok || !json.url || !json.attachmentType) {
-        const message = json.error || "Nao foi possivel enviar a midia.";
+        const message = json.error || "Não foi possível enviar a mídia.";
         const lower = message.toLowerCase();
         if (lower.includes("bucket") || lower.includes("not found")) {
           throw new Error(
-            `O bucket de midia da rede social ainda nao esta configurado. Rode a migration ${MEDIA_BUCKET_MIGRATION} no Supabase e tente novamente.`
+            `O bucket de mídia da rede social ainda não está configurado. Rode a migration ${MEDIA_BUCKET_MIGRATION} no Supabase e tente novamente.`
           );
         }
         throw new Error(message);
@@ -851,7 +869,7 @@ export default function InternalSocialPage() {
         },
       ]);
     } catch (err) {
-      setError(normalizeError(err instanceof Error ? err.message : "Erro ao enviar midia."));
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao enviar mídia."));
     } finally {
       setUploadingMedia(false);
     }
@@ -878,11 +896,11 @@ export default function InternalSocialPage() {
         label?: string;
       };
       if (!res.ok || !json.url || !json.attachmentType) {
-        const message = json.error || "N?o foi poss?vel enviar o anexo.";
+        const message = json.error || "Não foi possível enviar o anexo.";
         const lower = message.toLowerCase();
         if (lower.includes("bucket") || lower.includes("not found")) {
           throw new Error(
-            `O bucket de midia da rede social ainda nao esta configurado. Rode a migration ${MEDIA_BUCKET_MIGRATION} no Supabase e tente novamente.`
+            `O bucket de mídia da rede social ainda não está configurado. Rode a migration ${MEDIA_BUCKET_MIGRATION} no Supabase e tente novamente.`
           );
         }
         throw new Error(message);
@@ -1033,7 +1051,7 @@ export default function InternalSocialPage() {
         if (next) window.localStorage.setItem(PINNED_POST_KEY, next);
         else window.localStorage.removeItem(PINNED_POST_KEY);
       } else {
-      setError(normalizeError(err instanceof Error ? err.message : "Erro ao destacar publicacao."));
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao destacar publicação."));
         setPinnedPostId(pinnedPostId);
       }
     }
@@ -1103,14 +1121,14 @@ export default function InternalSocialPage() {
       cancelEditPost();
       await load();
     } catch (err) {
-      setError(normalizeError(err instanceof Error ? err.message : "Erro ao editar publicacao."));
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao editar publicação."));
     } finally {
       setBusy(false);
     }
   }
 
   async function deletePost(post: FeedPost) {
-    const authorAction = post.author_user_id === me?.id ? "excluir sua publicacao" : "excluir esta publicacao";
+    const authorAction = post.author_user_id === me?.id ? "excluir sua publicação" : "excluir esta publicação";
     if (!window.confirm(`Deseja ${authorAction}?`)) return;
     setBusy(true);
     setError("");
@@ -1128,7 +1146,7 @@ export default function InternalSocialPage() {
       if (editingPostId === post.id) cancelEditPost();
       await load();
     } catch (err) {
-      setError(normalizeError(err instanceof Error ? err.message : "Erro ao excluir publicacao."));
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao excluir publicação."));
     } finally {
       setBusy(false);
     }
@@ -1340,7 +1358,7 @@ export default function InternalSocialPage() {
           </div>
           <nav className="hidden items-center gap-2 rounded-full border border-slate-200 bg-white/80 p-1 text-sm shadow-[0_12px_30px_-24px_rgba(15,23,42,0.4)] lg:flex">
             {[
-              { id: "inicio", label: "Inicio" },
+              { id: "inicio", label: "Início" },
               { id: "network", label: "Minha rede" },
               { id: "projects", label: "Projetos" },
               { id: "messages", label: "Mensagens" },
@@ -1384,7 +1402,7 @@ export default function InternalSocialPage() {
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-200">Institucional</p>
-                <h1 className="mt-2 text-2xl font-semibold">Rede social interna</h1>
+                <h1 className="mt-2 text-2xl font-semibold">PulseHub</h1>
                 <p className="mt-2 max-w-3xl text-sm text-blue-100/90">
                   Ambiente colaborativo para relacionamento entre membros, equipes de projeto e conversas da empresa.
                 </p>
@@ -1432,7 +1450,7 @@ export default function InternalSocialPage() {
                 </div>
               </section>
               <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-4">
-                <p className="text-sm font-semibold text-slate-900">Publicacoes</p>
+                <p className="text-sm font-semibold text-slate-900">Publicações</p>
                 <div className="mt-3 space-y-3">
                   {globalPostResults.length ? (
                     globalPostResults.slice(0, 6).map((post) => (
@@ -1450,7 +1468,7 @@ export default function InternalSocialPage() {
                       </button>
                     ))
                   ) : (
-                    <p className="text-sm text-slate-500">Nenhuma publicacao encontrada.</p>
+                    <p className="text-sm text-slate-500">Nenhuma publicação encontrada.</p>
                   )}
                 </div>
               </section>
@@ -1517,148 +1535,11 @@ export default function InternalSocialPage() {
                 <div className="min-w-0 flex-1 space-y-4">
                   <button
                     type="button"
-                    onClick={() => {
-                      setComposerExpanded(true);
-                      document.getElementById("social-post-textarea")?.focus();
-                    }}
+                    onClick={() => setComposerExpanded(true)}
                     className="flex h-14 w-full items-center rounded-full border border-slate-300 bg-gradient-to-r from-slate-50 to-white px-5 text-left text-base font-medium text-slate-500 transition hover:border-slate-400 hover:bg-white hover:shadow-[0_12px_30px_-24px_rgba(15,23,42,0.45)]"
                   >
-                    Comecar publicacao
+                    Começar publicação
                   </button>
-                  {composerExpanded || postText || draftAttachments.length ? (
-                    <>
-                      <div className="rounded-3xl border border-slate-200 bg-slate-50/80 p-4">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Novo post</p>
-                        <p className="mt-1 text-sm text-slate-600">Compartilhe alinhamentos, marcos do time e comunicados internos.</p>
-                      </div>
-                      <textarea
-                        id="social-post-textarea"
-                        value={postText}
-                        onChange={(event) => setPostText(event.target.value)}
-                        rows={4}
-                        placeholder="Compartilhe atualizacoes, alinhamentos, imagens ou videos com o time."
-                        className="w-full rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-300 focus:bg-white focus:shadow-[0_0_0_4px_rgba(59,130,246,0.08)]"
-                      />
-                      <div className="flex flex-wrap items-center gap-3">
-                    <label className="inline-flex cursor-pointer items-center rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-[0_8px_24px_-22px_rgba(15,23,42,0.45)] hover:bg-slate-50">
-                      {uploadingMedia ? "Enviando midia..." : "Video ou foto"}
-                      <input
-                        type="file"
-                        accept="image/*,video/mp4,video/webm,video/quicktime"
-                        className="hidden"
-                        disabled={uploadingMedia || busy}
-                        onChange={(event) => {
-                          const file = event.target.files?.[0];
-                          if (file) void uploadMedia(file);
-                          event.currentTarget.value = "";
-                        }}
-                      />
-                    </label>
-                    {draftAttachments.length ? (
-                      <div className="grid w-full gap-3 sm:grid-cols-2">
-                        {draftAttachments.map((item, index) => (
-                          <div
-                            key={`${item.url}-${index}`}
-                            className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50"
-                          >
-                            {item.type === "image" ? (
-                              <Image
-                                src={item.url}
-                                alt={item.label}
-                                width={800}
-                                height={500}
-                                unoptimized
-                                className="h-36 w-full object-cover"
-                              />
-                            ) : item.type === "video" ? (
-                              <video src={item.url} controls className="h-36 w-full bg-slate-950 object-cover" />
-                            ) : null}
-                            <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs font-semibold text-slate-600">
-                              <span className="truncate">{item.label}</span>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setDraftAttachments((prev) => prev.filter((_, currentIndex) => currentIndex !== index))
-                                }
-                                className="text-slate-500 hover:text-rose-600"
-                              >
-                                Remover
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-                      </div>
-                      <div className="grid gap-3 md:grid-cols-[1fr,1fr]">
-                        <select
-                          value={scopeType}
-                          onChange={(event) => {
-                            const next = event.target.value === "project" ? "project" : "company";
-                            setScopeType(next);
-                            if (next !== "project") setProjectId("");
-                          }}
-                          className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-[0_8px_22px_-20px_rgba(15,23,42,0.4)]"
-                        >
-                          <option value="company">Toda a empresa</option>
-                          <option value="project">Equipe de projeto</option>
-                        </select>
-                        <select
-                          value={projectId}
-                          onChange={(event) => setProjectId(event.target.value)}
-                          disabled={scopeType !== "project"}
-                          className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-[0_8px_22px_-20px_rgba(15,23,42,0.4)] disabled:bg-slate-100"
-                        >
-                          <option value="">Selecione o projeto</option>
-                          {projects.map((project) => (
-                            <option key={project.id} value={project.id}>
-                              {project.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-2">
-                        <div className="flex flex-wrap gap-2">
-                          <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-[#0a66c2]">Video</span>
-                          <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-[#0a66c2]">Foto</span>
-                          <span className="inline-flex items-center rounded-full bg-blue-50 px-3 py-1 text-sm font-semibold text-[#0a66c2]">Humor</span>
-                          {EMOJIS.map((emoji) => (
-                            <button
-                              key={emoji}
-                              type="button"
-                              onClick={() => setPostText((prev) => `${prev}${emoji}`)}
-                              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-sm hover:bg-slate-50"
-                            >
-                              {emoji}
-                            </button>
-                          ))}
-                        </div>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setComposerExpanded(false);
-                              setPostText("");
-                              setDraftAttachments([]);
-                              setProjectId("");
-                              setScopeType("company");
-                            }}
-                            className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-                          >
-                            Fechar
-                          </button>
-                          <button
-                            type="button"
-                            disabled={busy || uploadingMedia || (!postText.trim() && !draftAttachments.length) || (scopeType === "project" && !projectId)}
-                            onClick={() => void submitPost()}
-                            className="rounded-2xl bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60"
-                          >
-                            {busy ? "Publicando..." : "Publicar"}
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  ) : null}
                 </div>
               </div>
             </section>
@@ -1917,7 +1798,7 @@ export default function InternalSocialPage() {
                 })}
               </section>
             ) : (
-              <div className="rounded-[2rem] border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.3)]">Nenhuma publicacao ainda.</div>
+              <div className="rounded-[2rem] border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.3)]">Nenhuma publicação ainda.</div>
             )}
           </main>
         ) : null}
@@ -1974,8 +1855,8 @@ export default function InternalSocialPage() {
                                 )}
                               </div>
                               <p className="mt-3 line-clamp-2 text-sm font-semibold text-slate-900">{highlightMatch(displayName(contact), searchTerm)}</p>
-                              <p className="mt-1 text-xs text-slate-500">{highlightMatch((contact.cargo ?? "").trim() || "Cargo nao informado", searchTerm)}</p>
-                              <p className="mt-1 text-xs text-slate-400">{highlightMatch((contact.setor ?? "").trim() || "Setor nao informado", searchTerm)}</p>
+                              <p className="mt-1 text-xs text-slate-500">{highlightMatch((contact.cargo ?? "").trim() || "Cargo não informado", searchTerm)}</p>
+                              <p className="mt-1 text-xs text-slate-400">{highlightMatch((contact.setor ?? "").trim() || "Setor não informado", searchTerm)}</p>
                               <span
                                 className={`mt-2 inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${
                                   onlineUserIds.has(contact.id) ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"
@@ -2008,8 +1889,8 @@ export default function InternalSocialPage() {
                                     className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left hover:border-slate-300"
                                   >
                                     <p className="text-sm font-semibold text-slate-900">{highlightMatch(displayName(member), searchTerm)}</p>
-                                    <p className="mt-1 text-xs text-slate-500">{highlightMatch((member.cargo ?? "").trim() || "Cargo nao informado", searchTerm)}</p>
-                                    <p className="mt-1 text-xs text-slate-400">{highlightMatch((member.setor ?? "").trim() || "Setor nao informado", searchTerm)}</p>
+                                    <p className="mt-1 text-xs text-slate-500">{highlightMatch((member.cargo ?? "").trim() || "Cargo não informado", searchTerm)}</p>
+                                    <p className="mt-1 text-xs text-slate-400">{highlightMatch((member.setor ?? "").trim() || "Setor não informado", searchTerm)}</p>
                                     <span
                                       className={`mt-2 inline-flex rounded-full px-2 py-1 text-[11px] font-semibold ${
                                         onlineUserIds.has(member.id) ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"
@@ -2481,7 +2362,7 @@ export default function InternalSocialPage() {
                   </div>
                 ) : (
                   <div className="flex min-h-[520px] flex-1 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                            Nenhuma mensagem ainda nesta conversa. Selecione um membro da lista para abrir o historico ou iniciar uma nova conversa.
+                            Nenhuma mensagem ainda nesta conversa. Selecione um membro da lista para abrir o histórico ou iniciar uma nova conversa.
                   </div>
                 )}
               </div>
@@ -2489,6 +2370,154 @@ export default function InternalSocialPage() {
           </section>
         ) : null}
       </div>
+
+      {composerExpanded ? (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-950/55 px-4 py-8 backdrop-blur-sm md:items-center">
+          <div className="w-full max-w-3xl overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_40px_120px_-36px_rgba(15,23,42,0.55)]">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+              <div className="flex min-w-0 items-center gap-4">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-blue-700 text-base font-semibold text-white shadow-[0_16px_32px_-20px_rgba(37,99,235,0.65)]">
+                  {initials(currentName)}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-xl font-semibold text-slate-900">{currentName}</p>
+                  <p className="text-sm text-slate-500">
+                    Publicar em {scopeType === "project" ? projects.find((item) => item.id === projectId)?.name ?? "equipe de projeto" : "toda a empresa"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setComposerExpanded(false)}
+                className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Fechar criação de publicação"
+              >
+                <span className="text-2xl leading-none">×</span>
+              </button>
+            </div>
+
+            <div className="space-y-5 px-6 py-6">
+              <div className="grid gap-3 md:grid-cols-[1fr,1fr]">
+                <select
+                  value={scopeType}
+                  onChange={(event) => {
+                    const next = event.target.value === "project" ? "project" : "company";
+                    setScopeType(next);
+                    if (next !== "project") setProjectId("");
+                  }}
+                  className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 shadow-[0_8px_22px_-20px_rgba(15,23,42,0.4)]"
+                >
+                  <option value="company">Toda a empresa</option>
+                  <option value="project">Equipe de projeto</option>
+                </select>
+                <select
+                  value={projectId}
+                  onChange={(event) => setProjectId(event.target.value)}
+                  disabled={scopeType !== "project"}
+                  className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 shadow-[0_8px_22px_-20px_rgba(15,23,42,0.4)] disabled:bg-slate-100"
+                >
+                  <option value="">Selecione o projeto</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <textarea
+                id="social-post-textarea"
+                ref={composerTextareaRef}
+                value={postText}
+                onChange={(event) => setPostText(event.target.value)}
+                rows={8}
+                placeholder="Sobre o que você quer falar?"
+                className="min-h-[260px] w-full resize-none rounded-[1.75rem] border border-transparent bg-white px-2 py-2 text-3xl font-light text-slate-700 outline-none placeholder:text-slate-400 focus:border-transparent focus:ring-0"
+              />
+
+              {draftAttachments.length ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {draftAttachments.map((item, index) => (
+                    <div key={`${item.url}-${index}`} className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50">
+                      {item.type === "image" ? (
+                        <Image src={item.url} alt={item.label} width={800} height={500} unoptimized className="h-40 w-full object-cover" />
+                      ) : item.type === "video" ? (
+                        <video src={item.url} controls className="h-40 w-full bg-slate-950 object-cover" />
+                      ) : null}
+                      <div className="flex items-center justify-between gap-3 px-3 py-2 text-xs font-semibold text-slate-600">
+                        <span className="truncate">{item.label}</span>
+                        <button
+                          type="button"
+                          onClick={() => setDraftAttachments((prev) => prev.filter((_, currentIndex) => currentIndex !== index))}
+                          className="text-slate-500 hover:text-rose-600"
+                        >
+                          Remover
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+
+              <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
+                <label className="inline-flex cursor-pointer items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
+                  {uploadingMedia ? "Enviando mídia..." : "Vídeo ou foto"}
+                  <input
+                    type="file"
+                    accept="image/*,video/mp4,video/webm,video/quicktime"
+                    className="hidden"
+                    disabled={uploadingMedia || busy}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void uploadMedia(file);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                <span className="inline-flex items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700">
+                  Humor
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {EMOJIS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => setPostText((prev) => `${prev}${emoji}`)}
+                      className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm transition hover:bg-slate-50"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-slate-100 px-6 py-5">
+              <button
+                type="button"
+                onClick={() => {
+                  setComposerExpanded(false);
+                  setPostText("");
+                  setDraftAttachments([]);
+                  setProjectId("");
+                  setScopeType("company");
+                }}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={busy || uploadingMedia || (!postText.trim() && !draftAttachments.length) || (scopeType === "project" && !projectId)}
+                onClick={() => void submitPost()}
+                className="rounded-full bg-[#0a66c2] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#004182] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {busy ? "Publicando..." : "Publicar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

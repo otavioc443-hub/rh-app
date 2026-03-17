@@ -99,7 +99,7 @@ export default function Sidebar({
         roles: ["colaborador", "coordenador", "gestor", "diretoria", "rh", "financeiro", "pd", "admin"],
         children: [
           { label: "Visão Geral", icon: LayoutDashboard, href: "/institucional", exact: true },
-          { label: "Rede social", icon: MessageSquareText, href: "/institucional/rede-social" },
+          { label: "PulseHub", icon: MessageSquareText, href: "/institucional/rede-social" },
           { label: "Organograma", icon: GitBranch, href: "/institucional/organograma", roles: ["gestor", "financeiro", "admin"] },
         ],
       },
