@@ -270,6 +270,36 @@ function isSchemaCompatError(message: string) {
   return lower.includes("schema cache") || lower.includes("does not exist") || lower.includes("could not find the table") || lower.includes("column");
 }
 
+function emojiToCodepoints(value: string) {
+  return Array.from(value)
+    .map((char) => char.codePointAt(0)?.toString(16))
+    .filter(Boolean)
+    .join("-");
+}
+
+function isCountryFlagEmoji(value: string) {
+  const chars = Array.from(value);
+  return chars.length === 2 && chars.every((char) => {
+    const code = char.codePointAt(0) ?? 0;
+    return code >= 0x1f1e6 && code <= 0x1f1ff;
+  });
+}
+
+function EmojiGlyph({ emoji, className }: { emoji: string; className?: string }) {
+  if (isCountryFlagEmoji(emoji)) {
+    return (
+      <img
+        src={`https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${emojiToCodepoints(emoji)}.svg`}
+        alt={emoji}
+        className={className ?? "h-5 w-5"}
+        loading="lazy"
+      />
+    );
+  }
+
+  return <span className={className}>{emoji}</span>;
+}
+
 type EmojiPickerProps = {
   groups: EmojiGroup[];
   onSelect: (emoji: string) => void;
@@ -328,7 +358,7 @@ function EmojiPicker({ groups, onSelect, className, panelClassName }: EmojiPicke
                 : "bg-white text-slate-500 hover:bg-slate-50"
             }`}
           >
-            {group.icon}
+            <EmojiGlyph emoji={group.icon} className="h-5 w-5 text-[1.2rem] leading-none" />
           </button>
         ))}
       </div>
@@ -346,7 +376,7 @@ function EmojiPicker({ groups, onSelect, className, panelClassName }: EmojiPicke
               className="space-y-2"
             >
               <div className="flex items-center gap-2 px-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                <span className="text-base">{group.icon}</span>
+                <EmojiGlyph emoji={group.icon} className="h-4 w-4 text-base leading-none" />
                 <span>{group.label}</span>
               </div>
               <div className="grid grid-cols-7 gap-2 sm:grid-cols-8">
@@ -355,9 +385,9 @@ function EmojiPicker({ groups, onSelect, className, panelClassName }: EmojiPicke
                     key={`${group.id}-${emoji}`}
                     type="button"
                     onClick={() => onSelect(emoji)}
-                    className="rounded-xl border border-slate-200 bg-white px-2 py-2 text-lg transition hover:bg-slate-100"
+                    className="flex items-center justify-center rounded-xl border border-slate-200 bg-white px-2 py-2 text-lg transition hover:bg-slate-100"
                   >
-                    {emoji}
+                    <EmojiGlyph emoji={emoji} className="h-6 w-6 text-[1.35rem] leading-none" />
                   </button>
                 ))}
               </div>
@@ -2604,7 +2634,7 @@ export default function InternalSocialPage() {
                 onChange={(event) => setPostText(event.target.value)}
                 rows={6}
                 placeholder="Sobre o que você quer falar?"
-                className="min-h-[180px] w-full resize-none rounded-[1.5rem] border border-transparent bg-white px-2 py-2 text-[2rem] font-light leading-tight text-slate-700 outline-none placeholder:text-slate-400 focus:border-transparent focus:ring-0"
+                className="min-h-[180px] w-full resize-none rounded-[1.5rem] border border-transparent bg-white px-2 py-2 text-[12px] leading-6 text-slate-700 outline-none placeholder:text-slate-400 focus:border-transparent focus:ring-0"
               />
 
               {draftAttachments.length ? (
