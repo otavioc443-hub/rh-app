@@ -64,6 +64,14 @@ type PortalShellCache = {
   hiddenRoutes: string[];
 };
 
+type DraftFieldSnapshot = {
+  key: string;
+  tag: "INPUT" | "TEXTAREA" | "SELECT";
+  type?: string;
+  value?: string;
+  checked?: boolean;
+};
+
 function withTimeout<T>(p: Promise<T>, ms = 7000): Promise<T> {
   return new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error("timeout")), ms);
@@ -79,6 +87,10 @@ function withTimeout<T>(p: Promise<T>, ms = 7000): Promise<T> {
 
 function getScrollStorageKey(pathname: string) {
   return `portal-scroll:${pathname}`;
+}
+
+function getDraftStorageKey(pathname: string) {
+  return `portal-draft:${pathname}`;
 }
 
 const PORTAL_SHELL_CACHE_KEY = "portal-shell-cache";
@@ -100,6 +112,98 @@ function writePortalShellCache(cache: PortalShellCache) {
   if (typeof window === "undefined") return;
   try {
     window.sessionStorage.setItem(PORTAL_SHELL_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // noop
+  }
+}
+
+function getFieldDraftKey(element: Element, index: number) {
+  const node = element as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+  return node.name || node.id || `${node.tagName}:${node.getAttribute("type") ?? "text"}:${index}`;
+}
+
+function collectDraftSnapshot() {
+  if (typeof document === "undefined") return [] as DraftFieldSnapshot[];
+
+  const fields = Array.from(
+    document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+      "input, textarea, select"
+    )
+  );
+
+  return fields.flatMap((field, index) => {
+    const tag = field.tagName as DraftFieldSnapshot["tag"];
+    if (tag === "INPUT") {
+      const type = (field as HTMLInputElement).type?.toLowerCase() || "text";
+      if (["password", "file", "hidden", "submit", "button", "reset"].includes(type)) return [];
+      if ((field as HTMLInputElement).disabled) return [];
+      if (type === "checkbox" || type === "radio") {
+        return [{ key: getFieldDraftKey(field, index), tag, type, checked: (field as HTMLInputElement).checked }];
+      }
+      return [{ key: getFieldDraftKey(field, index), tag, type, value: field.value }];
+    }
+
+    if (field.disabled) return [];
+    return [{ key: getFieldDraftKey(field, index), tag, value: field.value }];
+  });
+}
+
+function persistDraftSnapshot(pathname: string) {
+  if (typeof window === "undefined" || !pathname) return;
+  try {
+    const snapshot = collectDraftSnapshot();
+    window.sessionStorage.setItem(getDraftStorageKey(pathname), JSON.stringify(snapshot));
+  } catch {
+    // noop
+  }
+}
+
+function restoreDraftSnapshot(pathname: string) {
+  if (typeof window === "undefined" || typeof document === "undefined" || !pathname) return;
+
+  try {
+    const raw = window.sessionStorage.getItem(getDraftStorageKey(pathname));
+    if (!raw) return;
+
+    const snapshot = JSON.parse(raw) as DraftFieldSnapshot[];
+    if (!Array.isArray(snapshot) || !snapshot.length) return;
+
+    const fields = Array.from(
+      document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+        "input, textarea, select"
+      )
+    );
+
+    for (const [index, field] of fields.entries()) {
+      const key = getFieldDraftKey(field, index);
+      const saved = snapshot.find((item) => item.key === key);
+      if (!saved) continue;
+
+      if (saved.tag === "INPUT") {
+        const input = field as HTMLInputElement;
+        const type = input.type?.toLowerCase() || "text";
+        if (["password", "file", "hidden", "submit", "button", "reset"].includes(type)) continue;
+        if (type === "checkbox" || type === "radio") {
+          if (typeof saved.checked === "boolean" && input.checked !== saved.checked) {
+            input.checked = saved.checked;
+            input.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+          continue;
+        }
+        if (typeof saved.value === "string" && input.value !== saved.value) {
+          input.value = saved.value;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        continue;
+      }
+
+      if (typeof saved.value === "string" && field.value !== saved.value) {
+        field.value = saved.value;
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        field.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    }
   } catch {
     // noop
   }
@@ -443,6 +547,42 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       } catch {
         // noop
       }
+    };
+  }, [pathname]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !pathname) return;
+
+    const restoreDraft = () => {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          restoreDraftSnapshot(pathname);
+        });
+      });
+    };
+
+    const persistDraft = () => {
+      persistDraftSnapshot(pathname);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        persistDraft();
+        return;
+      }
+      if (document.visibilityState === "visible") {
+        restoreDraft();
+      }
+    };
+
+    restoreDraft();
+    window.addEventListener("pagehide", persistDraft);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      persistDraft();
+      window.removeEventListener("pagehide", persistDraft);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [pathname]);
 
