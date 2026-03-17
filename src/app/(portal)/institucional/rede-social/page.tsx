@@ -2709,6 +2709,40 @@ export default function InternalSocialPage() {
                   <p className="mt-1 text-sm text-slate-600">Ajuste o texto e a formatação antes de salvar.</p>
                 </div>
 
+                {editingPost.attachments.length ? (
+                  <div className="space-y-3">
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Mídia atual</p>
+                      <p className="mt-1 text-sm text-slate-600">A imagem ou vídeo do post é exibido aqui apenas para referência visual.</p>
+                    </div>
+                    {editingPost.attachments.map((attachment) => (
+                      <div key={attachment.id} className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50">
+                        {attachment.type === "image" ? (
+                          <Image
+                            src={attachment.url}
+                            alt={attachment.label ?? "Imagem do post"}
+                            width={1200}
+                            height={900}
+                            unoptimized
+                            className="max-h-[280px] w-full object-cover"
+                          />
+                        ) : attachment.type === "video" ? (
+                          <video controls src={attachment.url} className="max-h-[280px] w-full bg-slate-950" />
+                        ) : (
+                          <a
+                            href={attachment.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block px-4 py-3 text-sm font-semibold text-blue-700 hover:underline"
+                          >
+                            Abrir anexo
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
                 <textarea
                   ref={editingPostTextareaRef}
                   value={editingPostText}
