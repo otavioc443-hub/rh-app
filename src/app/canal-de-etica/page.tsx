@@ -1,6 +1,5 @@
 import { Search } from "lucide-react";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { buildEthicsChannelSlug, findEthicsChannelConfig } from "@/lib/ethicsChannel";
+import { getEthicsChannelCompanies } from "@/lib/ethicsChannelServer";
 import EthicsCompanySelector from "@/components/public/EthicsCompanySelector";
 
 export const metadata = {
@@ -8,29 +7,8 @@ export const metadata = {
   description: "Selecione a empresa para consultar o canal de etica correspondente.",
 };
 
-type CompanyRow = {
-  id: string;
-  name: string;
-  logo_url: string | null;
-  primary_color: string | null;
-  cidade: string | null;
-  estado: string | null;
-};
-
 export default async function CanalDeEticaPage() {
-  const { data } = await supabaseAdmin
-    .from("companies")
-    .select("id,name,logo_url,primary_color,cidade,estado")
-    .order("name", { ascending: true });
-
-  const companies = ((data ?? []) as CompanyRow[]).map((company) => {
-    const config = findEthicsChannelConfig(company.name) ?? findEthicsChannelConfig(company.id);
-    return {
-      ...company,
-      slug: buildEthicsChannelSlug(config?.key ?? company.name),
-      configured: Boolean(config),
-    };
-  });
+  const companies = await getEthicsChannelCompanies();
 
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#f6f8fb_0%,#edf2f8_46%,#ffffff_100%)] text-slate-950">

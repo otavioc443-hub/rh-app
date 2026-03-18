@@ -250,6 +250,7 @@ export default function Sidebar({
         children: [
           { label: "Painel Admin", icon: LayoutDashboard, href: "/admin", exact: true },
           { label: "Cadastro de empresas", icon: Building2, href: "/admin/empresas" },
+          { label: "Canal de ética", icon: FileCheck2, href: "/admin/canal-de-etica" },
           { label: "Configuração SLA", icon: CalendarClock, href: "/admin/sla" },
           { label: "Notificações", icon: MessageSquareText, href: "/admin/notificacoes" },
           { label: "Visibilidade", icon: Layers, href: "/admin/funcionalidades" },

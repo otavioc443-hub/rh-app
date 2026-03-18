@@ -15,119 +15,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import type { EthicsChannelConfig } from "@/lib/ethicsChannel";
-
-type BrandProfile = {
-  accent: string;
-  accentSoft: string;
-  accentLight: string;
-  heading: string;
-  heroTitle: string;
-  heroSubtitle: string;
-  intro: string;
-  imageUrl: string;
-  imageAlt: string;
-  codeSummary: string;
-  dataProtectionSummary: string;
-  principles: string[];
-  foundation?: {
-    title: string;
-    subtitle: string;
-    pillars: Array<{
-      label: string;
-      text: string;
-    }>;
-    steer?: {
-      title: string;
-      body: string;
-    };
-  } | null;
-};
-
-function normalizeValue(value: string | null | undefined) {
-  return String(value ?? "")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
-
-function buildBrandProfile(config: EthicsChannelConfig): BrandProfile {
-  const normalized = `${normalizeValue(config.key)} ${normalizeValue(config.companyName)}`;
-  const isSolida = normalized.includes("solida");
-
-  if (isSolida) {
-    return {
-      accent: "#99A41A",
-      accentSoft: "#2E3647",
-      accentLight: "#EEF1D4",
-      heading: "Tecnologia, excelencia e responsabilidade em cada relacao.",
-      heroTitle: "Bem-vindo ao Canal de Etica da Solida",
-      heroSubtitle:
-        "Um ambiente seguro, imparcial e protegido para comunicar condutas que possam violar o Codigo de Etica e Conduta, as politicas internas ou a legislacao aplicavel.",
-      intro:
-        "Na Solida, acreditamos que a engenharia transforma realidades. Por isso, nossa atuacao precisa refletir responsabilidade profissional, respeito as pessoas, integridade nas decisoes e compromisso permanente com a confianca.",
-      imageUrl: config.heroImageUrl || "/institucional/pdf/page-07.jpg",
-      imageAlt: "Atuacao da Solida em projetos de energia renovavel",
-      codeSummary:
-        "O Codigo de Etica e Conduta da Solida orienta a forma como trabalhamos, decidimos e nos relacionamos, conectando engenharia, tecnologia, inteligencia e pessoas para construir solucoes que transformam a sociedade.",
-      dataProtectionSummary:
-        "Os relatos recebidos devem ser tratados com responsabilidade e confidencialidade, com acesso restrito, protecao das informacoes pessoais e preservacao adequada das evidencias relacionadas ao caso.",
-      principles: [
-        "Projetar o futuro por meio da engenharia, conectando tecnologia, inteligencia e pessoas.",
-        "Desenvolver solucoes de engenharia inovadoras, seguras e eficientes, com excelencia tecnica.",
-        "Liderar a transformacao digital da engenharia com inovacao, BIM e impacto positivo.",
-        "Atuar com integridade, respeito, responsabilidade e protecao contra qualquer forma de retaliacao.",
-      ],
-      foundation: {
-        title: "Base institucional da Solida",
-        subtitle:
-          "O canal de etica da Solida nasce do mesmo conjunto de principios que orienta nossa atuacao tecnica, nosso relacionamento com pessoas e a forma como conduzimos decisoes.",
-        pillars: [
-          {
-            label: "Proposito",
-            text: "Projetar o futuro por meio da engenharia, conectando tecnologia, inteligencia e pessoas para construir solucoes que transformam a sociedade.",
-          },
-          {
-            label: "Missao",
-            text: "Desenvolver solucoes de engenharia inovadoras, seguras e eficientes, utilizando tecnologia, BIM e inteligencia tecnica para entregar projetos de alta qualidade.",
-          },
-          {
-            label: "Visao",
-            text: "Ser referencia nacional e internacional em solucoes de engenharia digital, inovacao tecnologica e modelagem BIM.",
-          },
-        ],
-        steer: {
-          title: "STEER",
-          body: "Conduzindo o futuro da engenharia com tecnologia, excelencia e responsabilidade.",
-        },
-      },
-    };
-  }
-
-  return {
-    accent: "#1E3A8A",
-    accentSoft: "#0F172A",
-    accentLight: "#E7EEFF",
-    heading: "Integridade e protecao para quem precisa relatar.",
-    heroTitle: `Canal de Etica de ${config.companyName}`,
-    heroSubtitle:
-      "Um espaco preparado para receber relatos com seriedade, sigilo, imparcialidade e orientacao para apuracao.",
-    intro:
-      "Este canal existe para apoiar a identificacao de condutas que contrariem os valores da empresa, a legislacao e os padroes esperados de etica, integridade e respeito.",
-    imageUrl: config.heroImageUrl || "/bg-login.jpg",
-    imageAlt: `Equipe da ${config.companyName}`,
-    codeSummary:
-      "A pagina consolida os compromissos de respeito, responsabilidade, integridade, combate a fraude e cuidado com pessoas, informacoes e ativos.",
-    dataProtectionSummary:
-      "Os relatos e documentos devem circular apenas entre as pessoas necessarias para a triagem e a apuracao, com registro formal do tratamento dado a cada caso.",
-    principles: [
-      "Respeito e ambiente de trabalho seguro para todas as pessoas.",
-      "Conduta integra, transparente e alinhada as regras internas e externas.",
-      "Nao tolerancia a assedio, discriminacao, fraude e retaliacao.",
-      "Preservacao do sigilo, dos dados pessoais e das evidencias do relato.",
-    ],
-    foundation: null,
-  };
-}
+import type { EthicsManagedContent } from "@/lib/ethicsChannelDefaults";
 
 const reportTopics = [
   {
@@ -266,11 +154,16 @@ function NavLink({ href, label }: { href: string; label: string }) {
 export default function EthicsChannelLanding({
   config,
   companies,
+  content,
 }: {
   config: EthicsChannelConfig;
   companies: EthicsChannelConfig[];
+  content: EthicsManagedContent;
 }) {
-  const profile = buildBrandProfile(config);
+  const isSolida = config.companyName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes("solida");
+  const accent = isSolida ? "#99A41A" : "#1E3A8A";
+  const accentSoft = isSolida ? "#2E3647" : "#0F172A";
+  const accentLight = isSolida ? "#EEF1D4" : "#E7EEFF";
   const reportHref = config.reportUrl || (config.contactEmail ? `mailto:${config.contactEmail}?subject=Canal%20de%20Etica` : "#contatos");
   const followUpHref = config.followUpUrl || "#fluxo";
   const dataProtectionHref = config.dataProtectionUrl || "#dados";
@@ -290,9 +183,9 @@ export default function EthicsChannelLanding({
       className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_40%,#ffffff_100%)] text-slate-950"
       style={
         {
-          "--ethics-accent": profile.accent,
-          "--ethics-soft": profile.accentSoft,
-          "--ethics-light": profile.accentLight,
+          "--ethics-accent": accent,
+          "--ethics-soft": accentSoft,
+          "--ethics-light": accentLight,
         } as React.CSSProperties
       }
     >
@@ -352,13 +245,19 @@ export default function EthicsChannelLanding({
           <div className="grid gap-8 lg:grid-cols-[1.02fr,0.98fr] lg:items-stretch">
             <div className="overflow-hidden rounded-[36px] border border-white/20 bg-white/10 shadow-[0_35px_100px_-55px_rgba(15,23,42,0.95)] backdrop-blur-sm">
               <div className="relative min-h-[340px] lg:min-h-[520px]">
-                <Image src={profile.imageUrl} alt={profile.imageAlt} fill className="object-cover" priority />
+                <Image
+                  src={content.heroImageUrl || config.heroImageUrl || "/bg-login.jpg"}
+                  alt={isSolida ? "Atuacao da Solida em projetos de energia renovavel" : `Equipe da ${config.companyName}`}
+                  fill
+                  className="object-cover"
+                  priority
+                />
                 <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.08)_0%,rgba(15,23,42,0.34)_100%)]" />
                 <div className="absolute inset-x-0 bottom-0 p-6 lg:p-8">
                   <div className="max-w-md rounded-[28px] border border-white/15 bg-slate-950/58 p-5 text-white backdrop-blur-md">
                     <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/70">Compromisso</p>
-                    <p className="mt-3 text-2xl font-semibold leading-tight">{profile.heading}</p>
-                    <p className="mt-3 text-sm leading-7 text-white/80">{profile.intro}</p>
+                    <p className="mt-3 text-2xl font-semibold leading-tight">{content.heading}</p>
+                    <p className="mt-3 text-sm leading-7 text-white/80">{content.intro}</p>
                   </div>
                 </div>
               </div>
@@ -370,9 +269,9 @@ export default function EthicsChannelLanding({
                 Canal seguro e confidencial
               </div>
               <h1 className="mt-6 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-                {profile.heroTitle}
+                {content.heroTitle}
               </h1>
-              <p className="mt-5 max-w-2xl text-lg leading-9 text-slate-600">{profile.heroSubtitle}</p>
+              <p className="mt-5 max-w-2xl text-lg leading-9 text-slate-600">{content.heroSubtitle}</p>
 
               <div className="mt-8 flex flex-wrap gap-3">
                 <ActionLink href={reportHref} primary>
@@ -414,10 +313,10 @@ export default function EthicsChannelLanding({
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Mensagem central</p>
                 <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Canal exclusivo para preservar etica, respeito e confianca.</h2>
-                <p className="mt-4 text-base leading-8 text-slate-600">{profile.codeSummary}</p>
+                <p className="mt-4 text-base leading-8 text-slate-600">{content.codeSummary}</p>
               </div>
               <div className="grid gap-3">
-                {profile.principles.map((item) => (
+                {content.principles.map((item) => (
                   <div key={item} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm font-medium leading-7 text-slate-700">
                     {item}
                   </div>
@@ -428,7 +327,7 @@ export default function EthicsChannelLanding({
         </div>
       </section>
 
-      {profile.foundation ? (
+      {content.foundationTitle ? (
         <section className="mx-auto max-w-7xl px-6 py-12 lg:px-10 lg:py-16">
           <div className="overflow-hidden rounded-[36px] border border-slate-200 bg-white shadow-sm">
             <div
@@ -439,16 +338,16 @@ export default function EthicsChannelLanding({
               }}
             >
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Identidade institucional</p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{profile.foundation.title}</h2>
-              <p className="mt-4 max-w-3xl text-base leading-8 text-slate-600">{profile.foundation.subtitle}</p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{content.foundationTitle}</h2>
+              <p className="mt-4 max-w-3xl text-base leading-8 text-slate-600">{content.foundationSubtitle}</p>
             </div>
 
             <div className="grid gap-0 lg:grid-cols-[1fr,320px]">
               <div className="grid gap-0 md:grid-cols-3">
-                {profile.foundation.pillars.map((pillar, index) => (
+                {content.foundationPillars.map((pillar, index) => (
                   <article
                     key={pillar.label}
-                    className={`p-7 lg:p-8 ${index < profile.foundation!.pillars.length - 1 ? "border-b border-slate-200 md:border-b-0 md:border-r" : ""}`}
+                    className={`p-7 lg:p-8 ${index < content.foundationPillars.length - 1 ? "border-b border-slate-200 md:border-b-0 md:border-r" : ""}`}
                   >
                     <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">{pillar.label}</p>
                     <p className="mt-4 text-base leading-8 text-slate-700">{pillar.text}</p>
@@ -456,11 +355,11 @@ export default function EthicsChannelLanding({
                 ))}
               </div>
 
-              {profile.foundation.steer ? (
+              {content.steerTitle ? (
                 <aside className="border-t border-slate-200 bg-slate-950 p-7 text-white lg:border-l lg:border-t-0 lg:p-8">
                   <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/60">Cultura</p>
-                  <h3 className="mt-3 text-3xl font-semibold tracking-tight">{profile.foundation.steer.title}</h3>
-                  <p className="mt-4 text-base leading-8 text-slate-300">{profile.foundation.steer.body}</p>
+                  <h3 className="mt-3 text-3xl font-semibold tracking-tight">{content.steerTitle}</h3>
+                  <p className="mt-4 text-base leading-8 text-slate-300">{content.steerBody}</p>
                 </aside>
               ) : null}
             </div>
@@ -530,7 +429,7 @@ export default function EthicsChannelLanding({
                 <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Sigilo e necessidade de conhecimento.</h2>
               </div>
             </div>
-            <p className="mt-6 text-sm leading-8 text-slate-600">{profile.dataProtectionSummary}</p>
+            <p className="mt-6 text-sm leading-8 text-slate-600">{content.dataProtectionSummary}</p>
             <div className="mt-6 rounded-[28px] border border-slate-200 bg-slate-50 p-5 text-sm leading-7 text-slate-700">
               Os dados do relato devem ser usados exclusivamente para triagem, investigacao, medidas de tratamento e cumprimento de obrigacoes legais, sempre com proporcionalidade e controle de acesso.
             </div>
@@ -557,7 +456,7 @@ export default function EthicsChannelLanding({
                 <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Principios que orientam a conduta esperada.</h2>
               </div>
             </div>
-            <p className="mt-6 text-sm leading-8 text-slate-600">{profile.codeSummary}</p>
+            <p className="mt-6 text-sm leading-8 text-slate-600">{content.codeSummary}</p>
             <div className="mt-6 grid gap-3">
               {guarantees.map((item) => (
                 <div key={item} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm leading-7 text-slate-700">

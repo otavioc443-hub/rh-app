@@ -1,9 +1,9 @@
 import EthicsChannelLanding from "@/components/public/EthicsChannelLanding";
-import { getEthicsChannelConfig, getEthicsChannelConfigs } from "@/lib/ethicsChannel";
+import { getEthicsChannelPageData } from "@/lib/ethicsChannelServer";
 
 export async function generateMetadata({ params }: { params: Promise<{ company: string }> }) {
   const { company } = await params;
-  const config = getEthicsChannelConfig(company);
+  const { config } = await getEthicsChannelPageData(company);
   return {
     title: `Canal de Etica - ${config.companyName}`,
     description: `Canal de etica e integridade de ${config.companyName}.`,
@@ -16,8 +16,7 @@ export default async function CanalDeEticaCompanyPage({
   params: Promise<{ company: string }>;
 }) {
   const { company } = await params;
-  const config = getEthicsChannelConfig(company);
-  const companies = getEthicsChannelConfigs();
+  const { config, companies, content } = await getEthicsChannelPageData(company);
 
-  return <EthicsChannelLanding config={config} companies={companies} />;
+  return <EthicsChannelLanding config={config} companies={companies} content={content} />;
 }
