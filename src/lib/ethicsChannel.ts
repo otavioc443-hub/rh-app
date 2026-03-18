@@ -31,6 +31,10 @@ function normalizeKey(value: string | null | undefined) {
     .replace(/^-+|-+$/g, "");
 }
 
+export function buildEthicsChannelSlug(value: string | null | undefined) {
+  return normalizeKey(value);
+}
+
 function coerceConfig(input: RawEthicsChannelConfig, fallbackKey: string): EthicsChannelConfig | null {
   const companyName = clean(input.companyName);
   const key = normalizeKey(input.key || companyName || fallbackKey);
@@ -79,12 +83,13 @@ export function getDefaultEthicsChannelConfig() {
   return configs.find((item) => item.key === wantedKey) ?? configs[0];
 }
 
-export function getEthicsChannelConfig(companyKey?: string | null) {
+export function findEthicsChannelConfig(companyKey?: string | null) {
   const configs = getEthicsChannelConfigs();
   const wanted = normalizeKey(companyKey);
-  if (!wanted) return getDefaultEthicsChannelConfig();
-  return (
-    configs.find((item) => item.key === wanted || normalizeKey(item.companyName) === wanted) ??
-    getDefaultEthicsChannelConfig()
-  );
+  if (!wanted) return null;
+  return configs.find((item) => item.key === wanted || normalizeKey(item.companyName) === wanted) ?? null;
+}
+
+export function getEthicsChannelConfig(companyKey?: string | null) {
+  return findEthicsChannelConfig(companyKey) ?? getDefaultEthicsChannelConfig();
 }
