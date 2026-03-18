@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, MoreHorizontal, RefreshCcw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 import { PersonChip } from "@/components/people/PersonChip";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { PageHelpModal } from "@/components/ui/PageHelpModal";
@@ -289,7 +290,7 @@ export default function MeuPerfilProjetosPage() {
   const personAvatar = (userId: string) => {
     const d = directoryById[userId];
     const url = typeof d?.avatar_url === "string" ? d.avatar_url.trim() : "";
-    return url || null;
+    return resolvePortalAvatarUrl(url || null);
   };
 
   const personCargo = (userId: string) => {

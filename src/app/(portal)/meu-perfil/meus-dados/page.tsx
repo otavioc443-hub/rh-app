@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Camera, RefreshCcw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 
 type CollaboratorRow = {
   id: string;
@@ -136,7 +137,7 @@ export default function MeusDadosPage() {
 
       setUserId(user.id);
       const md = (user.user_metadata ?? {}) as Record<string, unknown>;
-      setAvatarUrl(String(md.avatar_url ?? md.picture ?? ""));
+      setAvatarUrl(resolvePortalAvatarUrl(String(md.avatar_url ?? md.picture ?? "")) ?? "");
 
       const colabRes = await supabase
         .from("colaboradores")
@@ -189,7 +190,7 @@ export default function MeusDadosPage() {
         throw new Error(json.error || `Falha no upload (status ${res.status})`);
       }
 
-      const publicUrl = json.publicUrl;
+      const publicUrl = resolvePortalAvatarUrl(json.publicUrl ?? "") ?? "";
       const { error: updateErr } = await supabase.auth.updateUser({
         data: {
           avatar_url: publicUrl,

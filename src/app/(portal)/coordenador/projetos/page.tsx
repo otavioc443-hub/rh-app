@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, BellRing, MoreHorizontal, RefreshCcw } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 import { PersonChip } from "@/components/people/PersonChip";
 
 type Role = "colaborador" | "coordenador" | "gestor" | "rh" | "admin";
@@ -722,7 +723,7 @@ export default function CoordenadorProjetosPage() {
   const personAvatar = (userId: string) => {
     const d = directoryById[userId];
     const url = typeof d?.avatar_url === "string" ? d.avatar_url.trim() : "";
-    return url || null;
+    return resolvePortalAvatarUrl(url || null);
   };
 
   function clearAssigneeFilter() {

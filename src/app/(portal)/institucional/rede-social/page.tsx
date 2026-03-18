@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 
 type Profile = {
   id: string;
@@ -706,12 +707,23 @@ export default function InternalSocialPage() {
                   : currentFullName || fallbackName || null;
             return {
               ...profile,
+              avatar_url: resolvePortalAvatarUrl(profile.avatar_url ?? null),
               full_name: safeFullName,
               cargo: (collaborator?.cargo ?? "").trim() || null,
               setor: (collaborator?.setor ?? "").trim() || null,
             };
           });
+        } else {
+          nextProfiles = baseProfiles.map((profile) => ({
+            ...profile,
+            avatar_url: resolvePortalAvatarUrl(profile.avatar_url ?? null),
+          }));
         }
+      } else {
+        nextProfiles = baseProfiles.map((profile) => ({
+          ...profile,
+          avatar_url: resolvePortalAvatarUrl(profile.avatar_url ?? null),
+        }));
       }
       setProfiles(nextProfiles);
       setMe(nextProfiles.find((item) => item.id === userId) ?? null);
@@ -1390,7 +1402,7 @@ export default function InternalSocialPage() {
           .insert({
           author_user_id: me.id,
           author_name: currentName,
-          author_avatar_url: me.avatar_url ?? null,
+          author_avatar_url: resolvePortalAvatarUrl(me.avatar_url ?? null),
           audience_type: scopeType,
         audience_project_id: scopeType === "project" ? projectId || null : null,
         audience_label:
@@ -2027,7 +2039,7 @@ export default function InternalSocialPage() {
                 <section className="space-y-4">
                   {visibleFeedPosts.map((post) => {
                     const authorName = post.author_name || displayName(profileById.get(post.author_user_id));
-                    const authorAvatar = post.author_avatar_url || profileById.get(post.author_user_id)?.avatar_url || null;
+                    const authorAvatar = resolvePortalAvatarUrl(post.author_avatar_url) || profileById.get(post.author_user_id)?.avatar_url || null;
                     const canManagePost = post.author_user_id === me?.id || canModeratePosts;
                     return (
                       <article key={post.id} className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_70px_-44px_rgba(15,23,42,0.32)] backdrop-blur">

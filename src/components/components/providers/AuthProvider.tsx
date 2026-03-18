@@ -16,6 +16,7 @@ import {
   supabase,
 } from "@/lib/supabaseClient";
 import type { AuthState, Role } from "@/lib/auth/types";
+import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 
 type ProfileRow = {
   full_name: string | null;
@@ -202,7 +203,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userId: user.id,
       email: user.email ?? null,
       fullName: profErr ? null : profile?.full_name ?? null,
-      avatarUrl: profErr ? null : profile?.avatar_url ?? null,
+      avatarUrl: profErr ? null : resolvePortalAvatarUrl(profile?.avatar_url ?? null),
       role: profErr ? null : profile?.role ?? null,
       companyId,
       departmentId,

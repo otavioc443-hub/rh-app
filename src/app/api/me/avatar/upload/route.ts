@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { buildPortalAvatarUrl } from "@/lib/avatarUrl";
 
 const BUCKET = "avatars";
 const AVATAR_MIME_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -21,18 +22,17 @@ async function getServerSupabase() {
 
 export async function POST(req: Request) {
   try {
-    // Garante bucket acessivel por URL publica para renderizacao em Sidebar/PersonChip.
     const bucketRes = await supabaseAdmin.storage.getBucket(BUCKET);
     if (bucketRes.error) {
       const created = await supabaseAdmin.storage.createBucket(BUCKET, {
-        public: true,
+        public: false,
         fileSizeLimit: 3 * 1024 * 1024,
         allowedMimeTypes: AVATAR_MIME_TYPES,
       });
       if (created.error) return NextResponse.json({ error: created.error.message }, { status: 400 });
-    } else if (!bucketRes.data.public) {
+    } else if (bucketRes.data.public) {
       const updated = await supabaseAdmin.storage.updateBucket(BUCKET, {
-        public: true,
+        public: false,
         fileSizeLimit: 3 * 1024 * 1024,
         allowedMimeTypes: AVATAR_MIME_TYPES,
       });
@@ -68,11 +68,8 @@ export async function POST(req: Request) {
     });
     if (up.error) return NextResponse.json({ error: up.error.message }, { status: 400 });
 
-    const pub = supabaseAdmin.storage.from(BUCKET).getPublicUrl(path);
-    const baseUrl = pub.data.publicUrl;
-    const publicUrl = `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}v=${Date.now()}`;
+    const publicUrl = buildPortalAvatarUrl(path, Date.now());
 
-    // Mantem profiles.avatar_url sincronizado para Sidebar/Home e modulos que leem profiles.
     const { error: profileErr } = await supabaseAdmin
       .from("profiles")
       .update({ avatar_url: publicUrl })

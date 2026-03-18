@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { RefreshCcw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 
 type SectorKey = "coordenador" | "gestor" | "pd" | "rh" | "financeiro" | "diretoria";
 
@@ -785,7 +786,7 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
                   "Colaborador sem nome";
                 profileById[p.id] = {
                   name: safeName,
-                  avatarUrl: p.avatar_url ?? null,
+                  avatarUrl: resolvePortalAvatarUrl(p.avatar_url ?? null),
                 };
               }
             }

@@ -2,6 +2,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 
 type Size = "sm" | "md";
 
@@ -26,12 +27,13 @@ export function PersonChip(props: {
   const textSub = size === "sm" ? "text-[11px]" : "text-xs";
 
   const initials = useMemo(() => initialsFromName(props.name), [props.name]);
+  const avatarUrl = useMemo(() => resolvePortalAvatarUrl(props.avatarUrl), [props.avatarUrl]);
 
   return (
     <div className={`flex items-center gap-3 min-w-0 ${props.className ?? ""}`}>
-      {props.avatarUrl ? (
+      {avatarUrl ? (
         <img
-          src={props.avatarUrl}
+          src={avatarUrl}
           alt={props.name}
           className="rounded-full border border-slate-200 bg-white object-cover"
           style={{ width: dim, height: dim }}
@@ -51,4 +53,3 @@ export function PersonChip(props: {
     </div>
   );
 }
-

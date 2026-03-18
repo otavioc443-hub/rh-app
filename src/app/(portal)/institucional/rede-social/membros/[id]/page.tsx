@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 
 type MemberProfile = {
   id: string;
@@ -137,6 +138,7 @@ export default function InternalSocialMemberProfilePage() {
 
         setProfile({
           ...baseProfile,
+          avatar_url: resolvePortalAvatarUrl(baseProfile.avatar_url),
           full_name: safeName,
           cargo: (collaborator?.cargo ?? "").trim() || null,
           setor: (collaborator?.setor ?? "").trim() || null,

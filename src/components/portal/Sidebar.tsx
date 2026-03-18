@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { forceClientLogout } from "@/lib/supabaseClient";
+import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 import { isRouteHidden } from "@/lib/featureVisibility";
 
 type Role = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "financeiro" | "pd" | "admin";
@@ -84,6 +85,7 @@ export default function Sidebar({
 }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const resolvedAvatarUrl = useMemo(() => resolvePortalAvatarUrl(avatarUrl), [avatarUrl]);
 
   const nav = useMemo<NavItem[]>(
     () => [
@@ -348,10 +350,10 @@ export default function Sidebar({
         </div>
 
         <div className="mt-4 flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
-          {avatarUrl ? (
+          {resolvedAvatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
-              src={avatarUrl}
+              src={resolvedAvatarUrl}
               alt={fullName ?? "Colaborador"}
               className="h-10 w-10 rounded-full object-cover border border-slate-200 bg-white"
             />

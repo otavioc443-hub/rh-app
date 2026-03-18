@@ -12,6 +12,7 @@ import {
 } from "@/lib/supabaseClient";
 import Sidebar from "@/components/portal/Sidebar";
 import NotificationBell from "@/components/portal/NotificationBell";
+import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 import { isRouteHidden } from "@/lib/featureVisibility";
 
 type Role = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "financeiro" | "pd" | "admin";
@@ -397,7 +398,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         setRole(r);
         setFullName(resolvedFullName || null);
         setJobTitle(resolvedJobTitle);
-        setAvatarUrl(profile.avatar_url ?? null);
+        setAvatarUrl(resolvePortalAvatarUrl(profile.avatar_url));
 
         const hiddenRoutesReq = supabase
           .from("portal_feature_visibility")

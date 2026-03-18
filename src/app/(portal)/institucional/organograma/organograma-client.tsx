@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 import { PageHeader, Card, CardBody } from "@/components/ui/PageShell";
 import { Network, Search, RefreshCcw, ZoomIn, ZoomOut, RotateCcw, Download } from "lucide-react";
 import * as htmlToImage from "html-to-image";
@@ -153,7 +154,7 @@ function StatusPill({ active }: { active: boolean }) {
 
 function PersonCard({ node }: { node: Node }) {
   const active = !node.c.data_demissao;
-  const avatarUrl = (node.c.avatar_url ?? "").trim();
+  const avatarUrl = resolvePortalAvatarUrl((node.c.avatar_url ?? "").trim()) ?? "";
 
   return (
     <div className="oc-card">
@@ -259,7 +260,7 @@ export default function Page() {
       const profById = await supabase.from("profiles").select("id,avatar_url").in("id", userIds);
       if (!profById.error) {
         for (const p of (profById.data ?? []) as Array<{ id: string; avatar_url: string | null }>) {
-          const url = (p.avatar_url ?? "").trim();
+          const url = resolvePortalAvatarUrl((p.avatar_url ?? "").trim()) ?? "";
           if (url) avatarByUserId.set(String(p.id), url);
         }
       }
@@ -270,7 +271,7 @@ export default function Page() {
       if (!profByEmail.error) {
         for (const p of (profByEmail.data ?? []) as Array<{ email: string | null; avatar_url: string | null }>) {
           const email = normEmail(p.email);
-          const url = (p.avatar_url ?? "").trim();
+          const url = resolvePortalAvatarUrl((p.avatar_url ?? "").trim()) ?? "";
           if (email && url) avatarByEmail.set(email, url);
         }
       }
