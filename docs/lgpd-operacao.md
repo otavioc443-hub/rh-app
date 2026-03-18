@@ -2,6 +2,12 @@
 
 Este guia resume o que precisa ser aplicado e validado para colocar o pacote atual de adequacao LGPD em funcionamento.
 
+Documentos complementares:
+
+- matriz de tratamento: `docs/lgpd-matriz-tratamento.md`
+- politica de retencao: `docs/lgpd-politica-retencao.md`
+- procedimento de atendimento e incidente: `docs/lgpd-procedimento-atendimento-incidente.md`
+
 ## 1. Migrations obrigatorias
 
 Rode no Supabase SQL Editor, nesta ordem:
