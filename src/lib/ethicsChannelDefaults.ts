@@ -43,13 +43,13 @@ export function getDefaultEthicsManagedContent(companyName: string, companyKey?:
 
   if (isSolida) {
     return {
-      heroTitle: "Bem-vindo ao Canal de Etica da Solida",
+      heroTitle: "Bem-vindo ao Canal de Ética da Sólida",
       heroSubtitle:
-        "Um ambiente seguro, imparcial e protegido para comunicar condutas que possam violar o Codigo de Etica e Conduta, as politicas internas ou a legislacao aplicavel.",
-      heading: "Tecnologia, excelencia e responsabilidade em cada relacao.",
+        "Um ambiente seguro, imparcial e protegido para comunicar condutas que possam violar o Código de Ética e Conduta, as políticas internas ou a legislação aplicável.",
+      heading: "Tecnologia, excelência e responsabilidade em cada relação.",
       intro:
-        "Na Solida, acreditamos que a engenharia transforma realidades. Por isso, nossa atuacao precisa refletir responsabilidade profissional, respeito as pessoas, integridade nas decisoes e compromisso permanente com a confianca.",
-      heroImageUrl: "/institucional/pdf/page-07.jpg",
+        "Na Sólida, acreditamos que a engenharia transforma realidades. Por isso, nossa atuação precisa refletir responsabilidade profissional, respeito às pessoas, integridade nas decisões e compromisso permanente com a confiança.",
+      heroImageUrl: "/ethics/solida-canal-etica-hero.jpg",
       reportUrl: null,
       followUpUrl: null,
       contactEmail: null,
@@ -57,44 +57,44 @@ export function getDefaultEthicsManagedContent(companyName: string, companyKey?:
       codeOfEthicsUrl: null,
       dataProtectionUrl: null,
       codeSummary:
-        "O Codigo de Etica e Conduta da Solida orienta a forma como trabalhamos, decidimos e nos relacionamos, conectando engenharia, tecnologia, inteligencia e pessoas para construir solucoes que transformam a sociedade.",
+        "O Código de Ética e Conduta da Sólida orienta a forma como trabalhamos, decidimos e nos relacionamos, conectando engenharia, tecnologia, inteligência e pessoas para construir soluções que transformam a sociedade.",
       dataProtectionSummary:
-        "Os relatos recebidos devem ser tratados com responsabilidade e confidencialidade, com acesso restrito, protecao das informacoes pessoais e preservacao adequada das evidencias relacionadas ao caso.",
+        "Os relatos recebidos devem ser tratados com responsabilidade e confidencialidade, com acesso restrito, proteção das informações pessoais e preservação adequada das evidências relacionadas ao caso.",
       principles: [
-        "Projetar o futuro por meio da engenharia, conectando tecnologia, inteligencia e pessoas.",
-        "Desenvolver solucoes de engenharia inovadoras, seguras e eficientes, com excelencia tecnica.",
-        "Liderar a transformacao digital da engenharia com inovacao, BIM e impacto positivo.",
-        "Atuar com integridade, respeito, responsabilidade e protecao contra qualquer forma de retaliacao.",
+        "Projetar o futuro por meio da engenharia, conectando tecnologia, inteligência e pessoas.",
+        "Desenvolver soluções de engenharia inovadoras, seguras e eficientes, com excelência técnica.",
+        "Liderar a transformação digital da engenharia com inovação, BIM e impacto positivo.",
+        "Atuar com integridade, respeito, responsabilidade e proteção contra qualquer forma de retaliação.",
       ],
-      foundationTitle: "Base institucional da Solida",
+      foundationTitle: "Base institucional da Sólida",
       foundationSubtitle:
-        "O canal de etica da Solida nasce do mesmo conjunto de principios que orienta nossa atuacao tecnica, nosso relacionamento com pessoas e a forma como conduzimos decisoes.",
+        "O canal de ética da Sólida nasce do mesmo conjunto de princípios que orienta nossa atuação técnica, nosso relacionamento com pessoas e a forma como conduzimos decisões.",
       foundationPillars: [
         {
-          label: "Proposito",
-          text: "Projetar o futuro por meio da engenharia, conectando tecnologia, inteligencia e pessoas para construir solucoes que transformam a sociedade.",
+          label: "Propósito",
+          text: "Projetar o futuro por meio da engenharia, conectando tecnologia, inteligência e pessoas para construir soluções que transformam a sociedade.",
         },
         {
-          label: "Missao",
-          text: "Desenvolver solucoes de engenharia inovadoras, seguras e eficientes, utilizando tecnologia, BIM e inteligencia tecnica para entregar projetos de alta qualidade.",
+          label: "Missão",
+          text: "Desenvolver soluções de engenharia inovadoras, seguras e eficientes, utilizando tecnologia, BIM e inteligência técnica para entregar projetos de alta qualidade.",
         },
         {
-          label: "Visao",
-          text: "Ser referencia nacional e internacional em solucoes de engenharia digital, inovacao tecnologica e modelagem BIM.",
+          label: "Visão",
+          text: "Ser referência nacional e internacional em soluções de engenharia digital, inovação tecnológica e modelagem BIM.",
         },
       ],
       steerTitle: "STEER",
-      steerBody: "Conduzindo o futuro da engenharia com tecnologia, excelencia e responsabilidade.",
+      steerBody: "Conduzindo o futuro da engenharia com tecnologia, excelência e responsabilidade.",
     };
   }
 
   return {
-    heroTitle: `Canal de Etica de ${companyName}`,
+    heroTitle: `Canal de Ética de ${companyName}`,
     heroSubtitle:
-      "Um espaco preparado para receber relatos com seriedade, sigilo, imparcialidade e orientacao para apuracao.",
-    heading: "Integridade e protecao para quem precisa relatar.",
+      "Um espaço preparado para receber relatos com seriedade, sigilo, imparcialidade e orientação para apuração.",
+    heading: "Integridade e proteção para quem precisa relatar.",
     intro:
-      "Este canal existe para apoiar a identificacao de condutas que contrariem os valores da empresa, a legislacao e os padroes esperados de etica, integridade e respeito.",
+      "Este canal existe para apoiar a identificação de condutas que contrariem os valores da empresa, a legislação e os padrões esperados de ética, integridade e respeito.",
     heroImageUrl: "/bg-login.jpg",
     reportUrl: null,
     followUpUrl: null,
@@ -103,14 +103,14 @@ export function getDefaultEthicsManagedContent(companyName: string, companyKey?:
     codeOfEthicsUrl: null,
     dataProtectionUrl: null,
     codeSummary:
-      "A pagina consolida os compromissos de respeito, responsabilidade, integridade, combate a fraude e cuidado com pessoas, informacoes e ativos.",
+      "A página consolida os compromissos de respeito, responsabilidade, integridade, combate à fraude e cuidado com pessoas, informações e ativos.",
     dataProtectionSummary:
-      "Os relatos e documentos devem circular apenas entre as pessoas necessarias para a triagem e a apuracao, com registro formal do tratamento dado a cada caso.",
+      "Os relatos e documentos devem circular apenas entre as pessoas necessárias para a triagem e a apuração, com registro formal do tratamento dado a cada caso.",
     principles: [
       "Respeito e ambiente de trabalho seguro para todas as pessoas.",
-      "Conduta integra, transparente e alinhada as regras internas e externas.",
-      "Nao tolerancia a assedio, discriminacao, fraude e retaliacao.",
-      "Preservacao do sigilo, dos dados pessoais e das evidencias do relato.",
+      "Conduta íntegra, transparente e alinhada às regras internas e externas.",
+      "Não tolerância a assédio, discriminação, fraude e retaliação.",
+      "Preservação do sigilo, dos dados pessoais e das evidências do relato.",
     ],
     foundationTitle: null,
     foundationSubtitle: null,

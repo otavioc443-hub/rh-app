@@ -3,13 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, ExternalLink, RefreshCcw, Save, Search, ShieldCheck, Upload } from "lucide-react";
-import { supabase } from "@/lib/supabaseClient";
+import EthicsChannelLanding from "@/components/public/EthicsChannelLanding";
 import { useUserRole } from "@/hooks/useUserRole";
+import { buildEthicsChannelSlug, type EthicsChannelConfig } from "@/lib/ethicsChannel";
 import {
   getDefaultEthicsManagedContent,
   type EthicsFoundationPillar,
   type EthicsManagedContent,
 } from "@/lib/ethicsChannelDefaults";
+import { supabase } from "@/lib/supabaseClient";
 
 type Company = {
   id: string;
@@ -232,6 +234,21 @@ export default function AdminCanalDeEticaPage() {
     });
   }, [companies, q]);
 
+  const previewConfig = useMemo<EthicsChannelConfig>(
+    () => ({
+      key: buildEthicsChannelSlug(selectedCompanyName || "empresa") || "empresa",
+      companyName: selectedCompanyName || "Empresa",
+      reportUrl: clean(form.reportUrl) || null,
+      followUpUrl: clean(form.followUpUrl) || null,
+      contactEmail: clean(form.contactEmail) || null,
+      contactPhone: clean(form.contactPhone) || null,
+      heroImageUrl: clean(form.heroImageUrl) || null,
+      codeOfEthicsUrl: clean(form.codeOfEthicsUrl) || null,
+      dataProtectionUrl: clean(form.dataProtectionUrl) || null,
+    }),
+    [form.codeOfEthicsUrl, form.contactEmail, form.contactPhone, form.dataProtectionUrl, form.followUpUrl, form.heroImageUrl, form.reportUrl, selectedCompanyName],
+  );
+
   function setField<K extends keyof EthicsManagedContent>(key: K, value: EthicsManagedContent[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
@@ -302,7 +319,9 @@ export default function AdminCanalDeEticaPage() {
             </div>
             <div>
               <h1 className="text-xl font-semibold text-slate-900">Canal de ética</h1>
-              <p className="mt-1 text-sm text-slate-600">Edite o conteúdo público do canal por empresa e reflita as particularidades institucionais de cada operação.</p>
+              <p className="mt-1 text-sm text-slate-600">
+                Edite o conteúdo público do canal por empresa e reflita as particularidades institucionais de cada operação.
+              </p>
             </div>
           </div>
 
@@ -316,7 +335,7 @@ export default function AdminCanalDeEticaPage() {
               Recarregar
             </button>
             <a
-              href={selectedCompanyName ? `/canal-de-etica/${selectedCompanyName.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}` : "/canal-de-etica"}
+              href={selectedCompanyName ? `/canal-de-etica/${buildEthicsChannelSlug(selectedCompanyName)}` : "/canal-de-etica"}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
@@ -391,10 +410,10 @@ export default function AdminCanalDeEticaPage() {
         <div className="space-y-6">
           <section className="rounded-3xl border border-slate-200 bg-white p-6">
             <div className="grid gap-5 lg:grid-cols-2">
-              <Field label="Titulo da hero" value={clean(form.heroTitle)} onChange={(value) => setField("heroTitle", value)} />
+              <Field label="Título da hero" value={clean(form.heroTitle)} onChange={(value) => setField("heroTitle", value)} />
               <Field label="Heading do card da imagem" value={clean(form.heading)} onChange={(value) => setField("heading", value)} />
               <div className="lg:col-span-2">
-                <Field label="Subtitulo da hero" value={clean(form.heroSubtitle)} onChange={(value) => setField("heroSubtitle", value)} multiline rows={4} />
+                <Field label="Subtítulo da hero" value={clean(form.heroSubtitle)} onChange={(value) => setField("heroSubtitle", value)} multiline rows={4} />
               </div>
               <div className="lg:col-span-2">
                 <Field label="Texto institucional do card da imagem" value={clean(form.intro)} onChange={(value) => setField("intro", value)} multiline rows={5} />
@@ -427,7 +446,7 @@ export default function AdminCanalDeEticaPage() {
                 />
                 <span className="inline-flex items-center gap-2 text-xs text-slate-500">
                   <Upload size={14} />
-                  Use o bucket institucional ja existente para a imagem da hero.
+                  Use o bucket institucional já existente para a imagem da hero.
                 </span>
               </label>
             </div>
@@ -439,23 +458,23 @@ export default function AdminCanalDeEticaPage() {
               <Field label="Link para acompanhar relato" value={clean(form.followUpUrl)} onChange={(value) => setField("followUpUrl", value)} />
               <Field label="E-mail do canal" value={clean(form.contactEmail)} onChange={(value) => setField("contactEmail", value)} />
               <Field label="Telefone do canal" value={clean(form.contactPhone)} onChange={(value) => setField("contactPhone", value)} />
-              <Field label="Link do codigo de etica" value={clean(form.codeOfEthicsUrl)} onChange={(value) => setField("codeOfEthicsUrl", value)} />
-              <Field label="Link de protecao de dados" value={clean(form.dataProtectionUrl)} onChange={(value) => setField("dataProtectionUrl", value)} />
+              <Field label="Link do código de ética" value={clean(form.codeOfEthicsUrl)} onChange={(value) => setField("codeOfEthicsUrl", value)} />
+              <Field label="Link de proteção de dados" value={clean(form.dataProtectionUrl)} onChange={(value) => setField("dataProtectionUrl", value)} />
             </div>
           </section>
 
           <section className="rounded-3xl border border-slate-200 bg-white p-6">
             <div className="grid gap-5">
-              <Field label="Resumo do codigo de etica" value={clean(form.codeSummary)} onChange={(value) => setField("codeSummary", value)} multiline rows={5} />
+              <Field label="Resumo do código de ética" value={clean(form.codeSummary)} onChange={(value) => setField("codeSummary", value)} multiline rows={5} />
               <Field
-                label="Resumo de protecao de dados"
+                label="Resumo de proteção de dados"
                 value={clean(form.dataProtectionSummary)}
                 onChange={(value) => setField("dataProtectionSummary", value)}
                 multiline
                 rows={5}
               />
               <Field
-                label="Principios destacados"
+                label="Princípios destacados"
                 value={form.principles.join("\n")}
                 onChange={(value) => setField("principles", value.split("\n").map((item) => item.trim()).filter(Boolean))}
                 multiline
@@ -466,9 +485,9 @@ export default function AdminCanalDeEticaPage() {
 
           <section className="rounded-3xl border border-slate-200 bg-white p-6">
             <div className="grid gap-5">
-              <Field label="Titulo da base institucional" value={clean(form.foundationTitle)} onChange={(value) => setField("foundationTitle", value)} />
+              <Field label="Título da base institucional" value={clean(form.foundationTitle)} onChange={(value) => setField("foundationTitle", value)} />
               <Field
-                label="Subtitulo da base institucional"
+                label="Subtítulo da base institucional"
                 value={clean(form.foundationSubtitle)}
                 onChange={(value) => setField("foundationSubtitle", value)}
                 multiline
@@ -507,8 +526,23 @@ export default function AdminCanalDeEticaPage() {
               </div>
 
               <div className="grid gap-5 lg:grid-cols-2">
-                <Field label="Titulo do bloco STEER" value={clean(form.steerTitle)} onChange={(value) => setField("steerTitle", value)} />
+                <Field label="Título do bloco STEER" value={clean(form.steerTitle)} onChange={(value) => setField("steerTitle", value)} />
                 <Field label="Texto do bloco STEER" value={clean(form.steerBody)} onChange={(value) => setField("steerBody", value)} multiline rows={4} />
+              </div>
+            </div>
+          </section>
+
+          <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white">
+            <div className="border-b border-slate-200 px-6 py-5">
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Preview</p>
+              <h2 className="mt-2 text-lg font-semibold text-slate-950">Visualização da página pública</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                O preview já reflete as seções ocultas por menu. O conteúdo de cada bloco só aparece quando o usuário seleciona o item correspondente.
+              </p>
+            </div>
+            <div className="max-h-[920px] overflow-auto bg-slate-100 p-3">
+              <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
+                <EthicsChannelLanding config={previewConfig} companies={[previewConfig]} content={form} />
               </div>
             </div>
           </section>
@@ -516,7 +550,9 @@ export default function AdminCanalDeEticaPage() {
           <section className="rounded-3xl border border-slate-200 bg-slate-950 p-6 text-white">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/60">Registro</p>
             <p className="mt-3 text-sm text-slate-300">
-              {contentId ? `Conteudo vinculado ao registro ${contentId}.` : "Esta empresa ainda nao tem registro salvo; o formulario usa o fallback padrao ate a primeira gravacao."}
+              {contentId
+                ? `Conteúdo vinculado ao registro ${contentId}.`
+                : "Esta empresa ainda não tem registro salvo; o formulário usa o fallback padrão até a primeira gravação."}
             </p>
           </section>
         </div>
