@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ArrowRight, Building2, CircleAlert, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 type EthicsCompanyCard = {
   id: string;
@@ -26,7 +27,9 @@ export default function EthicsCompanySelector({
 }: {
   companies: EthicsCompanyCard[];
 }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
+  const [onlyConfigured, setOnlyConfigured] = useState(true);
 
   const filteredCompanies = useMemo(() => {
     const term = normalizeText(query);
@@ -34,31 +37,66 @@ export default function EthicsCompanySelector({
       if (a.configured !== b.configured) return a.configured ? -1 : 1;
       return a.name.localeCompare(b.name, "pt-BR");
     });
-    if (!term) return base;
-    return base.filter((company) => normalizeText(company.name).includes(term));
-  }, [companies, query]);
+    return base.filter((company) => {
+      if (onlyConfigured && !company.configured) return false;
+      if (!term) return true;
+      return normalizeText(company.name).includes(term);
+    });
+  }, [companies, onlyConfigured, query]);
 
   const configuredCount = companies.filter((item) => item.configured).length;
+  const directOptions = companies
+    .filter((item) => item.configured)
+    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
   return (
     <section className="mx-auto max-w-6xl px-6 py-10 lg:px-10 lg:py-12">
       <div className="mb-6 flex flex-col gap-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <div>
+        <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Empresas cadastradas</p>
           <p className="mt-2 text-sm text-slate-600">
             {configuredCount} canal(is) configurado(s) de {companies.length} empresa(s) cadastrada(s).
           </p>
         </div>
 
-        <label className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 lg:max-w-sm">
-          <Search size={16} className="text-slate-400" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar empresa"
-            className="w-full bg-transparent outline-none placeholder:text-slate-400"
-          />
-        </label>
+        <div className="grid w-full gap-3 lg:max-w-2xl lg:grid-cols-[1fr,auto,220px]">
+          <label className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+            <Search size={16} className="text-slate-400" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar empresa"
+              className="w-full bg-transparent outline-none placeholder:text-slate-400"
+            />
+          </label>
+
+          <label className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+            <input
+              type="checkbox"
+              checked={onlyConfigured}
+              onChange={(e) => setOnlyConfigured(e.target.checked)}
+              className="h-4 w-4"
+            />
+            Mostrar so configuradas
+          </label>
+
+          <select
+            defaultValue=""
+            onChange={(e) => {
+              const next = e.target.value;
+              if (!next) return;
+              router.push(`/canal-de-etica/${next}`);
+            }}
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none"
+          >
+            <option value="">Acesso rapido</option>
+            {directOptions.map((company) => (
+              <option key={company.id} value={company.slug}>
+                {company.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {filteredCompanies.length ? (
