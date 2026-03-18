@@ -38,4 +38,5 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 ## Operacao Interna
 
 - Guia de validacao sem publicacao: `docs/operacao-supabase.md`
+- Guia de implantacao LGPD: `docs/lgpd-operacao.md`
 - SQL de preflight para Supabase: `supabase/sql/preflight_checks.sql`
