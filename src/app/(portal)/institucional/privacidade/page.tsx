@@ -51,6 +51,7 @@ export default function PrivacidadePage() {
   const hasEmail = Boolean(config.contactEmail);
   const hasPhone = Boolean(config.contactPhone);
   const hasRequestUrl = Boolean(config.requestUrl);
+  const hasFullContactConfig = hasEmail && hasPhone && hasRequestUrl;
 
   return (
     <div className="space-y-6">
@@ -200,10 +201,12 @@ export default function PrivacidadePage() {
             ) : null}
           </div>
 
-          <p className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
-            Se os dados de contato ainda nao estiverem definidos, configure `NEXT_PUBLIC_LGPD_CONTACT_NAME`,
-            `NEXT_PUBLIC_LGPD_CONTACT_EMAIL`, `NEXT_PUBLIC_LGPD_CONTACT_PHONE` e `NEXT_PUBLIC_LGPD_REQUEST_URL`.
-          </p>
+          {!hasFullContactConfig ? (
+            <p className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+              Se os dados de contato ainda nao estiverem definidos, configure `NEXT_PUBLIC_LGPD_CONTACT_NAME`,
+              `NEXT_PUBLIC_LGPD_CONTACT_EMAIL`, `NEXT_PUBLIC_LGPD_CONTACT_PHONE` e `NEXT_PUBLIC_LGPD_REQUEST_URL`.
+            </p>
+          ) : null}
         </aside>
       </section>
 
