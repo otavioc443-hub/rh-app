@@ -20,7 +20,7 @@ type FinancialReason =
   | "other_financial";
 
 type UploadResult = {
-  publicUrl: string;
+  signedUrl: string;
   path: string;
   bucket: string;
   fileName: string;
@@ -58,9 +58,17 @@ type UnifiedTicket = {
   statusLabel: string;
   statusClass: string;
   createdAt: string;
+  attachmentPath: string | null;
   attachmentUrl: string | null;
   attachmentName: string | null;
 };
+
+function parseLegacyAttachment(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return { path: null, url: null };
+  if (/^https?:\/\//i.test(trimmed)) return { path: null, url: trimmed };
+  return { path: trimmed, url: null };
+}
 
 const OTHER_TITLE_VALUE = "__other__";
 
@@ -284,8 +292,13 @@ export default function MeuPerfilChamadosPage() {
       statusLabel: requestStatusLabel(r.status),
       statusClass: requestStatusClass(r.status),
       createdAt: r.created_at,
+      attachmentPath:
+        typeof (r.requested_changes ?? {})["attachment_path"] === "string"
+          ? String((r.requested_changes ?? {})["attachment_path"])
+          : null,
       attachmentUrl:
-        typeof (r.requested_changes ?? {})["attachment_url"] === "string"
+        typeof (r.requested_changes ?? {})["attachment_url"] === "string" &&
+        /^https?:\/\//i.test(String((r.requested_changes ?? {})["attachment_url"]))
           ? String((r.requested_changes ?? {})["attachment_url"])
           : null,
       attachmentName:
@@ -295,9 +308,9 @@ export default function MeuPerfilChamadosPage() {
     }));
 
     const fromPd = pdTickets.map((t) => {
-      const match = t.description.match(/(?:^|\n)Anexo:\s*(https?:\/\/\S+)/i);
-      const attachmentUrl = match?.[1] ?? null;
-      const cleanDescription = t.description.replace(/\n?Anexo:\s*https?:\/\/\S+/gi, "").trim();
+      const match = t.description.match(/(?:^|\n)Anexo:\s*(\S+)/i);
+      const parsedAttachment = parseLegacyAttachment(match?.[1] ?? "");
+      const cleanDescription = t.description.replace(/\n?Anexo:\s*\S+/gi, "").trim();
       return {
         id: t.id,
         source: "pd_ticket" as const,
@@ -308,8 +321,9 @@ export default function MeuPerfilChamadosPage() {
         statusLabel: pdStatusLabel(t.status),
         statusClass: pdStatusClass(t.status),
         createdAt: t.created_at,
-        attachmentUrl,
-        attachmentName: attachmentUrl ? "Anexo" : null,
+        attachmentPath: parsedAttachment.path,
+        attachmentUrl: parsedAttachment.url,
+        attachmentName: parsedAttachment.path || parsedAttachment.url ? "Anexo" : null,
       };
     });
 
@@ -327,17 +341,46 @@ export default function MeuPerfilChamadosPage() {
       body: form,
     });
     const json = (await res.json()) as Partial<UploadResult> & { error?: string };
-    if (!res.ok || !json.publicUrl || !json.path || !json.bucket || !json.fileName || !json.mimeType || !json.size) {
+    if (!res.ok || !json.signedUrl || !json.path || !json.bucket || !json.fileName || !json.mimeType || !json.size) {
       throw new Error(json.error ?? "Falha ao enviar anexo.");
     }
     return {
-      publicUrl: json.publicUrl,
+      signedUrl: json.signedUrl,
       path: json.path,
       bucket: json.bucket,
       fileName: json.fileName,
       mimeType: json.mimeType,
       size: Number(json.size),
     };
+  }
+
+  async function openAttachment(item: UnifiedTicket) {
+    setMsg("");
+    try {
+      if (item.attachmentPath) {
+        const res = await fetch("/api/chamados/attachments/url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            id: item.id,
+            path: item.attachmentPath,
+            source: item.source === "pd_ticket" ? "pd_ticket" : "profile_request",
+          }),
+        });
+        const json = (await res.json()) as { signedUrl?: string; error?: string };
+        if (!res.ok || !json.signedUrl) throw new Error(json.error ?? "Nao foi possivel abrir o anexo.");
+        window.open(json.signedUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+      if (item.attachmentUrl) {
+        window.open(item.attachmentUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+      throw new Error("Anexo indisponivel.");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao abrir anexo.");
+    }
   }
 
   const titleOptions = useMemo(() => {
@@ -372,7 +415,7 @@ export default function MeuPerfilChamadosPage() {
 
       if (destination === "pd") {
         const composedDescription = uploadedAttachment
-          ? `${description.trim()}\n\nAnexo: ${uploadedAttachment.publicUrl}`
+          ? `${description.trim()}\n\nAnexo: ${uploadedAttachment.path}`
           : description.trim();
         const { error } = await supabase.from("pd_tickets").insert({
           requester_user_id: userId,
@@ -402,7 +445,7 @@ export default function MeuPerfilChamadosPage() {
             channel: "meu-perfil/chamados",
             rh_reason: destination === "rh" ? rhReason : null,
             financial_reason: destination === "financeiro" ? financialReason : null,
-            attachment_url: uploadedAttachment?.publicUrl ?? null,
+            attachment_url: null,
             attachment_path: uploadedAttachment?.path ?? null,
             attachment_bucket: uploadedAttachment?.bucket ?? null,
             attachment_name: uploadedAttachment?.fileName ?? null,
@@ -645,15 +688,14 @@ export default function MeuPerfilChamadosPage() {
                     </td>
                     <td className="p-3">{item.description}</td>
                     <td className="p-3">
-                      {item.attachmentUrl ? (
-                        <a
-                          href={item.attachmentUrl}
-                          target="_blank"
-                          rel="noreferrer"
+                      {item.attachmentPath || item.attachmentUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => void openAttachment(item)}
                           className="text-xs font-semibold text-sky-700 underline"
                         >
                           {item.attachmentName ?? "Ver anexo"}
-                        </a>
+                        </button>
                       ) : (
                         <span className="text-xs text-slate-500">-</span>
                       )}

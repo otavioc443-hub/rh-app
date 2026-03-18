@@ -8,6 +8,12 @@ import { PageHeader, StatCard, Card, CardBody, TableShell, TableWrap } from "@/c
 
 type Row = ColaboradorPayload & { id: string; created_at: string; data_demissao?: string | null };
 
+function maskCpf(value?: string | null) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.length !== 11) return value ?? "-";
+  return `${digits.slice(0, 3)}.***.***-${digits.slice(9)}`;
+}
+
 function cleanNumber(v?: string) {
   const s = (v ?? "").trim().replace(",", ".");
   if (!s) return null;
@@ -174,7 +180,7 @@ export default function Page() {
                           <tr key={r.id} className="border-t">
                             <td className="p-4">
                               <div className="font-medium text-slate-900">{r.email ?? "-"}</div>
-                              <div className="text-xs text-slate-500">{r.cpf ?? ""}</div>
+                              <div className="text-xs text-slate-500">{maskCpf(r.cpf)}</div>
                             </td>
                             <td className="p-4">{r.nome ?? "-"}</td>
                             <td className="p-4">{r.cargo ?? "-"}</td>

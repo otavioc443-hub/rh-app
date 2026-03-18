@@ -71,6 +71,23 @@ export async function POST(req: Request) {
     const maxBytes = 10 * 1024 * 1024;
     if (file.size > maxBytes) return NextResponse.json({ error: "Arquivo muito grande (max 10MB)" }, { status: 400 });
 
+    const bucketRes = await supabaseAdmin.storage.getBucket(BUCKET);
+    if (bucketRes.error) {
+      const created = await supabaseAdmin.storage.createBucket(BUCKET, {
+        public: false,
+        fileSizeLimit: maxBytes,
+        allowedMimeTypes: ["application/pdf", "image/png", "image/jpeg", "image/webp"],
+      });
+      if (created.error) return NextResponse.json({ error: created.error.message }, { status: 400 });
+    } else if (bucketRes.data.public) {
+      const updated = await supabaseAdmin.storage.updateBucket(BUCKET, {
+        public: false,
+        fileSizeLimit: maxBytes,
+        allowedMimeTypes: ["application/pdf", "image/png", "image/jpeg", "image/webp"],
+      });
+      if (updated.error) return NextResponse.json({ error: updated.error.message }, { status: 400 });
+    }
+
     // Permissao: valida via RLS usando o token/cookie do usuario (nao via service role).
     const supabaseUser = await getRequesterSupabase(req, requester.token);
 
@@ -122,13 +139,15 @@ export async function POST(req: Request) {
     });
     if (up.error) return NextResponse.json({ error: up.error.message }, { status: 400 });
 
-    const pub = supabaseAdmin.storage.from(BUCKET).getPublicUrl(path);
-    const publicUrl = pub.data.publicUrl;
+    const signed = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(path, 60 * 60);
+    if (signed.error || !signed.data?.signedUrl) {
+      return NextResponse.json({ error: signed.error?.message ?? "Falha ao assinar anexo" }, { status: 400 });
+    }
 
     const ins = await supabaseAdmin.from("project_extra_payment_attachments").insert({
       payment_id: paymentId,
       project_id: projectId,
-      file_url: publicUrl,
+      file_url: path,
       file_path: path,
       file_name: file.name || null,
       mime_type: file.type || null,
@@ -137,10 +156,9 @@ export async function POST(req: Request) {
     });
     if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 400 });
 
-    return NextResponse.json({ ok: true, publicUrl, path });
+    return NextResponse.json({ ok: true, signedUrl: signed.data.signedUrl, path });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro inesperado";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

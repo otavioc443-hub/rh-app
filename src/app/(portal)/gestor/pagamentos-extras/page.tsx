@@ -28,7 +28,7 @@ type ExtraPayment = {
 type Attachment = {
   id: string;
   payment_id: string;
-  file_url: string;
+  file_path: string;
   file_name: string | null;
   created_at: string;
 };
@@ -193,7 +193,7 @@ export default function GestorPagamentosExtrasPage() {
       }
       const a = await supabase
         .from("project_extra_payment_attachments")
-        .select("id,payment_id,file_url,file_name,created_at")
+        .select("id,payment_id,file_path,file_name,created_at")
         .in("payment_id", ids)
         .order("created_at", { ascending: false });
       if (a.error) throw a.error;
@@ -289,6 +289,31 @@ export default function GestorPagamentosExtrasPage() {
       setMsg(e instanceof Error ? e.message : "Erro ao enviar anexo.");
     } finally {
       setUploadingFor(null);
+    }
+  }
+
+  async function openAttachment(attachmentId: string) {
+    setMsg("");
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token ?? null;
+
+      const res = await fetch("/api/extra-payments/attachments/url", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ attachmentId }),
+      });
+
+      const json = (await res.json()) as { signedUrl?: string; error?: string };
+      if (!res.ok || !json.signedUrl) throw new Error(json.error ?? "Nao foi possivel abrir o anexo.");
+
+      window.open(json.signedUrl, "_blank", "noopener,noreferrer");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao abrir anexo.");
     }
   }
 
@@ -443,16 +468,15 @@ export default function GestorPagamentosExtrasPage() {
                       <div className="flex flex-col gap-2">
                         <div className="flex flex-wrap gap-2">
                           {(attachmentsByPaymentId[r.id] ?? []).slice(0, 3).map((a) => (
-                            <a
+                            <button
+                              type="button"
                               key={a.id}
-                              href={a.file_url}
-                              target="_blank"
-                              rel="noreferrer"
+                              onClick={() => void openAttachment(a.id)}
                               className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
                               title={a.file_name ?? "Anexo"}
                             >
                               Ver anexo
-                            </a>
+                            </button>
                           ))}
                           {(attachmentsByPaymentId[r.id] ?? []).length > 3 ? (
                             <span className="text-xs text-slate-500">+{(attachmentsByPaymentId[r.id] ?? []).length - 3}</span>

@@ -9,6 +9,12 @@ import { Card, CardBody } from "@/components/ui/PageShell";
 type Props = { onImport: (rows: ColaboradorPayload[]) => Promise<void> };
 type CsvRow = Record<string, string | undefined>;
 
+function maskCpf(value?: string) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (digits.length !== 11) return value ?? "";
+  return `${digits.slice(0, 3)}.***.***-${digits.slice(9)}`;
+}
+
 function toISODate(value?: string) {
   if (!value) return "";
   const v = String(value).trim();
@@ -233,7 +239,7 @@ export default function EmployeesImport({ onImport }: Props) {
                       {preview.map((r, i) => (
                         <tr key={i} className="border-t">
                           <td className="p-3">{r.nome}</td>
-                          <td className="p-3">{r.cpf}</td>
+                          <td className="p-3">{maskCpf(r.cpf)}</td>
                           <td className="p-3">{r.email}</td>
                           <td className="p-3">{r.departamento}</td>
                           <td className="p-3">{r.cargo}</td>

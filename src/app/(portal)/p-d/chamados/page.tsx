@@ -41,6 +41,15 @@ type ProfileRow = {
   role: string | null;
 };
 
+function extractAttachment(description: string) {
+  const match = description.match(/(?:^|\n)Anexo:\s*(\S+)/i);
+  const raw = match?.[1]?.trim() ?? "";
+  const cleanDescription = description.replace(/\n?Anexo:\s*\S+/gi, "").trim();
+  if (!raw) return { cleanDescription, attachmentPath: null, attachmentUrl: null };
+  if (/^https?:\/\//i.test(raw)) return { cleanDescription, attachmentPath: null, attachmentUrl: raw };
+  return { cleanDescription, attachmentPath: raw, attachmentUrl: null };
+}
+
 function typeLabel(value: TicketType) {
   if (value === "server_access") return "TI - Acessos e infraestrutura";
   if (value === "system_improvement") return "Sistemas internos";
@@ -239,6 +248,36 @@ export default function PdChamadosPage() {
     }
   }
 
+  async function openAttachment(ticket: TicketRow) {
+    setMsg("");
+    try {
+      const parsed = extractAttachment(ticket.description);
+      if (parsed.attachmentPath) {
+        const res = await fetch("/api/chamados/attachments/url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            id: ticket.id,
+            path: parsed.attachmentPath,
+            source: "pd_ticket",
+          }),
+        });
+        const json = (await res.json()) as { signedUrl?: string; error?: string };
+        if (!res.ok || !json.signedUrl) throw new Error(json.error ?? "Nao foi possivel abrir o anexo.");
+        window.open(json.signedUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+      if (parsed.attachmentUrl) {
+        window.open(parsed.attachmentUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+      throw new Error("Anexo indisponivel.");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao abrir anexo.");
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
@@ -350,6 +389,7 @@ export default function PdChamadosPage() {
                   rows.map((row) => {
                     const requester = profiles[row.requester_user_id];
                     const requesterLabel = requester?.full_name || requester?.email || row.requester_user_id;
+                    const parsed = extractAttachment(row.description);
                     return (
                       <tr
                         key={row.id}
@@ -358,7 +398,7 @@ export default function PdChamadosPage() {
                       >
                         <td className="p-3">
                           <p className="font-semibold text-slate-900">{row.title}</p>
-                          <p className="mt-1 line-clamp-1 text-xs text-slate-600">{row.description}</p>
+                          <p className="mt-1 line-clamp-1 text-xs text-slate-600">{parsed.cleanDescription}</p>
                         </td>
                         <td className="p-3">{typeLabel(row.request_type)}</td>
                         <td className="p-3">{priorityLabel(row.priority)}</td>
@@ -391,14 +431,30 @@ export default function PdChamadosPage() {
           {selected ? (
             <div className="mt-3 space-y-3">
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
+                {(() => {
+                  const parsed = extractAttachment(selected.description);
+                  return (
+                    <>
                 <p className="font-semibold text-slate-900">{selected.title}</p>
-                <p className="mt-1 text-slate-700">{selected.description}</p>
+                <p className="mt-1 whitespace-pre-wrap text-slate-700">{parsed.cleanDescription}</p>
+                {parsed.attachmentPath || parsed.attachmentUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => void openAttachment(selected)}
+                    className="mt-2 text-xs font-semibold text-sky-700 underline"
+                  >
+                    Ver anexo
+                  </button>
+                ) : null}
                 <p className="mt-2 text-xs text-slate-500">
                   Tipo: {typeLabel(selected.request_type)} | Prioridade: {priorityLabel(selected.priority)}
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
                   Aberto em: {fmtDate(selected.opened_at)} | Resolvido em: {fmtDate(selected.resolved_at)}
                 </p>
+                    </>
+                  );
+                })()}
               </div>
 
               {isSupport ? (

@@ -37,14 +37,14 @@ export async function POST(req: Request) {
     const bucketRes = await supabaseAdmin.storage.getBucket(BUCKET);
     if (bucketRes.error) {
       const created = await supabaseAdmin.storage.createBucket(BUCKET, {
-        public: true,
+        public: false,
         fileSizeLimit: MAX_BYTES,
         allowedMimeTypes: ALLOWED_MIME_TYPES,
       });
       if (created.error) return NextResponse.json({ error: created.error.message }, { status: 400 });
-    } else if (!bucketRes.data.public) {
+    } else if (bucketRes.data.public) {
       const updated = await supabaseAdmin.storage.updateBucket(BUCKET, {
-        public: true,
+        public: false,
         fileSizeLimit: MAX_BYTES,
         allowedMimeTypes: ALLOWED_MIME_TYPES,
       });
@@ -82,10 +82,14 @@ export async function POST(req: Request) {
     });
     if (up.error) return NextResponse.json({ error: up.error.message }, { status: 400 });
 
-    const pub = supabaseAdmin.storage.from(BUCKET).getPublicUrl(path);
+    const signed = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(path, 60 * 60);
+    if (signed.error || !signed.data?.signedUrl) {
+      return NextResponse.json({ error: signed.error?.message ?? "Falha ao assinar anexo." }, { status: 400 });
+    }
+
     return NextResponse.json({
       ok: true,
-      publicUrl: pub.data.publicUrl,
+      signedUrl: signed.data.signedUrl,
       path,
       bucket: BUCKET,
       fileName: file.name,
