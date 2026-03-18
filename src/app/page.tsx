@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import {
   clearPortalExitIntent,
   clearRecentLoginMarker,
@@ -187,6 +188,12 @@ export default function LoginPage() {
             <p className="text-xs text-gray-500 mt-4 text-center">
               Ao acessar, voce concorda com as diretrizes internas de uso.
             </p>
+
+            <div className="mt-5 flex items-center justify-center gap-4 text-xs text-slate-500">
+              <Link href="/canal-de-etica" className="font-medium text-slate-700 underline underline-offset-2">
+                Canal de etica
+              </Link>
+            </div>
           </form>
         </div>
       </div>
