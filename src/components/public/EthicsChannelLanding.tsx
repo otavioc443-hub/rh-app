@@ -29,6 +29,18 @@ type BrandProfile = {
   codeSummary: string;
   dataProtectionSummary: string;
   principles: string[];
+  foundation?: {
+    title: string;
+    subtitle: string;
+    pillars: Array<{
+      label: string;
+      text: string;
+    }>;
+    steer?: {
+      title: string;
+      body: string;
+    };
+  } | null;
 };
 
 function normalizeValue(value: string | null | undefined) {
@@ -65,6 +77,29 @@ function buildBrandProfile(config: EthicsChannelConfig): BrandProfile {
         "Liderar a transformacao digital da engenharia com inovacao, BIM e impacto positivo.",
         "Atuar com integridade, respeito, responsabilidade e protecao contra qualquer forma de retaliacao.",
       ],
+      foundation: {
+        title: "Base institucional da Solida",
+        subtitle:
+          "O canal de etica da Solida nasce do mesmo conjunto de principios que orienta nossa atuacao tecnica, nosso relacionamento com pessoas e a forma como conduzimos decisoes.",
+        pillars: [
+          {
+            label: "Proposito",
+            text: "Projetar o futuro por meio da engenharia, conectando tecnologia, inteligencia e pessoas para construir solucoes que transformam a sociedade.",
+          },
+          {
+            label: "Missao",
+            text: "Desenvolver solucoes de engenharia inovadoras, seguras e eficientes, utilizando tecnologia, BIM e inteligencia tecnica para entregar projetos de alta qualidade.",
+          },
+          {
+            label: "Visao",
+            text: "Ser referencia nacional e internacional em solucoes de engenharia digital, inovacao tecnologica e modelagem BIM.",
+          },
+        ],
+        steer: {
+          title: "STEER",
+          body: "Conduzindo o futuro da engenharia com tecnologia, excelencia e responsabilidade.",
+        },
+      },
     };
   }
 
@@ -90,6 +125,7 @@ function buildBrandProfile(config: EthicsChannelConfig): BrandProfile {
       "Nao tolerancia a assedio, discriminacao, fraude e retaliacao.",
       "Preservacao do sigilo, dos dados pessoais e das evidencias do relato.",
     ],
+    foundation: null,
   };
 }
 
@@ -391,6 +427,46 @@ export default function EthicsChannelLanding({
           </div>
         </div>
       </section>
+
+      {profile.foundation ? (
+        <section className="mx-auto max-w-7xl px-6 py-12 lg:px-10 lg:py-16">
+          <div className="overflow-hidden rounded-[36px] border border-slate-200 bg-white shadow-sm">
+            <div
+              className="border-b border-slate-200 px-7 py-7 lg:px-8"
+              style={{
+                background:
+                  "linear-gradient(135deg, color-mix(in srgb, var(--ethics-light) 82%, white 18%) 0%, #ffffff 100%)",
+              }}
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Identidade institucional</p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{profile.foundation.title}</h2>
+              <p className="mt-4 max-w-3xl text-base leading-8 text-slate-600">{profile.foundation.subtitle}</p>
+            </div>
+
+            <div className="grid gap-0 lg:grid-cols-[1fr,320px]">
+              <div className="grid gap-0 md:grid-cols-3">
+                {profile.foundation.pillars.map((pillar, index) => (
+                  <article
+                    key={pillar.label}
+                    className={`p-7 lg:p-8 ${index < profile.foundation!.pillars.length - 1 ? "border-b border-slate-200 md:border-b-0 md:border-r" : ""}`}
+                  >
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">{pillar.label}</p>
+                    <p className="mt-4 text-base leading-8 text-slate-700">{pillar.text}</p>
+                  </article>
+                ))}
+              </div>
+
+              {profile.foundation.steer ? (
+                <aside className="border-t border-slate-200 bg-slate-950 p-7 text-white lg:border-l lg:border-t-0 lg:p-8">
+                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/60">Cultura</p>
+                  <h3 className="mt-3 text-3xl font-semibold tracking-tight">{profile.foundation.steer.title}</h3>
+                  <p className="mt-4 text-base leading-8 text-slate-300">{profile.foundation.steer.body}</p>
+                </aside>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       <section className="mx-auto max-w-7xl px-6 py-12 lg:px-10 lg:py-16">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
