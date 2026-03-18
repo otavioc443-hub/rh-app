@@ -1,69 +1,148 @@
+import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
   BadgeAlert,
   Building2,
+  FileCheck2,
   FileWarning,
   HeartHandshake,
   LockKeyhole,
-  MessageSquareWarning,
   Phone,
   Scale,
   SearchCheck,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import type { EthicsChannelConfig } from "@/lib/ethicsChannel";
+
+type BrandProfile = {
+  accent: string;
+  accentSoft: string;
+  accentLight: string;
+  heading: string;
+  heroTitle: string;
+  heroSubtitle: string;
+  intro: string;
+  imageUrl: string;
+  imageAlt: string;
+  codeSummary: string;
+  dataProtectionSummary: string;
+  principles: string[];
+};
+
+function normalizeValue(value: string | null | undefined) {
+  return String(value ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function buildBrandProfile(config: EthicsChannelConfig): BrandProfile {
+  const normalized = `${normalizeValue(config.key)} ${normalizeValue(config.companyName)}`;
+  const isSolida = normalized.includes("solida");
+
+  if (isSolida) {
+    return {
+      accent: "#99A41A",
+      accentSoft: "#2E3647",
+      accentLight: "#EEF1D4",
+      heading: "Etica, integridade e respeito em todas as relacoes.",
+      heroTitle: "Bem-vindo ao Canal de Etica da Solida",
+      heroSubtitle:
+        "Um ambiente seguro para relatar condutas que contrariem nossos valores, o respeito entre pessoas, a conformidade e a integridade nas relacoes profissionais.",
+      intro:
+        "Na Solida, a confianca se sustenta em comportamento etico, responsabilidade, transparencia, respeito as pessoas e tolerancia zero a praticas que violem a lei, o nosso codigo ou o ambiente de trabalho.",
+      imageUrl: config.heroImageUrl || "/institucional/pdf/page-07.jpg",
+      imageAlt: "Atuacao da Solida em projetos de energia renovavel",
+      codeSummary:
+        "O canal reforca principios de integridade, respeito, imparcialidade, responsabilidade socioambiental, protecao das informacoes e combate a fraude, corrupcao, assedio e discriminacao.",
+      dataProtectionSummary:
+        "Os relatos devem ser tratados com acesso restrito, necessidade real de conhecimento e preservacao das informacoes pessoais e evidencias relacionadas ao caso.",
+      principles: [
+        "Respeito, dignidade e ambiente sem assedio ou discriminacao.",
+        "Integridade nas decisoes, nas contratacoes e no relacionamento com terceiros.",
+        "Prevencao de conflito de interesses, fraude, corrupcao e favorecimento indevido.",
+        "Cuidado com seguranca, pessoas, ativos e informacoes da empresa.",
+      ],
+    };
+  }
+
+  return {
+    accent: "#1E3A8A",
+    accentSoft: "#0F172A",
+    accentLight: "#E7EEFF",
+    heading: "Integridade e protecao para quem precisa relatar.",
+    heroTitle: `Canal de Etica de ${config.companyName}`,
+    heroSubtitle:
+      "Um espaco preparado para receber relatos com seriedade, sigilo, imparcialidade e orientacao para apuracao.",
+    intro:
+      "Este canal existe para apoiar a identificacao de condutas que contrariem os valores da empresa, a legislacao e os padroes esperados de etica, integridade e respeito.",
+    imageUrl: config.heroImageUrl || "/bg-login.jpg",
+    imageAlt: `Equipe da ${config.companyName}`,
+    codeSummary:
+      "A pagina consolida os compromissos de respeito, responsabilidade, integridade, combate a fraude e cuidado com pessoas, informacoes e ativos.",
+    dataProtectionSummary:
+      "Os relatos e documentos devem circular apenas entre as pessoas necessarias para a triagem e a apuracao, com registro formal do tratamento dado a cada caso.",
+    principles: [
+      "Respeito e ambiente de trabalho seguro para todas as pessoas.",
+      "Conduta integra, transparente e alinhada as regras internas e externas.",
+      "Nao tolerancia a assedio, discriminacao, fraude e retaliacao.",
+      "Preservacao do sigilo, dos dados pessoais e das evidencias do relato.",
+    ],
+  };
+}
 
 const reportTopics = [
   {
     title: "Assedio e discriminacao",
-    description: "Situacoes de assedio moral, assedio sexual, humilhacao, preconceito ou retaliacao.",
+    description: "Assedio moral, assedio sexual, humilhacao, preconceito, retaliacao ou condutas que comprometam a dignidade.",
     icon: HeartHandshake,
   },
   {
     title: "Fraude e corrupcao",
-    description: "Suborno, desvio de recursos, conflito de interesses, favorecimento indevido ou fraude documental.",
+    description: "Suborno, fraude documental, desvio de recursos, conflito de interesses ou favorecimento indevido.",
     icon: Scale,
   },
   {
     title: "Conduta inadequada",
-    description: "Violacoes do codigo interno, abuso de autoridade, descumprimento de regras ou comportamento antietico.",
+    description: "Violacoes do codigo de etica, abuso de autoridade, quebra de regras internas ou comportamento antietico.",
     icon: BadgeAlert,
   },
   {
     title: "Seguranca e dados",
-    description: "Uso indevido de informacoes, vazamento de dados, falhas de controle ou risco relevante para pessoas e ativos.",
+    description: "Vazamento de informacoes, falhas de controle, acesso indevido ou risco relevante para pessoas e ativos.",
     icon: ShieldCheck,
   },
 ];
 
 const guarantees = [
-  "Recebimento de relatos com tratamento confidencial.",
-  "Possibilidade de relato com preservacao de identidade, conforme o canal adotado pela empresa.",
-  "Analise imparcial, com registro, triagem e encaminhamento para apuracao.",
-  "Proibicao de retaliacao contra quem relatar de boa-fe.",
+  "Tratamento confidencial do relato e das evidencias.",
+  "Triagem com criterio, registro formal e restricao de acesso.",
+  "Nao tolerancia a retaliacao contra relatos feitos de boa-fe.",
+  "Encaminhamento para apuracao com rastreabilidade e imparcialidade.",
 ];
 
 const flow = [
   {
-    step: "1",
+    step: "01",
     title: "Registro do relato",
-    body: "A pessoa relatora informa o ocorrido, data aproximada, envolvidos e, se houver, evidencias.",
+    body: "Informe o contexto, a data aproximada, as pessoas envolvidas e, se houver, documentos ou evidencias.",
   },
   {
-    step: "2",
+    step: "02",
     title: "Triagem e classificacao",
-    body: "O caso e qualificado por natureza, risco e urgencia, com definicao da frente responsavel pela apuracao.",
+    body: "O caso e avaliado por natureza, gravidade, urgencia e necessidade de investigacao complementar.",
   },
   {
-    step: "3",
+    step: "03",
     title: "Apuracao protegida",
-    body: "As evidencias sao analisadas com restricao de acesso, preservacao de sigilo e documentacao da decisao.",
+    body: "As evidencias sao analisadas com sigilo, acesso controlado e documentacao das decisoes do processo.",
   },
   {
-    step: "4",
-    title: "Resposta e fechamento",
-    body: "O caso recebe desfecho, medidas aplicaveis e possibilidade de acompanhamento quando o modelo de canal permitir.",
+    step: "04",
+    title: "Desfecho",
+    body: "O caso recebe tratamento, medidas cabiveis e, quando houver protocolo, possibilidade de acompanhamento.",
   },
 ];
 
@@ -71,22 +150,22 @@ const faq = [
   {
     question: "Quem pode utilizar o canal?",
     answer:
-      "Colaboradores, liderancas, terceiros, parceiros, fornecedores e qualquer pessoa que precise relatar situacoes contrarias a etica, integridade ou conformidade.",
+      "Colaboradores, liderancas, parceiros, fornecedores, prestadores e qualquer pessoa que precise comunicar uma situacao contraria a etica ou a conformidade.",
   },
   {
-    question: "O canal aceita denuncia anonima?",
+    question: "Posso relatar de forma reservada?",
     answer:
-      "A pagina foi preparada para trabalhar com canais que permitam preservacao de identidade. A forma exata depende do fluxo configurado pela empresa no link de registro.",
+      "A pagina foi preparada para trabalhar com canais que preservem a identidade quando essa opcao estiver disponivel no fluxo configurado pela empresa.",
   },
   {
-    question: "Que informacoes ajudam na apuracao?",
+    question: "Que informacoes ajudam na analise?",
     answer:
-      "Contexto do ocorrido, data aproximada, local, area envolvida, nomes, documentos, prints, e qualquer evidencia objetiva que facilite a analise.",
+      "Descricao objetiva do fato, data aproximada, local, area envolvida, nomes, prints, documentos e qualquer evidencia que ajude na apuracao.",
   },
   {
-    question: "Posso acompanhar meu relato?",
+    question: "Como acompanho o meu caso?",
     answer:
-      "Sim, quando a empresa disponibilizar fluxo de acompanhamento por protocolo. O botao de acompanhamento desta pagina pode ser apontado para esse processo.",
+      "Quando houver fluxo de acompanhamento por protocolo, utilize o acesso especifico desta pagina para consultar andamento e retorno.",
   },
 ];
 
@@ -100,19 +179,50 @@ function ActionLink({
   primary?: boolean;
 }) {
   const className = primary
-    ? "inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white hover:bg-slate-800"
-    : "inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 hover:bg-slate-50";
+    ? "inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-900/20 transition hover:translate-y-[-1px]"
+    : "inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50";
+  const style = primary ? { backgroundColor: "var(--ethics-accent)" } : undefined;
   const external = href.startsWith("http") || href.startsWith("mailto:") || href.startsWith("tel:");
+
   if (external) {
     return (
-      <a href={href} target={href.startsWith("http") ? "_blank" : undefined} rel={href.startsWith("http") ? "noreferrer" : undefined} className={className}>
+      <a
+        href={href}
+        target={href.startsWith("http") ? "_blank" : undefined}
+        rel={href.startsWith("http") ? "noreferrer" : undefined}
+        className={className}
+        style={style}
+      >
         {children}
       </a>
     );
   }
+
   return (
-    <Link href={href} className={className}>
+    <Link href={href} className={className} style={style}>
       {children}
+    </Link>
+  );
+}
+
+function NavLink({ href, label }: { href: string; label: string }) {
+  const external = href.startsWith("http");
+  if (external) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        className="text-sm font-medium text-slate-600 transition hover:text-slate-950"
+      >
+        {label}
+      </a>
+    );
+  }
+
+  return (
+    <Link href={href} className="text-sm font-medium text-slate-600 transition hover:text-slate-950">
+      {label}
     </Link>
   );
 }
@@ -124,47 +234,77 @@ export default function EthicsChannelLanding({
   config: EthicsChannelConfig;
   companies: EthicsChannelConfig[];
 }) {
+  const profile = buildBrandProfile(config);
   const reportHref = config.reportUrl || (config.contactEmail ? `mailto:${config.contactEmail}?subject=Canal%20de%20Etica` : "#contatos");
-  const followUpHref = config.followUpUrl || "#como-funciona";
+  const followUpHref = config.followUpUrl || "#fluxo";
+  const dataProtectionHref = config.dataProtectionUrl || "#dados";
+  const codeOfEthicsHref = config.codeOfEthicsUrl || "#codigo";
   const phoneHref = config.contactPhone ? `tel:${config.contactPhone}` : null;
 
+  const navItems = [
+    { label: "Pagina inicial", href: "#inicio" },
+    { label: "Realizar relato", href: reportHref },
+    { label: "Acompanhar relato", href: followUpHref },
+    { label: "Protecao de Dados", href: dataProtectionHref },
+    { label: "Codigo de Etica", href: codeOfEthicsHref },
+  ];
+
   return (
-    <main className="min-h-screen bg-[linear-gradient(180deg,#f5f7fb_0%,#eef2f7_46%,#ffffff_100%)] text-slate-950">
-      <section className="relative overflow-hidden border-b border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(15,23,42,0.14),_transparent_34%),linear-gradient(135deg,#ffffff_0%,#f7fafc_42%,#ecf3ff_100%)]">
-        <div className="absolute left-[-120px] top-[-80px] h-64 w-64 rounded-full bg-emerald-200/30 blur-3xl" />
-        <div className="absolute right-[-80px] top-10 h-72 w-72 rounded-full bg-blue-200/40 blur-3xl" />
+    <main
+      className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#f1f5f9_40%,#ffffff_100%)] text-slate-950"
+      style={
+        {
+          "--ethics-accent": profile.accent,
+          "--ethics-soft": profile.accentSoft,
+          "--ethics-light": profile.accentLight,
+        } as React.CSSProperties
+      }
+    >
+      <header className="border-b border-slate-200 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-5 lg:px-10">
+          <Link href="/canal-de-etica" className="flex items-center gap-4">
+            <span
+              className="grid h-14 w-14 place-items-center rounded-2xl text-white shadow-lg"
+              style={{ backgroundColor: "var(--ethics-soft)" }}
+            >
+              <Building2 size={24} />
+            </span>
+            <span>
+              <span className="block text-2xl font-semibold tracking-tight text-slate-950">{config.companyName}</span>
+              <span className="block text-sm text-slate-500">Canal de Etica e Integridade</span>
+            </span>
+          </Link>
 
-        <div className="relative mx-auto max-w-7xl px-6 py-8 lg:px-10 lg:py-10">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <Link href="/" className="inline-flex items-center gap-3 text-sm font-semibold text-slate-700 hover:text-slate-950">
-              <span className="grid h-11 w-11 place-items-center rounded-2xl bg-slate-950 text-white shadow-lg shadow-slate-950/15">
-                <Building2 size={20} />
-              </span>
-              <span>
-                <span className="block text-base text-slate-950">Canal de Etica</span>
-                <span className="block text-xs font-medium text-slate-500">{config.companyName}</span>
-              </span>
-            </Link>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <ActionLink href={reportHref} primary>
-                Fazer um relato
-                <ArrowRight size={16} />
-              </ActionLink>
-              <ActionLink href={followUpHref}>Acompanhar protocolo</ActionLink>
-            </div>
+          <div className="flex flex-wrap items-center gap-5">
+            {navItems.map((item) => (
+              <NavLink key={item.label} href={item.href} label={item.label} />
+            ))}
           </div>
+        </div>
+      </header>
 
+      <section id="inicio" className="relative overflow-hidden">
+        <div
+          className="absolute inset-x-0 top-0 h-[540px]"
+          style={{
+            background:
+              "linear-gradient(135deg, color-mix(in srgb, var(--ethics-accent) 92%, white 8%) 0%, color-mix(in srgb, var(--ethics-soft) 92%, white 8%) 100%)",
+          }}
+        />
+        <div className="absolute left-[-90px] top-[140px] h-72 w-72 rounded-full bg-white/12 blur-3xl" />
+        <div className="absolute right-[8%] top-[100px] h-80 w-80 rounded-full bg-white/10 blur-3xl" />
+
+        <div className="relative mx-auto max-w-7xl px-6 pb-16 pt-8 lg:px-10 lg:pb-24">
           {companies.length > 1 ? (
-            <div className="mt-6 flex flex-wrap gap-2">
+            <div className="mb-8 flex flex-wrap gap-2">
               {companies.map((item) => (
                 <Link
                   key={item.key}
                   href={`/canal-de-etica/${item.key}`}
-                  className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                  className={`rounded-full border px-4 py-2 text-xs font-semibold tracking-[0.18em] uppercase transition ${
                     item.key === config.key
-                      ? "bg-slate-950 text-white"
-                      : "border border-slate-300 bg-white/90 text-slate-700 hover:bg-slate-50"
+                      ? "border-white/40 bg-white text-slate-950"
+                      : "border-white/20 bg-white/8 text-white hover:bg-white/14"
                   }`}
                 >
                   {item.companyName}
@@ -173,63 +313,57 @@ export default function EthicsChannelLanding({
             </div>
           ) : null}
 
-          <div className="mt-12 grid gap-10 lg:grid-cols-[1.1fr,0.9fr] lg:items-end">
-            <div className="max-w-3xl">
-              <div className="inline-flex items-center gap-2 rounded-full border border-slate-300/70 bg-white/80 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.28em] text-slate-600 shadow-sm">
-                <LockKeyhole size={14} />
-                Integridade, sigilo e confianca
-              </div>
-              <h1 className="mt-6 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-                Um canal seguro para relatar condutas que nao combinam com a nossa empresa.
-              </h1>
-              <p className="mt-5 max-w-2xl text-base leading-8 text-slate-600">
-                Este espaco foi desenhado para apoiar relatos sobre assedio, fraude, discriminacao, conflito de interesses,
-                corrupcao, desvio de conduta, violacoes de seguranca e outras situacoes que afetem a integridade do ambiente
-                de trabalho e dos nossos relacionamentos.
-              </p>
-
-              <div className="mt-8 flex flex-wrap gap-3">
-                <ActionLink href={reportHref} primary>
-                  Registrar relato
-                  <MessageSquareWarning size={16} />
-                </ActionLink>
-                {config.contactEmail ? (
-                  <ActionLink href={`mailto:${config.contactEmail}`}>
-                    Falar com o canal responsavel
-                  </ActionLink>
-                ) : null}
+          <div className="grid gap-8 lg:grid-cols-[1.02fr,0.98fr] lg:items-stretch">
+            <div className="overflow-hidden rounded-[36px] border border-white/20 bg-white/10 shadow-[0_35px_100px_-55px_rgba(15,23,42,0.95)] backdrop-blur-sm">
+              <div className="relative min-h-[340px] lg:min-h-[520px]">
+                <Image src={profile.imageUrl} alt={profile.imageAlt} fill className="object-cover" priority />
+                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.08)_0%,rgba(15,23,42,0.34)_100%)]" />
+                <div className="absolute inset-x-0 bottom-0 p-6 lg:p-8">
+                  <div className="max-w-md rounded-[28px] border border-white/15 bg-slate-950/58 p-5 text-white backdrop-blur-md">
+                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/70">Compromisso</p>
+                    <p className="mt-3 text-2xl font-semibold leading-tight">{profile.heading}</p>
+                    <p className="mt-3 text-sm leading-7 text-white/80">{profile.intro}</p>
+                  </div>
+                </div>
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="rounded-[28px] border border-slate-200 bg-white/90 p-5 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.45)]">
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Compromisso</p>
-                <p className="mt-3 text-lg font-semibold text-slate-950">Nao toleramos retaliacao.</p>
-                <p className="mt-2 text-sm leading-7 text-slate-600">
-                  Relatos feitos de boa-fe devem ser tratados com respeito, seriedade e protecao contra represalias.
-                </p>
+            <div className="rounded-[40px] border border-slate-200 bg-white px-7 py-8 shadow-[0_36px_100px_-60px_rgba(15,23,42,0.8)] lg:px-10 lg:py-10">
+              <div className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white" style={{ backgroundColor: "var(--ethics-soft)" }}>
+                <LockKeyhole size={14} />
+                Canal seguro e confidencial
               </div>
-              <div className="rounded-[28px] border border-slate-200 bg-slate-950 p-5 text-white shadow-[0_24px_60px_-40px_rgba(15,23,42,0.55)]">
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-300">Tratamento</p>
-                <p className="mt-3 text-lg font-semibold">Recebimento confidencial e apuracao formal.</p>
-                <p className="mt-2 text-sm leading-7 text-slate-300">
-                  Cada caso precisa ser registrado, classificado e encaminhado com criterio, rastreabilidade e acesso restrito.
-                </p>
+              <h1 className="mt-6 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
+                {profile.heroTitle}
+              </h1>
+              <p className="mt-5 max-w-2xl text-lg leading-9 text-slate-600">{profile.heroSubtitle}</p>
+
+              <div className="mt-8 flex flex-wrap gap-3">
+                <ActionLink href={reportHref} primary>
+                  Realizar relato
+                  <ArrowRight size={16} />
+                </ActionLink>
+                <ActionLink href={followUpHref}>
+                  Acompanhar relato
+                  <SearchCheck size={16} />
+                </ActionLink>
               </div>
-              <div className="rounded-[28px] border border-slate-200 bg-white/90 p-5 shadow-[0_24px_60px_-40px_rgba(15,23,42,0.45)] sm:col-span-2">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Canais ativos</p>
-                    <p className="mt-2 text-lg font-semibold text-slate-950">Relato, acompanhamento e contato direto</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {config.contactEmail ? (
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{config.contactEmail}</span>
-                    ) : null}
-                    {config.contactPhone ? (
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{config.contactPhone}</span>
-                    ) : null}
-                  </div>
+
+              <div className="mt-10 grid gap-4 sm:grid-cols-3">
+                <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Sigilo</p>
+                  <p className="mt-3 text-base font-semibold text-slate-950">Recebimento reservado</p>
+                  <p className="mt-2 text-sm leading-7 text-slate-600">Informacoes e evidencias devem circular com acesso restrito.</p>
+                </div>
+                <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Integridade</p>
+                  <p className="mt-3 text-base font-semibold text-slate-950">Analise imparcial</p>
+                  <p className="mt-2 text-sm leading-7 text-slate-600">Cada caso precisa ser triado, registrado e tratado com criterio.</p>
+                </div>
+                <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Protecao</p>
+                  <p className="mt-3 text-base font-semibold text-slate-950">Sem retaliacao</p>
+                  <p className="mt-2 text-sm leading-7 text-slate-600">Relatos de boa-fe devem ser acolhidos com seriedade e protecao.</p>
                 </div>
               </div>
             </div>
@@ -237,16 +371,40 @@ export default function EthicsChannelLanding({
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-6 py-10 lg:px-10 lg:py-14">
+      <section className="border-y border-slate-200 bg-white">
+        <div className="mx-auto max-w-7xl px-6 py-8 lg:px-10">
+          <div className="rounded-[34px] border border-slate-200 bg-[linear-gradient(135deg,#fff_0%,#f8fafc_100%)] p-6 lg:p-8">
+            <div className="grid gap-6 lg:grid-cols-[1.15fr,0.85fr] lg:items-center">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Mensagem central</p>
+                <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Canal exclusivo para preservar etica, respeito e confianca.</h2>
+                <p className="mt-4 text-base leading-8 text-slate-600">{profile.codeSummary}</p>
+              </div>
+              <div className="grid gap-3">
+                {profile.principles.map((item) => (
+                  <div key={item} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm font-medium leading-7 text-slate-700">
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-6 py-12 lg:px-10 lg:py-16">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {reportTopics.map((topic) => {
             const Icon = topic.icon;
             return (
-              <article key={topic.title} className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-800">
+              <article key={topic.title} className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+                <div
+                  className="flex h-12 w-12 items-center justify-center rounded-2xl text-white"
+                  style={{ backgroundColor: "var(--ethics-soft)" }}
+                >
                   <Icon size={20} />
                 </div>
-                <h2 className="mt-4 text-lg font-semibold text-slate-950">{topic.title}</h2>
+                <h2 className="mt-5 text-lg font-semibold text-slate-950">{topic.title}</h2>
                 <p className="mt-3 text-sm leading-7 text-slate-600">{topic.description}</p>
               </article>
             );
@@ -254,132 +412,191 @@ export default function EthicsChannelLanding({
         </div>
       </section>
 
-      <section id="como-funciona" className="border-y border-slate-200 bg-white">
-        <div className="mx-auto max-w-7xl px-6 py-12 lg:px-10">
-          <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Como funciona</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Um fluxo simples, protegido e orientado a apuracao.</h2>
+      <section id="fluxo" className="border-y border-slate-200 bg-slate-950 text-white">
+        <div className="mx-auto max-w-7xl px-6 py-12 lg:px-10 lg:py-16">
+          <div className="max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/60">Fluxo do canal</p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight">Uma jornada clara para receber, analisar e tratar cada caso.</h2>
+            <p className="mt-4 text-base leading-8 text-slate-300">
+              O objetivo do canal nao e apenas receber relatos, mas garantir tratamento estruturado, documentado e coerente com a gravidade de cada situacao.
+            </p>
           </div>
 
           <div className="mt-8 grid gap-4 lg:grid-cols-4">
             {flow.map((item) => (
-              <article key={item.step} className="rounded-[28px] border border-slate-200 bg-[linear-gradient(180deg,#fff_0%,#f8fafc_100%)] p-6">
-                <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-slate-950 text-sm font-semibold text-white">
+              <article key={item.step} className="rounded-[28px] border border-white/10 bg-white/6 p-6 backdrop-blur-sm">
+                <div
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-full text-sm font-semibold text-white"
+                  style={{ backgroundColor: "var(--ethics-accent)" }}
+                >
                   {item.step}
                 </div>
-                <h3 className="mt-4 text-lg font-semibold text-slate-950">{item.title}</h3>
-                <p className="mt-3 text-sm leading-7 text-slate-600">{item.body}</p>
+                <h3 className="mt-4 text-lg font-semibold">{item.title}</h3>
+                <p className="mt-3 text-sm leading-7 text-slate-300">{item.body}</p>
               </article>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-6 py-12 lg:px-10">
+      <section id="dados" className="mx-auto max-w-7xl px-6 py-12 lg:px-10 lg:py-16">
         <div className="grid gap-6 xl:grid-cols-[0.95fr,1.05fr]">
-          <article className="rounded-[32px] border border-slate-200 bg-slate-950 p-7 text-white shadow-[0_30px_80px_-45px_rgba(15,23,42,0.9)]">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-300">Garantias do canal</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight">Protecao para quem relata e seriedade na apuracao.</h2>
-            <div className="mt-8 space-y-3">
+          <article className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div
+                className="flex h-12 w-12 items-center justify-center rounded-2xl text-white"
+                style={{ backgroundColor: "var(--ethics-soft)" }}
+              >
+                <ShieldCheck size={22} />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Protecao de dados</p>
+                <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Sigilo e necessidade de conhecimento.</h2>
+              </div>
+            </div>
+            <p className="mt-6 text-sm leading-8 text-slate-600">{profile.dataProtectionSummary}</p>
+            <div className="mt-6 rounded-[28px] border border-slate-200 bg-slate-50 p-5 text-sm leading-7 text-slate-700">
+              Os dados do relato devem ser usados exclusivamente para triagem, investigacao, medidas de tratamento e cumprimento de obrigacoes legais, sempre com proporcionalidade e controle de acesso.
+            </div>
+            {config.dataProtectionUrl ? (
+              <div className="mt-6">
+                <ActionLink href={config.dataProtectionUrl}>
+                  Ver politica de protecao de dados
+                  <ArrowRight size={16} />
+                </ActionLink>
+              </div>
+            ) : null}
+          </article>
+
+          <article id="codigo" className="rounded-[34px] border border-slate-200 bg-[linear-gradient(135deg,#fff_0%,#f8fafc_100%)] p-7 shadow-sm">
+            <div className="flex items-center gap-3">
+              <div
+                className="flex h-12 w-12 items-center justify-center rounded-2xl text-white"
+                style={{ backgroundColor: "var(--ethics-accent)" }}
+              >
+                <FileCheck2 size={22} />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Codigo de etica</p>
+                <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Principios que orientam a conduta esperada.</h2>
+              </div>
+            </div>
+            <p className="mt-6 text-sm leading-8 text-slate-600">{profile.codeSummary}</p>
+            <div className="mt-6 grid gap-3">
               {guarantees.map((item) => (
-                <div key={item} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm leading-7 text-slate-200">
+                <div key={item} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm leading-7 text-slate-700">
                   {item}
                 </div>
               ))}
             </div>
-          </article>
-
-          <article id="contatos" className="rounded-[32px] border border-slate-200 bg-white p-7 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Canais da empresa</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Escolha a forma mais adequada para registrar o caso.</h2>
-
-            <div className="mt-8 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                <p className="text-sm font-semibold text-slate-950">Registrar relato</p>
-                <p className="mt-2 text-sm leading-7 text-slate-600">
-                  Use este acesso para enviar um relato com contexto, envolvidos, documentos e evidencias.
-                </p>
-                <div className="mt-4">
-                  <ActionLink href={reportHref} primary>
-                    Abrir canal de relato
-                    <ArrowRight size={16} />
-                  </ActionLink>
-                </div>
-              </div>
-
-              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                <p className="text-sm font-semibold text-slate-950">Acompanhar protocolo</p>
-                <p className="mt-2 text-sm leading-7 text-slate-600">
-                  Quando o processo da empresa permitir, use o protocolo para consultar andamento e retorno.
-                </p>
-                <div className="mt-4">
-                  <ActionLink href={followUpHref}>
-                    Consultar andamento
-                    <SearchCheck size={16} />
-                  </ActionLink>
-                </div>
-              </div>
-
-              {config.contactEmail ? (
-                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                  <p className="text-sm font-semibold text-slate-950">E-mail do canal</p>
-                  <p className="mt-2 break-all text-sm leading-7 text-slate-600">{config.contactEmail}</p>
-                  <div className="mt-4">
-                    <ActionLink href={`mailto:${config.contactEmail}`}>
-                      Falar por e-mail
-                      <ArrowRight size={16} />
-                    </ActionLink>
-                  </div>
-                </div>
-              ) : null}
-
-              {phoneHref ? (
-                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                  <p className="text-sm font-semibold text-slate-950">Contato telefonico</p>
-                  <p className="mt-2 text-sm leading-7 text-slate-600">{config.contactPhone}</p>
-                  <div className="mt-4">
-                    <ActionLink href={phoneHref}>
-                      <Phone size={16} />
-                      Ligar para o canal
-                    </ActionLink>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            {!config.reportUrl || !config.followUpUrl ? (
-              <div className="mt-6 rounded-3xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm leading-7 text-amber-900">
-                Para ativar o fluxo real da empresa, configure `NEXT_PUBLIC_ETHICS_CHANNELS_JSON` ou, no modo simples,
-                `NEXT_PUBLIC_ETHICS_REPORT_URL`, `NEXT_PUBLIC_ETHICS_FOLLOWUP_URL`,
-                `NEXT_PUBLIC_ETHICS_CONTACT_EMAIL`, `NEXT_PUBLIC_ETHICS_CONTACT_PHONE` e
-                `NEXT_PUBLIC_ETHICS_COMPANY_NAME`.
+            {config.codeOfEthicsUrl ? (
+              <div className="mt-6">
+                <ActionLink href={config.codeOfEthicsUrl}>
+                  Acessar codigo completo
+                  <ArrowRight size={16} />
+                </ActionLink>
               </div>
             ) : null}
           </article>
         </div>
       </section>
 
-      <section className="border-t border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)]">
-        <div className="mx-auto max-w-7xl px-6 py-12 lg:px-10">
-          <div className="max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Perguntas frequentes</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">O que normalmente gera mais duvida antes de relatar.</h2>
-          </div>
+      <section id="contatos" className="border-y border-slate-200 bg-white">
+        <div className="mx-auto max-w-7xl px-6 py-12 lg:px-10 lg:py-16">
+          <div className="grid gap-6 xl:grid-cols-[0.9fr,1.1fr]">
+            <article className="rounded-[34px] border border-slate-200 bg-[linear-gradient(135deg,#fff_0%,#f8fafc_100%)] p-7 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Acoes rapidas</p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Escolha a forma mais adequada para iniciar o atendimento.</h2>
+              <p className="mt-4 text-base leading-8 text-slate-600">
+                O fluxo de relato pode ser feito por formulario, protocolo, e-mail ou contato direto, conforme a configuracao da empresa.
+              </p>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <ActionLink href={reportHref} primary>
+                  Realizar relato
+                  <ArrowRight size={16} />
+                </ActionLink>
+                <ActionLink href={followUpHref}>
+                  Acompanhar protocolo
+                  <SearchCheck size={16} />
+                </ActionLink>
+              </div>
+            </article>
 
-          <div className="mt-8 grid gap-4 lg:grid-cols-2">
-            {faq.map((item) => (
-              <article key={item.question} className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-                <div className="flex items-start gap-3">
-                  <div className="mt-1 flex h-9 w-9 items-center justify-center rounded-2xl bg-slate-100 text-slate-800">
-                    <FileWarning size={18} />
-                  </div>
-                  <div>
-                    <h3 className="text-base font-semibold text-slate-950">{item.question}</h3>
-                    <p className="mt-3 text-sm leading-7 text-slate-600">{item.answer}</p>
-                  </div>
-                </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <article className="rounded-[30px] border border-slate-200 bg-slate-50 p-6">
+                <p className="text-sm font-semibold text-slate-950">Registrar relato</p>
+                <p className="mt-3 text-sm leading-7 text-slate-600">Use este acesso para detalhar o fato, anexar evidencias e formalizar o caso.</p>
               </article>
-            ))}
+
+              <article className="rounded-[30px] border border-slate-200 bg-slate-50 p-6">
+                <p className="text-sm font-semibold text-slate-950">Consultar andamento</p>
+                <p className="mt-3 text-sm leading-7 text-slate-600">Quando houver protocolo, acompanhe a evolucao do atendimento pelo canal indicado.</p>
+              </article>
+
+              {config.contactEmail ? (
+                <article className="rounded-[30px] border border-slate-200 bg-slate-50 p-6">
+                  <p className="text-sm font-semibold text-slate-950">E-mail do canal</p>
+                  <p className="mt-3 break-all text-sm leading-7 text-slate-600">{config.contactEmail}</p>
+                </article>
+              ) : null}
+
+              {phoneHref ? (
+                <article className="rounded-[30px] border border-slate-200 bg-slate-50 p-6">
+                  <p className="text-sm font-semibold text-slate-950">Contato telefonico</p>
+                  <p className="mt-3 text-sm leading-7 text-slate-600">{config.contactPhone}</p>
+                  <div className="mt-5">
+                    <ActionLink href={phoneHref}>
+                      <Phone size={16} />
+                      Ligar para o canal
+                    </ActionLink>
+                  </div>
+                </article>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-6 py-12 lg:px-10 lg:py-16">
+        <div className="max-w-2xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Perguntas frequentes</p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">O que normalmente gera mais duvida antes de relatar.</h2>
+        </div>
+
+        <div className="mt-8 grid gap-4 lg:grid-cols-2">
+          {faq.map((item) => (
+            <article key={item.question} className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex items-start gap-4">
+                <div
+                  className="mt-1 flex h-10 w-10 items-center justify-center rounded-2xl text-white"
+                  style={{ backgroundColor: "var(--ethics-soft)" }}
+                >
+                  <FileWarning size={18} />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-slate-950">{item.question}</h3>
+                  <p className="mt-3 text-sm leading-7 text-slate-600">{item.answer}</p>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="border-t border-slate-200 bg-slate-950 text-white">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-6 px-6 py-8 lg:px-10">
+          <div className="max-w-2xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/60">Encaminhamento etico</p>
+            <p className="mt-3 text-lg font-semibold">Se algo nao parece correto, registre. O silencio nao protege a integridade.</p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <ActionLink href={reportHref} primary>
+              Registrar agora
+              <Sparkles size={16} />
+            </ActionLink>
+            <Link href="/canal-de-etica" className="inline-flex items-center justify-center rounded-full border border-white/15 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/8">
+              Trocar empresa
+            </Link>
           </div>
         </div>
       </section>

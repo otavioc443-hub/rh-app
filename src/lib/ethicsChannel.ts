@@ -5,6 +5,9 @@ export type EthicsChannelConfig = {
   followUpUrl: string | null;
   contactEmail: string | null;
   contactPhone: string | null;
+  heroImageUrl?: string | null;
+  codeOfEthicsUrl?: string | null;
+  dataProtectionUrl?: string | null;
 };
 
 type RawEthicsChannelConfig = Partial<EthicsChannelConfig> & {
@@ -14,6 +17,9 @@ type RawEthicsChannelConfig = Partial<EthicsChannelConfig> & {
   followUpUrl?: string;
   contactEmail?: string;
   contactPhone?: string;
+  heroImageUrl?: string;
+  codeOfEthicsUrl?: string;
+  dataProtectionUrl?: string;
 };
 
 function clean(value: string | undefined | null) {
@@ -47,6 +53,9 @@ function coerceConfig(input: RawEthicsChannelConfig, fallbackKey: string): Ethic
     followUpUrl: clean(input.followUpUrl),
     contactEmail: clean(input.contactEmail),
     contactPhone: clean(input.contactPhone),
+    heroImageUrl: clean(input.heroImageUrl),
+    codeOfEthicsUrl: clean(input.codeOfEthicsUrl),
+    dataProtectionUrl: clean(input.dataProtectionUrl),
   };
 }
 
@@ -58,6 +67,9 @@ function getSingleCompanyFallback(): EthicsChannelConfig {
     followUpUrl: clean(process.env.NEXT_PUBLIC_ETHICS_FOLLOWUP_URL),
     contactEmail: clean(process.env.NEXT_PUBLIC_ETHICS_CONTACT_EMAIL),
     contactPhone: clean(process.env.NEXT_PUBLIC_ETHICS_CONTACT_PHONE),
+    heroImageUrl: clean(process.env.NEXT_PUBLIC_ETHICS_HERO_IMAGE_URL),
+    codeOfEthicsUrl: clean(process.env.NEXT_PUBLIC_ETHICS_CODE_URL),
+    dataProtectionUrl: clean(process.env.NEXT_PUBLIC_ETHICS_PRIVACY_URL),
   };
 }
 
