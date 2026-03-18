@@ -1,7 +1,7 @@
-import Link from "next/link";
-import { ArrowRight, Building2, CircleAlert, Search } from "lucide-react";
+import { Search } from "lucide-react";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { buildEthicsChannelSlug, findEthicsChannelConfig } from "@/lib/ethicsChannel";
+import EthicsCompanySelector from "@/components/public/EthicsCompanySelector";
 
 export const metadata = {
   title: "Canal de Etica",
@@ -50,62 +50,7 @@ export default async function CanalDeEticaPage() {
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-6 py-10 lg:px-10 lg:py-12">
-        {companies.length ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {companies.map((company) => (
-              <article
-                key={company.id}
-                className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_-44px_rgba(15,23,42,0.4)]"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-center gap-4">
-                    <div
-                      className="grid h-14 w-14 place-items-center rounded-2xl text-white"
-                      style={{ backgroundColor: company.primary_color?.trim() || "#0f172a" }}
-                    >
-                      <Building2 size={22} />
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-semibold text-slate-950">{company.name}</h2>
-                      <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                        {company.configured ? "Canal configurado" : "Configuracao pendente"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <p className="mt-5 text-sm leading-7 text-slate-600">
-                  {company.configured
-                    ? "Acesse o canal dedicado desta empresa para registrar relatos, acompanhar protocolos e consultar os contatos corretos."
-                    : "Esta empresa ainda nao possui links especificos configurados para o canal de etica no ambiente atual."}
-                </p>
-
-                <div className="mt-6">
-                  {company.configured ? (
-                    <Link
-                      href={`/canal-de-etica/${company.slug}`}
-                      className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800"
-                    >
-                      Abrir canal desta empresa
-                      <ArrowRight size={16} />
-                    </Link>
-                  ) : (
-                    <div className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
-                      <CircleAlert size={16} />
-                      Configurar canal desta empresa
-                    </div>
-                  )}
-                </div>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-[30px] border border-slate-200 bg-white p-8 text-sm text-slate-600 shadow-sm">
-            Nenhuma empresa cadastrada foi encontrada no portal.
-          </div>
-        )}
-      </section>
+      <EthicsCompanySelector companies={companies} />
     </main>
   );
 }
