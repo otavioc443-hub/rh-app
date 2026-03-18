@@ -7,6 +7,7 @@ Documentos complementares:
 - matriz de tratamento: `docs/lgpd-matriz-tratamento.md`
 - politica de retencao: `docs/lgpd-politica-retencao.md`
 - procedimento de atendimento e incidente: `docs/lgpd-procedimento-atendimento-incidente.md`
+- checklist executivo: `docs/lgpd-checklist-executivo.md`
 
 ## 1. Migrations obrigatorias
 

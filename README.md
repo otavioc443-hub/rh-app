@@ -42,4 +42,5 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 - Matriz de tratamento LGPD: `docs/lgpd-matriz-tratamento.md`
 - Politica de retencao LGPD: `docs/lgpd-politica-retencao.md`
 - Procedimento de atendimento e incidente LGPD: `docs/lgpd-procedimento-atendimento-incidente.md`
+- Checklist executivo LGPD: `docs/lgpd-checklist-executivo.md`
 - SQL de preflight para Supabase: `supabase/sql/preflight_checks.sql`
