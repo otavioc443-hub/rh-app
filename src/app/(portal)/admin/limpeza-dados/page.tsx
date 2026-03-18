@@ -30,8 +30,64 @@ type CleanupAuditRow = {
   created_at: string;
 };
 
+type CleanupSummaryItem = {
+  label: string;
+  value: string;
+};
+
 function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
+}
+
+function summarizeCleanupResult(result: Record<string, unknown>): CleanupSummaryItem[] {
+  const items: CleanupSummaryItem[] = [];
+
+  const deliverableHistory =
+    result.deliverable_history && typeof result.deliverable_history === "object"
+      ? (result.deliverable_history as Record<string, unknown>)
+      : null;
+
+  if (deliverableHistory) {
+    items.push({
+      label: "Historico de entregaveis",
+      value: [
+        `projetos: ${Number(deliverableHistory.processed_projects ?? 0) || 0}`,
+        `timeline: ${Number(deliverableHistory.timeline_deleted ?? 0) || 0}`,
+        `contribuicoes: ${Number(deliverableHistory.contributions_deleted ?? 0) || 0}`,
+        `arquivos: ${Number(deliverableHistory.files_deleted ?? 0) || 0}`,
+      ].join(" | "),
+    });
+  }
+
+  if (typeof result.notifications_deleted === "number") {
+    items.push({
+      label: "Notificacoes removidas",
+      value: String(result.notifications_deleted),
+    });
+  }
+
+  if (typeof result.session_audit_deleted === "number") {
+    items.push({
+      label: "Trilha de sessao removida",
+      value: String(result.session_audit_deleted),
+    });
+  }
+
+  if (typeof result.projects_deleted === "number") {
+    items.push({
+      label: "Projetos removidos",
+      value: String(result.projects_deleted),
+    });
+  }
+
+  if (typeof result.company_id === "string" && result.company_id.trim()) {
+    items.push({
+      label: "Empresa",
+      value: result.company_id,
+    });
+  }
+
+  return items;
 }
 
 export default function AdminDataCleanupPage() {
@@ -58,7 +114,7 @@ export default function AdminDataCleanupPage() {
 
   const [running, setRunning] = useState(false);
   const [msg, setMsg] = useState("");
-  const [resultText, setResultText] = useState("");
+  const [resultSummary, setResultSummary] = useState<CleanupSummaryItem[]>([]);
   const [auditRows, setAuditRows] = useState<CleanupAuditRow[]>([]);
   const [loadingAudit, setLoadingAudit] = useState(false);
 
@@ -204,7 +260,7 @@ export default function AdminDataCleanupPage() {
 
   async function runCleanup() {
     setMsg("");
-    setResultText("");
+    setResultSummary([]);
 
     if (!selectedCompanyId) {
       setMsg("Selecione uma empresa.");
@@ -258,7 +314,7 @@ export default function AdminDataCleanupPage() {
       if (!res.ok) throw new Error(json.error || "Falha na limpeza.");
 
       setMsg("Limpeza executada com sucesso.");
-      setResultText(JSON.stringify(json.result ?? {}, null, 2));
+      setResultSummary(summarizeCleanupResult(json.result ?? {}));
 
       if (clearCompanyProjects || clearDeliverableHistory) {
         await loadProjects(token, selectedCompanyId);
@@ -423,10 +479,18 @@ export default function AdminDataCleanupPage() {
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">{msg}</div>
         ) : null}
 
-        {resultText ? (
-          <pre className="max-h-80 overflow-auto rounded-xl border border-slate-200 bg-slate-950 p-3 text-xs text-slate-100">
-            {resultText}
-          </pre>
+        {resultSummary.length ? (
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Resultado</p>
+            <div className="mt-3 space-y-2 text-sm text-slate-700">
+              {resultSummary.map((item) => (
+                <div key={item.label} className="flex flex-wrap gap-2">
+                  <span className="font-semibold text-slate-900">{item.label}:</span>
+                  <span>{item.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         ) : null}
       </div>
 

@@ -64,6 +64,20 @@ function fmtMoney(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function maskBankBranch(value: string | null | undefined) {
+  const digits = onlyDigits(value);
+  if (!digits) return "-";
+  if (digits.length <= 2) return `${"*".repeat(digits.length)}`;
+  return `${"*".repeat(Math.max(0, digits.length - 2))}${digits.slice(-2)}`;
+}
+
+function maskBankAccount(value: string | null | undefined) {
+  const digits = onlyDigits(value);
+  if (!digits) return "-";
+  if (digits.length <= 4) return `${"*".repeat(digits.length)}`;
+  return `${"*".repeat(Math.max(0, digits.length - 4))}${digits.slice(-4)}`;
+}
+
 export default function FinanceiroCnabBradescoPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -459,7 +473,7 @@ export default function FinanceiroCnabBradescoPage() {
               ) : payments.length ? (
                 payments.map((p) => {
                   const c = collabByUserId[p.user_id];
-                  const bankInfo = `${c?.banco ?? "-"} / ${c?.agencia ?? "-"} / ${c?.conta_corrente ?? "-"}`;
+                  const bankInfo = `${c?.banco ?? "-"} / ag. ${maskBankBranch(c?.agencia)} / conta ${maskBankAccount(c?.conta_corrente)}`;
                   return (
                     <tr key={p.id} className="border-t">
                       <td className="p-3">
