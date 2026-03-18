@@ -47,23 +47,23 @@ function buildBrandProfile(config: EthicsChannelConfig): BrandProfile {
       accent: "#99A41A",
       accentSoft: "#2E3647",
       accentLight: "#EEF1D4",
-      heading: "Etica, integridade e respeito em todas as relacoes.",
+      heading: "Tecnologia, excelencia e responsabilidade em cada relacao.",
       heroTitle: "Bem-vindo ao Canal de Etica da Solida",
       heroSubtitle:
-        "Um ambiente seguro para relatar condutas que contrariem nossos valores, o respeito entre pessoas, a conformidade e a integridade nas relacoes profissionais.",
+        "Um ambiente seguro, imparcial e protegido para comunicar condutas que possam violar o Codigo de Etica e Conduta, as politicas internas ou a legislacao aplicavel.",
       intro:
-        "Na Solida, a confianca se sustenta em comportamento etico, responsabilidade, transparencia, respeito as pessoas e tolerancia zero a praticas que violem a lei, o nosso codigo ou o ambiente de trabalho.",
+        "Na Solida, acreditamos que a engenharia transforma realidades. Por isso, nossa atuacao precisa refletir responsabilidade profissional, respeito as pessoas, integridade nas decisoes e compromisso permanente com a confianca.",
       imageUrl: config.heroImageUrl || "/institucional/pdf/page-07.jpg",
       imageAlt: "Atuacao da Solida em projetos de energia renovavel",
       codeSummary:
-        "O canal reforca principios de integridade, respeito, imparcialidade, responsabilidade socioambiental, protecao das informacoes e combate a fraude, corrupcao, assedio e discriminacao.",
+        "O Codigo de Etica e Conduta da Solida orienta a forma como trabalhamos, decidimos e nos relacionamos, conectando engenharia, tecnologia, inteligencia e pessoas para construir solucoes que transformam a sociedade.",
       dataProtectionSummary:
-        "Os relatos devem ser tratados com acesso restrito, necessidade real de conhecimento e preservacao das informacoes pessoais e evidencias relacionadas ao caso.",
+        "Os relatos recebidos devem ser tratados com responsabilidade e confidencialidade, com acesso restrito, protecao das informacoes pessoais e preservacao adequada das evidencias relacionadas ao caso.",
       principles: [
-        "Respeito, dignidade e ambiente sem assedio ou discriminacao.",
-        "Integridade nas decisoes, nas contratacoes e no relacionamento com terceiros.",
-        "Prevencao de conflito de interesses, fraude, corrupcao e favorecimento indevido.",
-        "Cuidado com seguranca, pessoas, ativos e informacoes da empresa.",
+        "Projetar o futuro por meio da engenharia, conectando tecnologia, inteligencia e pessoas.",
+        "Desenvolver solucoes de engenharia inovadoras, seguras e eficientes, com excelencia tecnica.",
+        "Liderar a transformacao digital da engenharia com inovacao, BIM e impacto positivo.",
+        "Atuar com integridade, respeito, responsabilidade e protecao contra qualquer forma de retaliacao.",
       ],
     };
   }
