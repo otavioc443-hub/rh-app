@@ -13,12 +13,14 @@ type CompanyRow = {
   name: string;
   logo_url: string | null;
   primary_color: string | null;
+  cidade: string | null;
+  estado: string | null;
 };
 
 export default async function CanalDeEticaPage() {
   const { data } = await supabaseAdmin
     .from("companies")
-    .select("id,name,logo_url,primary_color")
+    .select("id,name,logo_url,primary_color,cidade,estado")
     .order("name", { ascending: true });
 
   const companies = ((data ?? []) as CompanyRow[]).map((company) => {
@@ -43,8 +45,8 @@ export default async function CanalDeEticaPage() {
               Escolha a empresa para consultar o canal de etica.
             </h1>
             <p className="mt-4 max-w-2xl text-base leading-8 text-slate-600">
-              Cada empresa pode ter fluxo, contatos e links proprios para relato e acompanhamento. Selecione abaixo a
-              organizacao desejada para visualizar as informacoes corretas.
+              Selecione o estado e a empresa desejada para visualizar o canal correto. Quando nao houver uma configuracao
+              dedicada, o portal pode direcionar para o canal corporativo padrao da organizacao.
             </p>
           </div>
         </div>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { ArrowRight, Building2, CircleAlert, Search } from "lucide-react";
+import { ArrowRight, Building2, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 type EthicsCompanyCard = {
@@ -10,6 +10,8 @@ type EthicsCompanyCard = {
   name: string;
   logo_url: string | null;
   primary_color: string | null;
+  cidade?: string | null;
+  estado?: string | null;
   slug: string;
   configured: boolean;
 };
@@ -29,24 +31,45 @@ export default function EthicsCompanySelector({
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const [onlyConfigured, setOnlyConfigured] = useState(true);
+  const [selectedState, setSelectedState] = useState("");
+  const [selectedCity, setSelectedCity] = useState("");
+
+  const stateOptions = useMemo(
+    () =>
+      Array.from(new Set(companies.map((item) => String(item.estado ?? "").trim()).filter(Boolean))).sort((a, b) =>
+        a.localeCompare(b, "pt-BR")
+      ),
+    [companies]
+  );
+
+  const cityOptions = useMemo(() => {
+    const scope = selectedState
+      ? companies.filter((item) => String(item.estado ?? "").trim() === selectedState)
+      : companies;
+    return Array.from(new Set(scope.map((item) => String(item.cidade ?? "").trim()).filter(Boolean))).sort((a, b) =>
+      a.localeCompare(b, "pt-BR")
+    );
+  }, [companies, selectedState]);
 
   const filteredCompanies = useMemo(() => {
     const term = normalizeText(query);
-    const base = [...companies].sort((a, b) => {
-      if (a.configured !== b.configured) return a.configured ? -1 : 1;
-      return a.name.localeCompare(b.name, "pt-BR");
-    });
-    return base.filter((company) => {
-      if (onlyConfigured && !company.configured) return false;
-      if (!term) return true;
-      return normalizeText(company.name).includes(term);
-    });
-  }, [companies, onlyConfigured, query]);
+    return [...companies]
+      .sort((a, b) => {
+        if (a.configured !== b.configured) return a.configured ? -1 : 1;
+        return a.name.localeCompare(b.name, "pt-BR");
+      })
+      .filter((company) => {
+        const companyState = String(company.estado ?? "").trim();
+        const companyCity = String(company.cidade ?? "").trim();
+        if (selectedState && companyState !== selectedState) return false;
+        if (selectedCity && companyCity !== selectedCity) return false;
+        if (!term) return true;
+        return [company.name, companyCity, companyState].some((value) => normalizeText(value).includes(term));
+      });
+  }, [companies, query, selectedCity, selectedState]);
 
   const configuredCount = companies.filter((item) => item.configured).length;
-  const directOptions = companies
-    .filter((item) => item.configured)
+  const directOptions = filteredCompanies
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
   return (
@@ -70,15 +93,34 @@ export default function EthicsCompanySelector({
             />
           </label>
 
-          <label className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
-            <input
-              type="checkbox"
-              checked={onlyConfigured}
-              onChange={(e) => setOnlyConfigured(e.target.checked)}
-              className="h-4 w-4"
-            />
-            Mostrar so configuradas
-          </label>
+          <select
+            value={selectedState}
+            onChange={(e) => {
+              setSelectedState(e.target.value);
+              setSelectedCity("");
+            }}
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none"
+          >
+            <option value="">Escolha um estado</option>
+            {stateOptions.map((state) => (
+              <option key={state} value={state}>
+                {state}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={selectedCity}
+            onChange={(e) => setSelectedCity(e.target.value)}
+            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none"
+          >
+            <option value="">Escolha uma cidade</option>
+            {cityOptions.map((city) => (
+              <option key={city} value={city}>
+                {city}
+              </option>
+            ))}
+          </select>
 
           <select
             defaultValue=""
@@ -92,7 +134,7 @@ export default function EthicsCompanySelector({
             <option value="">Acesso rapido</option>
             {directOptions.map((company) => (
               <option key={company.id} value={company.slug}>
-                {company.name}
+                {company.cidade ? `${company.name} - ${company.cidade}` : company.name}
               </option>
             ))}
           </select>
@@ -124,34 +166,38 @@ export default function EthicsCompanySelector({
                   )}
                   <div>
                     <h2 className="text-lg font-semibold text-slate-950">{company.name}</h2>
-                    <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      {company.configured ? "Canal configurado" : "Configuracao pendente"}
-                    </p>
+                      <p className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        {company.configured ? "Canal dedicado" : "Canal corporativo"}
+                      </p>
+                      {(company.cidade || company.estado) ? (
+                        <p className="mt-2 text-xs text-slate-500">
+                          {[company.cidade, company.estado].filter(Boolean).join(" - ")}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <p className="mt-5 text-sm leading-7 text-slate-600">
+              <div
+                className="mt-5 rounded-2xl px-4 py-3 text-sm leading-7"
+                style={{
+                  backgroundColor: company.configured ? `${company.primary_color?.trim() || "#0f172a"}12` : "#f8fafc",
+                  color: "#475569",
+                }}
+              >
                 {company.configured
                   ? "Acesse o canal dedicado desta empresa para registrar relatos, acompanhar protocolos e consultar os contatos corretos."
-                  : "Esta empresa ainda nao possui links especificos configurados para o canal de etica no ambiente atual."}
-              </p>
+                  : "Esta empresa utilizará o canal corporativo padrao para registro e acompanhamento de relatos."}
+              </div>
 
               <div className="mt-6">
-                {company.configured ? (
-                  <Link
-                    href={`/canal-de-etica/${company.slug}`}
-                    className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800"
-                  >
-                    Abrir canal desta empresa
-                    <ArrowRight size={16} />
-                  </Link>
-                ) : (
-                  <div className="inline-flex items-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
-                    <CircleAlert size={16} />
-                    Configurar canal desta empresa
-                  </div>
-                )}
+                <Link
+                  href={`/canal-de-etica/${company.slug}`}
+                  className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800"
+                >
+                  Abrir canal desta empresa
+                  <ArrowRight size={16} />
+                </Link>
               </div>
             </article>
           ))}
