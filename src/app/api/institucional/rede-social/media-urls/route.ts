@@ -6,6 +6,12 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const BUCKET = "internal-social-media";
 
+type MediaRequestItem = {
+  kind: "post" | "message";
+  ownerId: string;
+  path: string;
+};
+
 async function getServerSupabase() {
   const cookieStore = await cookies();
   return createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
@@ -44,27 +50,6 @@ async function getRequesterSupabase(token: string | null): Promise<SupabaseClien
   return getServerSupabase();
 }
 
-function extFromMime(mime: string) {
-  if (mime === "image/png") return "png";
-  if (mime === "image/jpeg") return "jpg";
-  if (mime === "image/webp") return "webp";
-  if (mime === "image/gif") return "gif";
-  if (mime === "video/mp4") return "mp4";
-  if (mime === "video/webm") return "webm";
-  if (mime === "video/quicktime") return "mov";
-  return null;
-}
-
-function attachmentTypeFromMime(mime: string): "image" | "video" | null {
-  if (mime.startsWith("image/")) return "image";
-  if (mime.startsWith("video/")) return "video";
-  return null;
-}
-
-function safeName(name: string) {
-  return name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 120) || "arquivo";
-}
-
 export async function POST(req: Request) {
   try {
     const requester = await getRequesterUser(req);
@@ -80,43 +65,53 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Sem permissao" }, { status: 403 });
     }
 
-    const form = await req.formData();
-    const file = form.get("file");
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "Arquivo (file) e obrigatorio" }, { status: 400 });
+    const body = (await req.json().catch(() => null)) as { items?: MediaRequestItem[] } | null;
+    const items = (body?.items ?? [])
+      .map((item) => ({
+        kind: (item?.kind === "message" ? "message" : "post") as "message" | "post",
+        ownerId: String(item?.ownerId ?? "").trim(),
+        path: String(item?.path ?? "").trim(),
+      }))
+      .filter((item) => item.ownerId && item.path)
+      .slice(0, 50);
+
+    if (!items.length) {
+      return NextResponse.json({ error: "Nenhuma midia solicitada" }, { status: 400 });
     }
 
-    const ext = extFromMime(file.type);
-    const attachmentType = attachmentTypeFromMime(file.type);
-    if (!ext || !attachmentType) {
-      return NextResponse.json({ error: "Tipo de arquivo nao suportado. Use imagem ou video." }, { status: 400 });
+    const postIds = Array.from(new Set(items.filter((item) => item.kind === "post").map((item) => item.ownerId)));
+    const messageIds = Array.from(new Set(items.filter((item) => item.kind === "message").map((item) => item.ownerId)));
+
+    const [visiblePostsRes, visibleMessagesRes] = await Promise.all([
+      postIds.length
+        ? supabaseUser.from("internal_social_posts").select("id").in("id", postIds)
+        : Promise.resolve({ data: [], error: null }),
+      messageIds.length
+        ? supabaseUser.from("internal_social_direct_messages").select("id").in("id", messageIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (visiblePostsRes.error) {
+      return NextResponse.json({ error: visiblePostsRes.error.message }, { status: 400 });
+    }
+    if (visibleMessagesRes.error) {
+      return NextResponse.json({ error: visibleMessagesRes.error.message }, { status: 400 });
     }
 
-    const maxBytes = attachmentType === "image" ? 10 * 1024 * 1024 : 40 * 1024 * 1024;
-    if (file.size > maxBytes) {
-      return NextResponse.json({ error: "Arquivo muito grande para upload." }, { status: 400 });
+    const visiblePostIds = new Set(((visiblePostsRes.data ?? []) as Array<{ id: string }>).map((item) => item.id));
+    const visibleMessageIds = new Set(((visibleMessagesRes.data ?? []) as Array<{ id: string }>).map((item) => item.id));
+    const results: Array<{ kind: "post" | "message"; ownerId: string; path: string; signedUrl: string }> = [];
+
+    for (const item of items) {
+      if (item.kind === "post" && !visiblePostIds.has(item.ownerId)) continue;
+      if (item.kind === "message" && !visibleMessageIds.has(item.ownerId)) continue;
+      const signed = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(item.path, 60 * 60);
+      if (!signed.error && signed.data?.signedUrl) {
+        results.push({ kind: item.kind, ownerId: item.ownerId, path: item.path, signedUrl: signed.data.signedUrl });
+      }
     }
 
-    const path = `${requester.user.id}/${Date.now()}-${Math.random().toString(16).slice(2)}-${safeName(file.name)}`;
-    const up = await supabaseAdmin.storage.from(BUCKET).upload(path, file, {
-      upsert: true,
-      contentType: file.type,
-      cacheControl: "3600",
-    });
-    if (up.error) return NextResponse.json({ error: up.error.message }, { status: 400 });
-
-    const signed = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(path, 60 * 60);
-    if (signed.error || !signed.data?.signedUrl) {
-      return NextResponse.json({ error: signed.error?.message || "Nao foi possivel assinar a URL da midia." }, { status: 400 });
-    }
-
-    return NextResponse.json({
-      ok: true,
-      attachmentType,
-      url: signed.data.signedUrl,
-      label: file.name,
-      path,
-    });
+    return NextResponse.json({ ok: true, items: results });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro inesperado";
     return NextResponse.json({ error: message }, { status: 500 });

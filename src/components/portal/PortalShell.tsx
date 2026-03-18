@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronRight } from "lucide-react";
@@ -699,6 +700,14 @@ export default function PortalShell({ children }: { children: React.ReactNode })
               <NotificationBell />
             </div>
             {children}
+            <div className="mt-8 border-t border-slate-200 pt-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-xs text-slate-500">
+                <p>Privacidade e tratamento de dados do portal.</p>
+                <Link href="/institucional/privacidade" className="font-semibold text-slate-700 hover:text-slate-900">
+                  Abrir aviso de privacidade
+                </Link>
+              </div>
+            </div>
           </div>
         </main>
       </div>

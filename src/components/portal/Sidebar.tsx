@@ -31,6 +31,7 @@ import {
   Wrench,
   Trash2,
   ChevronLeft,
+  FileCheck2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { forceClientLogout } from "@/lib/supabaseClient";
@@ -100,6 +101,7 @@ export default function Sidebar({
         children: [
           { label: "Visão Geral", icon: LayoutDashboard, href: "/institucional", exact: true },
           { label: "PulseHub", icon: MessageSquareText, href: "/institucional/rede-social" },
+          { label: "Privacidade e LGPD", icon: FileCheck2, href: "/institucional/privacidade" },
           { label: "Organograma", icon: GitBranch, href: "/institucional/organograma", roles: ["gestor", "financeiro", "admin"] },
         ],
       },
@@ -221,6 +223,7 @@ export default function Sidebar({
           { label: "Governança Feedback", icon: MessageSquareText, href: "/rh/feedbacks" },
           { label: "Mapa comportamental", icon: BadgeCheck, href: "/rh/mapa-comportamental" },
           { label: "Ausências", icon: CalendarClock, href: "/rh/ausencias" },
+          { label: "LGPD", icon: FileCheck2, href: "/rh/lgpd" },
         ],
       },
 

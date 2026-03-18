@@ -50,6 +50,14 @@ type AttachmentRow = {
   type: AttachmentType;
   url: string;
   label: string | null;
+  resolvedUrl?: string;
+};
+
+type DraftAttachment = {
+  type: AttachmentType;
+  url: string;
+  label: string;
+  storagePath?: string;
 };
 
 type ReactionRow = {
@@ -241,12 +249,12 @@ function splitMessageContent(text: string) {
   const lines = text.split("\n");
   const attachmentLines = lines.filter((line) => line.trim().toLowerCase().startsWith("anexo:"));
   const bodyLines = lines.filter((line) => !line.trim().toLowerCase().startsWith("anexo:"));
-  const attachmentUrls = attachmentLines
+  const attachmentRefs = attachmentLines
     .map((line) => line.replace(/^anexo:\s*/i, "").trim())
     .filter(Boolean);
   return {
     body: bodyLines.join("\n").trim(),
-    attachmentUrls,
+    attachmentRefs,
   };
 }
 
@@ -255,6 +263,10 @@ function inferAttachmentTypeFromUrl(url: string): AttachmentType {
   if (/\.(png|jpg|jpeg|gif|webp|bmp|svg)(\?|#|$)/.test(lower)) return "image";
   if (/\.(mp4|webm|mov|m4v|ogg)(\?|#|$)/.test(lower)) return "video";
   return "link";
+}
+
+function isAbsoluteUrl(value: string) {
+  return /^https?:\/\//i.test(value);
 }
 
 function normalizeError(message: string) {
@@ -504,13 +516,13 @@ export default function InternalSocialPage() {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [postText, setPostText] = useState("");
-  const [draftAttachments, setDraftAttachments] = useState<Array<{ type: AttachmentType; url: string; label: string }>>([]);
+  const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>([]);
   const [scopeType, setScopeType] = useState<"company" | "project">("company");
   const [projectId, setProjectId] = useState("");
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [selectedUserId, setSelectedUserId] = useState("");
   const [messageText, setMessageText] = useState("");
-  const [messageAttachments, setMessageAttachments] = useState<Array<{ type: AttachmentType; url: string; label: string }>>([]);
+  const [messageAttachments, setMessageAttachments] = useState<DraftAttachment[]>([]);
   const [messageDropActive, setMessageDropActive] = useState(false);
   const [showMessageEmojiPicker, setShowMessageEmojiPicker] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -532,12 +544,99 @@ export default function InternalSocialPage() {
   const [searchSubmitted, setSearchSubmitted] = useState(false);
   const [searchDropdownIndex, setSearchDropdownIndex] = useState(-1);
   const [presenceMap, setPresenceMap] = useState<Record<string, { online: boolean; lastSeenAt: string | null }>>({});
+  const [messageMediaUrls, setMessageMediaUrls] = useState<Record<string, string>>({});
   const [readThreadAt, setReadThreadAt] = useState<Record<string, string>>({});
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const messageFileInputRef = useRef<HTMLInputElement | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const editingPostTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  async function resolvePostAttachmentUrls(items: AttachmentRow[]) {
+    const toResolve = items.filter((item) => item.url && !isAbsoluteUrl(item.url));
+    if (!toResolve.length) return items;
+
+    const sessionRes = await supabase.auth.getSession();
+    const token = sessionRes.data.session?.access_token;
+    const res = await fetch("/api/institucional/rede-social/media-urls", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        items: toResolve.map((item) => ({
+          kind: "post",
+          ownerId: item.post_id,
+          path: item.url,
+        })),
+      }),
+    });
+
+    const json = (await res.json().catch(() => ({}))) as {
+      items?: Array<{ ownerId: string; path: string; signedUrl: string }>;
+    };
+
+    if (!res.ok) return items;
+
+    const signedMap = new Map<string, string>();
+    for (const item of json.items ?? []) {
+      signedMap.set(`${item.ownerId}:${item.path}`, item.signedUrl);
+    }
+
+    return items.map((item) => ({
+      ...item,
+      resolvedUrl: signedMap.get(`${item.post_id}:${item.url}`) ?? (isAbsoluteUrl(item.url) ? item.url : ""),
+    }));
+  }
+
+  async function resolveMessageAttachmentUrls(items: MessageRow[]) {
+    const attachmentItems = items.flatMap((item) => {
+      const parsed = splitMessageContent(item.text);
+      return parsed.attachmentRefs
+        .filter((ref) => !isAbsoluteUrl(ref))
+        .map((ref) => ({
+          kind: "message" as const,
+          ownerId: item.id,
+          path: ref,
+        }));
+    });
+
+    if (!attachmentItems.length) {
+      setMessageMediaUrls({});
+      return;
+    }
+
+    const deduped = Array.from(
+      new Map(attachmentItems.map((item) => [`${item.ownerId}:${item.path}`, item])).values()
+    );
+
+    const sessionRes = await supabase.auth.getSession();
+    const token = sessionRes.data.session?.access_token;
+    const res = await fetch("/api/institucional/rede-social/media-urls", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ items: deduped }),
+    });
+
+    const json = (await res.json().catch(() => ({}))) as {
+      items?: Array<{ ownerId: string; path: string; signedUrl: string }>;
+    };
+
+    if (!res.ok) {
+      setMessageMediaUrls({});
+      return;
+    }
+
+    const nextMap: Record<string, string> = {};
+    for (const item of json.items ?? []) {
+      nextMap[`${item.ownerId}:${item.path}`] = item.signedUrl;
+    }
+    setMessageMediaUrls(nextMap);
+  }
 
   async function load() {
     setLoading(true);
@@ -706,8 +805,9 @@ export default function InternalSocialPage() {
       if (commentsRes.error) throw new Error(commentsRes.error.message);
       if (reactionsRes.error) throw new Error(reactionsRes.error.message);
 
+      const resolvedAttachments = await resolvePostAttachmentUrls((attachmentsRes.data ?? []) as AttachmentRow[]);
       const attachmentMap = new Map<string, AttachmentRow[]>();
-      for (const item of (attachmentsRes.data ?? []) as AttachmentRow[]) {
+      for (const item of resolvedAttachments) {
         const list = attachmentMap.get(item.post_id) ?? [];
         list.push(item);
         attachmentMap.set(item.post_id, list);
@@ -752,7 +852,9 @@ export default function InternalSocialPage() {
       } catch (pinnedErr) {
         if (!isSchemaCompatError(pinnedErr instanceof Error ? pinnedErr.message : "")) throw pinnedErr;
       }
-      setMessages((msgRes.data ?? []) as MessageRow[]);
+      const nextMessages = (msgRes.data ?? []) as MessageRow[];
+      setMessages(nextMessages);
+      await resolveMessageAttachmentUrls(nextMessages);
     } catch (err) {
       setError(normalizeError(err instanceof Error ? err.message : "Erro ao carregar rede social."));
     } finally {
@@ -1187,6 +1289,7 @@ export default function InternalSocialPage() {
       const token = sessionRes.data.session?.access_token;
       const form = new FormData();
       form.append("file", file);
+      form.append("context", "post");
       const res = await fetch("/api/institucional/rede-social/upload", {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
@@ -1197,6 +1300,7 @@ export default function InternalSocialPage() {
         attachmentType?: AttachmentType;
         url?: string;
         label?: string;
+        path?: string;
       };
       if (!res.ok || !json.url || !json.attachmentType) {
         const message = json.error || "Não foi possível enviar a mídia.";
@@ -1216,6 +1320,7 @@ export default function InternalSocialPage() {
           type: attachmentType,
           url: attachmentUrl,
           label: json.label || file.name,
+          storagePath: json.path || undefined,
         },
       ]);
     } catch (err) {
@@ -1234,6 +1339,7 @@ export default function InternalSocialPage() {
       const token = sessionRes.data.session?.access_token;
       const form = new FormData();
       form.append("file", file);
+      form.append("context", "message");
       const res = await fetch("/api/institucional/rede-social/upload", {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
@@ -1244,6 +1350,7 @@ export default function InternalSocialPage() {
         attachmentType?: AttachmentType;
         url?: string;
         label?: string;
+        path?: string;
       };
       if (!res.ok || !json.url || !json.attachmentType) {
         const message = json.error || "Não foi possível enviar o anexo.";
@@ -1263,6 +1370,7 @@ export default function InternalSocialPage() {
           type: attachmentType,
           url: attachmentUrl,
           label: json.label || file.name,
+          storagePath: json.path || undefined,
         },
       ]);
     } catch (err) {
@@ -1299,7 +1407,7 @@ export default function InternalSocialPage() {
           draftAttachments.map((item) => ({
             post_id: res.data.id,
             type: item.type,
-            url: item.url,
+            url: item.storagePath || item.url,
             label: item.label,
           }))
         );
@@ -1364,7 +1472,7 @@ export default function InternalSocialPage() {
     try {
       const composedText = [
         trimmedMessage,
-        ...messageAttachments.map((item) => `Anexo: ${item.url}`),
+        ...messageAttachments.map((item) => `Anexo: ${item.storagePath || item.url}`),
       ]
         .filter(Boolean)
         .join("\n");
@@ -1983,31 +2091,34 @@ export default function InternalSocialPage() {
                         <div className="mt-4 space-y-3">
                           {post.attachments.map((attachment) => (
                             <div key={attachment.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
-                              {attachment.type === "image" ? (
-                                <Image
-                                  src={attachment.url}
-                                  alt={attachment.label ?? "Imagem do post"}
-                                  width={1200}
-                                  height={900}
-                                  unoptimized
-                                  className="max-h-[280px] w-full object-cover"
-                                />
-                              ) : attachment.type === "video" ? (
-                                <video
-                                  controls
-                                  className="max-h-[280px] w-full bg-slate-950"
-                                  src={attachment.url}
-                                />
-                              ) : (
-                                <a
-                                  href={attachment.url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="block px-4 py-3 text-sm font-semibold text-blue-700 hover:underline"
-                                >
-                                  {attachment.label || attachment.url}
-                                </a>
-                              )}
+                              {(() => {
+                                const mediaUrl = attachment.resolvedUrl || attachment.url;
+                                return attachment.type === "image" ? (
+                                  <Image
+                                    src={mediaUrl}
+                                    alt={attachment.label ?? "Imagem do post"}
+                                    width={1200}
+                                    height={900}
+                                    unoptimized
+                                    className="max-h-[280px] w-full object-cover"
+                                  />
+                                ) : attachment.type === "video" ? (
+                                  <video
+                                    controls
+                                    className="max-h-[280px] w-full bg-slate-950"
+                                    src={mediaUrl}
+                                  />
+                                ) : (
+                                  <a
+                                    href={mediaUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="block px-4 py-3 text-sm font-semibold text-blue-700 hover:underline"
+                                  >
+                                    {attachment.label || mediaUrl}
+                                  </a>
+                                );
+                              })()}
                             </div>
                           ))}
                         </div>
@@ -2424,7 +2535,7 @@ export default function InternalSocialPage() {
                             </p>
                             <p className="mt-1 truncate text-xs text-slate-500">
                               {last
-                                ? lastMessage?.body || (lastMessage?.attachmentUrls?.length ? "Anexo compartilhado." : "")
+                                ? lastMessage?.body || (lastMessage?.attachmentRefs?.length ? "Anexo compartilhado." : "")
                                 : "Clique para iniciar a conversa."}
                             </p>
                           </div>
@@ -2499,13 +2610,16 @@ export default function InternalSocialPage() {
                                     }`}
                                   >
                                     {parsedMessage.body ? <p className="whitespace-pre-wrap">{parsedMessage.body}</p> : null}
-                                    {parsedMessage.attachmentUrls.length ? (
+                                    {parsedMessage.attachmentRefs.length ? (
                                       <div className="mt-2 space-y-2">
-                                        {parsedMessage.attachmentUrls.map((attachmentUrl) => {
-                                          const attachmentType = inferAttachmentTypeFromUrl(attachmentUrl);
+                                        {parsedMessage.attachmentRefs.map((attachmentRef) => {
+                                          const attachmentUrl =
+                                            messageMediaUrls[`${item.id}:${attachmentRef}`] ||
+                                            (isAbsoluteUrl(attachmentRef) ? attachmentRef : attachmentRef);
+                                          const attachmentType = inferAttachmentTypeFromUrl(attachmentRef);
                                           return (
                                             <div
-                                              key={`${item.id}-${attachmentUrl}`}
+                                              key={`${item.id}-${attachmentRef}`}
                                               className={`overflow-hidden rounded-xl border px-3 py-2 text-xs ${
                                                 mine ? "border-white/15 bg-white/10" : "border-slate-200 bg-slate-50"
                                               }`}
@@ -2531,7 +2645,7 @@ export default function InternalSocialPage() {
                                                 rel="noreferrer"
                                                 className={`mt-2 block truncate underline ${mine ? "text-white" : "text-[#0a66c2]"}`}
                                               >
-                                                {attachmentUrl}
+                                                Abrir anexo
                                               </a>
                                             </div>
                                           );
@@ -2717,27 +2831,30 @@ export default function InternalSocialPage() {
                     </div>
                     {editingPost.attachments.map((attachment) => (
                       <div key={attachment.id} className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50">
-                        {attachment.type === "image" ? (
-                          <Image
-                            src={attachment.url}
-                            alt={attachment.label ?? "Imagem do post"}
-                            width={1200}
-                            height={900}
-                            unoptimized
-                            className="max-h-[280px] w-full object-cover"
-                          />
-                        ) : attachment.type === "video" ? (
-                          <video controls src={attachment.url} className="max-h-[280px] w-full bg-slate-950" />
-                        ) : (
-                          <a
-                            href={attachment.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="block px-4 py-3 text-sm font-semibold text-blue-700 hover:underline"
-                          >
-                            Abrir anexo
-                          </a>
-                        )}
+                        {(() => {
+                          const mediaUrl = attachment.resolvedUrl || attachment.url;
+                          return attachment.type === "image" ? (
+                            <Image
+                              src={mediaUrl}
+                              alt={attachment.label ?? "Imagem do post"}
+                              width={1200}
+                              height={900}
+                              unoptimized
+                              className="max-h-[280px] w-full object-cover"
+                            />
+                          ) : attachment.type === "video" ? (
+                            <video controls src={mediaUrl} className="max-h-[280px] w-full bg-slate-950" />
+                          ) : (
+                            <a
+                              href={mediaUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="block px-4 py-3 text-sm font-semibold text-blue-700 hover:underline"
+                            >
+                              Abrir anexo
+                            </a>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>

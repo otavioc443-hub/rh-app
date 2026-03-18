@@ -149,8 +149,13 @@ export async function POST(req: NextRequest) {
     const clearDeliverableHistory = parseBoolean(body.clear_deliverable_history, false);
     const clearNotifications = parseBoolean(body.clear_notifications, false);
     const clearCompanyProjects = parseBoolean(body.clear_company_projects, false);
+    const clearSessionAudit = parseBoolean(body.clear_session_audit, false);
+    const retentionDaysRaw = Number(body.session_audit_retention_days ?? 180);
+    const sessionAuditRetentionDays = Number.isFinite(retentionDaysRaw)
+      ? Math.min(Math.max(Math.round(retentionDaysRaw), 1), 3650)
+      : 180;
 
-    if (!clearDeliverableHistory && !clearNotifications && !clearCompanyProjects) {
+    if (!clearDeliverableHistory && !clearNotifications && !clearCompanyProjects && !clearSessionAudit) {
       return NextResponse.json({ error: "Selecione ao menos um tipo de limpeza." }, { status: 400 });
     }
 
@@ -381,6 +386,45 @@ export async function POST(req: NextRequest) {
         status: "success",
         operationPayload: {},
         operationResult: { response: clearRes ?? null },
+      });
+    }
+
+    if (clearSessionAudit) {
+      const cutoff = new Date(Date.now() - sessionAuditRetentionDays * 24 * 60 * 60 * 1000).toISOString();
+      const delRes = await supabaseAdmin
+        .from("session_audit")
+        .delete({ count: "exact" })
+        .eq("company_id", scopeCompanyId)
+        .lt("last_seen_at", cutoff);
+
+      if (delRes.error) {
+        await insertCleanupAudit({
+          executionId,
+          actorUserId: guard.userId,
+          actorRole: guard.role,
+          companyId: scopeCompanyId,
+          operationKey: "clear_session_audit",
+          status: "failed",
+          operationPayload: { retention_days: sessionAuditRetentionDays, cutoff },
+          errorMessage: delRes.error.message,
+        });
+        return NextResponse.json({ error: `Falha ao limpar trilha de sessao: ${delRes.error.message}` }, { status: 400 });
+      }
+
+      result.session_audit = {
+        retention_days: sessionAuditRetentionDays,
+        cutoff,
+        deleted: delRes.count ?? 0,
+      };
+      await insertCleanupAudit({
+        executionId,
+        actorUserId: guard.userId,
+        actorRole: guard.role,
+        companyId: scopeCompanyId,
+        operationKey: "clear_session_audit",
+        status: "success",
+        operationPayload: { retention_days: sessionAuditRetentionDays, cutoff },
+        operationResult: { deleted: delRes.count ?? 0 },
       });
     }
 

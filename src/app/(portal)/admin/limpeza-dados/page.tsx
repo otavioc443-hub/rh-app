@@ -53,6 +53,8 @@ export default function AdminDataCleanupPage() {
   const [resetSubmissionFields, setResetSubmissionFields] = useState(true);
   const [clearNotifications, setClearNotifications] = useState(false);
   const [clearCompanyProjects, setClearCompanyProjects] = useState(false);
+  const [clearSessionAudit, setClearSessionAudit] = useState(true);
+  const [sessionAuditRetentionDays, setSessionAuditRetentionDays] = useState(180);
 
   const [running, setRunning] = useState(false);
   const [msg, setMsg] = useState("");
@@ -209,7 +211,7 @@ export default function AdminDataCleanupPage() {
       return;
     }
 
-    if (!clearDeliverableHistory && !clearNotifications && !clearCompanyProjects) {
+    if (!clearDeliverableHistory && !clearNotifications && !clearCompanyProjects && !clearSessionAudit) {
       setMsg("Selecione ao menos um tipo de limpeza.");
       return;
     }
@@ -223,6 +225,7 @@ export default function AdminDataCleanupPage() {
       "Confirma a limpeza dos dados selecionados?",
       companyLabel ? `Empresa: ${companyLabel}` : "",
       clearDeliverableHistory ? "- Historico de entregaveis" : "",
+      clearSessionAudit ? `- Trilha de sessao anterior a ${sessionAuditRetentionDays} dias` : "",
       clearNotifications ? "- Notificacoes" : "",
       clearCompanyProjects ? "- TODOS os projetos da empresa" : "",
     ]
@@ -244,6 +247,8 @@ export default function AdminDataCleanupPage() {
           clear_deliverable_history: clearDeliverableHistory,
           reset_submission_fields: resetSubmissionFields,
           project_id: selectedProjectId || null,
+          clear_session_audit: clearSessionAudit,
+          session_audit_retention_days: sessionAuditRetentionDays,
           clear_notifications: clearNotifications,
           clear_company_projects: clearCompanyProjects,
         }),
@@ -351,6 +356,29 @@ export default function AdminDataCleanupPage() {
             />
             Limpar notificacoes da empresa
           </label>
+
+          <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+            <label className="flex items-center gap-2 text-sm text-slate-800">
+              <input
+                type="checkbox"
+                checked={clearSessionAudit}
+                onChange={(e) => setClearSessionAudit(e.target.checked)}
+              />
+              Limpar trilha de sessao antiga
+            </label>
+            <label className={cx("grid gap-1 text-xs font-semibold text-slate-700", !clearSessionAudit && "opacity-50")}>
+              Reter ultimos dias
+              <input
+                type="number"
+                min={1}
+                max={3650}
+                value={sessionAuditRetentionDays}
+                disabled={!clearSessionAudit}
+                onChange={(e) => setSessionAuditRetentionDays(Number(e.target.value) || 180)}
+                className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+              />
+            </label>
+          </div>
 
           <label className={cx("flex items-center gap-2 text-sm", !isSuperAdmin && "opacity-50") }>
             <input
