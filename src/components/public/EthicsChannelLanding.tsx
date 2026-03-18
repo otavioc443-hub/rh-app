@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -10,7 +10,6 @@ import {
   FileCheck2,
   FileWarning,
   HeartHandshake,
-  LockKeyhole,
   Phone,
   Scale,
   SearchCheck,
@@ -175,6 +174,7 @@ export default function EthicsChannelLanding({
   const phoneHref = config.contactPhone ? `tel:${config.contactPhone}` : null;
 
   const [activeTab, setActiveTab] = useState<TabKey>("home");
+  const contentRef = useRef<HTMLElement | null>(null);
 
   const companyTabs = useMemo(
     () =>
@@ -184,6 +184,14 @@ export default function EthicsChannelLanding({
       })),
     [companies],
   );
+
+  function selectTab(tab: TabKey) {
+    setActiveTab(tab);
+    if (tab === "home") return;
+    requestAnimationFrame(() => {
+      contentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
 
   return (
     <main
@@ -212,19 +220,19 @@ export default function EthicsChannelLanding({
           </Link>
 
           <div className="flex flex-wrap items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-2 shadow-sm">
-            <TabButton active={activeTab === "home"} onClick={() => setActiveTab("home")}>
+            <TabButton active={activeTab === "home"} onClick={() => selectTab("home")}>
               Página Inicial
             </TabButton>
-            <TabButton active={activeTab === "report"} onClick={() => setActiveTab("report")}>
+            <TabButton active={activeTab === "report"} onClick={() => selectTab("report")}>
               Realizar relato
             </TabButton>
-            <TabButton active={activeTab === "follow-up"} onClick={() => setActiveTab("follow-up")}>
+            <TabButton active={activeTab === "follow-up"} onClick={() => selectTab("follow-up")}>
               Acompanhar relato
             </TabButton>
-            <TabButton active={activeTab === "data"} onClick={() => setActiveTab("data")}>
+            <TabButton active={activeTab === "data"} onClick={() => selectTab("data")}>
               Proteção de Dados
             </TabButton>
-            <TabButton active={activeTab === "code"} onClick={() => setActiveTab("code")}>
+            <TabButton active={activeTab === "code"} onClick={() => selectTab("code")}>
               Código de Ética
             </TabButton>
           </div>
@@ -233,7 +241,7 @@ export default function EthicsChannelLanding({
 
       <section className="relative overflow-hidden">
         <div
-          className="absolute inset-x-0 top-0 h-[540px]"
+          className="absolute inset-x-0 top-0 h-[620px]"
           style={{
             background:
               "linear-gradient(135deg, color-mix(in srgb, var(--ethics-accent) 92%, white 8%) 0%, color-mix(in srgb, var(--ethics-soft) 92%, white 8%) 100%)",
@@ -261,9 +269,9 @@ export default function EthicsChannelLanding({
             </div>
           ) : null}
 
-          <div className="grid gap-8 lg:grid-cols-[1.02fr,0.98fr] lg:items-stretch">
-            <div className="overflow-hidden rounded-[36px] border border-white/20 bg-white/10 shadow-[0_35px_100px_-55px_rgba(15,23,42,0.95)] backdrop-blur-sm">
-              <div className="relative min-h-[340px] lg:min-h-[520px]">
+          <div className="space-y-8">
+            <div className="overflow-hidden rounded-[40px] border border-white/20 bg-white/10 shadow-[0_35px_100px_-55px_rgba(15,23,42,0.95)] backdrop-blur-sm">
+              <div className="relative min-h-[420px] lg:min-h-[620px]">
                 <Image
                   src={content.heroImageUrl || config.heroImageUrl || "/bg-login.jpg"}
                   alt={isSolida ? "Atuação da Sólida em projetos de energia renovável" : `Equipe da ${config.companyName}`}
@@ -271,48 +279,45 @@ export default function EthicsChannelLanding({
                   className="object-cover"
                   priority
                 />
-                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(15,23,42,0.08)_0%,rgba(15,23,42,0.34)_100%)]" />
-                <div className="absolute inset-x-0 bottom-0 p-6 lg:p-8">
-                  <div className="max-w-md rounded-[28px] border border-white/15 bg-slate-950/58 p-5 text-white backdrop-blur-md">
+                <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,23,42,0.48)_0%,rgba(15,23,42,0.18)_42%,rgba(15,23,42,0.3)_100%)]" />
+                <div className="absolute inset-x-0 bottom-0 top-0 flex items-end p-6 lg:p-10">
+                  <div className="grid w-full gap-6 lg:grid-cols-[0.95fr,0.75fr] lg:items-end">
+                    <div className="max-w-xl rounded-[30px] border border-white/15 bg-slate-950/62 p-6 text-white backdrop-blur-md lg:p-8">
+                      <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/70">Compromisso</p>
+                      <p className="mt-3 text-3xl font-semibold leading-tight lg:text-5xl">{content.heroTitle}</p>
+                      <p className="mt-4 text-base leading-8 text-white/85 lg:text-lg">{content.heroSubtitle}</p>
+                      <div className="mt-6 flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          onClick={() => selectTab("report")}
+                          className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-900/20 transition hover:translate-y-[-1px]"
+                          style={{ backgroundColor: "var(--ethics-accent)" }}
+                        >
+                          Realizar relato
+                          <ArrowRight size={16} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => selectTab("follow-up")}
+                          className="inline-flex items-center justify-center gap-2 rounded-full border border-white/20 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/18"
+                        >
+                          Acompanhar relato
+                          <SearchCheck size={16} />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="max-w-md justify-self-end rounded-[28px] border border-white/15 bg-slate-950/58 p-5 text-white backdrop-blur-md">
                     <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/70">Compromisso</p>
                     <p className="mt-3 text-2xl font-semibold leading-tight">{content.heading}</p>
                     <p className="mt-3 text-sm leading-7 text-white/80">{content.intro}</p>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
             <div className="rounded-[40px] border border-slate-200 bg-white px-7 py-8 shadow-[0_36px_100px_-60px_rgba(15,23,42,0.8)] lg:px-10 lg:py-10">
-              <div
-                className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.3em] text-white"
-                style={{ backgroundColor: "var(--ethics-soft)" }}
-              >
-                <LockKeyhole size={14} />
-                Canal seguro e confidencial
-              </div>
-              <h1 className="mt-6 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">{content.heroTitle}</h1>
-              <p className="mt-5 max-w-2xl text-lg leading-9 text-slate-600">{content.heroSubtitle}</p>
-
-              <div className="mt-8 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("report")}
-                  className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-900/20 transition hover:translate-y-[-1px]"
-                  style={{ backgroundColor: "var(--ethics-accent)" }}
-                >
-                  Realizar relato
-                  <ArrowRight size={16} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("follow-up")}
-                  className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
-                >
-                  Acompanhar relato
-                  <SearchCheck size={16} />
-                </button>
-              </div>
-
               <div className="mt-10 grid gap-4 sm:grid-cols-3">
                 <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Sigilo</p>
@@ -335,7 +340,7 @@ export default function EthicsChannelLanding({
         </div>
       </section>
 
-      <section className="mx-auto max-w-7xl px-6 pb-16 lg:px-10">
+      <section ref={contentRef} className="mx-auto max-w-7xl px-6 pb-16 lg:px-10">
         {activeTab === "home" ? (
           <div className="space-y-10">
             <div className="rounded-[34px] border border-slate-200 bg-white p-6 shadow-sm lg:p-8">
