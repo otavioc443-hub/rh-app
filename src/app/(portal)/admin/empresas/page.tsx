@@ -73,9 +73,15 @@ function formatCnpj(v: string) {
     .replace(/(\d{4})(\d)/, "$1-$2");
 }
 
-  function fileExt(filename: string) {
+function fileExt(filename: string) {
   const parts = filename.split(".");
   return (parts[parts.length - 1] || "").toLowerCase();
+}
+
+function summarizeUploadDebugDetails(payload: Record<string, unknown>) {
+  const keys = Object.keys(payload).filter((key) => !["ok", "publicUrl", "error"].includes(key));
+  if (!keys.length) return "";
+  return ` | detalhe tecnico: ${keys.join(", ")}`;
 }
 
 export default function AdminEmpresasPage() {
@@ -373,13 +379,7 @@ export default function AdminEmpresasPage() {
       const json = (await res.json()) as Record<string, unknown> & { ok?: boolean; publicUrl?: string; error?: string };
       if (!res.ok || !json.publicUrl) {
         const base = json.error || `Erro no upload (status ${res.status})`;
-        const extra = Object.keys(json)
-          .filter((k) => !["ok", "publicUrl", "error"].includes(k))
-          .reduce<Record<string, unknown>>((acc, k) => {
-            acc[k] = json[k];
-            return acc;
-          }, {});
-        const extraTxt = Object.keys(extra).length ? ` | detalhe: ${JSON.stringify(extra)}` : "";
+        const extraTxt = summarizeUploadDebugDetails(json);
         throw new Error(`${base}${extraTxt}`);
       }
 

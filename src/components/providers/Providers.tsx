@@ -1,7 +1,8 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { supabase } from "../../lib/supabaseClient"; // <- use relativo pra não depender do "@"
+import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
+import { supabase } from "../../lib/supabaseClient"; // <- use relativo pra nÃ£o depender do "@"
 
 type Role = "user" | "rh" | "admin";
 
@@ -61,7 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       userId: user.id,
       email: user.email ?? null,
       fullName: profile?.full_name ?? null,
-      avatarUrl: profile?.avatar_url ?? null,
+      avatarUrl: resolvePortalAvatarUrl(profile?.avatar_url ?? null),
       role: profile?.role ?? null,
       companyId: profile?.company_id ?? null,
       departmentId: profile?.department_id ?? null,

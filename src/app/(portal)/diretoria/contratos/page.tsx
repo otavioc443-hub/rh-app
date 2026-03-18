@@ -77,6 +77,29 @@ type ProfileRow = {
   email: string | null;
 };
 
+type MetadataSummaryItem = {
+  label: string;
+  value: string;
+};
+
+const AUDIT_SENSITIVE_KEYS = new Set([
+  "cpf",
+  "cnpj",
+  "email",
+  "telefone",
+  "celular",
+  "pix_key",
+  "pix_bank",
+  "bank_name",
+  "agencia",
+  "agency",
+  "conta",
+  "account",
+  "conta_corrente",
+  "documento",
+  "document_number",
+]);
+
 function fmtMoney(value: number) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -113,6 +136,22 @@ function auditActionLabel(value: ContractAuditRow["action_type"]) {
   if (value === "status_changed") return "Mudanca de status";
   if (value === "notification_dispatched") return "Notifica??o enviada";
   return "Atualiza??o";
+}
+
+function summarizeAuditMetadata(metadata: Record<string, unknown> | null): MetadataSummaryItem[] {
+  if (!metadata) return [];
+  const items: MetadataSummaryItem[] = [];
+  for (const [key, rawValue] of Object.entries(metadata)) {
+    if (rawValue == null) continue;
+    if (typeof rawValue === "object") continue;
+    const value = String(rawValue).trim();
+    if (!value) continue;
+    items.push({
+      label: key.replace(/_/g, " "),
+      value: AUDIT_SENSITIVE_KEYS.has(key) ? "Informacao sensivel registrada" : value,
+    });
+  }
+  return items.slice(0, 10);
 }
 
 export default function DiretoriaContratosPage() {
@@ -646,10 +685,15 @@ export default function DiretoriaContratosPage() {
                     </p>
                   ) : null}
                   {a.notes ? <p className="mt-1 text-xs text-slate-700">{a.notes}</p> : null}
-                  {a.metadata ? (
-                    <pre className="mt-2 overflow-x-auto rounded-lg bg-white p-2 text-[11px] text-slate-700">
-{JSON.stringify(a.metadata, null, 2)}
-                    </pre>
+                  {summarizeAuditMetadata(a.metadata).length ? (
+                    <div className="mt-2 space-y-1 rounded-lg bg-white p-2 text-[11px] text-slate-700">
+                      {summarizeAuditMetadata(a.metadata).map((item) => (
+                        <div key={`${a.id}-${item.label}`} className="flex flex-wrap gap-2">
+                          <span className="font-semibold text-slate-900">{item.label}:</span>
+                          <span>{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
                   ) : null}
                 </div>
               );
