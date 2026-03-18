@@ -55,6 +55,11 @@ type AuditRow = {
   created_at: string;
 };
 
+type RequestSummaryItem = {
+  label: string;
+  value: string;
+};
+
 type ExtraPaymentPendingRow = {
   id: string;
   amount: number | null;
@@ -115,6 +120,41 @@ function deriveAssignedArea(row: Pick<ProfileRequestRow, "request_type" | "reque
   const explicit = row.requested_changes?.assigned_area;
   if (explicit === "rh" || explicit === "financeiro") return explicit;
   return row.request_type === "financial" ? "financeiro" : "rh";
+}
+
+function firstString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function summarizeRequestedChanges(changes: Record<string, unknown> | null): RequestSummaryItem[] {
+  if (!changes) return [];
+  const items: RequestSummaryItem[] = [];
+
+  const assignedArea = firstString(changes.assigned_area);
+  if (assignedArea) items.push({ label: "Área responsável", value: assignedArea === "financeiro" ? "Financeiro" : "RH" });
+
+  const channel = firstString(changes.channel);
+  if (channel) items.push({ label: "Origem", value: channel });
+
+  const financialReason = firstString(changes.financial_reason);
+  if (financialReason) items.push({ label: "Motivo financeiro", value: financialReason });
+
+  const rhReason = firstString(changes.rh_reason);
+  if (rhReason) items.push({ label: "Motivo RH", value: rhReason });
+
+  const attachmentName = firstString(changes.attachment_name);
+  if (attachmentName) items.push({ label: "Anexo", value: attachmentName });
+
+  return items;
+}
+
+function getRequestAttachment(changes: Record<string, unknown> | null) {
+  const path = firstString(changes?.attachment_path);
+  const url = firstString(changes?.attachment_url);
+  return {
+    path,
+    url: url && /^https?:\/\//i.test(url) ? url : null,
+  };
 }
 
 export default function FinanceiroSolicitacoesPage() {
@@ -257,6 +297,36 @@ export default function FinanceiroSolicitacoesPage() {
     setDecisionNotes(selected.review_notes ?? "");
     void loadAudit(selectedId);
   }, [selectedId, rows]);
+
+  async function openAttachment(requestId: string, changes: Record<string, unknown> | null) {
+    setMsg("");
+    try {
+      const attachment = getRequestAttachment(changes);
+      if (attachment.path) {
+        const res = await fetch("/api/chamados/attachments/url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            id: requestId,
+            path: attachment.path,
+            source: "profile_request",
+          }),
+        });
+        const json = (await res.json()) as { signedUrl?: string; error?: string };
+        if (!res.ok || !json.signedUrl) throw new Error(json.error ?? "Nao foi possivel abrir o anexo.");
+        window.open(json.signedUrl, "_blank", "noopener,noreferrer");
+        return;
+      }
+      if (attachment.url) {
+        window.open(attachment.url, "_blank", "noopener,noreferrer");
+        return;
+      }
+      throw new Error("Anexo indisponivel.");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao abrir anexo.");
+    }
+  }
 
   const scopedRows = useMemo(
     () => rows.filter((r) => deriveAssignedArea(r) === "financeiro"),
@@ -608,10 +678,24 @@ export default function FinanceiroSolicitacoesPage() {
                   <p className="mt-2 text-xs text-slate-500">
                     Tipo: {typeLabel(selected.request_type)} | Criada em: {fmtDate(selected.created_at)}
                   </p>
-                  {selected.requested_changes ? (
-                    <pre className="mt-2 overflow-x-auto rounded-lg bg-white p-2 text-xs text-slate-700">
-{JSON.stringify(selected.requested_changes, null, 2)}
-                    </pre>
+                  {summarizeRequestedChanges(selected.requested_changes).length ? (
+                    <div className="mt-3 space-y-2 rounded-lg bg-white p-3 text-xs text-slate-700">
+                      {summarizeRequestedChanges(selected.requested_changes).map((item) => (
+                        <div key={`${item.label}:${item.value}`} className="flex flex-wrap gap-2">
+                          <span className="font-semibold text-slate-900">{item.label}:</span>
+                          <span>{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {getRequestAttachment(selected.requested_changes).path || getRequestAttachment(selected.requested_changes).url ? (
+                    <button
+                      type="button"
+                      onClick={() => void openAttachment(selected.id, selected.requested_changes)}
+                      className="mt-3 text-xs font-semibold text-sky-700 underline"
+                    >
+                      Abrir anexo da solicitação
+                    </button>
                   ) : null}
                 </div>
 
