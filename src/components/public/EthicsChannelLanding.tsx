@@ -280,11 +280,10 @@ export default function EthicsChannelLanding({
                   priority
                 />
                 <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,23,42,0.48)_0%,rgba(15,23,42,0.18)_42%,rgba(15,23,42,0.3)_100%)]" />
-                <div className="absolute inset-x-0 bottom-0 top-0 flex items-end p-6 lg:p-10">
-                  <div className="grid w-full gap-6 lg:grid-cols-[0.95fr,0.75fr] lg:items-end">
-                    <div className="max-w-xl rounded-[30px] border border-white/15 bg-slate-950/62 p-6 text-white backdrop-blur-md lg:p-8">
+                <div className="absolute inset-0 flex flex-col justify-between p-5 pt-6 lg:p-10 lg:pt-12">
+                  <div className="max-w-[620px] rounded-[30px] border border-white/15 bg-slate-950/62 p-6 text-white backdrop-blur-md lg:p-8">
                       <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/70">Compromisso</p>
-                      <p className="mt-3 text-3xl font-semibold leading-tight lg:text-5xl">{content.heroTitle}</p>
+                      <p className="mt-3 text-3xl font-semibold leading-[1.02] md:text-4xl lg:text-[3.5rem]">{content.heroTitle}</p>
                       <p className="mt-4 text-base leading-8 text-white/85 lg:text-lg">{content.heroSubtitle}</p>
                       <div className="mt-6 flex flex-wrap gap-3">
                         <button
@@ -305,12 +304,13 @@ export default function EthicsChannelLanding({
                           <SearchCheck size={16} />
                         </button>
                       </div>
-                    </div>
+                  </div>
 
-                    <div className="max-w-md justify-self-end rounded-[28px] border border-white/15 bg-slate-950/58 p-5 text-white backdrop-blur-md">
-                    <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/70">Compromisso</p>
-                    <p className="mt-3 text-2xl font-semibold leading-tight">{content.heading}</p>
-                    <p className="mt-3 text-sm leading-7 text-white/80">{content.intro}</p>
+                  <div className="flex justify-start lg:justify-end">
+                    <div className="max-w-md rounded-[28px] border border-white/15 bg-slate-950/58 p-5 text-white backdrop-blur-md">
+                      <p className="text-xs font-semibold uppercase tracking-[0.3em] text-white/70">Compromisso</p>
+                      <p className="mt-3 text-2xl font-semibold leading-tight">{content.heading}</p>
+                      <p className="mt-3 text-sm leading-7 text-white/80">{content.intro}</p>
                     </div>
                   </div>
                 </div>
