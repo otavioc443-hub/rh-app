@@ -1,6 +1,3 @@
-"use client";
-
-import { useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -17,6 +14,14 @@ import type { EthicsChannelConfig } from "@/lib/ethicsChannel";
 import type { EthicsManagedContent } from "@/lib/ethicsChannelDefaults";
 
 type TabKey = "home" | "report" | "follow-up" | "data" | "code";
+
+function tabHref(companyKey: string, tab: TabKey) {
+  if (tab === "home") return `/canal-de-etica/${companyKey}`;
+  if (tab === "report") return `/canal-de-etica/${companyKey}/realizar-relato`;
+  if (tab === "follow-up") return `/canal-de-etica/${companyKey}/acompanhar-relato`;
+  if (tab === "data") return `/canal-de-etica/${companyKey}/protecao-de-dados`;
+  return `/canal-de-etica/${companyKey}/codigo-de-etica`;
+}
 
 const reportTopics = [
   {
@@ -136,23 +141,19 @@ function ActionLink({
 
 function TabButton({
   active,
-  onClick,
   children,
 }: {
   active: boolean;
-  onClick: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <span
       className={`rounded-full px-4 py-2 text-sm font-medium transition ${
         active ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-950"
       }`}
     >
       {children}
-    </button>
+    </span>
   );
 }
 
@@ -186,10 +187,12 @@ export default function EthicsChannelLanding({
   config,
   companies,
   content,
+  activeTab = "home",
 }: {
   config: EthicsChannelConfig;
   companies: EthicsChannelConfig[];
   content: EthicsManagedContent;
+  activeTab?: TabKey;
 }) {
   const isSolida = config.companyName
     .toLowerCase()
@@ -200,19 +203,7 @@ export default function EthicsChannelLanding({
   const accentSoft = isSolida ? "#2E3647" : "#0F172A";
   const reportHref = config.reportUrl || (config.contactEmail ? `mailto:${config.contactEmail}?subject=Canal%20de%20Ética` : "#");
   const followUpHref = config.followUpUrl || "#";
-  const [activeTab, setActiveTab] = useState<TabKey>("home");
-  const contentRef = useRef<HTMLElement | null>(null);
-
-  const companyTabs = useMemo(
-    () => companies.map((item) => ({ ...item, href: `/canal-de-etica/${item.key}` })),
-    [companies],
-  );
-
-  function selectTab(tab: TabKey) {
-    setActiveTab(tab);
-    if (tab === "home") return;
-    requestAnimationFrame(() => contentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
-  }
+  const companyTabs = companies.map((item) => ({ ...item, href: `/canal-de-etica/${item.key}` }));
 
   return (
     <main
@@ -235,21 +226,31 @@ export default function EthicsChannelLanding({
           </Link>
 
           <div className="flex flex-wrap items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-2 shadow-sm">
-            <TabButton active={activeTab === "home"} onClick={() => selectTab("home")}>
-              Página Inicial
-            </TabButton>
-            <TabButton active={activeTab === "report"} onClick={() => selectTab("report")}>
-              Realizar relato
-            </TabButton>
-            <TabButton active={activeTab === "follow-up"} onClick={() => selectTab("follow-up")}>
-              Acompanhar relato
-            </TabButton>
-            <TabButton active={activeTab === "data"} onClick={() => selectTab("data")}>
-              Proteção de Dados
-            </TabButton>
-            <TabButton active={activeTab === "code"} onClick={() => selectTab("code")}>
-              Código de Ética
-            </TabButton>
+            <Link href={tabHref(config.key, "home")}>
+              <TabButton active={activeTab === "home"}>
+                Página Inicial
+              </TabButton>
+            </Link>
+            <Link href={tabHref(config.key, "report")}>
+              <TabButton active={activeTab === "report"}>
+                Realizar relato
+              </TabButton>
+            </Link>
+            <Link href={tabHref(config.key, "follow-up")}>
+              <TabButton active={activeTab === "follow-up"}>
+                Acompanhar relato
+              </TabButton>
+            </Link>
+            <Link href={tabHref(config.key, "data")}>
+              <TabButton active={activeTab === "data"}>
+                Proteção de Dados
+              </TabButton>
+            </Link>
+            <Link href={tabHref(config.key, "code")}>
+              <TabButton active={activeTab === "code"}>
+                Código de Ética
+              </TabButton>
+            </Link>
           </div>
         </div>
       </header>
@@ -293,23 +294,21 @@ export default function EthicsChannelLanding({
               </p>
               <p className="mt-4 max-w-3xl text-base leading-8 text-slate-600 lg:text-lg">{content.heroSubtitle}</p>
               <div className="mt-6 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => selectTab("report")}
+                <Link
+                  href={tabHref(config.key, "report")}
                   className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-900/20 transition hover:translate-y-[-1px]"
                   style={{ backgroundColor: "var(--ethics-accent)" }}
                 >
                   Realizar relato
                   <ArrowRight size={16} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => selectTab("follow-up")}
+                </Link>
+                <Link
+                  href={tabHref(config.key, "follow-up")}
                   className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
                 >
                   Acompanhar relato
                   <SearchCheck size={16} />
-                </button>
+                </Link>
               </div>
             </div>
 
@@ -342,7 +341,7 @@ export default function EthicsChannelLanding({
         </div>
       </section>
 
-      <section ref={contentRef} className="mx-auto max-w-7xl px-6 pb-16 lg:px-10">
+      <section className="mx-auto max-w-7xl px-6 pb-16 lg:px-10">
         {activeTab === "home" ? (
           <div className="space-y-10">
             <SectionTitle

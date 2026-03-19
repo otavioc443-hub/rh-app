@@ -18,5 +18,5 @@ export default async function CanalDeEticaCompanyPage({
   const { company } = await params;
   const { config, companies, content } = await getEthicsChannelPageData(company);
 
-  return <EthicsChannelLanding config={config} companies={companies} content={content} />;
+  return <EthicsChannelLanding config={config} companies={companies} content={content} activeTab="home" />;
 }
