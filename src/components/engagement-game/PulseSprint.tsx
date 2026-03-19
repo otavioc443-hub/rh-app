@@ -6,6 +6,8 @@ import { toPng } from "html-to-image";
 import {
   Bolt,
   ChartNoAxesColumn,
+  ChevronDown,
+  ChevronUp,
   Crown,
   Flame,
   Medal,
@@ -41,6 +43,8 @@ type StatusResponse = {
     streak: number;
     lastPlayedDate: string | null;
     canPlayToday: boolean;
+    playedToday: boolean;
+    isAdmin: boolean;
     rankPosition: number | null;
   };
   leaderboard: DailyGameLeaderboardEntry[];
@@ -102,6 +106,12 @@ function whenLabel(value: string | null) {
 
 function clsx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
+}
+
+function getHistoryEntryLabel(eventType: string) {
+  if (eventType === "play_awarded") return "Rodada concluida";
+  if (eventType === "manual_adjustment") return "Replay admin";
+  return "Reset por falta";
 }
 
 function CompactLeaderboard({
@@ -242,6 +252,7 @@ export function PulseSprintPage() {
   const [result, setResult] = useState<SubmitResponse["result"] | null>(null);
   const [gameState, setGameState] = useState<"idle" | "playing" | "finished">("idle");
   const [copied, setCopied] = useState(false);
+  const [heroCollapsed, setHeroCollapsed] = useState(false);
   const resultCardRef = useRef<HTMLDivElement | null>(null);
   const startedAtRef = useRef<number>(0);
   const submitGuardRef = useRef(false);
@@ -382,21 +393,39 @@ export function PulseSprintPage() {
   }, [result]);
 
   const progress = Math.max(0, Math.min(100, (elapsedMs / durationMs) * 100));
+  const primaryActionLabel = status?.player.canPlayToday
+    ? status.player.isAdmin && status.player.playedToday
+      ? "Jogar novamente"
+      : "Jogar agora"
+    : "Rodada concluida hoje";
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <section className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.18),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.16),transparent_28%),linear-gradient(135deg,#f8fafc,#ffffff)] p-6 shadow-[0_28px_80px_-48px_rgba(15,23,42,0.45)]">
-        <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">
+            <Rocket size={14} /> Engajamento diario
+          </div>
+          <button
+            type="button"
+            onClick={() => setHeroCollapsed((prev) => !prev)}
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white/90 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            {heroCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+            {heroCollapsed ? "Expandir" : "Minimizar"}
+          </button>
+        </div>
+
+        <div className={clsx("grid gap-6", heroCollapsed ? "lg:grid-cols-1" : "lg:grid-cols-[1.15fr_0.85fr]")}>
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">
-              <Rocket size={14} /> Engajamento diario
-            </div>
-            <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-950">{DAILY_GAME_TITLE}</h1>
-            <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-600">
+            <h1 className={clsx("font-semibold tracking-tight text-slate-950", heroCollapsed ? "text-2xl" : "text-4xl")}>
+              {DAILY_GAME_TITLE}
+            </h1>
+            <p className={clsx("max-w-2xl leading-relaxed text-slate-600", heroCollapsed ? "mt-2 text-sm" : "mt-3 text-base")}>
               Desafio de reflexo de 40 segundos. Toque os pulsos de energia na grade e acumule pontos base, bonus de performance e bonus de streak.
             </p>
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            <div className={clsx("grid gap-3 sm:grid-cols-3", heroCollapsed ? "mt-4" : "mt-6")}>
               <div className="rounded-3xl border border-slate-200 bg-white/85 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Placar atual</p>
                 <p className="mt-2 text-3xl font-semibold text-slate-950">
@@ -417,14 +446,14 @@ export function PulseSprintPage() {
               </div>
             </div>
 
-            <div className="mt-5 rounded-3xl border border-slate-200 bg-white/75 p-4">
+            <div className={clsx("rounded-3xl border border-slate-200 bg-white/75 p-4", heroCollapsed ? "mt-4" : "mt-5")}>
               <p className="text-sm font-semibold text-slate-900">Mensagem do dia</p>
               <p className="mt-2 text-sm leading-relaxed text-slate-600">
                 {status?.message ?? "Carregando sua motivacao diaria..."}
               </p>
             </div>
 
-            <div className="mt-6 flex flex-wrap items-center gap-3">
+            <div className={clsx("flex flex-wrap items-center gap-3", heroCollapsed ? "mt-4" : "mt-6")}>
               <button
                 type="button"
                 onClick={() => void handleStart()}
@@ -432,7 +461,7 @@ export function PulseSprintPage() {
                 className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 <Play size={16} />
-                {status?.player.canPlayToday ? "Jogar agora" : "Rodada concluida hoje"}
+                {primaryActionLabel}
               </button>
               <button
                 type="button"
@@ -450,11 +479,17 @@ export function PulseSprintPage() {
             </div>
           </div>
 
-          <div className="rounded-[1.75rem] border border-slate-200 bg-white/85 p-5">
+          <div className={clsx("rounded-[1.75rem] border border-slate-200 bg-white/85 p-5", heroCollapsed && "hidden lg:hidden")}>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Como funciona</p>
             <div className="mt-4 space-y-3">
               {[
-                { icon: Target, title: "1 rodada por dia", body: "Jogou hoje, soma. Pulou um dia, seu placar atual zera." },
+                {
+                  icon: Target,
+                  title: status?.player.isAdmin ? "Replay admin liberado" : "1 rodada por dia",
+                  body: status?.player.isAdmin
+                    ? "Admins podem repetir no mesmo dia, mas o ranking considera apenas a ultima rodada concluida."
+                    : "Jogou hoje, soma. Pulou um dia, seu placar atual zera.",
+                },
                 { icon: Bolt, title: "Resposta rapida", body: "Toque cada pulso antes que ele desapareca para aumentar hits, combo e bonus de velocidade." },
                 { icon: Trophy, title: "Top 5 visivel", body: "O ranking da empresa aparece aqui, na area institucional e no PulseHub." },
               ].map((item) => (
@@ -483,42 +518,42 @@ export function PulseSprintPage() {
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_24px_70px_-48px_rgba(15,23,42,0.4)]">
+        <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-48px_rgba(15,23,42,0.4)]">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Arena</p>
-              <p className="mt-1 text-2xl font-semibold text-slate-950">Desafio de hoje</p>
+              <p className="mt-1 text-xl font-semibold text-slate-950">Desafio de hoje</p>
             </div>
             <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-semibold text-slate-700">
               Ultima rodada: {whenLabel(status?.player.lastPlayedDate ?? null)}
             </div>
           </div>
 
-          <div className="mt-5 rounded-[1.75rem] border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fafc)] p-5">
+          <div className="mt-4 rounded-[1.5rem] border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fafc)] p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-slate-950 p-3 text-white">
-                  <Target size={22} />
+                <div className="rounded-2xl bg-slate-950 p-2.5 text-white">
+                  <Target size={20} />
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-slate-900">Pulse Grid 3x3</p>
-                  <p className="text-sm text-slate-500">Um alvo por vez. Reaja antes do pulso mudar.</p>
+                  <p className="text-xs text-slate-500">Um alvo por vez. Reaja antes do pulso mudar.</p>
                 </div>
               </div>
               <div className="text-right">
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-400">tempo</p>
-                <p className="mt-1 text-xl font-semibold text-slate-950">{Math.max(0, Math.ceil((durationMs - elapsedMs) / 1000))}s</p>
+                <p className="mt-1 text-lg font-semibold text-slate-950">{Math.max(0, Math.ceil((durationMs - elapsedMs) / 1000))}s</p>
               </div>
             </div>
 
-            <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
               <div
                 className="h-full rounded-full bg-[linear-gradient(90deg,#f59e0b,#0ea5e9)] transition-[width]"
                 style={{ width: `${progress}%` }}
               />
             </div>
 
-            <div className="mt-5 grid grid-cols-3 gap-3">
+            <div className="mx-auto mt-4 grid max-w-[360px] grid-cols-3 gap-2.5 sm:max-w-[390px]">
               {GRID_CELLS.map((cell) => {
                 const isActive = activeRound?.cell === cell;
                 const wasHit = activeRound ? hitLookup.has(activeRound.index) && activeRound.cell === cell : false;
@@ -535,32 +570,32 @@ export function PulseSprintPage() {
                     type="button"
                     onClick={() => handleCellTap(cell)}
                     className={clsx(
-                      "aspect-square rounded-[1.5rem] border border-slate-200 bg-slate-50 transition",
+                      "aspect-square rounded-[1.2rem] border border-slate-200 bg-slate-50 transition",
                       gameState === "playing" && "hover:border-slate-300 hover:bg-slate-100",
                       isActive && `border-transparent bg-gradient-to-br ${toneClass} text-white shadow-[0_18px_40px_-24px_rgba(14,165,233,0.65)]`,
                       wasHit && "scale-[0.97]"
                     )}
                   >
                     <div className="flex h-full items-center justify-center">
-                      {isActive ? <Bolt size={26} /> : <span className="text-xs font-semibold text-slate-300">pulse</span>}
+                      {isActive ? <Bolt size={22} /> : <span className="text-[11px] font-semibold text-slate-300">pulse</span>}
                     </div>
                   </button>
                 );
               })}
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+            <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
+              <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-400">hits</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-950">{hits.length}</p>
+                <p className="mt-1.5 text-xl font-semibold text-slate-950">{hits.length}</p>
               </div>
-              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+              <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-400">rodadas</p>
-                <p className="mt-2 text-2xl font-semibold text-slate-950">{DAILY_GAME_CONFIG.rounds}</p>
+                <p className="mt-1.5 text-xl font-semibold text-slate-950">{DAILY_GAME_CONFIG.rounds}</p>
               </div>
-              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+              <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-400">estado</p>
-                <p className="mt-2 text-base font-semibold text-slate-950">
+                <p className="mt-1.5 text-sm font-semibold text-slate-950">
                   {gameState === "playing" ? "Em andamento" : submitting ? "Processando" : "Pronto"}
                 </p>
               </div>
@@ -598,9 +633,7 @@ export function PulseSprintPage() {
               {(status?.recentHistory ?? []).length ? (
                 status?.recentHistory.map((entry) => (
                   <div key={`${entry.created_at}-${entry.event_type}`} className="rounded-2xl bg-slate-50 px-3 py-3">
-                    <p className="text-sm font-semibold text-slate-900">
-                      {entry.event_type === "play_awarded" ? "Rodada concluida" : "Reset por falta"}
-                    </p>
+                    <p className="text-sm font-semibold text-slate-900">{getHistoryEntryLabel(entry.event_type)}</p>
                     <p className="mt-1 text-xs text-slate-500">
                       {entry.event_date} • streak {entry.streak_after} • atual {formatCompactPoints(entry.score_current_after)}
                     </p>

@@ -10,6 +10,8 @@ import {
   canPlayToday,
   ensureEngagementGamePlayer,
   getAuthenticatedPortalUser,
+  getLocalFortalezaDate,
+  isEngagementGameAdmin,
   loadEngagementGameLeaderboard,
   loadEngagementGameRankPosition,
   syncEngagementGameResets,
@@ -31,8 +33,8 @@ export async function POST(req: Request) {
     if (!sessionId) return NextResponse.json({ error: "Sessao invalida." }, { status: 400 });
 
     await syncEngagementGameResets();
-    const player = await ensureEngagementGamePlayer(user.id);
-    if (!canPlayToday(player.last_played_date)) {
+    const [player, isAdmin] = await Promise.all([ensureEngagementGamePlayer(user.id), isEngagementGameAdmin(user.id)]);
+    if (!isAdmin && !canPlayToday(player.last_played_date)) {
       return NextResponse.json({ error: "Voce ja concluiu a rodada de hoje." }, { status: 409 });
     }
 
@@ -69,11 +71,47 @@ export async function POST(req: Request) {
       .filter((item) => Number.isInteger(item.roundIndex) && Number.isFinite(item.hitAtMs));
 
     const rounds = buildDailyGameRounds(session.challenge_seed);
-    const breakdown = scoreDailyGameSession(rounds, hits, player.streak);
+    const localToday = getLocalFortalezaDate();
+    const playedToday = player.last_played_date === localToday;
+    const replayBaseStreak = isAdmin && playedToday ? Math.max(0, player.streak - 1) : player.streak;
+    const breakdown = scoreDailyGameSession(rounds, hits, replayBaseStreak);
 
-    const nextCurrentScore = player.score_current + breakdown.totalPoints;
-    const nextTotalScore = player.score_total + breakdown.totalPoints;
+    let replacedSession:
+      | {
+          id: string;
+          total_points_awarded: number;
+        }
+      | null = null;
+
+    if (isAdmin && playedToday) {
+      const { data: previousCompleted, error: previousCompletedError } = await supabaseAdmin
+        .from("engagement_game_sessions")
+        .select("id,total_points_awarded")
+        .eq("user_id", user.id)
+        .eq("play_date", localToday)
+        .eq("session_state", "completed")
+        .order("completed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle<{ id: string; total_points_awarded: number }>();
+      if (previousCompletedError && previousCompletedError.code !== "PGRST116") throw new Error(previousCompletedError.message);
+      replacedSession = previousCompleted ?? null;
+    }
+
+    const replacedPoints = Number(replacedSession?.total_points_awarded ?? 0);
+    const baseCurrentScore = Math.max(0, player.score_current - replacedPoints);
+    const baseTotalScore = Math.max(0, player.score_total - replacedPoints);
+    const nextCurrentScore = baseCurrentScore + breakdown.totalPoints;
+    const nextTotalScore = baseTotalScore + breakdown.totalPoints;
     const completedAt = new Date().toISOString();
+
+    if (replacedSession) {
+      const { error: previousSessionCancelError } = await supabaseAdmin
+        .from("engagement_game_sessions")
+        .update({ session_state: "cancelled" })
+        .eq("id", replacedSession.id)
+        .eq("session_state", "completed");
+      if (previousSessionCancelError) throw new Error(previousSessionCancelError.message);
+    }
 
     const { error: sessionUpdateError } = await supabaseAdmin
       .from("engagement_game_sessions")
@@ -99,25 +137,42 @@ export async function POST(req: Request) {
       .eq("session_state", "started");
     if (sessionUpdateError) throw new Error(sessionUpdateError.message);
 
+    const nextSessionsPlayed = replacedSession ? player.sessions_played : player.sessions_played + 1;
+
     const { error: playerUpdateError } = await supabaseAdmin
       .from("engagement_game_players")
       .update({
         score_current: nextCurrentScore,
         score_total: nextTotalScore,
-        sessions_played: player.sessions_played + 1,
+        sessions_played: nextSessionsPlayed,
         streak: breakdown.nextStreak,
         best_session_score: Math.max(player.best_session_score, breakdown.totalPoints),
-        last_played_date: new Intl.DateTimeFormat("en-CA", {
-          timeZone: "America/Fortaleza",
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-        }).format(new Date()),
+        last_played_date: localToday,
         last_session_id: session.id,
         reset_status: "played_today",
       })
       .eq("user_id", user.id);
     if (playerUpdateError) throw new Error(playerUpdateError.message);
+
+    if (replacedSession) {
+      const { error: adjustmentError } = await supabaseAdmin.from("engagement_game_score_history").insert({
+        user_id: user.id,
+        company_id: player.company_id,
+        session_id: replacedSession.id,
+        event_type: "manual_adjustment",
+        points_delta: -replacedPoints,
+        score_current_after: baseCurrentScore,
+        score_total_after: baseTotalScore,
+        streak_after: replayBaseStreak,
+        event_date: localToday,
+        meta: {
+          reason: "admin_replay_replace",
+          replaced_session_id: replacedSession.id,
+          replacement_session_id: session.id,
+        },
+      });
+      if (adjustmentError) throw new Error(adjustmentError.message);
+    }
 
     const { error: historyError } = await supabaseAdmin.from("engagement_game_score_history").insert({
       user_id: user.id,
@@ -134,6 +189,8 @@ export async function POST(req: Request) {
         accuracy: breakdown.accuracy,
         avg_reaction_ms: breakdown.avgReactionMs,
         combo_best: breakdown.comboBest,
+        replay_replaced_session_id: replacedSession?.id ?? null,
+        replay_replaced_points: replacedPoints || 0,
       },
     });
     if (historyError) throw new Error(historyError.message);

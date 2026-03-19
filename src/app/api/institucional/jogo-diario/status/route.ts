@@ -4,6 +4,8 @@ import {
   canPlayToday,
   ensureEngagementGamePlayer,
   getAuthenticatedPortalUser,
+  getLocalFortalezaDate,
+  isEngagementGameAdmin,
   loadEngagementGameLeaderboard,
   loadEngagementGamePlayerOfDay,
   loadEngagementGameRankPosition,
@@ -17,7 +19,7 @@ export async function GET() {
     if (!user) return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
 
     await syncEngagementGameResets();
-    const player = await ensureEngagementGamePlayer(user.id);
+    const [player, isAdmin] = await Promise.all([ensureEngagementGamePlayer(user.id), isEngagementGameAdmin(user.id)]);
     const [leaderboard, rankPosition, playerOfDay, recentHistoryRes] = await Promise.all([
       loadEngagementGameLeaderboard(player.company_id, user.id),
       loadEngagementGameRankPosition(player.company_id, user.id),
@@ -32,8 +34,12 @@ export async function GET() {
 
     if (recentHistoryRes.error) throw new Error(recentHistoryRes.error.message);
 
-    const playable = canPlayToday(player.last_played_date);
-    const message = buildDailyMotivationMessage(player.streak, playable, player.score_current);
+    const playedToday = player.last_played_date === getLocalFortalezaDate();
+    const playable = isAdmin ? true : canPlayToday(player.last_played_date);
+    const message =
+      isAdmin && playedToday
+        ? "Voce pode repetir a rodada hoje. Como admin, apenas o ultimo resultado do dia conta no ranking."
+        : buildDailyMotivationMessage(player.streak, playable, player.score_current);
 
     return NextResponse.json({
       game: {
@@ -51,6 +57,8 @@ export async function GET() {
         streak: player.streak,
         lastPlayedDate: player.last_played_date,
         canPlayToday: playable,
+        playedToday,
+        isAdmin,
         rankPosition,
       },
       leaderboard,

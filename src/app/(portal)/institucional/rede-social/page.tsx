@@ -2778,7 +2778,6 @@ export default function InternalSocialPage() {
               { id: "network", label: "Minha rede" },
               { id: "communities", label: "Comunidades" },
               { id: "projects", label: "Projetos" },
-              { id: "game", label: "Jogo" },
               { id: "messages", label: "Mensagens" },
             ].map((item) => {
               const active = activeTab === item.id;
@@ -3007,7 +3006,7 @@ export default function InternalSocialPage() {
         ) : null}
 
         {!searchSubmitted && activeTab === "inicio" ? (
-          <main id="feed" className="mx-auto grid max-w-6xl gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <main id="feed" className="mx-auto grid max-w-6xl gap-6 xl:auto-rows-min xl:grid-flow-row-dense xl:grid-cols-[minmax(0,1fr)_320px]">
             <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.35)] backdrop-blur xl:col-start-1 xl:max-w-3xl xl:justify-self-center xl:w-full">
               <div className="flex gap-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-blue-700 text-sm font-semibold text-white shadow-[0_16px_32px_-20px_rgba(37,99,235,0.65)]">

@@ -5,6 +5,7 @@ import {
   canPlayToday,
   ensureEngagementGamePlayer,
   getAuthenticatedPortalUser,
+  isEngagementGameAdmin,
   syncEngagementGameResets,
 } from "@/lib/server/engagementGameServer";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
@@ -15,8 +16,8 @@ export async function POST() {
     if (!user) return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
 
     await syncEngagementGameResets();
-    const player = await ensureEngagementGamePlayer(user.id);
-    if (!canPlayToday(player.last_played_date)) {
+    const [player, isAdmin] = await Promise.all([ensureEngagementGamePlayer(user.id), isEngagementGameAdmin(user.id)]);
+    if (!isAdmin && !canPlayToday(player.last_played_date)) {
       return NextResponse.json({ error: "Voce ja jogou hoje." }, { status: 409 });
     }
 

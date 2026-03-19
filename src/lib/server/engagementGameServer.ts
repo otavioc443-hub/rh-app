@@ -23,6 +23,10 @@ type GamePlayerRow = {
   reset_status: "ready" | "played_today" | "reset_after_miss";
 };
 
+type PortalProfileRow = {
+  role: string | null;
+};
+
 type LeaderboardRow = {
   user_id: string;
   display_name: string;
@@ -56,6 +60,25 @@ export async function getAuthenticatedPortalUser(): Promise<AuthenticatedUser | 
 
 export async function syncEngagementGameResets() {
   await supabaseAdmin.rpc("engagement_game_sync_all_resets");
+}
+
+export function getLocalFortalezaDate(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Fortaleza",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+export async function loadPortalRole(userId: string) {
+  const { data, error } = await supabaseAdmin.from("profiles").select("role").eq("id", userId).maybeSingle<PortalProfileRow>();
+  if (error && error.code !== "PGRST116") throw new Error(error.message);
+  return (data?.role ?? "").trim().toLowerCase() || null;
+}
+
+export async function isEngagementGameAdmin(userId: string) {
+  return (await loadPortalRole(userId)) === "admin";
 }
 
 export async function ensureEngagementGamePlayer(userId: string) {
@@ -172,13 +195,7 @@ export async function loadEngagementGameRankPosition(companyId: string | null, u
 
 export async function loadEngagementGamePlayerOfDay(companyId: string | null) {
   if (!companyId) return null;
-  const today = new Date();
-  const localToday = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Fortaleza",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(today);
+  const localToday = getLocalFortalezaDate();
 
   const { data, error } = await supabaseAdmin
     .from("engagement_game_sessions")
@@ -214,11 +231,6 @@ export async function loadEngagementGamePlayerOfDay(companyId: string | null) {
 
 export function canPlayToday(lastPlayedDate: string | null) {
   if (!lastPlayedDate) return true;
-  const today = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "America/Fortaleza",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
+  const today = getLocalFortalezaDate();
   return lastPlayedDate !== today;
 }
