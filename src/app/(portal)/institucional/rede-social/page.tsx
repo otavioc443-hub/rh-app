@@ -3006,8 +3006,8 @@ export default function InternalSocialPage() {
         ) : null}
 
         {!searchSubmitted && activeTab === "inicio" ? (
-          <main id="feed" className="mx-auto grid max-w-6xl gap-6 xl:auto-rows-min xl:grid-flow-row-dense xl:grid-cols-[minmax(0,1fr)_320px]">
-            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.35)] backdrop-blur xl:col-start-1 xl:max-w-3xl xl:justify-self-center xl:w-full">
+          <main id="feed" className="mx-auto grid max-w-6xl gap-6 xl:auto-rows-min xl:grid-cols-[minmax(0,1fr)_320px]">
+            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.35)] backdrop-blur xl:order-1 xl:col-start-1 xl:self-start xl:max-w-3xl xl:justify-self-center xl:w-full">
               <div className="flex gap-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-blue-700 text-sm font-semibold text-white shadow-[0_16px_32px_-20px_rgba(37,99,235,0.65)]">
                   {initials(currentName)}
@@ -3024,7 +3024,7 @@ export default function InternalSocialPage() {
               </div>
             </section>
 
-            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)] xl:col-start-2 xl:self-start">
+            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)] xl:order-5 xl:col-start-2 xl:self-start">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Destaques</p>
@@ -3090,9 +3090,9 @@ export default function InternalSocialPage() {
               </div>
             </section>
 
-            <PulseSprintWidget className="xl:col-start-2 xl:self-start" />
+            <PulseSprintWidget className="xl:order-6 xl:col-start-2 xl:self-start" />
 
-            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)] xl:col-start-2 xl:self-start">
+            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)] xl:order-7 xl:col-start-2 xl:self-start">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Painel</p>
@@ -3156,7 +3156,7 @@ export default function InternalSocialPage() {
               </div>
             </section>
 
-            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)] xl:col-start-2 xl:self-start">
+            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)] xl:order-8 xl:col-start-2 xl:self-start">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Canal oficial</p>
@@ -3198,7 +3198,7 @@ export default function InternalSocialPage() {
               </div>
             </section>
 
-            <section className="flex flex-wrap items-center gap-2 xl:col-start-1 xl:max-w-3xl xl:justify-self-center xl:w-full">
+            <section className="flex flex-wrap items-center gap-2 xl:order-2 xl:col-start-1 xl:self-start xl:max-w-3xl xl:justify-self-center xl:w-full">
               {[
                 { id: "all", label: "Todos" },
                 { id: "official", label: "Comunicados" },
@@ -3223,7 +3223,7 @@ export default function InternalSocialPage() {
             </section>
 
             {activeTab === "inicio" && visiblePinnedPost ? (
-              <section className="rounded-[2rem] border border-amber-200 bg-[linear-gradient(135deg,rgba(255,251,235,0.98),rgba(254,243,199,0.7))] p-5 shadow-[0_24px_70px_-42px_rgba(217,119,6,0.4)] xl:col-start-1 xl:max-w-3xl xl:justify-self-center xl:w-full">
+              <section className="rounded-[2rem] border border-amber-200 bg-[linear-gradient(135deg,rgba(255,251,235,0.98),rgba(254,243,199,0.7))] p-5 shadow-[0_24px_70px_-42px_rgba(217,119,6,0.4)] xl:order-3 xl:col-start-1 xl:self-start xl:max-w-3xl xl:justify-self-center xl:w-full">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">Post em destaque</p>
@@ -3258,9 +3258,9 @@ export default function InternalSocialPage() {
             ) : null}
 
             {loading ? (
-              <div className="rounded-[2rem] border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.35)] xl:col-start-1 xl:max-w-3xl xl:justify-self-center xl:w-full">Carregando feed...</div>
+              <div className="rounded-[2rem] border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.35)] xl:order-4 xl:col-start-1 xl:self-start xl:max-w-3xl xl:justify-self-center xl:w-full">Carregando feed...</div>
             ) : visibleFeedPosts.length ? (
-                <section className="space-y-4 xl:col-start-1 xl:max-w-3xl xl:justify-self-center xl:w-full">
+                <section className="space-y-4 xl:order-4 xl:col-start-1 xl:self-start xl:max-w-3xl xl:justify-self-center xl:w-full">
                   {visibleFeedPosts.map((post) => {
                     const authorName = post.author_name || displayName(profileById.get(post.author_user_id));
                     const authorAvatar = resolvePortalAvatarUrl(post.author_avatar_url) || profileById.get(post.author_user_id)?.avatar_url || null;

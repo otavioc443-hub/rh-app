@@ -413,8 +413,26 @@ export default function PortalShell({ children }: { children: React.ReactNode })
 
         // Role efetiva: preferimos a funcao do banco (current_role),
         // pois ela pode considerar mapeamento por cargo (cargos.portal_role).
-        let r: Role | null = coerceRole(profile.role);
-        for (let attempt = 0; attempt < 3; attempt += 1) {
+        let r: Role | null = null;
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          if (!r) {
+            if (attempt === 0) {
+              r = coerceRole(profile.role);
+            } else {
+              try {
+                const { data: lateProfile, error: lateProfileErr } = await supabase
+                  .from("profiles")
+                  .select("role")
+                  .eq("id", userId)
+                  .maybeSingle<{ role: Role | null }>();
+                if (!lateProfileErr) {
+                  r = coerceRole(lateProfile?.role) ?? r;
+                }
+              } catch {
+                // fallback silencioso
+              }
+            }
+          }
           try {
             const { data: cr, error: crErr } = await supabase.rpc("current_role");
             if (!crErr) {
@@ -425,7 +443,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
             // fallback silencioso: mantem a role do profile
           }
           if (r) break;
-          await sleep(200 * (attempt + 1));
+          await sleep(250 * (attempt + 1));
         }
 
         if (!r) {

@@ -24,11 +24,50 @@ function tabHref(companyKey: string, tab: TabKey) {
 }
 
 function tabLabel(tab: TabKey) {
-  if (tab === "home") return "Página Inicial";
+  if (tab === "home") return "Pagina Inicial";
   if (tab === "report") return "Realizar relato";
   if (tab === "follow-up") return "Acompanhar relato";
-  if (tab === "data") return "Proteção de Dados";
-  return "Código de Ética";
+  if (tab === "data") return "Protecao de Dados";
+  return "Codigo de Etica";
+}
+
+function innerHeroContent(activeTab: Exclude<TabKey, "home">, content: EthicsManagedContent) {
+  if (activeTab === "report") {
+    return {
+      title: "Registre um relato com clareza e seguranca.",
+      body:
+        "Use este espaco para comunicar situacoes que contrariem a etica, a integridade, as politicas internas ou a legislacao aplicavel.",
+      asideTitle: "Diretriz principal",
+      asideBody: "Descreva o fato com objetividade, contexto e evidencias sempre que possivel.",
+    };
+  }
+  if (activeTab === "follow-up") {
+    return {
+      title: "Acompanhe um relato ja registrado.",
+      body:
+        "Consulte o andamento de um caso aberto utilizando o fluxo de acompanhamento disponibilizado pela empresa.",
+      asideTitle: "Diretriz principal",
+      asideBody: "Use o acompanhamento apenas para consultas relacionadas a um protocolo existente.",
+    };
+  }
+  if (activeTab === "data") {
+    return {
+      title: "Protecao de dados e tratamento reservado.",
+      body:
+        content.dataProtectionSummary ||
+        "As informacoes tratadas neste canal devem seguir criterios de sigilo, acesso restrito e necessidade de conhecimento.",
+      asideTitle: "Diretriz principal",
+      asideBody: "Dados pessoais e evidencias devem ser usados apenas para triagem, apuracao e tratamento do caso.",
+    };
+  }
+  return {
+    title: "Consulte os principios do Codigo de Etica.",
+    body:
+      content.codeSummary ||
+      "Os principios eticos orientam condutas, decisoes e relacoes internas e externas da empresa.",
+    asideTitle: "Diretriz principal",
+    asideBody: "O canal complementa o codigo, mas nao substitui as regras formais de conduta e integridade.",
+  };
 }
 
 const reportTopics = [
@@ -280,19 +319,21 @@ function InnerHero({
   activeTab: Exclude<TabKey, "home">;
   content: EthicsManagedContent;
 }) {
+  const hero = innerHeroContent(activeTab, content);
+
   return (
     <section className="mx-auto max-w-7xl px-6 pb-10 pt-10 lg:px-10 lg:pt-12">
       <div className="rounded-[40px] border border-slate-200 bg-white px-7 py-8 shadow-[0_30px_80px_-52px_rgba(15,23,42,0.55)] lg:px-10 lg:py-10">
         <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">{tabLabel(activeTab)}</p>
         <div className="mt-4 grid gap-6 lg:grid-cols-[1.2fr,0.8fr] lg:items-start">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">{content.heroTitle}</h1>
-            <p className="mt-4 max-w-3xl text-base leading-8 text-slate-600">{content.heroSubtitle}</p>
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">{hero.title}</h1>
+            <p className="mt-4 max-w-3xl text-base leading-8 text-slate-600">{hero.body}</p>
           </div>
           <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Diretriz principal</p>
-            <p className="mt-3 text-base font-semibold text-slate-950">{content.heading}</p>
-            <p className="mt-3 text-sm leading-7 text-slate-600">{content.intro}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">{hero.asideTitle}</p>
+            <p className="mt-3 text-base font-semibold text-slate-950">{tabLabel(activeTab)}</p>
+            <p className="mt-3 text-sm leading-7 text-slate-600">{hero.asideBody}</p>
           </div>
         </div>
       </div>
