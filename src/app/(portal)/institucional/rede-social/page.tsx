@@ -17,20 +17,52 @@ type Profile = {
   setor?: string | null;
 };
 
+type CollaboratorDirectoryRow = {
+  user_id: string | null;
+  nome: string | null;
+  cargo: string | null;
+  setor: string | null;
+  data_nascimento?: string | null;
+  data_admissao?: string | null;
+  is_active?: boolean | null;
+};
+
 type Project = {
   id: string;
   name: string;
 };
+
+type Group = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  cover_color: string;
+  is_private: boolean;
+};
+
+type GroupMemberRow = {
+  group_id: string;
+  user_id: string;
+  role: "owner" | "moderator" | "member";
+};
+
+type PostType = "social" | "announcement" | "campaign" | "event" | "recognition";
 
 type PostRow = {
   id: string;
   author_user_id: string;
   author_name: string;
   author_avatar_url: string | null;
-  audience_type: "company" | "project";
+  audience_type: "company" | "project" | "group";
   audience_project_id: string | null;
+  audience_group_id?: string | null;
   audience_label: string;
   text: string;
+  post_type?: PostType;
+  official_author_label?: string | null;
+  hidden_at?: string | null;
+  hidden_reason?: string | null;
   created_at: string;
 };
 
@@ -81,7 +113,90 @@ type FeedPost = PostRow & {
   attachments: AttachmentRow[];
   comments: CommentRow[];
   reactions: ReactionRow[];
+  poll?: FeedPoll | null;
+  reportsCount?: number;
+  isReportedByMe?: boolean;
 };
+
+type FeedPoll = {
+  id: string;
+  post_id: string;
+  question: string;
+  allow_multiple: boolean;
+  options: FeedPollOption[];
+};
+
+type FeedPollOption = {
+  id: string;
+  poll_id: string;
+  label: string;
+  position: number;
+  votes: number;
+  votedByMe: boolean;
+};
+
+type NotificationRow = {
+  id: string;
+  user_id: string;
+  actor_user_id: string | null;
+  kind: "comment" | "reaction" | "mention" | "message" | "announcement" | "campaign";
+  entity_type: "post" | "comment" | "message" | "system";
+  entity_id: string | null;
+  title: string;
+  body: string | null;
+  link_url: string | null;
+  read_at: string | null;
+  created_at: string;
+};
+
+type ReportRow = {
+  id: string;
+  reporter_user_id: string;
+  target_type: "post" | "comment";
+  post_id: string | null;
+  comment_id: string | null;
+  reason: string;
+  details: string | null;
+  status: "open" | "reviewing" | "resolved" | "dismissed";
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+};
+
+type SocialHighlightRow = {
+  userId: string;
+  name: string;
+  subtitle: string;
+  dateLabel: string;
+  avatarUrl: string | null;
+};
+
+type SyncBody =
+  | {
+      type: "post_sync";
+      postId: string;
+      text: string;
+      postType?: string | null;
+      broadcastOfficial?: boolean;
+    }
+  | {
+      type: "comment_sync";
+      postId: string;
+      commentId: string;
+      text: string;
+      notifyPostAuthor?: boolean;
+    }
+  | {
+      type: "reaction_notify";
+      postId: string;
+      emoji: string;
+    }
+  | {
+      type: "message_notify";
+      messageId: string;
+      toUserId: string;
+      preview?: string | null;
+    };
 
 type SearchSuggestionItem = {
   key: string;
@@ -174,6 +289,9 @@ const REACTION_EMOJIS = ["👍", "❤️", "🎉", "👏", "🔥", "🚀"] as co
 const MIGRATION = "supabase/sql/2026-03-03_create_internal_social_network_tables.sql";
 const MEDIA_BUCKET_MIGRATION = "supabase/sql/2026-03-03_create_internal_social_media_bucket.sql";
 const SOCIAL_BOARD_MIGRATION = "supabase/sql/2026-03-03_add_pinned_post_and_project_board_to_internal_social.sql";
+const QUICKWINS_MIGRATION = "supabase/sql/2026-03-19_expand_pulsehub_quickwins.sql";
+const COMMUNITIES_MIGRATION = "supabase/sql/2026-03-19_expand_pulsehub_communities_polls_moderation.sql";
+const HOME_ANALYTICS_MIGRATION = "supabase/sql/2026-03-19_expand_pulsehub_home_analytics_moderation_controls.sql";
 const PINNED_POST_KEY = "internal-social-pinned-post-id";
 
 function displayName(profile?: Profile | null) {
@@ -185,6 +303,90 @@ function displayName(profile?: Profile | null) {
 function profileRoleLine(profile?: Profile | null) {
   const parts = [(profile?.cargo ?? "").trim(), (profile?.setor ?? "").trim()].filter(Boolean);
   return parts.length ? parts.join(" | ") : "Cargo e setor não informados";
+}
+
+function slugifyHandle(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-");
+}
+
+function buildMentionDirectory(items: Profile[]) {
+  const usedHandles = new Set<string>();
+  const byHandle = new Map<string, { id: string; label: string }>();
+  const byUserId = new Map<string, { handle: string; label: string }>();
+
+  for (const profile of [...items].sort((a, b) => a.id.localeCompare(b.id))) {
+    const label = displayName(profile);
+    const base =
+      slugifyHandle(label) ||
+      slugifyHandle((profile.email ?? "").split("@")[0] ?? "") ||
+      profile.id.slice(0, 8).toLowerCase();
+    if (!base) continue;
+    let nextHandle = base;
+    let suffix = 2;
+    while (usedHandles.has(nextHandle)) {
+      nextHandle = `${base}-${suffix}`;
+      suffix += 1;
+    }
+    usedHandles.add(nextHandle);
+    const payload = { handle: nextHandle, label };
+    byHandle.set(nextHandle, { id: profile.id, label });
+    byUserId.set(profile.id, payload);
+  }
+
+  return { byHandle, byUserId };
+}
+
+function postTypeLabel(value: PostType | string | null | undefined) {
+  if (value === "announcement") return "Comunicado";
+  if (value === "campaign") return "Campanha";
+  if (value === "event") return "Evento";
+  if (value === "recognition") return "Reconhecimento";
+  return "Social";
+}
+
+function isOfficialPostType(value: PostType | string | null | undefined) {
+  return value === "announcement" || value === "campaign";
+}
+
+function roleOfficialLabel(role: string | null | undefined) {
+  if (role === "rh") return "RH";
+  if (role === "diretoria") return "Diretoria";
+  if (role === "admin") return "Admin";
+  return null;
+}
+
+function formatMonthDay(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+}
+
+function daysUntilDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let target = new Date(today.getFullYear(), month - 1, day);
+  if (target < today) target = new Date(today.getFullYear() + 1, month - 1, day);
+  return Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function extractHashtagsFromValue(value: string) {
+  const matches = value.match(/(^|[\s(])#([a-z0-9][a-z0-9_-]{1,49})/gi) ?? [];
+  const tags = new Set<string>();
+  for (const item of matches) {
+    const normalized = item.trim();
+    const hashIndex = normalized.indexOf("#");
+    const tag = (hashIndex >= 0 ? normalized.slice(hashIndex + 1) : normalized).toLowerCase();
+    if (tag) tags.add(tag);
+  }
+  return [...tags];
 }
 
 function initials(name: string) {
@@ -275,6 +477,20 @@ function normalizeError(message: string) {
   if (lower.includes("could not find the table") || lower.includes("schema cache") || lower.includes("does not exist")) {
     return `A rede social interna ainda não está configurada no banco. Rode a migration ${MIGRATION} no Supabase e tente novamente.`;
   }
+  if (lower.includes("internal_social_notifications") || lower.includes("internal_social_saved_posts") || lower.includes("internal_social_mentions")) {
+    return `Os recursos novos do PulseHub dependem da migration ${QUICKWINS_MIGRATION}. Rode a migration no Supabase e tente novamente.`;
+  }
+  if (
+    lower.includes("internal_social_groups") ||
+    lower.includes("internal_social_polls") ||
+    lower.includes("internal_social_reports") ||
+    lower.includes("audience_group_id")
+  ) {
+    return `Comunidades, enquetes e moderacao dependem da migration ${COMMUNITIES_MIGRATION}. Rode a migration no Supabase e tente novamente.`;
+  }
+  if (lower.includes("hidden_at") || lower.includes("hidden_reason")) {
+    return `Os controles ampliados de moderacao dependem da migration ${HOME_ANALYTICS_MIGRATION}. Rode a migration no Supabase e tente novamente.`;
+  }
   return message;
 }
 
@@ -301,7 +517,23 @@ function formatInlineRichText(value: string) {
     .replace(/~~(.+?)~~/g, "<s>$1</s>");
 }
 
-function renderRichTextHtml(value: string) {
+function linkifySocialText(
+  value: string,
+  mentionDirectory?: Map<string, { id: string; label: string }>
+) {
+  return value
+    .replace(/(^|[\s(])@([a-z0-9._-]{2,50})/gi, (match, prefix: string, handle: string) => {
+      const mention = mentionDirectory?.get(handle.toLowerCase());
+      if (!mention) return match;
+      return `${prefix}<a href="/institucional/rede-social/membros/${mention.id}" class="font-semibold text-[#0a66c2] no-underline hover:underline">@${escapeHtml(mention.label)}</a>`;
+    })
+    .replace(/(^|[\s(])#([a-z0-9][a-z0-9_-]{1,49})/gi, (_match, prefix: string, tag: string) => {
+      const safeTag = escapeHtml(tag.toLowerCase());
+      return `${prefix}<a href="/institucional/rede-social?tag=${encodeURIComponent(tag.toLowerCase())}" class="font-semibold text-emerald-700 no-underline hover:underline">#${safeTag}</a>`;
+    });
+}
+
+function renderRichTextHtml(value: string, mentionDirectory?: Map<string, { id: string; label: string }>) {
   const lines = value.split("\n");
   const parts: string[] = [];
   let paragraph: string[] = [];
@@ -309,13 +541,15 @@ function renderRichTextHtml(value: string) {
 
   function flushParagraph() {
     if (!paragraph.length) return;
-    parts.push(`<p>${paragraph.map((line) => formatInlineRichText(line)).join("<br />")}</p>`);
+    parts.push(`<p>${paragraph.map((line) => linkifySocialText(formatInlineRichText(line), mentionDirectory)).join("<br />")}</p>`);
     paragraph = [];
   }
 
   function flushList() {
     if (!listItems.length) return;
-    parts.push(`<ul>${listItems.map((item) => `<li>${formatInlineRichText(item)}</li>`).join("")}</ul>`);
+    parts.push(
+      `<ul>${listItems.map((item) => `<li>${linkifySocialText(formatInlineRichText(item), mentionDirectory)}</li>`).join("")}</ul>`
+    );
     listItems = [];
   }
 
@@ -341,8 +575,16 @@ function renderRichTextHtml(value: string) {
   return parts.join("");
 }
 
-function RichText({ value, className }: { value: string; className?: string }) {
-  return <div className={className} dangerouslySetInnerHTML={{ __html: renderRichTextHtml(value) }} />;
+function RichText({
+  value,
+  className,
+  mentionDirectory,
+}: {
+  value: string;
+  className?: string;
+  mentionDirectory?: Map<string, { id: string; label: string }>;
+}) {
+  return <div className={className} dangerouslySetInnerHTML={{ __html: renderRichTextHtml(value, mentionDirectory) }} />;
 }
 
 function emojiToCodepoints(value: string) {
@@ -363,11 +605,13 @@ function isCountryFlagEmoji(value: string) {
 function EmojiGlyph({ emoji, className }: { emoji: string; className?: string }) {
   if (isCountryFlagEmoji(emoji)) {
     return (
-      <img
+      <Image
         src={`https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${emojiToCodepoints(emoji)}.svg`}
         alt={emoji}
+        width={20}
+        height={20}
+        unoptimized
         className={className ?? "h-5 w-5"}
-        loading="lazy"
       />
     );
   }
@@ -514,12 +758,17 @@ export default function InternalSocialPage() {
   const [me, setMe] = useState<Profile | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [groupMembers, setGroupMembers] = useState<GroupMemberRow[]>([]);
   const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [reports, setReports] = useState<ReportRow[]>([]);
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [postText, setPostText] = useState("");
+  const [postType, setPostType] = useState<PostType>("social");
   const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>([]);
-  const [scopeType, setScopeType] = useState<"company" | "project">("company");
+  const [scopeType, setScopeType] = useState<"company" | "project" | "group">("company");
   const [projectId, setProjectId] = useState("");
+  const [groupId, setGroupId] = useState("");
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [selectedUserId, setSelectedUserId] = useState("");
   const [messageText, setMessageText] = useState("");
@@ -538,16 +787,30 @@ export default function InternalSocialPage() {
   const [projectNotes, setProjectNotes] = useState<Record<string, string>>({});
   const [composerExpanded, setComposerExpanded] = useState(false);
   const [showComposerEmojiPicker, setShowComposerEmojiPicker] = useState(false);
-  const [activeTab, setActiveTab] = useState<"inicio" | "network" | "projects" | "messages">("inicio");
+  const [activeTab, setActiveTab] = useState<"inicio" | "network" | "communities" | "projects" | "messages">("inicio");
   const [messageFilter, setMessageFilter] = useState<"all" | "online" | "with_history">("all");
   const [messageSearch, setMessageSearch] = useState("");
   const [search, setSearch] = useState("");
   const [searchSubmitted, setSearchSubmitted] = useState(false);
   const [searchDropdownIndex, setSearchDropdownIndex] = useState(-1);
+  const [feedFilter, setFeedFilter] = useState<"all" | "official" | "saved">("all");
   const [presenceMap, setPresenceMap] = useState<Record<string, { online: boolean; lastSeenAt: string | null }>>({});
   const [messageMediaUrls, setMessageMediaUrls] = useState<Record<string, string>>({});
   const [readThreadAt, setReadThreadAt] = useState<Record<string, string>>({});
+  const [savedPostIds, setSavedPostIds] = useState<string[]>([]);
+  const [notifications, setNotifications] = useState<NotificationRow[]>([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [birthdayHighlights, setBirthdayHighlights] = useState<SocialHighlightRow[]>([]);
+  const [newHireHighlights, setNewHireHighlights] = useState<SocialHighlightRow[]>([]);
+  const [mentionQuery, setMentionQuery] = useState("");
+  const [showComposerMentionPicker, setShowComposerMentionPicker] = useState(false);
+  const [pollEnabled, setPollEnabled] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
+  const [communityFilter, setCommunityFilter] = useState<"all" | "joined" | "discover">("all");
+  const [selectedCommunityId, setSelectedCommunityId] = useState("");
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
+  const notificationsRef = useRef<HTMLDivElement | null>(null);
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const messageFileInputRef = useRef<HTMLInputElement | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -647,13 +910,9 @@ export default function InternalSocialPage() {
       if (auth.error || !auth.data.user) throw new Error("Sessao invalida.");
       const userId = auth.data.user.id;
 
-      const [profilesRes, memberRes, postsRes, msgRes] = await Promise.all([
+      const [profilesRes, memberRes, msgRes] = await Promise.all([
         supabase.from("profiles").select("id,full_name,email,role,avatar_url").order("full_name", { ascending: true }),
         supabase.from("project_members").select("project_id").eq("user_id", userId),
-        supabase
-          .from("internal_social_posts")
-          .select("id,author_user_id,author_name,author_avatar_url,audience_type,audience_project_id,audience_label,text,created_at")
-          .order("created_at", { ascending: false }),
         supabase
           .from("internal_social_direct_messages")
           .select("id,from_user_id,from_name,to_user_id,text,created_at")
@@ -661,41 +920,56 @@ export default function InternalSocialPage() {
           .order("created_at", { ascending: true }),
       ]);
 
+      const postsResWithQuickWins = await supabase
+        .from("internal_social_posts")
+        .select(
+          "id,author_user_id,author_name,author_avatar_url,audience_type,audience_project_id,audience_group_id,audience_label,text,post_type,official_author_label,hidden_at,hidden_reason,created_at"
+        )
+        .order("created_at", { ascending: false });
+      let postsError = postsResWithQuickWins.error;
+      let postRowsSource = (postsResWithQuickWins.data ?? []) as PostRow[];
+      if (postsError && isSchemaCompatError(postsError.message)) {
+        const legacyPostsRes = await supabase
+          .from("internal_social_posts")
+          .select("id,author_user_id,author_name,author_avatar_url,audience_type,audience_project_id,audience_label,text,created_at")
+          .order("created_at", { ascending: false });
+        postsError = legacyPostsRes.error;
+        postRowsSource = ((legacyPostsRes.data ?? []) as PostRow[]).map((item) => ({
+          ...item,
+          audience_group_id: null,
+          post_type: "social",
+          official_author_label: null,
+          hidden_at: null,
+          hidden_reason: null,
+        }));
+      }
+
       if (profilesRes.error) throw new Error(profilesRes.error.message);
       if (memberRes.error) throw new Error(memberRes.error.message);
-      if (postsRes.error) throw new Error(postsRes.error.message);
+      if (postsError) throw new Error(postsError.message);
       if (msgRes.error) throw new Error(msgRes.error.message);
 
       const baseProfiles = (profilesRes.data ?? []) as Profile[];
-      let nextProfiles = baseProfiles;
+      let nextProfiles = baseProfiles.map((profile) => ({
+        ...profile,
+        avatar_url: resolvePortalAvatarUrl(profile.avatar_url ?? null),
+      }));
+
       if (baseProfiles.length) {
         const collaboratorRes = await supabase
           .from("colaboradores")
-          .select("user_id,nome,cargo,setor")
+          .select("user_id,nome,cargo,setor,data_nascimento,data_admissao,is_active")
           .in(
             "user_id",
             baseProfiles.map((item) => item.id)
           );
         if (!collaboratorRes.error) {
-          const collaboratorByUserId = new Map<
-            string,
-            { nome: string | null; cargo: string | null; setor: string | null }
-          >();
-          for (const item of (collaboratorRes.data ?? []) as Array<{
-            user_id: string | null;
-            nome: string | null;
-            cargo: string | null;
-            setor: string | null;
-          }>) {
-            if (item.user_id) {
-              collaboratorByUserId.set(item.user_id, {
-                nome: item.nome,
-                cargo: item.cargo,
-                setor: item.setor,
-              });
-            }
+          const collaboratorByUserId = new Map<string, CollaboratorDirectoryRow>();
+          for (const item of (collaboratorRes.data ?? []) as CollaboratorDirectoryRow[]) {
+            if (item.user_id) collaboratorByUserId.set(item.user_id, item);
           }
-          nextProfiles = baseProfiles.map((profile) => {
+
+          nextProfiles = nextProfiles.map((profile) => {
             const collaborator = collaboratorByUserId.get(profile.id);
             const fallbackName = (collaborator?.nome ?? "").trim();
             const currentFullName = (profile.full_name ?? "").trim();
@@ -707,23 +981,88 @@ export default function InternalSocialPage() {
                   : currentFullName || fallbackName || null;
             return {
               ...profile,
-              avatar_url: resolvePortalAvatarUrl(profile.avatar_url ?? null),
               full_name: safeFullName,
               cargo: (collaborator?.cargo ?? "").trim() || null,
               setor: (collaborator?.setor ?? "").trim() || null,
             };
           });
+
+          const birthdayRows = nextProfiles
+            .map((profile) => {
+              const collaborator = collaboratorByUserId.get(profile.id);
+              const birthDate = (collaborator?.data_nascimento ?? "").trim();
+              if (!birthDate || collaborator?.is_active === false) return null;
+              const daysLeft = daysUntilDate(birthDate);
+              if (daysLeft === null || daysLeft > 30) return null;
+              return {
+                userId: profile.id,
+                name: displayName(profile),
+                subtitle: profileRoleLine(profile),
+                dateLabel: daysLeft === 0 ? "Hoje" : formatMonthDay(birthDate),
+                avatarUrl: profile.avatar_url ?? null,
+                sortOrder: daysLeft,
+              };
+            })
+            .filter(
+              (
+                item
+              ): item is SocialHighlightRow & {
+                sortOrder: number;
+              } => Boolean(item)
+            )
+            .sort((a, b) => a.sortOrder - b.sortOrder)
+            .slice(0, 4)
+            .map((item) => ({
+              userId: item.userId,
+              name: item.name,
+              subtitle: item.subtitle,
+              dateLabel: item.dateLabel,
+              avatarUrl: item.avatarUrl,
+            }));
+          setBirthdayHighlights(birthdayRows);
+
+          const now = Date.now();
+          const newHires = nextProfiles
+            .map((profile) => {
+              const collaborator = collaboratorByUserId.get(profile.id);
+              const admissionDate = (collaborator?.data_admissao ?? "").trim();
+              const admissionMs = admissionDate ? new Date(`${admissionDate}T00:00:00`).getTime() : Number.NaN;
+              if (!admissionDate || Number.isNaN(admissionMs) || collaborator?.is_active === false) return null;
+              const ageDays = Math.round((now - admissionMs) / (1000 * 60 * 60 * 24));
+              if (ageDays < 0 || ageDays > 45) return null;
+              return {
+                userId: profile.id,
+                name: displayName(profile),
+                subtitle: profileRoleLine(profile),
+                dateLabel: formatMonthDay(admissionDate),
+                avatarUrl: profile.avatar_url ?? null,
+                sortOrder: ageDays,
+              };
+            })
+            .filter(
+              (
+                item
+              ): item is SocialHighlightRow & {
+                sortOrder: number;
+              } => Boolean(item)
+            )
+            .sort((a, b) => a.sortOrder - b.sortOrder)
+            .slice(0, 4)
+            .map((item) => ({
+              userId: item.userId,
+              name: item.name,
+              subtitle: item.subtitle,
+              dateLabel: item.dateLabel,
+              avatarUrl: item.avatarUrl,
+            }));
+          setNewHireHighlights(newHires);
         } else {
-          nextProfiles = baseProfiles.map((profile) => ({
-            ...profile,
-            avatar_url: resolvePortalAvatarUrl(profile.avatar_url ?? null),
-          }));
+          setBirthdayHighlights([]);
+          setNewHireHighlights([]);
         }
       } else {
-        nextProfiles = baseProfiles.map((profile) => ({
-          ...profile,
-          avatar_url: resolvePortalAvatarUrl(profile.avatar_url ?? null),
-        }));
+        setBirthdayHighlights([]);
+        setNewHireHighlights([]);
       }
       setProfiles(nextProfiles);
       setMe(nextProfiles.find((item) => item.id === userId) ?? null);
@@ -792,9 +1131,43 @@ export default function InternalSocialPage() {
         setProjectTeamMap({});
       }
 
-      const postRows = (postsRes.data ?? []) as PostRow[];
+      try {
+        const [groupsRes, groupMembersRes] = await Promise.all([
+          supabase
+            .from("internal_social_groups")
+            .select("id,name,slug,description,cover_color,is_private")
+            .order("name", { ascending: true }),
+          supabase
+            .from("internal_social_group_members")
+            .select("group_id,user_id,role"),
+        ]);
+        if (!groupsRes.error) {
+          const nextGroups = (groupsRes.data ?? []) as Group[];
+          setGroups(nextGroups);
+          setSelectedCommunityId((prev) => prev || nextGroups[0]?.id || "");
+        } else if (isSchemaCompatError(groupsRes.error.message)) {
+          setGroups([]);
+          setSelectedCommunityId("");
+        } else {
+          throw new Error(groupsRes.error.message);
+        }
+        if (!groupMembersRes.error) {
+          setGroupMembers((groupMembersRes.data ?? []) as GroupMemberRow[]);
+        } else if (isSchemaCompatError(groupMembersRes.error.message)) {
+          setGroupMembers([]);
+        } else {
+          throw new Error(groupMembersRes.error.message);
+        }
+      } catch (groupsErr) {
+        if (!isSchemaCompatError(groupsErr instanceof Error ? groupsErr.message : "")) throw groupsErr;
+        setGroups([]);
+        setGroupMembers([]);
+        setSelectedCommunityId("");
+      }
+
+      const postRows = postRowsSource;
       const postIds = postRows.map((item) => item.id);
-      const [attachmentsRes, commentsRes, reactionsRes] = await Promise.all([
+      const [attachmentsRes, commentsRes, reactionsRes, pollsRes, pollOptionsRes, pollVotesRes, reportsRes] = await Promise.all([
         postIds.length
           ? supabase
               .from("internal_social_post_attachments")
@@ -811,11 +1184,29 @@ export default function InternalSocialPage() {
         postIds.length
           ? supabase.from("internal_social_post_reactions").select("id,post_id,user_id,emoji").in("post_id", postIds)
           : Promise.resolve({ data: [], error: null }),
+        postIds.length
+          ? supabase.from("internal_social_polls").select("id,post_id,question,allow_multiple").in("post_id", postIds)
+          : Promise.resolve({ data: [], error: null }),
+        postIds.length
+          ? supabase.from("internal_social_poll_options").select("id,poll_id,label,position")
+          : Promise.resolve({ data: [], error: null }),
+        postIds.length
+          ? supabase.from("internal_social_poll_votes").select("id,poll_id,option_id,user_id")
+          : Promise.resolve({ data: [], error: null }),
+        postIds.length
+          ? supabase
+              .from("internal_social_reports")
+              .select("id,reporter_user_id,target_type,post_id,comment_id,reason,details,status,reviewed_by,reviewed_at,created_at")
+          : Promise.resolve({ data: [], error: null }),
       ]);
 
       if (attachmentsRes.error) throw new Error(attachmentsRes.error.message);
       if (commentsRes.error) throw new Error(commentsRes.error.message);
       if (reactionsRes.error) throw new Error(reactionsRes.error.message);
+      if (pollsRes.error && !isSchemaCompatError(pollsRes.error.message)) throw new Error(pollsRes.error.message);
+      if (pollOptionsRes.error && !isSchemaCompatError(pollOptionsRes.error.message)) throw new Error(pollOptionsRes.error.message);
+      if (pollVotesRes.error && !isSchemaCompatError(pollVotesRes.error.message)) throw new Error(pollVotesRes.error.message);
+      if (reportsRes.error && !isSchemaCompatError(reportsRes.error.message)) throw new Error(reportsRes.error.message);
 
       const resolvedAttachments = await resolvePostAttachmentUrls((attachmentsRes.data ?? []) as AttachmentRow[]);
       const attachmentMap = new Map<string, AttachmentRow[]>();
@@ -839,14 +1230,94 @@ export default function InternalSocialPage() {
         reactionMap.set(item.post_id, list);
       }
 
+      const pollsByPostId = new Map<string, FeedPoll>();
+      const pollIds = new Set<string>();
+      for (const poll of (pollsRes.data ?? []) as Array<{ id: string; post_id: string; question: string; allow_multiple: boolean }>) {
+        pollsByPostId.set(poll.post_id, {
+          id: poll.id,
+          post_id: poll.post_id,
+          question: poll.question,
+          allow_multiple: poll.allow_multiple,
+          options: [],
+        });
+        pollIds.add(poll.id);
+      }
+      const votesByOptionId = new Map<string, number>();
+      const myVotes = new Set<string>();
+      for (const vote of (pollVotesRes.data ?? []) as Array<{ poll_id: string; option_id: string; user_id: string }>) {
+        if (!pollIds.has(vote.poll_id)) continue;
+        votesByOptionId.set(vote.option_id, (votesByOptionId.get(vote.option_id) ?? 0) + 1);
+        if (vote.user_id === userId) myVotes.add(vote.option_id);
+      }
+      for (const option of (pollOptionsRes.data ?? []) as Array<{ id: string; poll_id: string; label: string; position: number }>) {
+        const poll = [...pollsByPostId.values()].find((item) => item.id === option.poll_id);
+        if (!poll) continue;
+        poll.options.push({
+          id: option.id,
+          poll_id: option.poll_id,
+          label: option.label,
+          position: option.position,
+          votes: votesByOptionId.get(option.id) ?? 0,
+          votedByMe: myVotes.has(option.id),
+        });
+        poll.options.sort((a, b) => a.position - b.position);
+      }
+
+      const reportRows = ((reportsRes.data ?? []) as ReportRow[]).filter((item) => item.target_type === "post");
+      setReports(reportRows);
+      const reportsByPostId = new Map<string, ReportRow[]>();
+      for (const report of reportRows) {
+        if (!report.post_id) continue;
+        const list = reportsByPostId.get(report.post_id) ?? [];
+        list.push(report);
+        reportsByPostId.set(report.post_id, list);
+      }
+
       setPosts(
         postRows.map((item) => ({
           ...item,
           attachments: attachmentMap.get(item.id) ?? [],
           comments: commentMap.get(item.id) ?? [],
           reactions: reactionMap.get(item.id) ?? [],
+          poll: pollsByPostId.get(item.id) ?? null,
+          reportsCount: reportsByPostId.get(item.id)?.length ?? 0,
+          isReportedByMe: (reportsByPostId.get(item.id) ?? []).some((report) => report.reporter_user_id === userId),
         }))
       );
+
+      try {
+        const savedRes = await supabase.from("internal_social_saved_posts").select("post_id").eq("user_id", userId);
+        if (!savedRes.error) {
+          setSavedPostIds(((savedRes.data ?? []) as Array<{ post_id: string }>).map((item) => item.post_id));
+        } else if (isSchemaCompatError(savedRes.error.message)) {
+          setSavedPostIds([]);
+        } else {
+          throw new Error(savedRes.error.message);
+        }
+      } catch (savedErr) {
+        if (!isSchemaCompatError(savedErr instanceof Error ? savedErr.message : "")) throw savedErr;
+        setSavedPostIds([]);
+      }
+
+      try {
+        const notificationsRes = await supabase
+          .from("internal_social_notifications")
+          .select("id,user_id,actor_user_id,kind,entity_type,entity_id,title,body,link_url,read_at,created_at")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(20);
+        if (!notificationsRes.error) {
+          setNotifications((notificationsRes.data ?? []) as NotificationRow[]);
+        } else if (isSchemaCompatError(notificationsRes.error.message)) {
+          setNotifications([]);
+        } else {
+          throw new Error(notificationsRes.error.message);
+        }
+      } catch (notificationsErr) {
+        if (!isSchemaCompatError(notificationsErr instanceof Error ? notificationsErr.message : "")) throw notificationsErr;
+        setNotifications([]);
+      }
+
       try {
         const pinnedRes = await supabase
           .from("internal_social_posts")
@@ -874,9 +1345,12 @@ export default function InternalSocialPage() {
     }
   }
 
+  // `load` is intentionally invoked on mount and realtime updates; keeping this effect stable avoids unnecessary refetch churn.
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     void load();
   }, []);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -884,11 +1358,19 @@ export default function InternalSocialPage() {
     const tab = params.get("tab");
     const user = params.get("user");
     const project = params.get("project");
-    if (tab === "inicio" || tab === "network" || tab === "projects" || tab === "messages") {
+    const tag = params.get("tag");
+    const community = params.get("community");
+    if (tab === "inicio" || tab === "network" || tab === "communities" || tab === "projects" || tab === "messages") {
       setActiveTab(tab);
     }
     if (user) setSelectedUserId(user);
     if (project) setProjectBoardProjectId(project);
+    if (community) setSelectedCommunityId(community);
+    if (tag) {
+      setSearch(`#${tag}`);
+      setSearchSubmitted(true);
+      setActiveTab("inicio");
+    }
   }, []);
 
   useEffect(() => {
@@ -900,6 +1382,8 @@ export default function InternalSocialPage() {
     } catch {}
   }, []);
 
+  // Realtime refresh depends on the authenticated user channel; `load` remains intentionally stable by call-site.
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     if (!me?.id) return;
     const channel = supabase
@@ -921,16 +1405,37 @@ export default function InternalSocialPage() {
       void supabase.removeChannel(channel);
     };
   }, [me?.id]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   const profileById = useMemo(() => {
     const map = new Map<string, Profile>();
     for (const profile of profiles) map.set(profile.id, profile);
     return map;
   }, [profiles]);
+  const mentionDirectory = useMemo(() => buildMentionDirectory(profiles), [profiles]);
+  const unreadNotificationsCount = useMemo(
+    () => notifications.filter((item) => !item.read_at).length,
+    [notifications]
+  );
+  const canPublishOfficial = me?.role === "admin" || me?.role === "diretoria" || me?.role === "rh";
+  const composerMentionOptions = useMemo(() => {
+    const term = mentionQuery.trim().toLowerCase();
+    return profiles
+      .filter((item) => item.id !== me?.id)
+      .filter((item) => {
+        const mentionMeta = mentionDirectory.byUserId.get(item.id);
+        if (!mentionMeta) return false;
+        if (!term) return true;
+        const haystack = `${mentionMeta.handle} ${mentionMeta.label} ${(item.cargo ?? "").trim()} ${(item.setor ?? "").trim()}`.toLowerCase();
+        return haystack.includes(term);
+      })
+      .slice(0, 10);
+  }, [mentionDirectory.byUserId, mentionQuery, me?.id, profiles]);
 
   const searchTerm = useMemo(() => search.trim().toLowerCase(), [search]);
   const searchPlaceholder = useMemo(() => {
     if (activeTab === "network") return "Pesquisar membros da rede";
+    if (activeTab === "communities") return "Pesquisar comunidades";
     if (activeTab === "projects") return "Pesquisar projetos";
     if (activeTab === "messages") return "Pesquisar conversas";
     return "Pesquisar publicações na rede";
@@ -945,12 +1450,33 @@ export default function InternalSocialPage() {
     );
   }, [messages, me?.id, selectedUserId]);
   const canModeratePosts = me?.role === "admin" || me?.role === "diretoria";
-  const pinnedPost = useMemo(() => posts.find((item) => item.id === pinnedPostId) ?? null, [posts, pinnedPostId]);
-  const feedPosts = useMemo(() => posts.filter((item) => item.id !== pinnedPostId), [posts, pinnedPostId]);
+  const visiblePostsForRole = useMemo(
+    () => posts.filter((item) => canModeratePosts || !item.hidden_at),
+    [canModeratePosts, posts]
+  );
+  const pinnedPost = useMemo(
+    () => visiblePostsForRole.find((item) => item.id === pinnedPostId) ?? null,
+    [visiblePostsForRole, pinnedPostId]
+  );
+  const feedPosts = useMemo(
+    () => visiblePostsForRole.filter((item) => item.id !== pinnedPostId),
+    [visiblePostsForRole, pinnedPostId]
+  );
   const editingPost = useMemo(() => posts.find((item) => item.id === editingPostId) ?? null, [editingPostId, posts]);
   const selectedProjectBoard = useMemo(
     () => projects.find((item) => item.id === projectBoardProjectId) ?? null,
     [projects, projectBoardProjectId]
+  );
+  const selectedCommunity = useMemo(
+    () => groups.find((item) => item.id === selectedCommunityId) ?? null,
+    [groups, selectedCommunityId]
+  );
+  const joinedGroupIds = useMemo(
+    () =>
+      new Set(
+        groupMembers.filter((item) => item.user_id === me?.id).map((item) => item.group_id)
+      ),
+    [groupMembers, me?.id]
   );
   const onlineUserIds = useMemo(() => {
     const ids = new Set<string>();
@@ -1007,6 +1533,53 @@ export default function InternalSocialPage() {
     if (!searchTerm) return projects;
     return projects.filter((project) => project.name.toLowerCase().includes(searchTerm));
   }, [projects, searchTerm]);
+  const visibleGroups = useMemo(() => {
+    const base = groups.filter((group) => {
+      if (communityFilter === "joined") return joinedGroupIds.has(group.id);
+      if (communityFilter === "discover") return !joinedGroupIds.has(group.id);
+      return true;
+    });
+    if (!searchTerm) return base;
+    return base.filter((group) => `${group.name} ${group.description}`.toLowerCase().includes(searchTerm));
+  }, [communityFilter, groups, joinedGroupIds, searchTerm]);
+  const officialPosts = useMemo(
+    () => feedPosts.filter((item) => isOfficialPostType(item.post_type)).slice(0, 4),
+    [feedPosts]
+  );
+  const topHashtags = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const post of posts) {
+      if (post.hidden_at && !canModeratePosts) continue;
+      for (const tag of extractHashtagsFromValue(post.text ?? "")) {
+        counts.set(tag, (counts.get(tag) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([tag, count]) => ({ tag, count }));
+  }, [canModeratePosts, posts]);
+  const engagementHighlights = useMemo(() => {
+    const postCount = posts.filter((item) => !item.hidden_at).length;
+    const officialCount = posts.filter((item) => !item.hidden_at && isOfficialPostType(item.post_type)).length;
+    const pollCount = posts.filter((item) => item.poll).length;
+    const openReports = reports.filter((item) => item.status === "open").length;
+    return { postCount, officialCount, pollCount, openReports };
+  }, [posts, reports]);
+  const topAuthors = useMemo(() => {
+    const counts = new Map<string, { userId: string; name: string; total: number }>();
+    for (const post of posts) {
+      if (post.hidden_at && !canModeratePosts) continue;
+      const current = counts.get(post.author_user_id) ?? {
+        userId: post.author_user_id,
+        name: post.author_name || displayName(profileById.get(post.author_user_id)),
+        total: 0,
+      };
+      current.total += 1;
+      counts.set(post.author_user_id, current);
+    }
+    return [...counts.values()].sort((a, b) => b.total - a.total).slice(0, 5);
+  }, [canModeratePosts, posts, profileById]);
   const visibleProjectTeamMap = useMemo(() => {
     if (!searchTerm) return projectTeamMap;
     const next: Record<string, Profile[]> = {};
@@ -1025,13 +1598,18 @@ export default function InternalSocialPage() {
     return next;
   }, [projectTeamMap, searchTerm]);
   const visibleFeedPosts = useMemo(() => {
-    if (!searchTerm) return feedPosts;
-    return feedPosts.filter((post) => {
+    const filteredByMode = feedPosts.filter((post) => {
+      if (feedFilter === "official") return isOfficialPostType(post.post_type);
+      if (feedFilter === "saved") return savedPostIds.includes(post.id);
+      return true;
+    });
+    if (!searchTerm) return filteredByMode;
+    return filteredByMode.filter((post) => {
       const commentText = post.comments.map((item) => item.text).join(" ");
       const haystack = [post.author_name, post.audience_label, post.text, commentText].join(" ").toLowerCase();
       return haystack.includes(searchTerm);
     });
-  }, [feedPosts, searchTerm]);
+  }, [feedFilter, feedPosts, savedPostIds, searchTerm]);
   const visiblePinnedPost = useMemo(() => {
     if (!pinnedPost) return null;
     if (!searchTerm) return pinnedPost;
@@ -1215,9 +1793,12 @@ export default function InternalSocialPage() {
 
   useEffect(() => {
     function handleDocumentPointerDown(event: MouseEvent) {
-      if (!searchBoxRef.current) return;
-      if (searchBoxRef.current.contains(event.target as Node)) return;
-      setSearchDropdownIndex(-1);
+      if (searchBoxRef.current && !searchBoxRef.current.contains(event.target as Node)) {
+        setSearchDropdownIndex(-1);
+      }
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+        setNotificationsOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleDocumentPointerDown);
     return () => document.removeEventListener("mousedown", handleDocumentPointerDown);
@@ -1290,6 +1871,90 @@ export default function InternalSocialPage() {
       textarea.focus();
       textarea.setSelectionRange(nextStart, nextEnd);
     });
+  }
+
+  function insertTextAtCursor(
+    value: string,
+    setValue: (nextValue: string) => void,
+    textarea: HTMLTextAreaElement | null,
+    insertion: string
+  ) {
+    if (!textarea) {
+      setValue(`${value}${insertion}`);
+      return;
+    }
+    const start = textarea.selectionStart ?? value.length;
+    const end = textarea.selectionEnd ?? value.length;
+    const nextValue = `${value.slice(0, start)}${insertion}${value.slice(end)}`;
+    const nextCursor = start + insertion.length;
+    setValue(nextValue);
+    window.requestAnimationFrame(() => {
+      textarea.focus();
+      textarea.setSelectionRange(nextCursor, nextCursor);
+    });
+  }
+
+  async function syncPulseHubEvent(payload: SyncBody) {
+    try {
+      const sessionRes = await supabase.auth.getSession();
+      const token = sessionRes.data.session?.access_token;
+      await fetch("/api/institucional/rede-social/sync", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch {
+      // Mantem a acao principal funcionando mesmo se a sincronizacao auxiliar falhar.
+    }
+  }
+
+  async function toggleSavedPost(postId: string) {
+    if (!me?.id) return;
+    setError("");
+    const alreadySaved = savedPostIds.includes(postId);
+    try {
+      if (alreadySaved) {
+        const res = await supabase
+          .from("internal_social_saved_posts")
+          .delete()
+          .eq("post_id", postId)
+          .eq("user_id", me.id);
+        if (res.error) throw new Error(res.error.message);
+        setSavedPostIds((prev) => prev.filter((item) => item !== postId));
+      } else {
+        const res = await supabase.from("internal_social_saved_posts").insert({
+          post_id: postId,
+          user_id: me.id,
+        });
+        if (res.error) throw new Error(res.error.message);
+        setSavedPostIds((prev) => [...prev, postId]);
+      }
+    } catch (err) {
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao atualizar post salvo."));
+    }
+  }
+
+  async function markNotificationsAsRead(ids?: string[]) {
+    if (!me?.id) return;
+    const unreadIds = (ids ?? notifications.filter((item) => !item.read_at).map((item) => item.id)).filter(Boolean);
+    if (!unreadIds.length) return;
+    try {
+      const nowIso = new Date().toISOString();
+      const res = await supabase
+        .from("internal_social_notifications")
+        .update({ read_at: nowIso })
+        .in("id", unreadIds)
+        .eq("user_id", me.id);
+      if (res.error) throw new Error(res.error.message);
+      setNotifications((prev) =>
+        prev.map((item) => (unreadIds.includes(item.id) ? { ...item, read_at: item.read_at ?? nowIso } : item))
+      );
+    } catch (err) {
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao atualizar notificacoes."));
+    }
   }
 
   async function uploadMedia(file: File) {
@@ -1393,26 +2058,53 @@ export default function InternalSocialPage() {
   }
 
   async function submitPost() {
-    if (!me?.id || (!postText.trim() && !draftAttachments.length)) return;
+    if (!me?.id || (!postText.trim() && !draftAttachments.length && !pollEnabled)) return;
     setBusy(true);
     setError("");
     try {
-        const res = await supabase
-          .from("internal_social_posts")
-          .insert({
+      const normalizedPostType = canPublishOfficial ? postType : "social";
+      let res = await supabase
+        .from("internal_social_posts")
+        .insert({
           author_user_id: me.id,
           author_name: currentName,
           author_avatar_url: resolvePortalAvatarUrl(me.avatar_url ?? null),
           audience_type: scopeType,
-        audience_project_id: scopeType === "project" ? projectId || null : null,
-        audience_label:
-          scopeType === "project"
-            ? projects.find((item) => item.id === projectId)?.name ?? "Equipe de projeto"
-            : "Toda a empresa",
-        text: postText.trim(),
+          audience_project_id: scopeType === "project" ? projectId || null : null,
+          audience_group_id: scopeType === "group" ? groupId || null : null,
+          audience_label:
+            scopeType === "project"
+              ? projects.find((item) => item.id === projectId)?.name ?? "Equipe de projeto"
+              : scopeType === "group"
+                ? groups.find((item) => item.id === groupId)?.name ?? "Comunidade"
+              : "Toda a empresa",
+          text: postText.trim(),
+          post_type: normalizedPostType,
+          official_author_label: isOfficialPostType(normalizedPostType) ? roleOfficialLabel(me.role) : null,
         })
         .select("id")
         .single<{ id: string }>();
+      if (res.error && isSchemaCompatError(res.error.message)) {
+        res = await supabase
+          .from("internal_social_posts")
+          .insert({
+            author_user_id: me.id,
+            author_name: currentName,
+            author_avatar_url: resolvePortalAvatarUrl(me.avatar_url ?? null),
+            audience_type: scopeType,
+            audience_project_id: scopeType === "project" ? projectId || null : null,
+            audience_group_id: scopeType === "group" ? groupId || null : null,
+            audience_label:
+              scopeType === "project"
+                ? projects.find((item) => item.id === projectId)?.name ?? "Equipe de projeto"
+                : scopeType === "group"
+                  ? groups.find((item) => item.id === groupId)?.name ?? "Comunidade"
+                : "Toda a empresa",
+            text: postText.trim(),
+          })
+          .select("id")
+          .single<{ id: string }>();
+      }
       if (res.error) throw new Error(res.error.message);
       if (draftAttachments.length) {
         const attachRes = await supabase.from("internal_social_post_attachments").insert(
@@ -1425,11 +2117,50 @@ export default function InternalSocialPage() {
         );
         if (attachRes.error) throw new Error(attachRes.error.message);
       }
+      if (pollEnabled) {
+        const cleanQuestion = pollQuestion.trim();
+        const cleanOptions = pollOptions.map((item) => item.trim()).filter(Boolean).slice(0, 4);
+        if (!cleanQuestion || cleanOptions.length < 2) {
+          throw new Error("Preencha a pergunta e pelo menos duas opcoes da enquete.");
+        }
+        const pollRes = await supabase
+          .from("internal_social_polls")
+          .insert({
+            post_id: res.data.id,
+            question: cleanQuestion,
+            allow_multiple: false,
+          })
+          .select("id")
+          .single<{ id: string }>();
+        if (pollRes.error) throw new Error(pollRes.error.message);
+        const optionsRes = await supabase.from("internal_social_poll_options").insert(
+          cleanOptions.map((label, index) => ({
+            poll_id: pollRes.data.id,
+            label,
+            position: index,
+          }))
+        );
+        if (optionsRes.error) throw new Error(optionsRes.error.message);
+      }
+      await syncPulseHubEvent({
+        type: "post_sync",
+        postId: res.data.id,
+        text: postText.trim(),
+        postType: normalizedPostType,
+        broadcastOfficial: isOfficialPostType(normalizedPostType),
+      });
       setPostText("");
+      setPostType("social");
       setDraftAttachments([]);
       setScopeType("company");
       setProjectId("");
+      setGroupId("");
       setComposerExpanded(false);
+      setShowComposerMentionPicker(false);
+      setMentionQuery("");
+      setPollEnabled(false);
+      setPollQuestion("");
+      setPollOptions(["", ""]);
       await load();
     } catch (err) {
       setError(normalizeError(err instanceof Error ? err.message : "Erro ao publicar."));
@@ -1449,6 +2180,7 @@ export default function InternalSocialPage() {
       } else {
         const addRes = await supabase.from("internal_social_post_reactions").insert({ post_id: post.id, user_id: me.id, emoji });
         if (addRes.error) throw new Error(addRes.error.message);
+        await syncPulseHubEvent({ type: "reaction_notify", postId: post.id, emoji });
       }
       await load();
     } catch (err) {
@@ -1462,13 +2194,24 @@ export default function InternalSocialPage() {
     if (!content) return;
     setError("");
     try {
-      const res = await supabase.from("internal_social_post_comments").insert({
+      const res = await supabase
+        .from("internal_social_post_comments")
+        .insert({
         post_id: postId,
         author_user_id: me.id,
         author_name: currentName,
         text: content,
-      });
+      })
+        .select("id")
+        .single<{ id: string }>();
       if (res.error) throw new Error(res.error.message);
+      await syncPulseHubEvent({
+        type: "comment_sync",
+        postId,
+        commentId: res.data.id,
+        text: content,
+        notifyPostAuthor: true,
+      });
       setCommentDrafts((prev) => ({ ...prev, [postId]: "" }));
       await load();
     } catch (err) {
@@ -1488,13 +2231,23 @@ export default function InternalSocialPage() {
       ]
         .filter(Boolean)
         .join("\n");
-      const res = await supabase.from("internal_social_direct_messages").insert({
-        from_user_id: me.id,
-        from_name: currentName,
-        to_user_id: selectedUserId,
-        text: composedText,
-      });
+      const res = await supabase
+        .from("internal_social_direct_messages")
+        .insert({
+          from_user_id: me.id,
+          from_name: currentName,
+          to_user_id: selectedUserId,
+          text: composedText,
+        })
+        .select("id")
+        .single<{ id: string }>();
       if (res.error) throw new Error(res.error.message);
+      await syncPulseHubEvent({
+        type: "message_notify",
+        messageId: res.data.id,
+        toUserId: selectedUserId,
+        preview: trimmedMessage || "Anexo compartilhado.",
+      });
       setMessageText("");
       setMessageAttachments([]);
       setShowMessageEmojiPicker(false);
@@ -1543,6 +2296,16 @@ export default function InternalSocialPage() {
     try {
       const res = await supabase.from("internal_social_post_comments").update({ text: editingCommentText.trim() }).eq("id", commentId);
       if (res.error) throw new Error(res.error.message);
+      const comment = posts.flatMap((item) => item.comments).find((item) => item.id === commentId);
+      if (comment) {
+        await syncPulseHubEvent({
+          type: "comment_sync",
+          postId: comment.post_id,
+          commentId,
+          text: editingCommentText.trim(),
+          notifyPostAuthor: false,
+        });
+      }
       cancelEditComment();
       await load();
     } catch (err) {
@@ -1588,6 +2351,14 @@ export default function InternalSocialPage() {
         .update({ text: editingPostText.trim() })
         .eq("id", editingPostId);
       if (res.error) throw new Error(res.error.message);
+      const editingMeta = posts.find((item) => item.id === editingPostId);
+      await syncPulseHubEvent({
+        type: "post_sync",
+        postId: editingPostId,
+        text: editingPostText.trim(),
+        postType: editingMeta?.post_type ?? "social",
+        broadcastOfficial: false,
+      });
       cancelEditPost();
       await load();
     } catch (err) {
@@ -1655,6 +2426,174 @@ export default function InternalSocialPage() {
       } else {
         setError(normalizeError(err instanceof Error ? err.message : "Erro ao salvar quadro colaborativo."));
       }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleGroupMembership(group: Group) {
+    if (!me?.id) return;
+    const joined = joinedGroupIds.has(group.id);
+    setBusy(true);
+    setError("");
+    try {
+      if (joined) {
+        const res = await supabase
+          .from("internal_social_group_members")
+          .delete()
+          .eq("group_id", group.id)
+          .eq("user_id", me.id);
+        if (res.error) throw new Error(res.error.message);
+      } else {
+        const res = await supabase.from("internal_social_group_members").insert({
+          group_id: group.id,
+          user_id: me.id,
+          role: "member",
+        });
+        if (res.error) throw new Error(res.error.message);
+      }
+      await load();
+    } catch (err) {
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao atualizar comunidade."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function voteOnPoll(post: FeedPost, optionId: string) {
+    if (!me?.id || !post.poll) return;
+    setBusy(true);
+    setError("");
+    try {
+      const myOptionIds = post.poll.options.filter((item) => item.votedByMe).map((item) => item.id);
+      if (post.poll.allow_multiple) {
+        if (myOptionIds.includes(optionId)) {
+          const res = await supabase
+            .from("internal_social_poll_votes")
+            .delete()
+            .eq("poll_id", post.poll.id)
+            .eq("option_id", optionId)
+            .eq("user_id", me.id);
+          if (res.error) throw new Error(res.error.message);
+        } else {
+          const res = await supabase.from("internal_social_poll_votes").insert({
+            poll_id: post.poll.id,
+            option_id: optionId,
+            user_id: me.id,
+          });
+          if (res.error) throw new Error(res.error.message);
+        }
+      } else {
+        if (myOptionIds.length) {
+          const clearRes = await supabase
+            .from("internal_social_poll_votes")
+            .delete()
+            .eq("poll_id", post.poll.id)
+            .eq("user_id", me.id);
+          if (clearRes.error) throw new Error(clearRes.error.message);
+        }
+        if (!myOptionIds.includes(optionId)) {
+          const res = await supabase.from("internal_social_poll_votes").insert({
+            poll_id: post.poll.id,
+            option_id: optionId,
+            user_id: me.id,
+          });
+          if (res.error) throw new Error(res.error.message);
+        }
+      }
+      await load();
+    } catch (err) {
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao votar na enquete."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function reportPost(post: FeedPost) {
+    if (!me?.id) return;
+    const reason = window.prompt("Motivo da denuncia (ex.: conteudo inadequado, spam, conduta imprópria):", "conteudo inadequado");
+    if (!reason?.trim()) return;
+    const details = window.prompt("Detalhes adicionais (opcional):", "") ?? "";
+    setBusy(true);
+    setError("");
+    try {
+      const res = await supabase.from("internal_social_reports").insert({
+        reporter_user_id: me.id,
+        target_type: "post",
+        post_id: post.id,
+        reason: reason.trim(),
+        details: details.trim() || null,
+      });
+      if (res.error) throw new Error(res.error.message);
+      await load();
+    } catch (err) {
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao denunciar publicacao."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updateReportStatus(reportId: string, status: ReportRow["status"]) {
+    if (!me?.id) return;
+    setBusy(true);
+    setError("");
+    try {
+      const nowIso = new Date().toISOString();
+      const reportRes = await supabase
+        .from("internal_social_reports")
+        .update({
+          status,
+          reviewed_by: me.id,
+          reviewed_at: nowIso,
+        })
+        .eq("id", reportId);
+      if (reportRes.error) throw new Error(reportRes.error.message);
+
+      const actionRes = await supabase.from("internal_social_moderation_actions").insert({
+        report_id: reportId,
+        moderator_user_id: me.id,
+        action: status === "reviewing" ? "reviewing" : status === "resolved" ? "resolved" : "dismissed",
+        target_type: "report",
+        target_id: reportId,
+        notes: null,
+      });
+      if (actionRes.error) throw new Error(actionRes.error.message);
+      await load();
+    } catch (err) {
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao atualizar denuncia."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function setPostModerationState(post: FeedPost, hide: boolean) {
+    if (!me?.id) return;
+    const reason = hide ? window.prompt("Motivo para ocultar a publicacao:", post.hidden_reason ?? "moderacao interna") : "";
+    if (hide && !reason?.trim()) return;
+    const normalizedReason = hide ? reason?.trim() ?? null : null;
+    setBusy(true);
+    setError("");
+    try {
+      const res = await supabase
+        .from("internal_social_posts")
+        .update({
+          hidden_at: hide ? new Date().toISOString() : null,
+          hidden_reason: normalizedReason,
+        })
+        .eq("id", post.id);
+      if (res.error) throw new Error(res.error.message);
+
+      const actionRes = await supabase.from("internal_social_moderation_actions").insert({
+        moderator_user_id: me.id,
+        action: hide ? "hide_post" : "restore_post",
+        target_type: "post",
+        target_id: post.id,
+        notes: hide ? normalizedReason : "restaurado",
+      });
+      if (actionRes.error) throw new Error(actionRes.error.message);
+      await load();
+    } catch (err) {
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao atualizar visibilidade da publicacao."));
     } finally {
       setBusy(false);
     }
@@ -1830,6 +2769,7 @@ export default function InternalSocialPage() {
             {[
               { id: "inicio", label: "Início" },
               { id: "network", label: "Minha rede" },
+              { id: "communities", label: "Comunidades" },
               { id: "projects", label: "Projetos" },
               { id: "messages", label: "Mensagens" },
             ].map((item) => {
@@ -1839,7 +2779,7 @@ export default function InternalSocialPage() {
                   key={item.id}
                   type="button"
                   onClick={() => {
-                    setActiveTab(item.id as "inicio" | "network" | "projects" | "messages");
+                    setActiveTab(item.id as "inicio" | "network" | "communities" | "projects" | "messages");
                     setSearchSubmitted(false);
                   }}
                   className={`relative rounded-full px-4 py-2 font-medium transition ${
@@ -1859,6 +2799,69 @@ export default function InternalSocialPage() {
             })}
           </nav>
           <div className="flex items-center gap-3">
+            <div ref={notificationsRef} className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  const nextOpen = !notificationsOpen;
+                  setNotificationsOpen(nextOpen);
+                  if (nextOpen) void markNotificationsAsRead();
+                }}
+                className="relative inline-flex h-11 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-[0_10px_24px_-22px_rgba(15,23,42,0.45)] hover:bg-slate-50"
+              >
+                Alertas
+                {unreadNotificationsCount ? (
+                  <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 py-0.5 text-[11px] font-bold text-white">
+                    {unreadNotificationsCount}
+                  </span>
+                ) : null}
+              </button>
+              {notificationsOpen ? (
+                <div className="absolute right-0 top-14 z-30 w-[22rem] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_-32px_rgba(15,23,42,0.45)]">
+                  <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">Notificacoes</p>
+                      <p className="text-xs text-slate-500">Atualizadas em tempo real apos recarregar o feed.</p>
+                    </div>
+                    {unreadNotificationsCount ? (
+                      <button
+                        type="button"
+                        onClick={() => void markNotificationsAsRead()}
+                        className="text-xs font-semibold text-[#0a66c2] hover:underline"
+                      >
+                        Marcar tudo
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="max-h-[26rem] overflow-y-auto">
+                    {notifications.length ? (
+                      notifications.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            if (!item.read_at) void markNotificationsAsRead([item.id]);
+                            setNotificationsOpen(false);
+                            router.push(item.link_url || "/institucional/rede-social");
+                          }}
+                          className={`block w-full border-b border-slate-100 px-4 py-3 text-left hover:bg-slate-50 ${
+                            item.read_at ? "bg-white" : "bg-blue-50/50"
+                          }`}
+                        >
+                          <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+                          {item.body ? <p className="mt-1 text-xs leading-5 text-slate-600">{item.body}</p> : null}
+                          <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                            {when(item.created_at)}
+                          </p>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-4 py-6 text-sm text-slate-500">Nenhuma notificacao por enquanto.</div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
             <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 text-xs font-semibold text-white shadow-[0_14px_30px_-18px_rgba(59,130,246,0.8)]">
               {initials(currentName)}
             </div>
@@ -2014,6 +3017,210 @@ export default function InternalSocialPage() {
               </div>
             </section>
 
+            <section className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)]">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Destaques</p>
+                    <p className="mt-1 text-lg font-semibold text-slate-900">Aniversariantes</p>
+                  </div>
+                  <Link href="/agenda/aniversariantes" className="text-sm font-semibold text-[#0a66c2] hover:underline">
+                    Ver agenda
+                  </Link>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {birthdayHighlights.length ? (
+                    birthdayHighlights.map((item) => (
+                      <Link
+                        key={`birthday-${item.userId}`}
+                        href={`/institucional/rede-social/membros/${item.userId}`}
+                        className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 hover:bg-slate-100"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-900">{item.name}</p>
+                          <p className="truncate text-xs text-slate-500">{item.subtitle}</p>
+                        </div>
+                        <span className="rounded-full bg-pink-50 px-3 py-1 text-xs font-semibold text-pink-700">{item.dateLabel}</span>
+                      </Link>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-500">Nenhum aniversario nos proximos 30 dias.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)]">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Boas-vindas</p>
+                    <p className="mt-1 text-lg font-semibold text-slate-900">Novos membros</p>
+                  </div>
+                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                    ate 45 dias
+                  </span>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {newHireHighlights.length ? (
+                    newHireHighlights.map((item) => (
+                      <Link
+                        key={`hire-${item.userId}`}
+                        href={`/institucional/rede-social/membros/${item.userId}`}
+                        className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 hover:bg-slate-100"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-900">{item.name}</p>
+                          <p className="truncate text-xs text-slate-500">{item.subtitle}</p>
+                        </div>
+                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{item.dateLabel}</span>
+                      </Link>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-500">Nenhuma admissao recente para destacar.</p>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <section className="grid gap-4 xl:grid-cols-[1.2fr,0.8fr]">
+              <div className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)]">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Painel</p>
+                    <p className="mt-1 text-lg font-semibold text-slate-900">Analytics do PulseHub</p>
+                  </div>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+                    resumo operacional
+                  </span>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Posts ativos</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900">{engagementHighlights.postCount}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Comunicados</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900">{engagementHighlights.officialCount}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Enquetes</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900">{engagementHighlights.pollCount}</p>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Denuncias abertas</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900">{engagementHighlights.openReports}</p>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-semibold text-slate-900">Assuntos em alta</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {topHashtags.length ? (
+                        topHashtags.map((item) => (
+                          <button
+                            key={`tag-${item.tag}`}
+                            type="button"
+                            onClick={() => {
+                              setSearch(`#${item.tag}`);
+                              setSearchSubmitted(true);
+                              setActiveTab("inicio");
+                            }}
+                            className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                          >
+                            #{item.tag} • {item.count}
+                          </button>
+                        ))
+                      ) : (
+                        <p className="text-sm text-slate-500">Nenhuma hashtag em destaque.</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="text-sm font-semibold text-slate-900">Autores com mais posts</p>
+                    <div className="mt-3 space-y-2">
+                      {topAuthors.length ? (
+                        topAuthors.map((author) => (
+                          <div key={`author-${author.userId}`} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2">
+                            <span className="truncate text-sm font-semibold text-slate-900">{author.name}</span>
+                            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
+                              {author.total} post(s)
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-sm text-slate-500">Sem dados de autoria ainda.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)]">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Canal oficial</p>
+                    <p className="mt-1 text-lg font-semibold text-slate-900">Comunicados recentes</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFeedFilter("official")}
+                    className="text-sm font-semibold text-[#0a66c2] hover:underline"
+                  >
+                    Ver feed oficial
+                  </button>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {officialPosts.length ? (
+                    officialPosts.map((post) => (
+                      <div key={`official-${post.id}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">{post.author_name}</p>
+                            <p className="text-xs text-slate-500">{when(post.created_at)}</p>
+                          </div>
+                          <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                            {postTypeLabel(post.post_type)}
+                          </span>
+                        </div>
+                        {post.text ? (
+                          <RichText
+                            className="mt-3 text-sm text-slate-700 [&_p]:whitespace-pre-wrap"
+                            value={post.text}
+                            mentionDirectory={mentionDirectory.byHandle}
+                          />
+                        ) : null}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-500">Nenhum comunicado recente no feed.</p>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <section className="flex flex-wrap items-center gap-2">
+              {[
+                { id: "all", label: "Todos" },
+                { id: "official", label: "Comunicados" },
+                { id: "saved", label: "Salvos" },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setFeedFilter(item.id as "all" | "official" | "saved")}
+                  className={`rounded-full border px-4 py-2 text-sm font-semibold ${
+                    feedFilter === item.id
+                      ? "border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">
+                Use @handle e #assunto nas publicacoes
+              </p>
+            </section>
+
             {activeTab === "inicio" && visiblePinnedPost ? (
               <section className="rounded-[2rem] border border-amber-200 bg-[linear-gradient(135deg,rgba(255,251,235,0.98),rgba(254,243,199,0.7))] p-5 shadow-[0_24px_70px_-42px_rgba(217,119,6,0.4)]">
                 <div className="mb-3 flex items-center justify-between gap-3">
@@ -2029,7 +3236,23 @@ export default function InternalSocialPage() {
                     Desafixar
                   </button>
                 </div>
-                {visiblePinnedPost.text ? <p className="text-sm leading-6 text-slate-800">{highlightMatch(visiblePinnedPost.text, searchTerm)}</p> : null}
+                <div className="mb-3 flex flex-wrap gap-2">
+                  <span className="rounded-full border border-amber-300 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                    {postTypeLabel(visiblePinnedPost.post_type)}
+                  </span>
+                  {visiblePinnedPost.official_author_label ? (
+                    <span className="rounded-full border border-blue-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-blue-700">
+                      {visiblePinnedPost.official_author_label}
+                    </span>
+                  ) : null}
+                </div>
+                {visiblePinnedPost.text ? (
+                  <RichText
+                    className="text-sm leading-6 text-slate-800 [&_p]:whitespace-pre-wrap"
+                    value={visiblePinnedPost.text}
+                    mentionDirectory={mentionDirectory.byHandle}
+                  />
+                ) : null}
               </section>
             ) : null}
 
@@ -2043,6 +3266,12 @@ export default function InternalSocialPage() {
                     const canManagePost = post.author_user_id === me?.id || canModeratePosts;
                     return (
                       <article key={post.id} className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_70px_-44px_rgba(15,23,42,0.32)] backdrop-blur">
+                        {post.hidden_at ? (
+                          <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+                            Publicacao oculta pela moderacao em {when(post.hidden_at)}.
+                            {post.hidden_reason ? ` Motivo: ${post.hidden_reason}` : ""}
+                          </div>
+                        ) : null}
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3">
                             <div className="relative h-12 w-12 rounded-full">
@@ -2067,8 +3296,46 @@ export default function InternalSocialPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                            {post.audience_type === "company" ? "Feed geral" : "Equipe"}
+                            {post.audience_type === "company" ? "Feed geral" : post.audience_type === "group" ? "Comunidade" : "Equipe"}
                           </span>
+                          <span
+                            className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${
+                              isOfficialPostType(post.post_type)
+                                ? "border border-amber-200 bg-amber-50 text-amber-700"
+                                : "border border-slate-200 bg-white text-slate-500"
+                            }`}
+                          >
+                            {postTypeLabel(post.post_type)}
+                          </span>
+                          {post.official_author_label ? (
+                            <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-blue-700">
+                              {post.official_author_label}
+                            </span>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => void toggleSavedPost(post.id)}
+                            className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${
+                              savedPostIds.includes(post.id)
+                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                            }`}
+                          >
+                            {savedPostIds.includes(post.id) ? "Salvo" : "Salvar"}
+                          </button>
+                          {post.author_user_id !== me?.id ? (
+                            <button
+                              type="button"
+                              onClick={() => void reportPost(post)}
+                              className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${
+                                post.isReportedByMe
+                                  ? "border-rose-200 bg-rose-50 text-rose-700"
+                                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                              }`}
+                            >
+                              {post.isReportedByMe ? "Denunciado" : "Denunciar"}
+                            </button>
+                          ) : null}
                           {canManagePost ? (
                             <>
                               <button
@@ -2092,12 +3359,29 @@ export default function InternalSocialPage() {
                               >
                                 Excluir
                               </button>
+                              {canModeratePosts && post.author_user_id !== me?.id ? (
+                                <button
+                                  type="button"
+                                  onClick={() => void setPostModerationState(post, !post.hidden_at)}
+                                  className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${
+                                    post.hidden_at
+                                      ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                      : "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                                  }`}
+                                >
+                                  {post.hidden_at ? "Restaurar" : "Ocultar"}
+                                </button>
+                              ) : null}
                             </>
                           ) : null}
                         </div>
                       </div>
                       {post.text ? (
-                        <RichText className="mt-4 space-y-3 text-sm leading-6 text-slate-800 [&_li]:ml-5 [&_li]:list-disc [&_p]:whitespace-pre-wrap" value={post.text} />
+                        <RichText
+                          className="mt-4 space-y-3 text-sm leading-6 text-slate-800 [&_li]:ml-5 [&_li]:list-disc [&_p]:whitespace-pre-wrap"
+                          value={post.text}
+                          mentionDirectory={mentionDirectory.byHandle}
+                        />
                       ) : null}
                       {post.attachments.length ? (
                         <div className="mt-4 space-y-3">
@@ -2136,6 +3420,42 @@ export default function InternalSocialPage() {
                         </div>
                       ) : null}
 
+                      {post.poll ? (
+                        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                          <p className="text-sm font-semibold text-slate-900">{post.poll.question}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {post.poll.allow_multiple ? "Voce pode marcar mais de uma opcao." : "Escolha uma opcao."}
+                          </p>
+                          <div className="mt-3 space-y-2">
+                            {post.poll.options.map((option) => {
+                              const totalVotes = post.poll?.options.reduce((sum, current) => sum + current.votes, 0) ?? 0;
+                              const width = totalVotes > 0 ? `${Math.round((option.votes / totalVotes) * 100)}%` : "0%";
+                              return (
+                                <button
+                                  key={option.id}
+                                  type="button"
+                                  onClick={() => void voteOnPoll(post, option.id)}
+                                  className={`relative block w-full overflow-hidden rounded-2xl border px-4 py-3 text-left ${
+                                    option.votedByMe
+                                      ? "border-blue-300 bg-blue-50"
+                                      : "border-slate-200 bg-white hover:bg-slate-100"
+                                  }`}
+                                >
+                                  <span
+                                    className="absolute inset-y-0 left-0 bg-blue-100/70"
+                                    style={{ width }}
+                                  />
+                                  <span className="relative flex items-center justify-between gap-3">
+                                    <span className="text-sm font-semibold text-slate-900">{option.label}</span>
+                                    <span className="text-xs font-semibold text-slate-500">{option.votes} voto(s)</span>
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+
                       <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
                         {REACTION_EMOJIS.map((emoji) => {
                           const count = post.reactions.filter((item) => item.emoji === emoji).length;
@@ -2156,6 +3476,7 @@ export default function InternalSocialPage() {
                       <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4 text-sm font-semibold text-slate-500">
                         <span>{post.reactions.length} reacao(oes)</span>
                         <span>{post.comments.length} comentario(s)</span>
+                        {post.reportsCount ? <span>{post.reportsCount} denuncia(s)</span> : null}
                       </div>
 
                       <div className="mt-3 space-y-3 border-t border-slate-100 pt-4">
@@ -2214,7 +3535,11 @@ export default function InternalSocialPage() {
                                 </div>
                               </div>
                             ) : (
-                              <p className="mt-1 text-sm text-slate-700">{comment.text}</p>
+                              <RichText
+                                className="mt-1 text-sm text-slate-700 [&_p]:whitespace-pre-wrap"
+                                value={comment.text}
+                                mentionDirectory={mentionDirectory.byHandle}
+                              />
                             )}
                           </div>
                         ))}
@@ -2222,7 +3547,7 @@ export default function InternalSocialPage() {
                           <input
                             value={commentDrafts[post.id] ?? ""}
                             onChange={(event) => setCommentDrafts((prev) => ({ ...prev, [post.id]: event.target.value }))}
-                            placeholder="Escreva um comentario"
+                            placeholder="Escreva um comentario. Use @handle e #assunto."
                             className="h-11 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
                           />
                           <button
@@ -2296,6 +3621,9 @@ export default function InternalSocialPage() {
                                 )}
                               </div>
                               <p className="mt-3 line-clamp-2 text-sm font-semibold text-slate-900">{highlightMatch(displayName(contact), searchTerm)}</p>
+                              <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#0a66c2]">
+                                @{mentionDirectory.byUserId.get(contact.id)?.handle ?? contact.id.slice(0, 8).toLowerCase()}
+                              </p>
                               <p className="mt-1 text-xs text-slate-500">{highlightMatch((contact.cargo ?? "").trim() || "Cargo não informado", searchTerm)}</p>
                               <p className="mt-1 text-xs text-slate-400">{highlightMatch((contact.setor ?? "").trim() || "Setor não informado", searchTerm)}</p>
                               <span
@@ -2330,6 +3658,9 @@ export default function InternalSocialPage() {
                                     className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left hover:border-slate-300"
                                   >
                                     <p className="text-sm font-semibold text-slate-900">{highlightMatch(displayName(member), searchTerm)}</p>
+                                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#0a66c2]">
+                                      @{mentionDirectory.byUserId.get(member.id)?.handle ?? member.id.slice(0, 8).toLowerCase()}
+                                    </p>
                                     <p className="mt-1 text-xs text-slate-500">{highlightMatch((member.cargo ?? "").trim() || "Cargo não informado", searchTerm)}</p>
                                     <p className="mt-1 text-xs text-slate-400">{highlightMatch((member.setor ?? "").trim() || "Setor não informado", searchTerm)}</p>
                                     <span
@@ -2359,6 +3690,222 @@ export default function InternalSocialPage() {
                 </div>
               </section>
             </section>
+        ) : null}
+
+        {!searchSubmitted && activeTab === "communities" ? (
+          <section id="comunidades" className="mx-auto max-w-6xl space-y-6">
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Comunidades</p>
+                  <p className="mt-1 text-lg font-semibold text-slate-900">Grupos internos por tema, area ou iniciativa</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { id: "all", label: "Todas" },
+                    { id: "joined", label: "Minhas" },
+                    { id: "discover", label: "Descobrir" },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setCommunityFilter(item.id as "all" | "joined" | "discover")}
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                        communityFilter === item.id
+                          ? "bg-slate-950 text-white"
+                          : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-4 grid gap-4 lg:grid-cols-[320px,1fr]">
+                <div className="space-y-3">
+                  {visibleGroups.length ? (
+                    visibleGroups.map((group) => {
+                      const memberCount = groupMembers.filter((item) => item.group_id === group.id).length;
+                      const joined = joinedGroupIds.has(group.id);
+                      const active = selectedCommunityId === group.id;
+                      return (
+                        <button
+                          key={group.id}
+                          type="button"
+                          onClick={() => setSelectedCommunityId(group.id)}
+                          className={`block w-full rounded-3xl border p-4 text-left transition ${
+                            active ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-slate-50 hover:bg-white"
+                          }`}
+                        >
+                          <div
+                            className="mb-3 h-2 rounded-full"
+                            style={{ backgroundColor: group.cover_color || "#0f172a" }}
+                          />
+                          <p className={`text-sm font-semibold ${active ? "text-white" : "text-slate-900"}`}>{group.name}</p>
+                          <p className={`mt-1 text-xs ${active ? "text-slate-200" : "text-slate-500"}`}>{group.description}</p>
+                          <div className="mt-3 flex items-center justify-between gap-2">
+                            <span className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${active ? "text-slate-200" : "text-slate-400"}`}>
+                              {memberCount} membro(s)
+                            </span>
+                            <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${joined ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>
+                              {joined ? "Participando" : "Disponivel"}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                      Nenhuma comunidade encontrada para o filtro atual.
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  {selectedCommunity ? (
+                    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div
+                            className="mb-3 h-2 w-32 rounded-full"
+                            style={{ backgroundColor: selectedCommunity.cover_color || "#0f172a" }}
+                          />
+                          <p className="text-xl font-semibold text-slate-900">{selectedCommunity.name}</p>
+                          <p className="mt-2 max-w-2xl text-sm text-slate-600">{selectedCommunity.description}</p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void toggleGroupMembership(selectedCommunity)}
+                          className={`rounded-2xl px-4 py-2 text-sm font-semibold ${
+                            joinedGroupIds.has(selectedCommunity.id)
+                              ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
+                              : "bg-[#0a66c2] text-white hover:bg-[#004182]"
+                          }`}
+                        >
+                          {joinedGroupIds.has(selectedCommunity.id) ? "Sair da comunidade" : "Entrar na comunidade"}
+                        </button>
+                      </div>
+                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Membros</p>
+                          <p className="mt-2 text-2xl font-semibold text-slate-900">
+                            {groupMembers.filter((item) => item.group_id === selectedCommunity.id).length}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Posts</p>
+                          <p className="mt-2 text-2xl font-semibold text-slate-900">
+                            {posts.filter((item) => item.audience_type === "group" && item.audience_group_id === selectedCommunity.id).length}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Privacidade</p>
+                          <p className="mt-2 text-2xl font-semibold text-slate-900">{selectedCommunity.is_private ? "Privada" : "Aberta"}</p>
+                        </div>
+                      </div>
+
+                      <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
+                        <p className="text-sm font-semibold text-slate-900">Feed da comunidade</p>
+                        <div className="mt-3 space-y-3">
+                          {posts.filter((item) => item.audience_type === "group" && item.audience_group_id === selectedCommunity.id).length ? (
+                            posts
+                              .filter((item) => item.audience_type === "group" && item.audience_group_id === selectedCommunity.id)
+                              .slice(0, 6)
+                              .map((post) => (
+                                <div key={`community-post-${post.id}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                      <p className="text-sm font-semibold text-slate-900">{post.author_name}</p>
+                                      <p className="text-xs text-slate-500">{when(post.created_at)}</p>
+                                    </div>
+                                    <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                      {postTypeLabel(post.post_type)}
+                                    </span>
+                                  </div>
+                                  {post.text ? (
+                                    <RichText
+                                      className="mt-3 text-sm text-slate-700 [&_p]:whitespace-pre-wrap"
+                                      value={post.text}
+                                      mentionDirectory={mentionDirectory.byHandle}
+                                    />
+                                  ) : null}
+                                </div>
+                              ))
+                          ) : (
+                            <p className="text-sm text-slate-500">Ainda nao ha publicacoes nesta comunidade.</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-sm text-slate-500">
+                      Selecione uma comunidade para ver detalhes e participar.
+                    </div>
+                  )}
+
+                  {canModeratePosts ? (
+                    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Moderacao</p>
+                          <p className="mt-1 text-lg font-semibold text-slate-900">Fila inicial de denuncias</p>
+                        </div>
+                        <span className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">
+                          {reports.filter((item) => item.status === "open").length} abertas
+                        </span>
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        {reports.length ? (
+                          reports.slice(0, 8).map((report) => (
+                            <div key={report.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-900">{report.reason}</p>
+                                  <p className="mt-1 text-xs text-slate-500">
+                                    Status: {report.status} • {when(report.created_at)}
+                                  </p>
+                                  {report.details ? <p className="mt-2 text-sm text-slate-600">{report.details}</p> : null}
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() => void updateReportStatus(report.id, "reviewing")}
+                                    className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-100"
+                                  >
+                                    Em analise
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() => void updateReportStatus(report.id, "resolved")}
+                                    className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                                  >
+                                    Resolver
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={busy}
+                                    onClick={() => void updateReportStatus(report.id, "dismissed")}
+                                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                                  >
+                                    Descartar
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-slate-500">Nenhuma denuncia registrada.</p>
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+          </section>
         ) : null}
 
         {!searchSubmitted && activeTab === "projects" ? (
@@ -2920,7 +4467,13 @@ export default function InternalSocialPage() {
                 <div className="min-w-0">
                   <p className="truncate text-lg font-semibold text-slate-900">{currentName}</p>
                   <p className="text-sm text-slate-500">
-                    Publicar em {scopeType === "project" ? projects.find((item) => item.id === projectId)?.name ?? "equipe de projeto" : "toda a empresa"}
+                    Publicar em
+                    {" "}
+                    {scopeType === "project"
+                      ? projects.find((item) => item.id === projectId)?.name ?? "equipe de projeto"
+                      : scopeType === "group"
+                        ? groups.find((item) => item.id === groupId)?.name ?? "comunidade"
+                        : "toda a empresa"}
                   </p>
                 </div>
               </div>
@@ -2936,18 +4489,21 @@ export default function InternalSocialPage() {
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5">
               <div className="space-y-4 pb-2">
-              <div className="grid gap-3 md:grid-cols-[1fr,1fr]">
+              <div className={`grid gap-3 ${canPublishOfficial ? "md:grid-cols-[1fr,1fr,1fr,1fr]" : "md:grid-cols-[1fr,1fr,1fr]"}`}>
                 <select
                   value={scopeType}
                   onChange={(event) => {
-                    const next = event.target.value === "project" ? "project" : "company";
+                    const raw = event.target.value;
+                    const next = raw === "project" ? "project" : raw === "group" ? "group" : "company";
                     setScopeType(next);
                     if (next !== "project") setProjectId("");
+                    if (next !== "group") setGroupId("");
                   }}
                   className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 shadow-[0_8px_22px_-20px_rgba(15,23,42,0.4)]"
                 >
                   <option value="company">Toda a empresa</option>
                   <option value="project">Equipe de projeto</option>
+                  <option value="group">Comunidade</option>
                 </select>
                 <select
                   value={projectId}
@@ -2962,6 +4518,34 @@ export default function InternalSocialPage() {
                     </option>
                   ))}
                 </select>
+                <select
+                  value={groupId}
+                  onChange={(event) => setGroupId(event.target.value)}
+                  disabled={scopeType !== "group"}
+                  className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 shadow-[0_8px_22px_-20px_rgba(15,23,42,0.4)] disabled:bg-slate-100"
+                >
+                  <option value="">Selecione a comunidade</option>
+                  {groups
+                    .filter((item) => joinedGroupIds.has(item.id))
+                    .map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}
+                      </option>
+                    ))}
+                </select>
+                {canPublishOfficial ? (
+                  <select
+                    value={postType}
+                    onChange={(event) => setPostType((event.target.value as PostType) || "social")}
+                    className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 shadow-[0_8px_22px_-20px_rgba(15,23,42,0.4)]"
+                  >
+                    <option value="social">Post social</option>
+                    <option value="announcement">Comunicado oficial</option>
+                    <option value="campaign">Campanha interna</option>
+                    <option value="event">Evento</option>
+                    <option value="recognition">Reconhecimento</option>
+                  </select>
+                ) : null}
               </div>
 
               <textarea
@@ -2974,9 +4558,71 @@ export default function InternalSocialPage() {
                 className="min-h-[180px] w-full resize-none rounded-[1.5rem] border border-transparent bg-white px-2 py-2 text-[16px] leading-7 text-slate-700 outline-none placeholder:text-slate-400 focus:border-transparent focus:ring-0"
               />
 
+              {isOfficialPostType(postType) ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  Este post sera tratado como comunicacao institucional e podera gerar notificacoes para o publico-alvo.
+                </div>
+              ) : null}
+
               <RichTextToolbar
                 onAction={(action) => applyRichTextAction(action, postText, setPostText, composerTextareaRef.current)}
               />
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Enquete</p>
+                    <p className="text-xs text-slate-500">Adicione uma pergunta com 2 a 4 opcoes.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPollEnabled((prev) => !prev);
+                      if (pollEnabled) {
+                        setPollQuestion("");
+                        setPollOptions(["", ""]);
+                      }
+                    }}
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                      pollEnabled ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-700"
+                    }`}
+                  >
+                    {pollEnabled ? "Remover enquete" : "Adicionar enquete"}
+                  </button>
+                </div>
+                {pollEnabled ? (
+                  <div className="mt-3 space-y-3">
+                    <input
+                      value={pollQuestion}
+                      onChange={(event) => setPollQuestion(event.target.value)}
+                      placeholder="Pergunta da enquete"
+                      className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                    />
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {pollOptions.map((option, index) => (
+                        <input
+                          key={`poll-option-${index}`}
+                          value={option}
+                          onChange={(event) =>
+                            setPollOptions((prev) => prev.map((item, currentIndex) => (currentIndex === index ? event.target.value : item)))
+                          }
+                          placeholder={`Opcao ${index + 1}`}
+                          className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                        />
+                      ))}
+                    </div>
+                    {pollOptions.length < 4 ? (
+                      <button
+                        type="button"
+                        onClick={() => setPollOptions((prev) => [...prev, ""])}
+                        className="text-sm font-semibold text-[#0a66c2] hover:underline"
+                      >
+                        Adicionar opcao
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
 
               {draftAttachments.length ? (
                 <div className={`grid gap-3 ${draftAttachments.length === 1 ? "grid-cols-1" : "sm:grid-cols-2"}`}>
@@ -3022,10 +4668,17 @@ export default function InternalSocialPage() {
                   onClick={() => {
                     setComposerExpanded(false);
                     setShowComposerEmojiPicker(false);
+                    setShowComposerMentionPicker(false);
+                    setMentionQuery("");
                     setPostText("");
+                    setPostType("social");
                     setDraftAttachments([]);
                     setProjectId("");
+                    setGroupId("");
                     setScopeType("company");
+                    setPollEnabled(false);
+                    setPollQuestion("");
+                    setPollOptions(["", ""]);
                   }}
                   className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
@@ -3045,6 +4698,58 @@ export default function InternalSocialPage() {
                     }}
                   />
                 </label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowComposerMentionPicker((prev) => !prev);
+                      setMentionQuery("");
+                    }}
+                    className="inline-flex items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                  >
+                    Mencao
+                  </button>
+                  {showComposerMentionPicker ? (
+                    <div className="absolute bottom-[calc(100%+0.75rem)] left-0 z-10 w-[22rem] rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_20px_50px_-24px_rgba(15,23,42,0.35)]">
+                      <input
+                        value={mentionQuery}
+                        onChange={(event) => setMentionQuery(event.target.value)}
+                        placeholder="Buscar pessoa ou @handle"
+                        className="mb-3 h-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900"
+                      />
+                      <div className="max-h-64 space-y-2 overflow-y-auto">
+                        {composerMentionOptions.length ? (
+                          composerMentionOptions.map((profile) => {
+                            const mentionMeta = mentionDirectory.byUserId.get(profile.id);
+                            if (!mentionMeta) return null;
+                            return (
+                              <button
+                                key={`mention-${profile.id}`}
+                                type="button"
+                                onClick={() => {
+                                  insertTextAtCursor(
+                                    postText,
+                                    setPostText,
+                                    composerTextareaRef.current,
+                                    `${postText && !postText.endsWith(" ") ? " " : ""}@${mentionMeta.handle} `
+                                  );
+                                  setShowComposerMentionPicker(false);
+                                  setMentionQuery("");
+                                }}
+                                className="block w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-left hover:bg-slate-100"
+                              >
+                                <p className="text-sm font-semibold text-slate-900">{mentionMeta.label}</p>
+                                <p className="text-xs text-slate-500">@{mentionMeta.handle}</p>
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <p className="text-sm text-slate-500">Nenhum colaborador encontrado.</p>
+                        )}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
                 <div className="relative">
                   <button
                     type="button"
@@ -3070,7 +4775,13 @@ export default function InternalSocialPage() {
               </div>
               <button
                 type="button"
-                disabled={busy || uploadingMedia || (!postText.trim() && !draftAttachments.length) || (scopeType === "project" && !projectId)}
+                disabled={
+                  busy ||
+                  uploadingMedia ||
+                  (!postText.trim() && !draftAttachments.length && !pollEnabled) ||
+                  (scopeType === "project" && !projectId) ||
+                  (scopeType === "group" && !groupId)
+                }
                 onClick={() => void submitPost()}
                 className="rounded-full bg-[#0a66c2] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#004182] disabled:cursor-not-allowed disabled:opacity-60"
               >

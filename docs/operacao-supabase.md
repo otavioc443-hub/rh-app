@@ -84,6 +84,23 @@ Para habilitar publicacao (draft/published) e historico/restauracao do instituci
 - `supabase/sql/2026-02-13_institutional_publishing_backfill.sql` (cria published inicial)
 - `supabase/sql/2026-02-13_institutional_content_versions.sql` (historico + restaurar rascunho)
 
+Para habilitar o pacote atual do PulseHub:
+
+- `supabase/sql/2026-03-03_create_internal_social_network_tables.sql`
+- `supabase/sql/2026-03-03_create_internal_social_media_bucket.sql`
+- `supabase/sql/2026-03-03_add_pinned_post_and_project_board_to_internal_social.sql`
+- `supabase/sql/2026-03-18_make_internal_social_media_bucket_private.sql`
+- `supabase/sql/2026-03-19_expand_pulsehub_quickwins.sql`
+- `supabase/sql/2026-03-19_expand_pulsehub_communities_polls_moderation.sql`
+- `supabase/sql/2026-03-19_expand_pulsehub_home_analytics_moderation_controls.sql`
+
+Documentos complementares do PulseHub:
+
+- `docs/pulsehub-roadmap-tecnico.md`
+- `docs/pulsehub-operacao.md`
+- `docs/pulsehub-homologacao.md`
+- `docs/pulsehub-deploy-checklist.md`
+
 Ordem sugerida apos aplicar SQLs:
 
 1. `supabase/sql/preflight_feature_modules.sql`
