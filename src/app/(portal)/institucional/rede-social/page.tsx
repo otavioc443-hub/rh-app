@@ -3000,7 +3000,7 @@ export default function InternalSocialPage() {
 
         {!searchSubmitted && activeTab === "inicio" ? (
           <main id="feed" className="mx-auto grid max-w-6xl gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.35)] backdrop-blur">
+            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.35)] backdrop-blur xl:col-start-1 xl:max-w-3xl xl:justify-self-center xl:w-full">
               <div className="flex gap-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-blue-700 text-sm font-semibold text-white shadow-[0_16px_32px_-20px_rgba(37,99,235,0.65)]">
                   {initials(currentName)}
@@ -3083,7 +3083,7 @@ export default function InternalSocialPage() {
               </div>
             </section>
 
-            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)] xl:col-start-1">
+            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)] xl:col-start-1 xl:max-w-3xl xl:justify-self-center xl:w-full">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Painel</p>
@@ -3100,14 +3100,17 @@ export default function InternalSocialPage() {
                   { label: "Enquetes", value: engagementHighlights.pollCount },
                   { label: "Denuncias abertas", value: engagementHighlights.openReports },
                 ].map((item) => (
-                  <div key={item.label} className="rounded-2xl bg-slate-50 px-4 py-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{item.label}</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-900">{item.value}</p>
+                  <div key={item.label} className="rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{item.label}</p>
+                    <div className="mt-2 flex items-end gap-3">
+                      <p className="text-2xl font-semibold text-slate-900">{item.value}</p>
+                      <span className="h-px flex-1 bg-slate-200" />
+                    </div>
                   </div>
                 ))}
               </div>
-              <div className="mt-5 grid gap-5 lg:grid-cols-[1.2fr,0.8fr]">
-                <div>
+              <div className="mt-5 grid gap-5 lg:grid-cols-[1.15fr,0.85fr]">
+                <div className="rounded-2xl bg-slate-50/70 px-4 py-4">
                   <p className="text-sm font-semibold text-slate-900">Assuntos em alta</p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     {topHashtags.length ? (
@@ -3130,12 +3133,12 @@ export default function InternalSocialPage() {
                     )}
                   </div>
                 </div>
-                <div>
+                <div className="rounded-2xl bg-slate-50/70 px-4 py-4">
                   <p className="text-sm font-semibold text-slate-900">Autores em destaque</p>
                   <div className="mt-3 space-y-2">
                     {topAuthors.length ? (
                       topAuthors.map((author) => (
-                        <div key={`author-${author.userId}`} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3 py-2.5">
+                        <div key={`author-${author.userId}`} className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-2.5">
                           <span className="truncate text-sm font-semibold text-slate-900">{author.name}</span>
                           <span className="text-xs font-semibold text-slate-500">{author.total} post(s)</span>
                         </div>
@@ -3190,7 +3193,7 @@ export default function InternalSocialPage() {
               </div>
             </section>
 
-            <section className="flex flex-wrap items-center gap-2">
+            <section className="flex flex-wrap items-center gap-2 xl:col-start-1 xl:max-w-3xl xl:justify-self-center xl:w-full">
               {[
                 { id: "all", label: "Todos" },
                 { id: "official", label: "Comunicados" },
@@ -3215,7 +3218,7 @@ export default function InternalSocialPage() {
             </section>
 
             {activeTab === "inicio" && visiblePinnedPost ? (
-              <section className="rounded-[2rem] border border-amber-200 bg-[linear-gradient(135deg,rgba(255,251,235,0.98),rgba(254,243,199,0.7))] p-5 shadow-[0_24px_70px_-42px_rgba(217,119,6,0.4)]">
+              <section className="rounded-[2rem] border border-amber-200 bg-[linear-gradient(135deg,rgba(255,251,235,0.98),rgba(254,243,199,0.7))] p-5 shadow-[0_24px_70px_-42px_rgba(217,119,6,0.4)] xl:col-start-1 xl:max-w-3xl xl:justify-self-center xl:w-full">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">Post em destaque</p>
@@ -3250,9 +3253,9 @@ export default function InternalSocialPage() {
             ) : null}
 
             {loading ? (
-              <div className="rounded-[2rem] border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.35)]">Carregando feed...</div>
+              <div className="rounded-[2rem] border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.35)] xl:col-start-1 xl:max-w-3xl xl:justify-self-center xl:w-full">Carregando feed...</div>
             ) : visibleFeedPosts.length ? (
-                <section className="space-y-4">
+                <section className="space-y-4 xl:col-start-1 xl:max-w-3xl xl:justify-self-center xl:w-full">
                   {visibleFeedPosts.map((post) => {
                     const authorName = post.author_name || displayName(profileById.get(post.author_user_id));
                     const authorAvatar = resolvePortalAvatarUrl(post.author_avatar_url) || profileById.get(post.author_user_id)?.avatar_url || null;
@@ -3557,7 +3560,7 @@ export default function InternalSocialPage() {
                 })}
               </section>
             ) : (
-              <div className="rounded-[2rem] border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.3)]">Nenhuma publicação ainda.</div>
+              <div className="rounded-[2rem] border border-slate-200 bg-white p-6 text-sm text-slate-500 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.3)] xl:col-start-1 xl:max-w-3xl xl:justify-self-center xl:w-full">Nenhuma publicação ainda.</div>
             )}
           </main>
         ) : null}
