@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toPng } from "html-to-image";
 import {
+  ArrowLeft,
   Bolt,
   ChartNoAxesColumn,
   ChevronDown,
@@ -110,7 +111,7 @@ function clsx(...parts: Array<string | false | null | undefined>) {
 
 function getHistoryEntryLabel(eventType: string) {
   if (eventType === "play_awarded") return "Rodada concluida";
-  if (eventType === "manual_adjustment") return "Replay admin";
+  if (eventType === "manual_adjustment") return "Ajuste de rodada";
   return "Reset por falta";
 }
 
@@ -393,16 +394,8 @@ export function PulseSprintPage() {
   }, [result]);
 
   const progress = Math.max(0, Math.min(100, (elapsedMs / durationMs) * 100));
-  const primaryActionLabel = status?.player.canPlayToday
-    ? status.player.isAdmin && status.player.playedToday
-      ? "Jogar novamente"
-      : "Jogar agora"
-    : "Rodada concluida hoje";
-  const compactMessage = status?.player.isAdmin && status?.player.playedToday
-    ? "Replay admin liberado."
-    : status?.player.canPlayToday
-    ? "Sua rodada de hoje esta pronta."
-    : "Rodada concluida hoje.";
+  const primaryActionLabel = status?.player.canPlayToday ? "Jogar agora" : "Rodada concluida hoje";
+  const compactMessage = status?.player.canPlayToday ? "Sua rodada de hoje esta pronta." : "Rodada concluida hoje.";
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -537,13 +530,11 @@ export function PulseSprintPage() {
           <div className="rounded-[1.75rem] border border-slate-200 bg-white/85 p-5">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Como funciona</p>
             <div className="mt-4 space-y-3">
-              {[
+              {[ 
                 {
                   icon: Target,
-                  title: status?.player.isAdmin ? "Replay admin liberado" : "1 rodada por dia",
-                  body: status?.player.isAdmin
-                    ? "Admins podem repetir no mesmo dia, mas o ranking considera apenas a ultima rodada concluida."
-                    : "Jogou hoje, soma. Pulou um dia, seu placar atual zera.",
+                  title: "1 rodada por dia",
+                  body: "Jogou hoje, soma. Pulou um dia, seu placar atual zera.",
                 },
                 { icon: Bolt, title: "Resposta rapida", body: "Toque cada pulso antes que ele desapareca para aumentar hits, combo e bonus de velocidade." },
                 { icon: Trophy, title: "Top 5 visivel", body: "O ranking da empresa aparece aqui, na area institucional e no PulseHub." },
@@ -579,8 +570,16 @@ export function PulseSprintPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Arena</p>
               <p className="mt-1 text-xl font-semibold text-slate-950">Desafio de hoje</p>
             </div>
-            <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-semibold text-slate-700">
-              Ultima rodada: {whenLabel(status?.player.lastPlayedDate ?? null)}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Link
+                href="/institucional/rede-social"
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <ArrowLeft size={15} /> Voltar ao PulseHub
+              </Link>
+              <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-semibold text-slate-700">
+                Ultima rodada: {whenLabel(status?.player.lastPlayedDate ?? null)}
+              </div>
             </div>
           </div>
 

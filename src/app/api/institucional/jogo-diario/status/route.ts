@@ -36,10 +36,7 @@ export async function GET() {
 
     const playedToday = player.last_played_date === getLocalFortalezaDate();
     const playable = isAdmin ? true : canPlayToday(player.last_played_date);
-    const message =
-      isAdmin && playedToday
-        ? "Voce pode repetir a rodada hoje. Como admin, apenas o ultimo resultado do dia conta no ranking."
-        : buildDailyMotivationMessage(player.streak, playable, player.score_current);
+    const message = buildDailyMotivationMessage(player.streak, playable, player.score_current);
 
     return NextResponse.json({
       game: {
