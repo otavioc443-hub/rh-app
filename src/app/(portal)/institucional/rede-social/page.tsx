@@ -800,6 +800,7 @@ export default function InternalSocialPage() {
   const [savedPostIds, setSavedPostIds] = useState<string[]>([]);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [openPostActionsId, setOpenPostActionsId] = useState("");
   const [birthdayHighlights, setBirthdayHighlights] = useState<SocialHighlightRow[]>([]);
   const [newHireHighlights, setNewHireHighlights] = useState<SocialHighlightRow[]>([]);
   const [mentionQuery, setMentionQuery] = useState("");
@@ -811,6 +812,7 @@ export default function InternalSocialPage() {
   const [selectedCommunityId, setSelectedCommunityId] = useState("");
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const notificationsRef = useRef<HTMLDivElement | null>(null);
+  const postActionsRef = useRef<HTMLDivElement | null>(null);
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const messageFileInputRef = useRef<HTMLInputElement | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1798,6 +1800,9 @@ export default function InternalSocialPage() {
       }
       if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
         setNotificationsOpen(false);
+      }
+      if (postActionsRef.current && !postActionsRef.current.contains(event.target as Node)) {
+        setOpenPostActionsId("");
       }
     }
     document.addEventListener("mousedown", handleDocumentPointerDown);
@@ -3083,70 +3088,66 @@ export default function InternalSocialPage() {
               </div>
             </section>
 
-            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)] xl:col-start-1 xl:max-w-3xl xl:justify-self-center xl:w-full">
+            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)] xl:col-start-2 xl:self-start">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Painel</p>
                   <p className="mt-1 text-lg font-semibold text-slate-900">Resumo do PulseHub</p>
                 </div>
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-                  visao geral do dia
-                </span>
+                <span className="text-xs font-semibold text-slate-400">hoje</span>
               </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+
+              <div className="mt-4 space-y-3 text-sm">
                 {[
                   { label: "Posts ativos", value: engagementHighlights.postCount },
                   { label: "Comunicados", value: engagementHighlights.officialCount },
                   { label: "Enquetes", value: engagementHighlights.pollCount },
                   { label: "Denuncias abertas", value: engagementHighlights.openReports },
                 ].map((item) => (
-                  <div key={item.label} className="rounded-2xl border border-slate-100 bg-slate-50/80 px-4 py-3">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">{item.label}</p>
-                    <div className="mt-2 flex items-end gap-3">
-                      <p className="text-2xl font-semibold text-slate-900">{item.value}</p>
-                      <span className="h-px flex-1 bg-slate-200" />
-                    </div>
+                  <div key={item.label} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3 py-2.5">
+                    <span className="text-slate-600">{item.label}</span>
+                    <span className="text-base font-semibold text-slate-900">{item.value}</span>
                   </div>
                 ))}
               </div>
-              <div className="mt-5 grid gap-5 lg:grid-cols-[1.15fr,0.85fr]">
-                <div className="rounded-2xl bg-slate-50/70 px-4 py-4">
-                  <p className="text-sm font-semibold text-slate-900">Assuntos em alta</p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {topHashtags.length ? (
-                      topHashtags.map((item) => (
-                        <button
-                          key={`tag-${item.tag}`}
-                          type="button"
-                          onClick={() => {
-                            setSearch(`#${item.tag}`);
-                            setSearchSubmitted(true);
-                            setActiveTab("inicio");
-                          }}
-                          className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
-                        >
-                          #{item.tag} • {item.count}
-                        </button>
-                      ))
-                    ) : (
-                      <p className="text-sm text-slate-500">Nenhuma hashtag em destaque.</p>
-                    )}
-                  </div>
+
+              <div className="mt-5 border-t border-slate-100 pt-5">
+                <p className="text-sm font-semibold text-slate-900">Assuntos em alta</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {topHashtags.length ? (
+                    topHashtags.map((item) => (
+                      <button
+                        key={`tag-${item.tag}`}
+                        type="button"
+                        onClick={() => {
+                          setSearch(`#${item.tag}`);
+                          setSearchSubmitted(true);
+                          setActiveTab("inicio");
+                        }}
+                        className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                      >
+                        #{item.tag} • {item.count}
+                      </button>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-500">Nenhuma hashtag em destaque.</p>
+                  )}
                 </div>
-                <div className="rounded-2xl bg-slate-50/70 px-4 py-4">
-                  <p className="text-sm font-semibold text-slate-900">Autores em destaque</p>
-                  <div className="mt-3 space-y-2">
-                    {topAuthors.length ? (
-                      topAuthors.map((author) => (
-                        <div key={`author-${author.userId}`} className="flex items-center justify-between gap-3 rounded-2xl bg-white px-3 py-2.5">
-                          <span className="truncate text-sm font-semibold text-slate-900">{author.name}</span>
-                          <span className="text-xs font-semibold text-slate-500">{author.total} post(s)</span>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-sm text-slate-500">Sem dados de autoria ainda.</p>
-                    )}
-                  </div>
+              </div>
+
+              <div className="mt-5 border-t border-slate-100 pt-5">
+                <p className="text-sm font-semibold text-slate-900">Autores em destaque</p>
+                <div className="mt-3 space-y-2">
+                  {topAuthors.length ? (
+                    topAuthors.map((author) => (
+                      <div key={`author-${author.userId}`} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3 py-2.5">
+                        <span className="truncate text-sm font-semibold text-slate-900">{author.name}</span>
+                        <span className="text-xs font-semibold text-slate-500">{author.total} post(s)</span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-500">Sem dados de autoria ainda.</p>
+                  )}
                 </div>
               </div>
             </section>
@@ -3308,17 +3309,6 @@ export default function InternalSocialPage() {
                               {post.official_author_label}
                             </span>
                           ) : null}
-                          <button
-                            type="button"
-                            onClick={() => void toggleSavedPost(post.id)}
-                            className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${
-                              savedPostIds.includes(post.id)
-                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                                : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                            }`}
-                          >
-                            {savedPostIds.includes(post.id) ? "Salvo" : "Salvar"}
-                          </button>
                           {post.author_user_id !== me?.id ? (
                             <button
                               type="button"
@@ -3332,44 +3322,84 @@ export default function InternalSocialPage() {
                               {post.isReportedByMe ? "Denunciado" : "Denunciar"}
                             </button>
                           ) : null}
-                          {canManagePost ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => togglePinnedPost(post.id)}
-                                className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700 hover:bg-amber-100"
-                              >
-                                {pinnedPostId === post.id ? "Desafixar" : "Fixar"}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => startEditPost(post)}
-                                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-50"
-                              >
-                                Editar
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void deletePost(post)}
-                                className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-rose-700 hover:bg-rose-100"
-                              >
-                                Excluir
-                              </button>
-                              {canModeratePosts && post.author_user_id !== me?.id ? (
+                          <div ref={openPostActionsId === post.id ? postActionsRef : null} className="relative">
+                            <button
+                              type="button"
+                              onClick={() => setOpenPostActionsId((current) => (current === post.id ? "" : post.id))}
+                              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-base font-semibold text-slate-500 hover:bg-slate-50"
+                              aria-label="Abrir ações da publicação"
+                            >
+                              ...
+                            </button>
+                            {openPostActionsId === post.id ? (
+                              <div className="absolute right-0 top-11 z-20 min-w-[180px] rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.35)]">
                                 <button
                                   type="button"
-                                  onClick={() => void setPostModerationState(post, !post.hidden_at)}
-                                  className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${
-                                    post.hidden_at
-                                      ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                      : "border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                                  onClick={() => {
+                                    setOpenPostActionsId("");
+                                    void toggleSavedPost(post.id);
+                                  }}
+                                  className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold ${
+                                    savedPostIds.includes(post.id)
+                                      ? "bg-emerald-50 text-emerald-700"
+                                      : "text-slate-700 hover:bg-slate-50"
                                   }`}
                                 >
-                                  {post.hidden_at ? "Restaurar" : "Ocultar"}
+                                  <span>{savedPostIds.includes(post.id) ? "Remover dos salvos" : "Salvar publicação"}</span>
                                 </button>
-                              ) : null}
-                            </>
-                          ) : null}
+                                {canManagePost ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenPostActionsId("");
+                                        togglePinnedPost(post.id);
+                                      }}
+                                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold text-amber-700 hover:bg-amber-50"
+                                    >
+                                      <span>{pinnedPostId === post.id ? "Desafixar" : "Fixar publicação"}</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenPostActionsId("");
+                                        startEditPost(post);
+                                      }}
+                                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                                    >
+                                      <span>Editar publicação</span>
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenPostActionsId("");
+                                        void deletePost(post);
+                                      }}
+                                      className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold text-rose-700 hover:bg-rose-50"
+                                    >
+                                      <span>Excluir publicação</span>
+                                    </button>
+                                    {canModeratePosts && post.author_user_id !== me?.id ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setOpenPostActionsId("");
+                                          void setPostModerationState(post, !post.hidden_at);
+                                        }}
+                                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold ${
+                                          post.hidden_at
+                                            ? "text-emerald-700 hover:bg-emerald-50"
+                                            : "text-rose-700 hover:bg-rose-50"
+                                        }`}
+                                      >
+                                        <span>{post.hidden_at ? "Restaurar publicação" : "Ocultar publicação"}</span>
+                                      </button>
+                                    ) : null}
+                                  </>
+                                ) : null}
+                              </div>
+                            ) : null}
+                          </div>
                         </div>
                       </div>
                       {post.text ? (

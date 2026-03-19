@@ -81,7 +81,7 @@ function deliverableStatusLabel(value?: string | null) {
   if (value === "in_progress") return "Em andamento";
   if (value === "sent") return "Enviado";
   if (value === "approved") return "Aprovado";
-  if (value === "approved_with_comments") return "Aprovado com comentarios";
+  if (value === "approved_with_comments") return "Aprovado com comentários";
   if (value === "blocked") return "Bloqueado";
   if (value === "cancelled") return "Cancelado";
   return value ?? "-";
@@ -306,11 +306,11 @@ export default function PdProjetosPage() {
     setMsg("");
     try {
       const { data, error } = await supabase.auth.getUser();
-      if (error || !data.user) throw new Error("Sessao invalida.");
+      if (error || !data.user) throw new Error("Sessão inválida.");
       setUid(data.user.id);
       await loadProjectsAndCollabs();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao carregar modulo P&D.");
+      setMsg(e instanceof Error ? e.message : "Erro ao carregar módulo P&D.");
     } finally {
       setLoading(false);
     }
@@ -333,7 +333,7 @@ export default function PdProjetosPage() {
   }, [selected]);
 
   async function createProject() {
-    if (!canCreateProject) return setMsg("Sem permissao para criar projeto.");
+    if (!canCreateProject) return setMsg("Sem permissão para criar projeto.");
     const name = projectName.trim();
     if (!name) return setMsg("Informe o nome.");
     setSaving(true);
@@ -348,7 +348,7 @@ export default function PdProjetosPage() {
   }
 
   async function addMember() {
-    if (!canManageMembers) return setMsg("Sem permissao para gerenciar membros.");
+    if (!canManageMembers) return setMsg("Sem permissão para gerenciar membros.");
     if (!memberUserId) return setMsg("Selecione um colaborador.");
     setSaving(true);
     try {
@@ -404,32 +404,32 @@ export default function PdProjetosPage() {
   }
 
   async function createAction() {
-    if (!canManageActions) return setMsg("Sem permissao para criar acoes.");
+    if (!canManageActions) return setMsg("Sem permissão para criar ações.");
     const title = actionTitle.trim();
-    if (!title) return setMsg("Informe o titulo da acao.");
+    if (!title) return setMsg("Informe o título da ação.");
     setSaving(true);
     try {
       const { error } = await supabase.from("pd_project_actions").insert({ project_id: selectedProjectId, title, due_date: actionDue || null, assigned_to: actionAssigned || null, created_by: uid, updated_by: uid });
       if (error) throw new Error(error.message);
       setActionTitle(""); setActionDue(""); setActionAssigned("");
       await loadDetails(selectedProjectId);
-    } catch (e: unknown) { setMsg(e instanceof Error ? e.message : "Erro ao criar acao."); }
+    } catch (e: unknown) { setMsg(e instanceof Error ? e.message : "Erro ao criar ação."); }
     finally { setSaving(false); }
   }
 
   async function updateActionStatus(id: string, status: ActionStatus) {
     const row = actionsP.find((x) => x.id === id);
     if (!row) return;
-    if (!canManageActions && row.assigned_to !== uid) return setMsg("Sem permissao para atualizar.");
+    if (!canManageActions && row.assigned_to !== uid) return setMsg("Sem permissão para atualizar.");
     const { error } = await supabase.from("pd_project_actions").update({ status, updated_by: uid }).eq("id", id);
     if (error) return setMsg(error.message);
     await loadDetails(selectedProjectId);
   }
 
   async function createDeliverable() {
-    if (!canManageActions) return setMsg("Sem permissao para criar entregaveis.");
+    if (!canManageActions) return setMsg("Sem permissão para criar entregáveis.");
     const title = deliverableTitle.trim();
-    if (!title) return setMsg("Informe o titulo do entregavel.");
+    if (!title) return setMsg("Informe o título do entregável.");
     setSaving(true);
     try {
       const insertRes = await supabase
@@ -452,7 +452,7 @@ export default function PdProjetosPage() {
         project_id: selectedProjectId,
         event_type: "created",
         status_to: "pending",
-        comment: "Entregavel criado",
+        comment: "Entregável criado",
         actor_user_id: uid,
         actor_role: role ?? null,
       });
@@ -463,15 +463,15 @@ export default function PdProjetosPage() {
       setDeliverableAssigned("");
       await loadDetails(selectedProjectId);
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao criar entregavel.");
+      setMsg(e instanceof Error ? e.message : "Erro ao criar entregável.");
     } finally {
       setSaving(false);
     }
   }
 
   async function deleteDeliverable(id: string) {
-    if (!canManageActions) return setMsg("Sem permissao para excluir entregaveis.");
-    if (!confirm("Excluir este entregavel? Esta acao nao pode ser desfeita.")) return;
+    if (!canManageActions) return setMsg("Sem permissão para excluir entregáveis.");
+    if (!confirm("Excluir este entregável? Esta ação não pode ser desfeita.")) return;
     setSaving(true);
     try {
       const del = await supabase.from("pd_project_deliverables").delete().eq("id", id);
@@ -482,16 +482,16 @@ export default function PdProjetosPage() {
         return next;
       });
       await loadDetails(selectedProjectId);
-      setMsg("Entregavel excluido.");
+      setMsg("Entregável excluído.");
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao excluir entregavel.");
+      setMsg(e instanceof Error ? e.message : "Erro ao excluir entregável.");
     } finally {
       setSaving(false);
     }
   }
 
   async function importDeliverablesFromCsv(file: File) {
-    if (!canManageActions) return setMsg("Sem permissao para importar entregaveis.");
+    if (!canManageActions) return setMsg("Sem permissão para importar entregáveis.");
     if (!selectedProjectId) return setMsg("Selecione um projeto.");
     setSaving(true);
     try {
@@ -515,7 +515,7 @@ export default function PdProjetosPage() {
       const descIdx = headers.findIndex((h) =>
         ["descricao", "description", "detalhes"].includes(h)
       );
-      if (titleIdx < 0) throw new Error("CSV invalido: informe coluna de titulo do entregavel.");
+      if (titleIdx < 0) throw new Error("CSV inválido: informe coluna de título do entregável.");
 
       const rows = lines
         .slice(1)
@@ -527,7 +527,7 @@ export default function PdProjetosPage() {
         }))
         .filter((r) => r.title.length > 0);
 
-      if (!rows.length) throw new Error("Nenhuma linha valida para importacao.");
+      if (!rows.length) throw new Error("Nenhuma linha válida para importação.");
 
       const ins = await supabase
         .from("pd_project_deliverables")
@@ -554,7 +554,7 @@ export default function PdProjetosPage() {
             project_id: selectedProjectId,
             event_type: "created",
             status_to: "pending",
-            comment: "Entregavel criado via importacao CSV.",
+            comment: "Entregável criado via importação CSV.",
             actor_user_id: uid,
             actor_role: role ?? null,
           }))
@@ -562,9 +562,9 @@ export default function PdProjetosPage() {
       }
 
       await loadDetails(selectedProjectId);
-      setMsg(`${createdIds.length} entregavel(eis) importado(s) com sucesso.`);
+      setMsg(`${createdIds.length} entregável(is) importado(s) com sucesso.`);
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao importar CSV de entregaveis.");
+      setMsg(e instanceof Error ? e.message : "Erro ao importar CSV de entregáveis.");
     } finally {
       setSaving(false);
     }
@@ -572,7 +572,7 @@ export default function PdProjetosPage() {
 
   async function updateDeliverableStatus(row: D, next: D["status"], commentInput?: string) {
     const canUpdate = canManageActions || row.assigned_to === uid;
-    if (!canUpdate) return setMsg("Sem permissao para atualizar entregavel.");
+    if (!canUpdate) return setMsg("Sem permissão para atualizar entregável.");
     setSaving(true);
     try {
       const comment = (commentInput ?? "").trim() || null;
@@ -595,7 +595,7 @@ export default function PdProjetosPage() {
       setDeliverableCommentById((prev) => ({ ...prev, [row.id]: "" }));
       await loadDetails(selectedProjectId);
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao atualizar entregavel.");
+      setMsg(e instanceof Error ? e.message : "Erro ao atualizar entregável.");
     } finally {
       setSaving(false);
     }
@@ -603,7 +603,7 @@ export default function PdProjetosPage() {
 
   async function saveProjectStatus() {
     if (!selected) return;
-    if (!canEditProjectStatus) return setMsg("Sem permissao para editar status do projeto.");
+    if (!canEditProjectStatus) return setMsg("Sem permissão para editar status do projeto.");
     setSaving(true);
     try {
       const { error } = await supabase
@@ -627,7 +627,7 @@ export default function PdProjetosPage() {
         <div className="flex items-start justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold text-slate-900">P&D - Projetos</h1>
-            <p className="mt-1 text-sm text-slate-600">Projetos internos, equipes e direcionamento de acoes para colaboradores.</p>
+            <p className="mt-1 text-sm text-slate-600">Projetos internos, equipes e direcionamento de ações para colaboradores.</p>
           </div>
           <button onClick={() => void load()} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"><RefreshCcw size={16} className={loading ? "animate-spin" : ""} />Atualizar</button>
         </div>
@@ -639,7 +639,7 @@ export default function PdProjetosPage() {
         <p className="text-sm font-semibold text-slate-900">Novo projeto de P&D</p>
         <div className="grid gap-3 md:grid-cols-3">
           <input value={projectName} onChange={(e) => setProjectName(e.target.value)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm" placeholder="Nome do projeto" />
-          <input value={projectDesc} onChange={(e) => setProjectDesc(e.target.value)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm md:col-span-2" placeholder="Descricao" />
+          <input value={projectDesc} onChange={(e) => setProjectDesc(e.target.value)} className="h-10 rounded-xl border border-slate-200 px-3 text-sm md:col-span-2" placeholder="Descrição" />
         </div>
         <button onClick={() => void createProject()} disabled={!canCreateProject || saving} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">Criar projeto</button>
       </div>
@@ -769,7 +769,7 @@ export default function PdProjetosPage() {
                               <PersonChip
                                 size="sm"
                                 name={person(collabByUserId[x.user_id])}
-                                subtitle={collabByUserId[x.user_id]?.cargo ?? "Cargo nao informado"}
+                                subtitle={collabByUserId[x.user_id]?.cargo ?? "Cargo não informado"}
                               />
                             </div>
                             <button
@@ -791,14 +791,14 @@ export default function PdProjetosPage() {
 
                 <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <summary className="cursor-pointer text-xs font-semibold text-slate-700">
-                    Historico de equipe excluida/removida ({deletedTeamItemsP.length})
+                    Histórico de equipe excluída/removida ({deletedTeamItemsP.length})
                   </summary>
                   <div className="mt-2 space-y-2">
                     {deletedTeamItemsP.length ? (
                       deletedTeamItemsP.map((item) => (
                         <div key={item.id} className="rounded-lg border border-slate-200 bg-white p-2 text-xs text-slate-700">
                           <p className="font-semibold">
-                            {item.event_kind === "team_deleted" ? "Equipe excluida" : "Colaborador removido"}
+                            {item.event_kind === "team_deleted" ? "Equipe excluída" : "Colaborador removido"}
                           </p>
                           <p>Equipe: {item.team_name ?? "-"}</p>
                           {item.user_id ? <p>Colaborador: {person(collabByUserId[item.user_id] ?? null)}</p> : null}
@@ -806,7 +806,7 @@ export default function PdProjetosPage() {
                         </div>
                       ))
                     ) : (
-                      <p className="text-xs text-slate-500">Nenhum historico de exclusao neste projeto.</p>
+                      <p className="text-xs text-slate-500">Nenhum histórico de exclusão neste projeto.</p>
                     )}
                   </div>
                 </details>
@@ -814,16 +814,16 @@ export default function PdProjetosPage() {
             </div>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
-              <h2 className="text-sm font-semibold text-slate-900">Acoes internas</h2>
+              <h2 className="text-sm font-semibold text-slate-900">Ações internas</h2>
               <div className="grid gap-2 md:grid-cols-4">
-                <input value={actionTitle} onChange={(e) => setActionTitle(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm md:col-span-2" placeholder="Titulo da acao" />
+                <input value={actionTitle} onChange={(e) => setActionTitle(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm md:col-span-2" placeholder="Título da ação" />
                 <input type="date" value={actionDue} onChange={(e) => setActionDue(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm" />
                 <select value={actionAssigned} onChange={(e) => setActionAssigned(e.target.value)} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm">
-                  <option value="">Responsavel</option>
+                  <option value="">Responsável</option>
                   {membersP.map((m) => <option key={m.id} value={m.user_id}>{person(collabByUserId[m.user_id])}</option>)}
                 </select>
               </div>
-              <button onClick={() => void createAction()} disabled={!canManageActions || saving} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60">Criar acao</button>
+              <button onClick={() => void createAction()} disabled={!canManageActions || saving} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60">Criar ação</button>
               <div className="space-y-3">
                 {actionsP.length ? (
                   actionsP.map((a) => (
@@ -837,42 +837,42 @@ export default function PdProjetosPage() {
                         >
                           <option value="pending">Pendente</option>
                           <option value="in_progress">Em andamento</option>
-                          <option value="review">Em revisao</option>
-                          <option value="done">Concluida</option>
+                          <option value="review">Em revisão</option>
+                          <option value="done">Concluída</option>
                           <option value="blocked">Bloqueada</option>
                           <option value="cancelled">Cancelada</option>
                         </select>
                       </div>
                       <p className="mt-2 text-xs text-slate-500">
-                        Responsavel: {person(a.assigned_to ? collabByUserId[a.assigned_to] : null)} | Prazo: {a.due_date ?? "-"}
+                        Responsável: {person(a.assigned_to ? collabByUserId[a.assigned_to] : null)} | Prazo: {a.due_date ?? "-"}
                       </p>
                     </div>
                   ))
                 ) : (
-                  <p className="text-sm text-slate-500">Sem acoes cadastradas.</p>
+                  <p className="text-sm text-slate-500">Sem ações cadastradas.</p>
                 )}
               </div>
             </section>
 
             <section className="rounded-2xl border border-slate-200 bg-white p-6 space-y-4">
-              <h2 className="text-sm font-semibold text-slate-900">Lista de documentos entregaveis</h2>
+              <h2 className="text-sm font-semibold text-slate-900">Lista de documentos entregáveis</h2>
               <div className="grid gap-3 md:grid-cols-2">
-                <input value={deliverableTitle} onChange={(e) => setDeliverableTitle(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm" placeholder="Titulo do entregavel" />
+                <input value={deliverableTitle} onChange={(e) => setDeliverableTitle(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm" placeholder="Título do entregável" />
                 <input type="date" value={deliverableDue} onChange={(e) => setDeliverableDue(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm" />
-                <input value={deliverableDesc} onChange={(e) => setDeliverableDesc(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm md:col-span-2" placeholder="Descricao" />
+                <input value={deliverableDesc} onChange={(e) => setDeliverableDesc(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm md:col-span-2" placeholder="Descrição" />
                 <select value={deliverableAssigned} onChange={(e) => setDeliverableAssigned(e.target.value)} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm md:col-span-2">
-                  <option value="">Responsavel</option>
+                  <option value="">Responsável</option>
                   {membersP.map((m) => <option key={m.id} value={m.user_id}>{person(collabByUserId[m.user_id])}</option>)}
                 </select>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <button onClick={() => void createDeliverable()} disabled={!canManageActions || saving} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60">Adicionar entregavel</button>
+                <button onClick={() => void createDeliverable()} disabled={!canManageActions || saving} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60">Adicionar entregável</button>
                 <button
                   type="button"
                   onClick={() =>
                     downloadTextFile(
                       "modelo_entregaveis_pd.csv",
-                      "titulo_entregavel,previsao_entrega,descricao\nChecklist de infraestrutura,28/02/2026,Descricao do entregavel de P&D",
+                      "titulo_entregavel,previsao_entrega,descricao\nChecklist de infraestrutura,28/02/2026,Descrição do entregável de P&D",
                       "text/csv;charset=utf-8"
                     )
                   }
@@ -899,7 +899,7 @@ export default function PdProjetosPage() {
                 <input
                   value={deliverableSearch}
                   onChange={(e) => setDeliverableSearch(e.target.value)}
-                  placeholder="Buscar por titulo ou descricao..."
+                  placeholder="Buscar por título ou descrição..."
                   className="h-10 rounded-lg border border-slate-200 px-3 text-sm md:col-span-2"
                 />
                 <select
@@ -912,7 +912,7 @@ export default function PdProjetosPage() {
                   <option value="in_progress">Em andamento</option>
                   <option value="sent">Enviado</option>
                   <option value="approved">Aprovado</option>
-                  <option value="approved_with_comments">Aprovado com comentarios</option>
+                  <option value="approved_with_comments">Aprovado com comentários</option>
                   <option value="blocked">Bloqueado</option>
                   <option value="cancelled">Cancelado</option>
                 </select>
@@ -963,7 +963,7 @@ export default function PdProjetosPage() {
                               <option value="in_progress">Em andamento</option>
                               <option value="sent">Enviado</option>
                               <option value="approved">Aprovado</option>
-                              <option value="approved_with_comments">Aprovado com comentarios</option>
+                              <option value="approved_with_comments">Aprovado com comentários</option>
                               <option value="blocked">Bloqueado</option>
                               <option value="cancelled">Cancelado</option>
                             </select>
@@ -979,18 +979,18 @@ export default function PdProjetosPage() {
                         </div>
 
                         <p className="text-xs text-slate-500">
-                          Responsavel: {person(d.assigned_to ? collabByUserId[d.assigned_to] : null)} | Prazo: {d.due_date ?? "-"}
+                        Responsável: {person(d.assigned_to ? collabByUserId[d.assigned_to] : null)} | Prazo: {d.due_date ?? "-"}
                         </p>
 
                         <input
                           value={deliverableCommentById[d.id] ?? ""}
                           onChange={(e) => setDeliverableCommentById((prev) => ({ ...prev, [d.id]: e.target.value }))}
                           className="h-10 w-full rounded-lg border border-slate-200 px-3 text-xs"
-                          placeholder="Comentario para status aprovado com comentarios"
+                          placeholder="Comentário para status aprovado com comentários"
                         />
 
                         {d.status === "approved_with_comments" ? (
-                          <p className="text-xs text-amber-700">Comentario de aprovacao: {d.approval_comment ?? "-"}</p>
+                          <p className="text-xs text-amber-700">Comentário de aprovação: {d.approval_comment ?? "-"}</p>
                         ) : null}
 
                         <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
@@ -1017,7 +1017,7 @@ export default function PdProjetosPage() {
                     );
                   })
                 ) : (
-                  <p className="text-sm text-slate-500">Sem entregaveis para o filtro selecionado.</p>
+                  <p className="text-sm text-slate-500">Sem entregáveis para o filtro selecionado.</p>
                 )}
               </div>
             </section>

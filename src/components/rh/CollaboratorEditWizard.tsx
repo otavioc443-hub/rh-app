@@ -28,6 +28,11 @@ type AbsenceEventRow = {
   created_at: string;
 };
 
+type HistorySummaryItem = {
+  label: string;
+  value: string;
+};
+
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -73,6 +78,49 @@ function mapRowToInitial(row: Record<string, unknown>): Partial<ColaboradorPaylo
     pix_key_type: (row.pix_key_type as string | null) ?? "CPF",
     pix_bank: (row.pix_bank as string | null) ?? "",
   };
+}
+
+function maskCpfValue(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (digits.length !== 11) return value;
+  return `${digits.slice(0, 3)}.***.***-${digits.slice(9)}`;
+}
+
+function summarizeHistoryDetails(details: unknown): HistorySummaryItem[] {
+  if (!details || typeof details !== "object") return [];
+  const row = details as Record<string, unknown>;
+  const items: HistorySummaryItem[] = [];
+  const sensitiveKeys = new Set([
+    "cpf",
+    "rg",
+    "banco",
+    "bank_name",
+    "agencia",
+    "agency",
+    "conta_corrente",
+    "account",
+    "pix_key",
+    "pix_key_type",
+    "pix_bank",
+    "telefone",
+    "celular",
+    "telefone_emergencia",
+    "email",
+    "email_pessoal",
+    "email_empresarial",
+  ]);
+
+  for (const [key, rawValue] of Object.entries(row)) {
+    if (rawValue == null) continue;
+    if (typeof rawValue === "object") continue;
+    let value = String(rawValue).trim();
+    if (!value) continue;
+    if (key === "cpf") value = maskCpfValue(value);
+    else if (sensitiveKeys.has(key)) value = "Informação sensível atualizada";
+    items.push({ label: key.replace(/_/g, " "), value });
+  }
+
+  return items.slice(0, 12);
 }
 
 function toDb(payload: ColaboradorPayload, isActive: boolean, editorEmail: string | null) {
@@ -903,9 +951,20 @@ export default function CollaboratorEditWizard({
                         <div className="mt-1 text-xs text-slate-600">
                           por: <b>{h.actor_email ?? "-"}</b>
                         </div>
-                        <pre className="mt-3 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-xs text-slate-700">
-                          {JSON.stringify(h.details ?? {}, null, 2)}
-                        </pre>
+                        {summarizeHistoryDetails(h.details).length ? (
+                          <div className="mt-3 space-y-2 rounded-xl bg-slate-50 p-3 text-xs text-slate-700">
+                            {summarizeHistoryDetails(h.details).map((item) => (
+                              <div key={`${h.id}-${item.label}`} className="flex flex-wrap gap-2">
+                                <span className="font-semibold text-slate-900">{item.label}:</span>
+                                <span>{item.value}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="mt-3 rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
+                            Alteração registrada sem detalhes adicionais exibíveis.
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>

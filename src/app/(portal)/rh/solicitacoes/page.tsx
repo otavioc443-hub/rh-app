@@ -232,7 +232,7 @@ export default function RhSolicitacoesPage() {
       setColabById({});
       setProfileById({});
       setSelectedId("");
-      setMsg(e instanceof Error ? e.message : "Erro ao carregar solicita??es.");
+      setMsg(e instanceof Error ? e.message : "Erro ao carregar solicita��es.");
     } finally {
       setLoading(false);
     }
@@ -254,7 +254,7 @@ export default function RhSolicitacoesPage() {
       const missing = text.includes("does not exist") || text.includes("relation") || text.includes("schema cache");
       if (missing) {
         setMsg(
-          "Auditoria ainda n?o dispon?vel. Rode supabase/sql/2026-02-16_create_profile_update_request_audit.sql."
+          "Auditoria ainda n�o dispon�vel. Rode supabase/sql/2026-02-16_create_profile_update_request_audit.sql."
         );
         setAuditRows([]);
       } else {
@@ -470,7 +470,7 @@ export default function RhSolicitacoesPage() {
       setSelectedId("");
       setAuditRows([]);
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao redirecionar solicita??o.");
+      setMsg(e instanceof Error ? e.message : "Erro ao redirecionar solicita��o.");
     } finally {
       setRedirecting(false);
     }
@@ -481,7 +481,7 @@ export default function RhSolicitacoesPage() {
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold text-slate-900">Solicita??es de adequa??o</h1>
+            <h1 className="text-xl font-semibold text-slate-900">Solicita��es de adequa��o</h1>
             <p className="mt-1 text-sm text-slate-600">
               Fila do RH (dados pessoais, contratuais e outros), com trilha de auditoria e redirecionamento.
             </p>
@@ -519,7 +519,7 @@ export default function RhSolicitacoesPage() {
 
       {stats.overdue > 0 ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          Existem {stats.overdue} solicita??es da fila RH acima de {slaHours}h.
+          Existem {stats.overdue} solicita��es da fila RH acima de {slaHours}h.
         </div>
       ) : null}
 
@@ -640,7 +640,7 @@ export default function RhSolicitacoesPage() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={6} className="p-3 text-slate-500">Nenhuma solicita??o encontrada.</td>
+                    <td colSpan={6} className="p-3 text-slate-500">Nenhuma solicita��o encontrada.</td>
                   </tr>
                 )}
               </tbody>
@@ -652,7 +652,7 @@ export default function RhSolicitacoesPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
               <ShieldCheck size={16} />
-              An?lise da solicita??o
+              An�lise da solicita��o
             </div>
 
             {selected ? (
@@ -686,7 +686,7 @@ export default function RhSolicitacoesPage() {
 
                 <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                    A??es da solicita??o selecionada
+                    A��es da solicita��o selecionada
                   </div>
 
                   <label className="grid gap-1 text-xs font-semibold text-slate-700">
@@ -706,7 +706,7 @@ export default function RhSolicitacoesPage() {
                   </label>
 
                   <label className="mt-3 grid gap-1 text-xs font-semibold text-slate-700">
-                    Observa??es da an?lise
+                    Observa��es da an�lise
                     <textarea
                       value={decisionNotes}
                       onChange={(e) => setDecisionNotes(e.target.value)}
@@ -727,7 +727,7 @@ export default function RhSolicitacoesPage() {
                 </div>
 
                 <div className="rounded-xl border border-slate-200 bg-white p-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Redirecionar solicita??o</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Redirecionar solicita��o</p>
                   <div className="mt-2 grid gap-2">
                     <select
                       value={redirectArea}
@@ -755,7 +755,7 @@ export default function RhSolicitacoesPage() {
                 </div>
               </div>
             ) : (
-              <p className="mt-3 text-sm text-slate-600">Selecione uma solicita??o para analisar.</p>
+              <p className="mt-3 text-sm text-slate-600">Selecione uma solicita��o para analisar.</p>
             )}
           </div>
 
@@ -776,7 +776,7 @@ export default function RhSolicitacoesPage() {
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-slate-600">Sem eventos de auditoria para esta solicita??o.</p>
+                <p className="text-sm text-slate-600">Sem eventos de auditoria para esta solicita��o.</p>
               )}
             </div>
           </div>
@@ -794,3 +794,6 @@ function StatCard({ label, value }: { label: string; value: number | string }) {
     </div>
   );
 }
+
+
+

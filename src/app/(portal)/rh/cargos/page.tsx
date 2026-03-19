@@ -37,7 +37,7 @@ const PORTAL_ROLE_OPTIONS: Array<{ key: string; value: PortalRole; label: string
 ];
 
 function portalRoleLabel(v: PortalRole | null | undefined) {
-  if (!v) return "â€”";
+  if (!v) return "—";
   const opt = PORTAL_ROLE_OPTIONS.find((o) => o.value === v);
   return opt?.label ?? String(v);
 }
@@ -79,7 +79,7 @@ export default function CargosPage() {
 
         if (portalRoleMissing) {
           setSupportsPortalRole(false);
-          setMsg("Seu banco ainda n?o tem o campo de permiss?es por cargo. Execute a migration de cargos (portal_role).");
+          setMsg("Seu banco ainda não tem o campo de permissões por cargo. Execute a migration de cargos (`portal_role`).");
 
           const retry = await supabase
             .from("cargos")
@@ -96,7 +96,7 @@ export default function CargosPage() {
 
       setRows((data ?? []) as CargoRow[]);
     } catch (e: unknown) {
-      setMsg(`âŒ ${e instanceof Error ? e.message : "Erro ao carregar cargos."}`);
+      setMsg(`❌ ${e instanceof Error ? e.message : "Erro ao carregar cargos."}`);
       setRows([]);
     } finally {
       setLoading(false);
@@ -120,7 +120,7 @@ export default function CargosPage() {
 
     setLoading(true);
     try {
-      // upsert por name (precisa de unique no banco â€” deixei o SQL no final)
+      // upsert por name (precisa de unique no banco — deixei o SQL no final)
       const payload: CargoPayload = {
         name: n,
         cbo: cbo.trim() || null,
@@ -132,10 +132,10 @@ export default function CargosPage() {
       setName("");
       setCbo("");
       setPortalRole("");
-      setMsg("âœ… Cargo salvo.");
+      setMsg("✅ Cargo salvo.");
       await load();
     } catch (e: unknown) {
-      setMsg(`âŒ ${e instanceof Error ? e.message : "Erro ao salvar cargo."}`);
+      setMsg(`❌ ${e instanceof Error ? e.message : "Erro ao salvar cargo."}`);
     } finally {
       setLoading(false);
     }
@@ -170,11 +170,11 @@ export default function CargosPage() {
       const { error } = await supabase.from("cargos").update(payload).eq("id", id);
       if (error) throw error;
 
-      setMsg("âœ… Atualizado.");
+      setMsg("✅ Atualizado.");
       cancelEdit();
       await load();
     } catch (e: unknown) {
-      setMsg(`âŒ ${e instanceof Error ? e.message : "Erro ao atualizar."}`);
+      setMsg(`❌ ${e instanceof Error ? e.message : "Erro ao atualizar."}`);
     } finally {
       setLoading(false);
     }
@@ -190,10 +190,10 @@ export default function CargosPage() {
       const { error } = await supabase.from("cargos").delete().eq("id", id);
       if (error) throw error;
 
-      setMsg("âœ… Removido.");
+      setMsg("✅ Removido.");
       await load();
     } catch (e: unknown) {
-      setMsg(`âŒ ${e instanceof Error ? e.message : "Erro ao excluir."}`);
+      setMsg(`❌ ${e instanceof Error ? e.message : "Erro ao excluir."}`);
     } finally {
       setLoading(false);
     }
@@ -203,7 +203,7 @@ export default function CargosPage() {
     <div className="mx-auto w-full max-w-6xl space-y-6 p-6">
       <PageHeader
         icon={<Briefcase size={22} />}
-        title="Inclusao Cargos"
+        title="Inclusão de Cargos"
         subtitle="Cadastre e gerencie cargos para usar no cadastro de colaboradores."
       />
 
@@ -239,13 +239,13 @@ export default function CargosPage() {
               </div>
               {supportsPortalRole ? (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600">Permiss?o no portal (role)</label>
+                  <label className="block text-xs font-semibold text-slate-600">Permissão no portal (role)</label>
                   <select
                     value={portalRole}
                     onChange={(e) => setPortalRole(e.target.value as PortalRole | "")}
                     className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-300"
                   >
-                    <option value="">-- N?o altera o acesso --</option>
+                    <option value="">-- Não altera o acesso --</option>
                     {PORTAL_ROLE_OPTIONS.map((o, idx) => (
                       <option key={o.key ?? `${o.value}-${idx}`} value={o.value}>
                         {o.label}
@@ -303,7 +303,7 @@ export default function CargosPage() {
                         <div>
                           <div className="font-medium text-slate-900">{r.name}</div>
                           <div className="text-xs text-slate-500">
-                            {r.cbo ? `CBO: ${r.cbo}` : "CBO: â€”"}
+                            {r.cbo ? `CBO: ${r.cbo}` : "CBO: —"}
                             {supportsPortalRole ? ` | Acesso: ${portalRoleLabel(r.portal_role)}` : ""}
                           </div>
                         </div>
@@ -352,7 +352,7 @@ export default function CargosPage() {
 	                              onChange={(e) => setEditPortalRole(e.target.value as PortalRole | "")}
 	                              className="mt-1 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-slate-300"
 	                            >
-	                              <option value="">-- N?o altera o acesso --</option>
+	                              <option value="">-- Não altera o acesso --</option>
 	                              {PORTAL_ROLE_OPTIONS.map((o, idx) => (
 	                                <option key={o.key ?? `${o.value}-${idx}`} value={o.value}>
 	                                  {o.label}

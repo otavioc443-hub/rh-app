@@ -248,7 +248,7 @@ export default function FinanceiroSolicitacoesPage() {
       setProfileById({});
       setExtraPaymentsPending([]);
       setSelectedId("");
-      setMsg(e instanceof Error ? e.message : "Erro ao carregar solicita??es.");
+      setMsg(e instanceof Error ? e.message : "Erro ao carregar solicita��es.");
     } finally {
       setLoading(false);
     }
@@ -270,7 +270,7 @@ export default function FinanceiroSolicitacoesPage() {
       const missing = text.includes("does not exist") || text.includes("relation") || text.includes("schema cache");
       if (missing) {
         setMsg(
-          "Auditoria ainda n?o dispon?vel. Rode supabase/sql/2026-02-16_create_profile_update_request_audit.sql."
+          "Auditoria ainda n�o dispon�vel. Rode supabase/sql/2026-02-16_create_profile_update_request_audit.sql."
         );
         setAuditRows([]);
       } else {
@@ -469,9 +469,9 @@ export default function FinanceiroSolicitacoesPage() {
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold text-slate-900">Solicita??es para an?lise financeira</h1>
+            <h1 className="text-xl font-semibold text-slate-900">Solicita��es para an�lise financeira</h1>
             <p className="mt-1 text-sm text-slate-600">
-              Governan?a de solicita??es de adequa??o com decis?o e trilha de auditoria.
+              Governan�a de solicita��es de adequa��o com decis�o e trilha de auditoria.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -516,7 +516,7 @@ export default function FinanceiroSolicitacoesPage() {
 
       {stats.overdue > 0 ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-          Existem {stats.overdue} solicita??es da fila Financeiro acima de {slaHours}h.
+          Existem {stats.overdue} solicita��es da fila Financeiro acima de {slaHours}h.
         </div>
       ) : null}
 
@@ -655,7 +655,7 @@ export default function FinanceiroSolicitacoesPage() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={6} className="p-3 text-slate-500">Nenhuma solicita??o encontrada.</td>
+                    <td colSpan={6} className="p-3 text-slate-500">Nenhuma solicita��o encontrada.</td>
                   </tr>
                 )}
               </tbody>
@@ -667,7 +667,7 @@ export default function FinanceiroSolicitacoesPage() {
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
               <ShieldCheck size={16} />
-              An?lise da solicita??o
+              An�lise da solicita��o
             </div>
 
             {selected ? (
@@ -716,7 +716,7 @@ export default function FinanceiroSolicitacoesPage() {
                 </label>
 
                 <label className="grid gap-1 text-xs font-semibold text-slate-700">
-                  Observa??es da an?lise
+                  Observa��es da an�lise
                   <textarea
                     value={decisionNotes}
                     onChange={(e) => setDecisionNotes(e.target.value)}
@@ -734,7 +734,7 @@ export default function FinanceiroSolicitacoesPage() {
                 </button>
               </div>
             ) : (
-              <p className="mt-3 text-sm text-slate-600">Selecione uma solicita??o para analisar.</p>
+              <p className="mt-3 text-sm text-slate-600">Selecione uma solicita��o para analisar.</p>
             )}
           </div>
 
@@ -755,7 +755,7 @@ export default function FinanceiroSolicitacoesPage() {
                   </div>
                 ))
               ) : (
-                <p className="text-sm text-slate-600">Sem eventos de auditoria para esta solicita??o.</p>
+                <p className="text-sm text-slate-600">Sem eventos de auditoria para esta solicita��o.</p>
               )}
             </div>
           </div>
@@ -773,3 +773,5 @@ function StatCard({ label, value }: { label: string; value: number | string }) {
     </div>
   );
 }
+
+
