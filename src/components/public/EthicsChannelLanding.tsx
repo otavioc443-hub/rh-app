@@ -666,6 +666,30 @@ export default function EthicsChannelLanding({
           </div>
         ) : null}
       </section>
+
+      <footer className="border-t border-slate-200 bg-white/96">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-8 text-sm text-slate-600 lg:flex-row lg:items-center lg:justify-between lg:px-10">
+          <div>
+            <p className="font-semibold text-slate-900">{config.companyName}</p>
+            <p className="mt-1">
+              Canal de etica institucional com acesso a registro, acompanhamento e orientacoes de integridade.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            {config.dataProtectionUrl ? (
+              <Link href={config.dataProtectionUrl} className="font-semibold text-slate-700 hover:text-slate-950">
+                Protecao de dados
+              </Link>
+            ) : null}
+            {config.codeOfEthicsUrl ? (
+              <Link href={config.codeOfEthicsUrl} className="font-semibold text-slate-700 hover:text-slate-950">
+                Codigo de etica
+              </Link>
+            ) : null}
+            <span className="text-slate-400">© {new Date().getFullYear()}</span>
+          </div>
+        </div>
+      </footer>
     </main>
   );
 }
