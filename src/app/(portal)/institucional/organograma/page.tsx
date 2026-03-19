@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
@@ -100,7 +100,7 @@ function buildTree(colabs: Colab[]) {
     const parent = (bossEmail && byEmail.get(bossEmail)) || (bossName && byName.get(bossName)) || null;
     if (!parent || parent.key === child.key) continue;
 
-    // Evita ciclo: n?o liga se o pai j? for descendente do filho.
+    // Evita ciclo: nao liga se o pai j? for descendente do filho.
     let p: string | undefined = parent.key;
     let hasCycle = false;
     while (p) {
@@ -866,3 +866,4 @@ export default function Page() {
     </div>
   );
 }
+

@@ -2936,7 +2936,7 @@ export default function GestorProjetosPage() {
 
           <details className="rounded-xl border border-slate-200 bg-slate-50 p-3">
             <summary className="cursor-pointer text-xs font-semibold text-slate-700">
-              Itens exclu?dos ({selectedDeletedDeliverables.length})
+              Itens excluidos ({selectedDeletedDeliverables.length})
             </summary>
             <div className="mt-2 space-y-2">
               {selectedDeletedDeliverables.length ? (
@@ -2949,7 +2949,7 @@ export default function GestorProjetosPage() {
                   </div>
                 ))
               ) : (
-                <p className="text-xs text-slate-500">Nenhum item exclu?do neste projeto.</p>
+                <p className="text-xs text-slate-500">Nenhum item excluido neste projeto.</p>
               )}
             </div>
           </details>
@@ -2960,6 +2960,7 @@ export default function GestorProjetosPage() {
     </div>
   );
 }
+
 
 
 

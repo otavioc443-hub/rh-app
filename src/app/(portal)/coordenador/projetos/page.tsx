@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, BellRing, MoreHorizontal, RefreshCcw } from "lucide-react";
@@ -134,7 +134,7 @@ const ASSIGNEE_REASON_OPTIONS: Array<{ value: AssigneeReason; label: string }> =
   { value: "reencaminhamento", label: "Reencaminhamento" },
   { value: "redistribuicao_carga", label: "Redistribuicao de carga" },
   { value: "especialidade_tecnica", label: "Especialidade tecnica" },
-  { value: "substituicao_responsavel", label: "Substitui??o de respons?vel" },
+  { value: "substituicao_responsavel", label: "Substituicao de responsavel" },
   { value: "ajuste_escopo", label: "Ajuste de escopo" },
   { value: "prioridade_urgente", label: "Prioridade urgente" },
 ];
@@ -179,15 +179,15 @@ function getDeliverableStatusEventType(statusFrom?: string | null, statusTo?: st
 
 function deliverableEventLabel(eventType: string) {
   if (eventType === "returned_for_rework") return "Retornou para ajuste";
-  if (eventType === "status_changed") return "Mudan?a de status";
+  if (eventType === "status_changed") return "Mudanca de status";
   if (eventType === "directed") return "Direcionado";
-  if (eventType === "assignment_cancelled") return "Atribui??o cancelada";
+  if (eventType === "assignment_cancelled") return "Atribuicao cancelada";
   if (eventType === "created") return "Criado";
-  if (eventType === "contribution_added") return "Contribui??o registrada";
-  if (eventType === "contribution_approved") return "Contribui??o aprovada (interna)";
-  if (eventType === "contribution_returned") return "Contribui??o retornada para ajuste (interna)";
-  if (eventType === "assignee_added") return "Respons�vel adicionado";
-  if (eventType === "assignee_removed") return "Respons�vel removido";
+  if (eventType === "contribution_added") return "Contribuicao registrada";
+  if (eventType === "contribution_approved") return "Contribuicao aprovada (interna)";
+  if (eventType === "contribution_returned") return "Contribuicao retornada para ajuste (interna)";
+  if (eventType === "assignee_added") return "Responsavel adicionado";
+  if (eventType === "assignee_removed") return "Responsavel removido";
   if (eventType === "document_uploaded") return "Documento enviado";
   if (eventType === "document_linked") return "Link de documento atualizado";
   if (eventType === "document_link_updated") return "Link de documento atualizado";
@@ -198,10 +198,10 @@ function deliverableEventLabel(eventType: string) {
 
 function deliverableStatusLabel(value?: string | null) {
   if (value === "pending") return "Pendente";
-  if (value === "in_progress") return "Em andamen?o";
+  if (value === "in_progress") return "Em andamento";
   if (value === "sent") return "Enviado";
   if (value === "approved") return "Aprovado";
-  if (value === "approved_with_comments") return "Aprovado com coment�rios";
+  if (value === "approved_with_comments") return "Aprovado com comentarios";
   if (value === "blocked") return "Bloqueado";
   if (value === "cancelled") return "Cancelado";
   return value ?? "-";
@@ -271,7 +271,7 @@ function DonutProgressMetric({
         </div>
         <div className="text-xs text-slate-300">
           <p className="text-2xl font-semibold leading-none text-white">{pct}%</p>
-          <p className="mt-1">Progresso por entreg�veis</p>
+          <p className="mt-1">Progresso por entregaveis</p>
         </div>
       </div>
       {detail ? <div className="mt-2">{detail}</div> : null}
@@ -361,11 +361,11 @@ export default function CoordenadorProjetosPage() {
     setMsg("");
     try {
       const { data: authData, error: authErr } = await supabase.auth.getUser();
-      if (authErr || !authData?.user) throw new Error("N?o autenticado.");
+      if (authErr || !authData?.user) throw new Error("Nao autenticado.");
       const userId = authData.user.id;
       setMeId(userId);
 
-      // Admin deve enxergar tudo (n?o depender de membership).
+      // Admin deve enxergar tudo (nao depender de membership).
       let effectiveRole: Role | null = null;
       try {
         const { data: cr, error: crErr } = await supabase.rpc("current_role");
@@ -717,7 +717,7 @@ export default function CoordenadorProjetosPage() {
   const personCargo = (userId: string) => {
     const d = directoryById[userId];
     const cargo = (d?.cargo ?? "").trim();
-    return cargo || "Cargo n?o informado";
+    return cargo || "Cargo nao informado";
   };
 
   const personAvatar = (userId: string) => {
@@ -752,7 +752,7 @@ export default function CoordenadorProjetosPage() {
   async function directDeliverable() {
     if (!selectedProjectId) return setMsg("Selecione um projeto.");
     if (!selectedDeliverableId) return setMsg("Selecione um documento do projeto.");
-    if (!dirAssignedTo) return setMsg("Selecione um respons?vel.");
+    if (!dirAssignedTo) return setMsg("Selecione um responsavel.");
     setSaving(true);
     setMsg("");
     try {
@@ -776,7 +776,7 @@ export default function CoordenadorProjetosPage() {
         eventType: "directed",
         statusFrom: previous?.status ?? null,
         statusTo: nextStatus ?? null,
-        comment: `Respons�vel: ${personLabel(dirAssignedTo)}`,
+        comment: `Responsavel: ${personLabel(dirAssignedTo)}`,
       });
 
       setMsg("Documento direcionado para a equipe.");
@@ -809,7 +809,7 @@ export default function CoordenadorProjetosPage() {
       });
       const json = (await response.json()) as { ok?: boolean; error?: string };
       if (!response.ok || !json.ok) {
-        throw new Error(json.error || "N?o foi poss�vel atualizar o documento.");
+        throw new Error(json.error || "Nao foi possivel atualizar o documento.");
       }
 
       await logDeliverableEvent({
@@ -892,9 +892,9 @@ export default function CoordenadorProjetosPage() {
         deliverableId,
         projectId: current?.project_id ?? selectedProjectId,
         eventType: "edited",
-        comment: "Entreg�vel atualizado (t?tulo/descri??o/prazo).",
+        comment: "Entregavel atualizado (titulo/descricao/prazo).",
       });
-      setMsg("Entreg�vel atualizado.");
+      setMsg("Entregavel atualizado.");
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao atualizar entregavel.");
@@ -977,7 +977,7 @@ export default function CoordenadorProjetosPage() {
   async function addContribution(deliverableId: string) {
     const rawHours = (contribHoursByDeliverable[deliverableId] ?? "").replace(",", ".").trim();
     const hours = Number(rawHours);
-    if (!Number.isFinite(hours) || hours <= 0) return setMsg("In?orme horas v�lidas de contribui��o.");
+    if (!Number.isFinite(hours) || hours <= 0) return setMsg("Informe horas validas de contribuicao.");
     const note = (contribTextByDeliverable[deliverableId] ?? "").trim();
     setSaving(true);
     setMsg("");
@@ -1029,10 +1029,10 @@ export default function CoordenadorProjetosPage() {
       });
       setContribTextByDeliverable((prev) => ({ ...prev, [deliverableId]: "" }));
       setContribHoursByDeliverable((prev) => ({ ...prev, [deliverableId]: "" }));
-      setMsg("Contribui??o registrada com horas.");
+      setMsg("Contribuicao registrada com horas.");
       await load();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao registrar contribui��o.");
+      setMsg(e instanceof Error ? e.message : "Erro ao registrar contribuicao.");
     } finally {
       setSaving(false);
     }
@@ -1041,7 +1041,7 @@ export default function CoordenadorProjetosPage() {
   async function reviewContribution(deliverable: Deliverable, decision: "approve" | "return") {
     const comment = (contribReviewCommentByDeliverableId[deliverable.id] ?? "").trim();
     if (decision === "return" && !comment) {
-      return setMsg("In?orme coment�rio para retornar a contribui��o.");
+      return setMsg("Informe comentario para retornar a contribuicao.");
     }
     setSaving(true);
     setMsg("");
@@ -1063,7 +1063,7 @@ export default function CoordenadorProjetosPage() {
       setMsg(decision === "approve" ? "Contribuicao aprovada internamente." : "Contribuicao retornada para ajuste.");
       await load();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao validar contribui��o.");
+      setMsg(e instanceof Error ? e.message : "Erro ao validar contribuicao.");
     } finally {
       setSaving(false);
     }
@@ -1088,7 +1088,7 @@ export default function CoordenadorProjetosPage() {
         actor_user_id: meId || null,
       });
     } catch {
-      // n?o bloqueia o fluxo principal
+      // nao bloqueia o fluxo principal
     }
   }
 
@@ -1106,7 +1106,7 @@ export default function CoordenadorProjetosPage() {
     const needsReassignmentContext =
       wasReturnedForRework && (deliverable.status === "in_progress" || deliverable.status === "pending");
     if (needsReassignmentContext && !comment) {
-      return setMsg("In?orme o comentario para o colaborador no reencaminhamento.");
+      return setMsg("Informe o comentario para o colaborador no reencaminhamento.");
     }
     if (!queuedUserIds.length && !needsReassignmentContext) {
       return setMsg("Adicione ao menos uma pessoa na lista antes de salvar.");
@@ -1142,11 +1142,11 @@ export default function CoordenadorProjetosPage() {
           ? newUserIds.map((id) => personLabel(id)).join(", ")
           : deliverable.assigned_to
             ? personLabel(deliverable.assigned_to)
-            : "Respons�vel atual";
+            : "Responsavel atual";
       const timelineComment = needsReassignmentContext
-        ? `Flag: Reencaminhamento. Motivo: ${reasonLabel}. Colaboradores: ${names}. Coment?rio: ${comment}`
+        ? `Flag: Reencaminhamento. Motivo: ${reasonLabel}. Colaboradores: ${names}. Comentario: ${comment}`
         : comment
-          ? `Motivo: ${reasonLabel}. Colaboradores: ${names}. Coment?rio: ${comment}`
+          ? `Motivo: ${reasonLabel}. Colaboradores: ${names}. Comentario: ${comment}`
           : `Motivo: ${reasonLabel}. Colaboradores: ${names}`;
       await logDeliverableEvent({
         deliverableId: deliverable.id,
@@ -1193,8 +1193,8 @@ export default function CoordenadorProjetosPage() {
       .filter((a) => a.deliverable_id === deliverable.id)
       .map((a) => a.user_id);
     const hasAnyAssignee = !!deliverable.assigned_to || extraAssignees.length > 0;
-    if (!hasAnyAssignee) return setMsg("Este entreg�vel n?o possui respons�veis atribu�dos.");
-    if (!confirm("Cancelar atribui??o atual e liberar edi??o sem exigir novo envio?")) return;
+    if (!hasAnyAssignee) return setMsg("Este entregavel nao possui responsaveis atribuidos.");
+    if (!confirm("Cancelar atribuicao atual e liberar edicao sem exigir novo envio?")) return;
     setSaving(true);
     setMsg("");
     try {
@@ -1227,7 +1227,7 @@ export default function CoordenadorProjetosPage() {
         statusTo: nextStatus,
         comment: `Liberado para ajustes sem novo envio. Responsaveis removidos: ${removedUsers.map((u) => personLabel(u)).join(", ") || "-"}.`,
       });
-      setMsg("Atribui??es canceladas. Entreg�vel ficou sem respons?vel.");
+      setMsg("Atribuicoes canceladas. Entregavel ficou sem responsavel.");
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao cancelar atribuicao.");
@@ -1264,7 +1264,7 @@ export default function CoordenadorProjetosPage() {
           <div>
             <h1 className="text-xl font-semibold text-slate-900">Projetos que participo</h1>
             <p className="mt-1 text-sm text-slate-600">
-              Minha equipe, direcionamen?o de documentos e percentual de entrega.
+              Minha equipe, direcionamento de documentos e percentual de entrega.
             </p>
           </div>
           <button
@@ -1301,7 +1301,7 @@ export default function CoordenadorProjetosPage() {
         {selectedProject ? (
           <div className="rounded-2xl border border-slate-900 bg-slate-900 p-6 text-white">
             <p className="text-3xl font-semibold">{selectedProject.name}</p>
-            <p className="mt-2 text-sm text-slate-200">{selectedProject.description ?? "Sem descri??o"}</p>
+            <p className="mt-2 text-sm text-slate-200">{selectedProject.description ?? "Sem descricao"}</p>
             <p className="mt-2 text-xs text-slate-300">
               Cliente: {selectedProject.client_id ? (clientNameById[selectedProject.client_id] ?? selectedProject.client_id) : "-"} | Linha: {projectLineLabel(selectedProject.project_line)} | Modalidade: {projectTypeLabel(selectedProject.project_type)}
               {selectedProject.project_scopes?.length
@@ -1458,7 +1458,7 @@ export default function CoordenadorProjetosPage() {
             <input
               value={dirDescription}
               onChange={(e) => setDirDescription(e.target.value)}
-              placeholder="Descri??o (opcional)"
+              placeholder="Descricao (opcional)"
               className="h-11 rounded-xl border border-slate-200 px-3 text-sm md:col-span-2"
             />
 
@@ -1467,7 +1467,7 @@ export default function CoordenadorProjetosPage() {
               onChange={(e) => setDirAssignedTo(e.target.value)}
               className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm md:col-span-2"
             >
-              <option value="">Selecione o respons?vel...</option>
+              <option value="">Selecione o responsavel...</option>
               {projectMembers.map((m) => (
                 <option key={m.id} value={m.user_id}>
                   {personLabel(m.user_id)} ({m.member_role})
@@ -1528,7 +1528,7 @@ export default function CoordenadorProjetosPage() {
           </div>
         ) : (
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-            Nenhuma equipe criada ainda (ou SQL de equipes ainda n?o foi aplicado).
+            Nenhuma equipe criada ainda (ou SQL de equipes ainda nao foi aplicado).
           </div>
         )}
 
@@ -1611,7 +1611,7 @@ export default function CoordenadorProjetosPage() {
           <input
             value={deliverableSearch}
             onChange={(e) => setDeliverableSearch(e.target.value)}
-            placeholder="Buscar por t?tulo ou descri??o..."
+            placeholder="Buscar por titulo ou descricao..."
             className="h-10 rounded-lg border border-slate-200 px-3 text-sm md:col-span-2"
           />
           <select
@@ -1621,10 +1621,10 @@ export default function CoordenadorProjetosPage() {
           >
             <option value="all">Todos status</option>
             <option value="pending">Pendente</option>
-            <option value="in_progress">Em andamen?o</option>
+            <option value="in_progress">Em andamento</option>
             <option value="sent">Enviado</option>
             <option value="approved">Aprovado</option>
-            <option value="approved_with_comments">Aprovado com coment�rios</option>
+            <option value="approved_with_comments">Aprovado com comentarios</option>
           </select>
           <input
             type="date"
@@ -1709,7 +1709,7 @@ export default function CoordenadorProjetosPage() {
                   ? "Civil"
                   : d.discipline_code === "eletromecanico"
                     ? "Eletromecanico"
-                    : "N?o in?ormada";
+                    : "Nao informada";
               const financialStatus = d.financial_status ?? "aberto";
               const financialLocked = financialStatus !== "aberto";
               const financialStatusLabel = financialStatus === "baixado" ? "Baixado" : financialStatus === "pendente" ? "Pendente" : "Aberto";
@@ -1749,8 +1749,8 @@ export default function CoordenadorProjetosPage() {
                   <div>
                     <p className="text-sm font-semibold text-slate-900">{d.title}</p>
                     <p className="text-xs text-slate-500">
-                      Status: {deliverableStatusLabel(d.status)} | Prazo: {dueDateLabel} | Disciplina: {disciplineLabel} | Respons�vel:{" "}
-                      {allResponsibleNames.length ? allResponsibleNames.join(", ") : "N?o definido"} | Financeiro: {financialStatusLabel}
+                      Status: {deliverableStatusLabel(d.status)} | Prazo: {dueDateLabel} | Disciplina: {disciplineLabel} | Responsavel:{" "}
+                      {allResponsibleNames.length ? allResponsibleNames.join(", ") : "Nao definido"} | Financeiro: {financialStatusLabel}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
@@ -1760,7 +1760,7 @@ export default function CoordenadorProjetosPage() {
                     {pendingContributionReview ? (
                       <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2 py-1 text-[11px] font-semibold text-amber-800">
                         <BellRing size={13} />
-                        Pendente valida??o interna
+                        Pendente validacao interna
                       </span>
                     ) : null}
                     {overdueAwaitingInternalApproval ? (
@@ -1789,7 +1789,7 @@ export default function CoordenadorProjetosPage() {
                         }}
                         className="inline-flex cursor-pointer items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
                       >
-                        <MoreHorizontal size={14} /> A??es
+                        <MoreHorizontal size={14} /> Acoes
                       </button>
                       {openedActionMenuDeliverableId === d.id ? (
                       <>
@@ -1806,7 +1806,7 @@ export default function CoordenadorProjetosPage() {
                         data-action-menu-root="true"
                       >
                         <div className="mb-2 border-b border-slate-100 px-3 pb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-                          A??es do entreg�vel
+                          Acoes do entregavel
                         </div>
                         <button
                           type="button"
@@ -1814,7 +1814,7 @@ export default function CoordenadorProjetosPage() {
                             e.preventDefault();
                             e.stopPropagation();
                             if (financialLocked) {
-                              setMsg("Entreg�vel em boletim (pendente/baixado) n?o pode ser alterado.");
+                              setMsg("Entregavel em boletim (pendente/baixado) nao pode ser alterado.");
                               return;
                             }
                             setOpenedDeliverableId(d.id);
@@ -1833,7 +1833,7 @@ export default function CoordenadorProjetosPage() {
                             e.preventDefault();
                             e.stopPropagation();
                             if (financialLocked) {
-                              setMsg("Entreg�vel em boletim (pendente/baixado) n?o pode ser alterado.");
+                              setMsg("Entregavel em boletim (pendente/baixado) nao pode ser alterado.");
                               return;
                             }
                             setOpenedDeliverableId(d.id);
@@ -1852,7 +1852,7 @@ export default function CoordenadorProjetosPage() {
                             e.preventDefault();
                             e.stopPropagation();
                             if (financialLocked) {
-                              setMsg("Entreg�vel em boletim (pendente/baixado) n?o pode ser alterado.");
+                              setMsg("Entregavel em boletim (pendente/baixado) nao pode ser alterado.");
                               return;
                             }
                             setOpenedDeliverableId(d.id);
@@ -1871,7 +1871,7 @@ export default function CoordenadorProjetosPage() {
                             e.preventDefault();
                             e.stopPropagation();
                             if (financialLocked) {
-                              setMsg("Entreg�vel em boletim (pendente/baixado) n?o pode ser alterado.");
+                              setMsg("Entregavel em boletim (pendente/baixado) nao pode ser alterado.");
                               return;
                             }
                             setOpenedDeliverableId(d.id);
@@ -1890,7 +1890,7 @@ export default function CoordenadorProjetosPage() {
                             e.preventDefault();
                             e.stopPropagation();
                             if (financialLocked) {
-                              setMsg("Entreg�vel em boletim (pendente/baixado) n?o pode ser alterado.");
+                              setMsg("Entregavel em boletim (pendente/baixado) nao pode ser alterado.");
                               return;
                             }
                             setOpenedDeliverableId(d.id);
@@ -1901,7 +1901,7 @@ export default function CoordenadorProjetosPage() {
                           disabled={financialLocked}
                           className="mt-1 w-full rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                          Registrar contribui��o
+                          Registrar contribuicao
                         </button>
                       </div>
                       </>
@@ -1913,12 +1913,12 @@ export default function CoordenadorProjetosPage() {
               <div className="space-y-2 border-t border-slate-100 px-3 py-3">
                 {overdueAwaitingInternalApproval ? (
                   <div className="rounded-lg border border-rose-300 bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-800">
-                    Entreg�vel atrasado: encaminhe e conclua a valida??o interna da contribui��o.
+                    Entregavel atrasado: encaminhe e conclua a validacao interna da contribuicao.
                   </div>
                 ) : null}
                 {selectedAction && financialLocked ? (
                   <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs font-semibold text-amber-800">
-                    Entreg�vel vinculado a boletim (financeiro {financialStatusLabel.toLowerCase()}) n?o permite altera??es.
+                    Entregavel vinculado a boletim (financeiro {financialStatusLabel.toLowerCase()}) nao permite alteracoes.
                   </div>
                 ) : null}
 
@@ -1937,10 +1937,10 @@ export default function CoordenadorProjetosPage() {
                         className="h-9 rounded-lg border border-slate-200 bg-white px-2 text-xs"
                       >
                         <option value="pending">Pendente</option>
-                        <option value="in_progress">Em andamen?o</option>
+                        <option value="in_progress">Em andamento</option>
                         <option value="sent">Enviado</option>
                         <option value="approved">Aprovado</option>
-                        <option value="approved_with_comments">Aprovado com coment�rios</option>
+                        <option value="approved_with_comments">Aprovado com comentarios</option>
                       </select>
                       <button
                         type="button"
@@ -1954,11 +1954,11 @@ export default function CoordenadorProjetosPage() {
                     <input
                       value={statusCommentByDeliverableId[d.id] ?? ""}
                       onChange={(e) => setStatusCommentByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))}
-                      placeholder="Coment?rio da mudanca de status"
+                      placeholder="Comentario da mudanca de status"
                       className="h-9 w-full rounded-lg border border-slate-200 px-2 text-xs"
                     />
                     <p className="text-xs text-slate-500">
-                      Respons�vel: {allResponsibleNames.length ? allResponsibleNames.join(", ") : "N?o definido"}
+                      Responsavel: {allResponsibleNames.length ? allResponsibleNames.join(", ") : "Nao definido"}
                     </p>
                     {allResponsibleIds.length ? (
                       <button
@@ -1971,7 +1971,7 @@ export default function CoordenadorProjetosPage() {
                       </button>
                     ) : null}
                     {d.status === "approved_with_comments" ? (
-                      <p className="text-xs text-amber-700">Coment?rio: {d.approval_comment ?? "-"}</p>
+                      <p className="text-xs text-amber-700">Comentario: {d.approval_comment ?? "-"}</p>
                     ) : null}
                     {d.status === "sent" ? (
                       <div className="flex flex-wrap items-center gap-2">
@@ -1988,7 +1988,7 @@ export default function CoordenadorProjetosPage() {
                           onChange={(e) =>
                             setStatusCommentByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))
                           }
-                          placeholder="Coment?rio da aprovacao"
+                          placeholder="Comentario da aprovacao"
                           className="h-9 min-w-[220px] rounded-lg border border-slate-200 px-2 text-xs"
                         />
                         <button
@@ -1997,7 +1997,7 @@ export default function CoordenadorProjetosPage() {
                           disabled={saving}
                           className="inline-flex items-center justify-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700 disabled:opacity-60"
                         >
-                          Aprovar com coment?rios
+                          Aprovar com comentarios
                         </button>
                       </div>
                     ) : null}
@@ -2035,7 +2035,7 @@ export default function CoordenadorProjetosPage() {
                         value={editDescByDeliverableId[d.id] ?? (d.description ?? "")}
                         onChange={(e) => setEditDescByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))}
                         className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-xs md:col-span-2"
-                        placeholder="Descri??o"
+                        placeholder="Descricao"
                       />
                       <div className="flex flex-wrap justify-end gap-2 md:col-span-2">
                         <button
@@ -2112,7 +2112,7 @@ export default function CoordenadorProjetosPage() {
 
                 {selectedAction === "contribution" && !financialLocked ? (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
-                    <p className="text-xs font-semibold text-slate-700">Registrar contribui��o nesse documento</p>
+                    <p className="text-xs font-semibold text-slate-700">Registrar contribuicao nesse documento</p>
                     <div className="grid gap-2 md:grid-cols-[180px_1fr_auto]">
                       <input
                         type="number"
@@ -2128,7 +2128,7 @@ export default function CoordenadorProjetosPage() {
                       <input
                         value={contribTextByDeliverable[d.id] ?? ""}
                         onChange={(e) => setContribTextByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))}
-                        placeholder="Descri??o da contribui��o (opcional)"
+                        placeholder="Descricao da contribuicao (opcional)"
                         className="h-9 rounded-lg border border-slate-200 px-2 text-xs"
                       />
                       <button
@@ -2178,7 +2178,7 @@ export default function CoordenadorProjetosPage() {
                   </button>
                 </div>
                 <p className="mt-1 text-xs text-slate-500">
-                  Se houver novas pessoas na lista, salva normalmente. Se n?o houver, registra o reencaminhamento para o respons?vel atual.
+                  Se houver novas pessoas na lista, salva normalmente. Se nao houver, registra o reencaminhamento para o responsavel atual.
                 </p>
                 {queuedAssignees.length ? (
                   <div className="mt-2 space-y-1">
@@ -2240,15 +2240,15 @@ export default function CoordenadorProjetosPage() {
                     }
                     placeholder={
                       requiresReassignmentReason
-                        ? "Coment?rio ao colaborador (obrigatorio no reencaminhamento)"
-                        : "Coment?rio ao colaborador (opcional)"
+                        ? "Comentario ao colaborador (obrigatorio no reencaminhamento)"
+                        : "Comentario ao colaborador (opcional)"
                     }
                     className="h-9 rounded-lg border border-slate-200 px-2 text-xs md:col-span-2"
                   />
                 </div>
                 {requiresReassignmentReason ? (
                   <p className="mt-1 text-xs text-amber-700">
-                    Este documento voltou para ajuste. A flag de reencaminhamento ser? registrada automaticamente; selecione o motivo complementar e informe comentario.
+                    Este documento voltou para ajuste. A flag de reencaminhamento sera registrada automaticamente; selecione o motivo complementar e informe comentario.
                   </p>
                 ) : null}
                 <div className="mt-2 flex justify-end">
@@ -2306,7 +2306,7 @@ export default function CoordenadorProjetosPage() {
                     className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs"
                   >
                     <option value="all">Todos</option>
-                    <option value="leadership">Apenas lideran?a</option>
+                    <option value="leadership">Apenas lideranca</option>
                     <option value="rework">Apenas reencaminhamento</option>
                   </select>
                 </div>
@@ -2314,7 +2314,7 @@ export default function CoordenadorProjetosPage() {
                   {pendingContributionReview ? (
                     <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 p-2">
                       <p className="text-xs font-semibold text-amber-800">
-                        Nova contribui��o aguardando aprova??o/retorno interno.
+                        Nova contribuicao aguardando aprovacao/retorno interno.
                       </p>
                       <div className="mt-2 grid gap-2 md:grid-cols-[1fr_auto_auto]">
                         <input
@@ -2322,7 +2322,7 @@ export default function CoordenadorProjetosPage() {
                           onChange={(e) =>
                             setContribReviewCommentByDeliverableId((prev) => ({ ...prev, [d.id]: e.target.value }))
                           }
-                          placeholder="Coment?rio para retorno (obrigatorio ao retornar)"
+                          placeholder="Comentario para retorno (obrigatorio ao retornar)"
                           className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs"
                         />
                         <button
@@ -2331,7 +2331,7 @@ export default function CoordenadorProjetosPage() {
                           disabled={saving}
                           className="rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-800 disabled:opacity-60"
                         >
-                          Aprovar contribui��o
+                          Aprovar contribuicao
                         </button>
                         <button
                           type="button"
@@ -2339,7 +2339,7 @@ export default function CoordenadorProjetosPage() {
                           disabled={saving}
                           className="rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800 disabled:opacity-60"
                         >
-                          Retornar com coment�rios
+                          Retornar com comentarios
                         </button>
                       </div>
                     </div>
@@ -2355,7 +2355,7 @@ export default function CoordenadorProjetosPage() {
                           ? ` (${deliverableStatusLabel(t.status_from)} -> ${deliverableStatusLabel(t.status_to)})`
                           : ""}
                         {t.comment ? ` - ${t.comment}` : ""}
-                        {isLeadershipRole(t.actor_role) && t.comment ? " [Coment?rio da lideran?a]" : ""}
+                        {isLeadershipRole(t.actor_role) && t.comment ? " [Comentario da lideranca]" : ""}
                         {t.actor_user_id ? ` - ${personLabel(t.actor_user_id)}` : ""}
                       </p>
                     ))
@@ -2390,6 +2390,11 @@ export default function CoordenadorProjetosPage() {
     </div>
   );
 }
+
+
+
+
+
 
 
 

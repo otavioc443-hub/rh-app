@@ -126,7 +126,7 @@ const BEHAVIORAL_GUIDES: Record<BehaviorKey, string> = {
   comunicacao: "Explica contexto, alinhamentos e bloqueios de forma clara e no tempo certo?",
   trabalho_equipe: "Colabora bem com pares, compartilha contexto e contribui com o grupo?",
   postura: "Demonstra maturidade, respeito e coerência na atuação profissional?",
-  proatividade: "Antecipou necessidades, propôs melhorias ou agiu antes da cobran?a?",
+  proatividade: "Antecipou necessidades, propos melhorias ou agiu antes da cobranca?",
   adaptabilidade: "Lidou bem com mudanças de demanda, contexto ou prioridade?",
   inteligencia_emocional: "Equilibra reações, escuta o outro e lida bem com pressão e feedback?",
 };
@@ -626,9 +626,9 @@ export default function GestorFeedbackPage() {
           </p>
           <div className="mt-3 grid gap-2 text-xs text-slate-600 md:grid-cols-2">
             <p>Considere fatos observáveis, e não apenas percepções isoladas.</p>
-            <p>Avalie a frequ?ncia: foi algo pontual ou consistente durante o ciclo?</p>
+            <p>Avalie a frequencia: foi algo pontual ou consistente durante o ciclo?</p>
             <p>Pense no impacto para equipe, prazo, qualidade e relacionamento.</p>
-            <p>Nas respostas abertas, cite exemplos concretos sempre que poss?vel.</p>
+            <p>Nas respostas abertas, cite exemplos concretos sempre que possivel.</p>
           </div>
         </div>
         <div>

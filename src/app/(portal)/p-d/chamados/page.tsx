@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { RefreshCcw, Wrench } from "lucide-react";
@@ -522,3 +522,4 @@ export default function PdChamadosPage() {
     </div>
   );
 }
+

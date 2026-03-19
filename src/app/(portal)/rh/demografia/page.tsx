@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { Download, Printer, RefreshCcw } from "lucide-react";
@@ -327,7 +327,7 @@ export default function RhDemografiaPage() {
   const byGender = useMemo(() => {
     const m = new Map<string, number>();
     for (const r of active) {
-      const key = (r.sexo ?? "N?o informado").trim() || "N?o informado";
+      const key = (r.sexo ?? "Nao informado").trim() || "Nao informado";
       m.set(key, (m.get(key) ?? 0) + 1);
     }
     return Array.from(m.entries()).map(([label, count]) => ({ label, count }));
@@ -336,7 +336,7 @@ export default function RhDemografiaPage() {
   const byCivil = useMemo(() => {
     const m = new Map<string, number>();
     for (const r of active) {
-      const key = (r.estado_civil ?? "N?o informado").trim() || "N?o informado";
+      const key = (r.estado_civil ?? "Nao informado").trim() || "Nao informado";
       m.set(key, (m.get(key) ?? 0) + 1);
     }
     return Array.from(m.entries()).map(([label, count]) => ({ label, count }));
@@ -345,7 +345,7 @@ export default function RhDemografiaPage() {
   const byContract = useMemo(() => {
     const m = new Map<string, number>();
     for (const r of active) {
-      const key = (r.tipo_contrato ?? "N?o informado").trim() || "N?o informado";
+      const key = (r.tipo_contrato ?? "Nao informado").trim() || "Nao informado";
       m.set(key, (m.get(key) ?? 0) + 1);
     }
     return Array.from(m.entries()).map(([label, count]) => ({ label, count }));
@@ -354,7 +354,7 @@ export default function RhDemografiaPage() {
   const bySector = useMemo(() => {
     const m = new Map<string, number>();
     for (const r of active) {
-      const key = (r.setor ?? "N?o informado").trim() || "N?o informado";
+      const key = (r.setor ?? "Nao informado").trim() || "Nao informado";
       m.set(key, (m.get(key) ?? 0) + 1);
     }
     return Array.from(m.entries())
@@ -396,7 +396,7 @@ export default function RhDemografiaPage() {
       { key: "1_3", label: "1 a 3 anos", count: 0 },
       { key: "3_5", label: "3 a 5 anos", count: 0 },
       { key: "5_plus", label: "Mais de 5 anos", count: 0 },
-      { key: "na", label: "N?o informado", count: 0 },
+      { key: "na", label: "Nao informado", count: 0 },
     ];
     for (const r of active) {
       const years = tenureYears(r.data_admissao);
@@ -418,9 +418,9 @@ export default function RhDemografiaPage() {
   const costsByCenter = useMemo(() => {
     const keyOf = (r: Collaborator) => {
       if (costCenterMode === "setor") {
-        return (r.setor ?? "").trim() || "N?o informado";
+        return (r.setor ?? "").trim() || "Nao informado";
       }
-      return (r.departamento ?? "").trim() || "N?o informado";
+      return (r.departamento ?? "").trim() || "Nao informado";
     };
     const m = new Map<string, number>();
     for (const r of active) {
@@ -479,7 +479,7 @@ export default function RhDemografiaPage() {
             <tr><th>Indicador</th><th>Valor</th></tr>
             <tr><td>Colaboradores ativos</td><td>${htmlEscape(active.length)}</td></tr>
             <tr><td>Idade media</td><td>${htmlEscape(avgAge.toFixed(1))}</td></tr>
-            <tr><td>Tempo m?dio de empresa (anos)</td><td>${htmlEscape(avgTenure.toFixed(1))}</td></tr>
+            <tr><td>Tempo medio de empresa (anos)</td><td>${htmlEscape(avgTenure.toFixed(1))}</td></tr>
           </table>
         </body>
       </html>
@@ -544,7 +544,7 @@ export default function RhDemografiaPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <Kpi title="Colaboradores ativos" value={String(active.length)} subtitle="No filtro atual" />
         <Kpi title="Idade media" value={`${avgAge.toFixed(1)} anos`} subtitle="Com base em data de nascimento" />
-        <Kpi title="Tempo m?dio de empresa" value={`${avgTenure.toFixed(1)} anos`} subtitle="Com base na admiss?o" />
+        <Kpi title="Tempo medio de empresa" value={`${avgTenure.toFixed(1)} anos`} subtitle="Com base na admissao" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -618,3 +618,4 @@ export default function RhDemografiaPage() {
     </div>
   );
 }
+

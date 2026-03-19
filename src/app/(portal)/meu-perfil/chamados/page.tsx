@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { Paperclip, RefreshCcw, Save } from "lucide-react";
@@ -715,3 +715,4 @@ export default function MeuPerfilChamadosPage() {
     </div>
   );
 }
+

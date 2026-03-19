@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { BarChart3, ListChecks, RefreshCcw, Target } from "lucide-react";
@@ -373,7 +373,7 @@ export default function RHFeedbacksPage() {
         }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json?.error ?? "Falha ao atualizar libera??o.");
+      if (!res.ok) throw new Error(json?.error ?? "Falha ao atualizar liberacao.");
       setRows((prev) => prev.map((r) => (r.id === feedbackId ? { ...r, released_to_collaborator: release } : r)));
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao atualizar.");
@@ -384,7 +384,7 @@ export default function RHFeedbacksPage() {
     const cycleIdToDelete = String(targetCycleId ?? cycleId ?? "").trim();
     if (!cycleIdToDelete) return setMsg("Nenhum ciclo selecionado para excluir.");
     const confirmed = window.confirm(
-      "Excluir ciclo e todos os feedbacks vinculados? Essa acao remove as informa??es para todos os perfis."
+      "Excluir ciclo e todos os feedbacks vinculados? Essa acao remove as informacoes para todos os perfis."
     );
     if (!confirmed) return;
 
@@ -444,7 +444,7 @@ export default function RHFeedbacksPage() {
           <div>
             <h1 className="text-xl font-semibold text-slate-900">RH - Governanca de Feedback</h1>
             <p className="mt-1 text-sm text-slate-600">
-              Defina janelas de coleta/disponibiliza??o e acompanhe feedbacks aplicados.
+              Defina janelas de coleta/disponibilizacao e acompanhe feedbacks aplicados.
             </p>
           </div>
           <button
@@ -462,12 +462,12 @@ export default function RHFeedbacksPage() {
         <h2 className="text-sm font-semibold text-slate-900">Periodo de feedback</h2>
         {loading ? (
           <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-sm text-slate-600">Carregando configura??o do ciclo...</p>
+            <p className="text-sm text-slate-600">Carregando configuracao do ciclo...</p>
           </div>
         ) : (
           <>
             <p className="mt-2 text-sm text-slate-600">
-              Configure o ciclo com datas de coleta e libera??o. Quando houver ciclo ativo, voc? pode visualizar o resumo e clicar em editar para ajustar.
+              Configure o ciclo com datas de coleta e liberacao. Quando houver ciclo ativo, voce pode visualizar o resumo e clicar em editar para ajustar.
             </p>
             {!editingCycle ? (
               <>
@@ -796,7 +796,7 @@ export default function RHFeedbacksPage() {
                             {r.released_to_collaborator ? "Liberado" : "Não liberado"}
                           </span>
                           <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${classificationClass(r.final_classification)}`}>
-                            {r.final_classification ?? "Sem classifica??o"}
+                            {r.final_classification ?? "Sem classificacao"}
                           </span>
                           <span
                             className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
@@ -819,7 +819,7 @@ export default function RHFeedbacksPage() {
                                 : "border-slate-200 bg-slate-50 text-slate-700"
                             }`}
                           >
-                            {r.acknowledged_at ? "Devolutiva confirmada" : "Aguardando confirma??o do colaborador"}
+                            {r.acknowledged_at ? "Devolutiva confirmada" : "Aguardando confirmacao do colaborador"}
                           </span>
                           {r.one_on_one_completed_at && !r.acknowledged_at ? (
                             <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${pendingToneClass(ackDaysPending, ackWarn, ackDanger)}`}>
@@ -910,7 +910,7 @@ export default function RHFeedbacksPage() {
             <div className="rounded-t-2xl border-b border-slate-200 bg-gradient-to-r from-sky-50 via-white to-emerald-50 p-6">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-lg font-semibold text-slate-900">Detalhes completos da avalia??o</p>
+                  <p className="text-lg font-semibold text-slate-900">Detalhes completos da avaliacao</p>
                   <p className="mt-1 text-sm text-slate-700">
                     {displayName(selectedDetails.target_name, "Colaborador")}
                   </p>
@@ -1205,7 +1205,7 @@ export default function RHFeedbacksPage() {
                         </p>
                       </div>
                       <div className="rounded-lg border border-teal-200 bg-white p-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-teal-700">Anota??es internas</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-teal-700">Anotacoes internas</p>
                         <p className="mt-1 text-sm text-slate-800">{selectedDetails.one_on_one_notes || "Não informado."}</p>
                       </div>
                     </div>
@@ -1214,7 +1214,7 @@ export default function RHFeedbacksPage() {
                     <p className="text-xs font-semibold text-emerald-700">Devolutiva do colaborador</p>
                     <div className="mt-3 space-y-2">
                       <div className="rounded-lg border border-emerald-200 bg-white p-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Confirma??o de recebimento</p>
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Confirmacao de recebimento</p>
                         <p className="mt-1 text-sm text-slate-800">
                           {selectedDetails.acknowledged_at
                             ? `Confirmado em ${new Date(selectedDetails.acknowledged_at).toLocaleString("pt-BR")}`
@@ -1251,3 +1251,4 @@ export default function RHFeedbacksPage() {
     </div>
   );
 }
+

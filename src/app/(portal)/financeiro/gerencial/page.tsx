@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowDownUp, CircleHelp, RefreshCcw } from "lucide-react";
@@ -77,10 +77,10 @@ type RemittanceRow = {
 };
 
 type BulletinStatus =
-  | "em_an?lise"
+  | "em_analise"
   | "faturado"
   | "enviado_cliente"
-  | "previs?o_pagamento"
+  | "previsao_pagamento"
   | "pago"
   | "parcialmente_pago"
   | "atrasado"
@@ -205,10 +205,10 @@ function isIntegralSingleProjectIndirect(notes: string | null | undefined) {
 }
 
 function bulletinStatusLabel(v: BulletinStatus) {
-  if (v === "em_an?lise") return "Em an?lise";
+  if (v === "em_analise") return "Em analise";
   if (v === "faturado") return "Faturado";
   if (v === "enviado_cliente") return "Enviado ao cliente";
-  if (v === "previs?o_pagamento") return "Previs?o de pagamento";
+  if (v === "previsao_pagamento") return "Previsao de pagamento";
   if (v === "pago") return "Pago";
   if (v === "parcialmente_pago") return "Parcialmente pago";
   if (v === "atrasado") return "Atrasado";
@@ -297,7 +297,7 @@ export default function FinanceiroGerencialPage() {
       const { data: sessionRes, error: sessionErr } = await supabase.auth.getSession();
       if (sessionErr) throw new Error(sessionErr.message);
       const meId = sessionRes.session?.user?.id ?? null;
-      if (!meId) throw new Error("Usu?rio n?o autenticado.");
+      if (!meId) throw new Error("Usuario nao autenticado.");
 
       const profRes = await supabase.from("profiles").select("company_id").eq("id", meId).maybeSingle();
       if (profRes.error) throw new Error(profRes.error.message);
@@ -378,7 +378,7 @@ export default function FinanceiroGerencialPage() {
         ((bRes.data ?? []) as BulletinRow[]).filter((b) => projectIds.has(b.project_id))
       );
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao carregar vis?o gerencial.");
+      setMsg(e instanceof Error ? e.message : "Erro ao carregar visao gerencial.");
     } finally {
       setLoading(false);
     }
@@ -1075,7 +1075,7 @@ export default function FinanceiroGerencialPage() {
   function exportComparativoProjetosCsv() {
     downloadCsv(
       "financeiro-comparativo-projetos.csv",
-      ["Projeto", "Status", "Orcamento", "Recebido boletins", "Recebimento/Or?ado (%)", "Direto", "Indireto", "Folha", "Real total", "Extras pendentes", "Margem (%)"],
+      ["Projeto", "Status", "Orcamento", "Recebido boletins", "Recebimento/Orcado (%)", "Direto", "Indireto", "Folha", "Real total", "Extras pendentes", "Margem (%)"],
       [
         ...sortedByProject.map((p) => [
           p.name,
@@ -1417,10 +1417,10 @@ export default function FinanceiroGerencialPage() {
 
   const bulletinsByStatus = useMemo(() => {
     const order: BulletinStatus[] = [
-      "em_an?lise",
+      "em_analise",
       "faturado",
       "enviado_cliente",
-      "previs?o_pagamento",
+      "previsao_pagamento",
       "parcialmente_pago",
       "pago",
       "atrasado",
@@ -1464,7 +1464,7 @@ export default function FinanceiroGerencialPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-200">Financeiro</p>
-            <h1 className="text-xl font-semibold text-white">Vis?o gerencial financeira</h1>
+            <h1 className="text-xl font-semibold text-white">Visao gerencial financeira</h1>
             <p className="mt-1 text-sm text-blue-100/90">
               Comparativos economicos de custos diretos/indiretos, extras e margem por projeto.
             </p>
@@ -1476,7 +1476,7 @@ export default function FinanceiroGerencialPage() {
               className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold text-white hover:bg-white/15"
             >
               <CircleHelp size={14} />
-              Ajuda da p?gina
+              Ajuda da pagina
             </button>
             <select
               value={windowKey}
@@ -1546,10 +1546,10 @@ export default function FinanceiroGerencialPage() {
             className="h-9 rounded-xl border border-white/20 bg-white/10 px-3 text-xs text-white"
           >
             <option value="all" className="bg-white text-slate-900">Todos</option>
-            <option value="em_an?lise" className="bg-white text-slate-900">Em an?lise</option>
+            <option value="em_analise" className="bg-white text-slate-900">Em analise</option>
             <option value="faturado" className="bg-white text-slate-900">Faturado</option>
             <option value="enviado_cliente" className="bg-white text-slate-900">Enviado ao cliente</option>
-            <option value="previs?o_pagamento" className="bg-white text-slate-900">Previs?o de pagamento</option>
+            <option value="previsao_pagamento" className="bg-white text-slate-900">Previsao de pagamento</option>
             <option value="parcialmente_pago" className="bg-white text-slate-900">Parcialmente pago</option>
             <option value="pago" className="bg-white text-slate-900">Pago</option>
             <option value="atrasado" className="bg-white text-slate-900">Atrasado</option>
@@ -1615,13 +1615,13 @@ export default function FinanceiroGerencialPage() {
       <PageHelpModal
         open={showPageHelp}
         onClose={() => setShowPageHelp(false)}
-        title="Ajuda da p?gina - Vis?o gerencial financeira"
+        title="Ajuda da pagina - Visao gerencial financeira"
         items={[
           { title: "Resumo", text: "Resumo das principais formulas e leituras da tela." },
           { title: "Custo total (global)", text: "Direto reconhecido + custos indiretos + folha projetada do ciclo completo dos projetos filtrados." },
           { title: "Fluxo 30/60/90", text: "Entradas consideram boletins pagos (pagamento confirmado). Saidas combinam folha mensal atual, remessas em aberto, extras pendentes e indiretos estimados." },
-          { title: "Recebimento / Or?ado", text: "% recebido por projeto = boletins pagos / orcamento do projeto." },
-          { title: "Sem?foro de risco", text: "Classifica??o gerencial baseada no ciclo completo do projeto: margem, extras pendentes e peso de indireto. Serve para prioriza??o." },
+          { title: "Recebimento / Orcado", text: "% recebido por projeto = boletins pagos / orcamento do projeto." },
+          { title: "Semaforo de risco", text: "Classificacao gerencial baseada no ciclo completo do projeto: margem, extras pendentes e peso de indireto. Serve para priorizacao." },
         ]}
       />
 
@@ -1646,16 +1646,16 @@ export default function FinanceiroGerencialPage() {
             <InfoTooltip
               title="Indicadores economicos"
               body={[
-                "Custo total projetado usa o ciclo completo dos projetos filtrados: do inicio ate a previs?o de t?rmino.",
+                "Custo total projetado usa o ciclo completo dos projetos filtrados: do inicio ate a previsao de termino.",
                 "Margem global estimada compara esse custo total projetado com o orcamento dos projetos filtrados.",
-                "Taxa de aprova??o de extras continua usando extras pendentes/aprovados/pagos do recorte atual.",
+                "Taxa de aprovacao de extras continua usando extras pendentes/aprovados/pagos do recorte atual.",
               ]}
             />
           </div>
           <div className="mt-3 space-y-2 text-sm text-slate-700">
             <p>Custo total projetado do ciclo (direto + indireto + folha): <b>{money(lifecycleSummary.totalCost)}</b></p>
             <p>Margem global estimada (inicio ao fim): <b className={lifecycleSummary.margin < 0 ? "text-rose-700" : "text-emerald-700"}>{pct(lifecycleSummary.margin)}</b></p>
-            <p>Taxa de aprova??o de extras: <b>{pct(summary.approvalRate)}</b></p>
+            <p>Taxa de aprovacao de extras: <b>{pct(summary.approvalRate)}</b></p>
             <p>Extras aprovados + pagos: <b>{money(summary.extrasApproved + summary.extrasPaid)}</b></p>
           </div>
         </div>
@@ -1699,15 +1699,15 @@ export default function FinanceiroGerencialPage() {
               title="Entradas previstas x realizadas (boletins)"
               body={[
                 "Compara boletins em aberto (a receber) com valores ja recebidos.",
-                "Inadimpl?ncia indica saldo aberto com previs?o de pagamento vencida.",
-                "Taxa de realiza??o = recebido / (recebido + a receber).",
+                "Inadimplencia indica saldo aberto com previsao de pagamento vencida.",
+                "Taxa de realizacao = recebido / (recebido + a receber).",
               ]}
             />
           </div>
           {(uiAlerts.hasOverdueBulletins || uiAlerts.lowRealization) ? (
             <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              {uiAlerts.hasOverdueBulletins ? "Aten??o: existem boletins com saldo em atraso. " : ""}
-              {uiAlerts.lowRealization ? "Taxa de realiza??o abaixo de 50% no recorte atual." : ""}
+              {uiAlerts.hasOverdueBulletins ? "Atencao: existem boletins com saldo em atraso. " : ""}
+              {uiAlerts.lowRealization ? "Taxa de realizacao abaixo de 50% no recorte atual." : ""}
             </div>
           ) : null}
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -1724,7 +1724,7 @@ export default function FinanceiroGerencialPage() {
               <p className="mt-1 text-lg font-semibold text-rose-700">{money(bulletinCashStats.overdueOpen)}</p>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <p className="text-xs text-slate-500">Taxa de realiza??o</p>
+              <p className="text-xs text-slate-500">Taxa de realizacao</p>
               <p className={`mt-1 text-lg font-semibold ${bulletinCashStats.realizedVsExpectedRate < 50 ? "text-rose-700" : bulletinCashStats.realizedVsExpectedRate < 75 ? "text-amber-700" : "text-emerald-700"}`}>
                 {pct(bulletinCashStats.realizedVsExpectedRate)}
               </p>
@@ -1808,9 +1808,9 @@ export default function FinanceiroGerencialPage() {
             </button>
             <div className="pr-24">
               <div>
-                <h3 className="text-base font-semibold text-slate-900">Base de Or?ado x Real</h3>
+                <h3 className="text-base font-semibold text-slate-900">Base de Orcado x Real</h3>
                 <p className="mt-1 text-sm text-slate-600">
-                  Detalhamento consolidado por projeto na vis?o do ciclo completo: orcado, direto, indireto, folha, real total e desvio.
+                  Detalhamento consolidado por projeto na visao do ciclo completo: orcado, direto, indireto, folha, real total e desvio.
                 </p>
               </div>
             </div>
@@ -1819,7 +1819,7 @@ export default function FinanceiroGerencialPage() {
                 <thead className="bg-slate-50 text-slate-700">
                   <tr>
                     <th className="p-3 text-left">Projeto</th>
-                    <th className="p-3 text-right">Or?ado</th>
+                    <th className="p-3 text-right">Orcado</th>
                     <th className="p-3 text-right">Direto</th>
                     <th className="p-3 text-right">Indireto</th>
                     <th className="p-3 text-right">Folha</th>
@@ -1874,7 +1874,7 @@ export default function FinanceiroGerencialPage() {
               <div>
                 <h3 className="text-base font-semibold text-slate-900">Base do Semaforo de Risco</h3>
                 <p className="mt-1 text-sm text-slate-600">
-                  Detalhamento do score por projeto na vis?o do ciclo completo, com margem, peso de indireto e extras pendentes.
+                  Detalhamento do score por projeto na visao do ciclo completo, com margem, peso de indireto e extras pendentes.
                 </p>
               </div>
             </div>
@@ -1888,9 +1888,9 @@ export default function FinanceiroGerencialPage() {
                     <th className="p-3 text-right">Margem</th>
                     <th className="p-3 text-right">Folha</th>
                     <th className="p-3 text-right">Extras pendentes</th>
-                    <th className="p-3 text-right">Pend./Or?ado</th>
+                    <th className="p-3 text-right">Pend./Orcado</th>
                     <th className="p-3 text-right">Indireto</th>
-                    <th className="p-3 text-right">Indir./Or?ado</th>
+                    <th className="p-3 text-right">Indir./Orcado</th>
                     <th className="p-3 text-left">Motivos</th>
                   </tr>
                 </thead>
@@ -1960,14 +1960,14 @@ export default function FinanceiroGerencialPage() {
             </div>
             <div className="mt-4 flex items-start justify-between gap-3">
               <p className="text-xs text-slate-500">
-                A folha usa apenas a compet?ncia atual. Se houver aloca??o cadastrada, ela prevalece; sem aloca??o expl?cita, o sistema divide igualmente.
+                A folha usa apenas a competencia atual. Se houver alocacao cadastrada, ela prevalece; sem alocacao explicita, o sistema divide igualmente.
               </p>
               <InfoTooltip
                 title="Base da folha mensal rateada"
                 body={[
-                  "A folha usa apenas a compet?ncia atual, nao soma meses passados do recorte.",
-                  "Se existir aloca??o vigente em project_member_allocations, o salario segue esses percentuais.",
-                  "Sem aloca??o expl?cita, o sistema divide igualmente entre os projetos ativos em que o membro participa.",
+                  "A folha usa apenas a competencia atual, nao soma meses passados do recorte.",
+                  "Se existir alocacao vigente em project_member_allocations, o salario segue esses percentuais.",
+                  "Sem alocacao explicita, o sistema divide igualmente entre os projetos ativos em que o membro participa.",
                 ]}
               />
             </div>
@@ -2001,7 +2001,7 @@ export default function FinanceiroGerencialPage() {
                               ? "Alocacao cadastrada"
                               : row.allocationRule === "mixed"
                                 ? "Misto"
-                                : "Divis?o igual"}
+                                : "Divisao igual"}
                           </span>
                         </td>
                         <td className="p-3 text-right text-slate-700">{money(row.salary)}</td>
@@ -2129,7 +2129,7 @@ export default function FinanceiroGerencialPage() {
                 title="Boletins por status (fila financeira)"
                 body={[
                   "Resume a fila de boletins no recorte atual por status.",
-                  "Clique no status para filtrar automaticamente os boletins na vis?o.",
+                  "Clique no status para filtrar automaticamente os boletins na visao.",
                 ]}
               />
             </div>
@@ -2314,7 +2314,7 @@ export default function FinanceiroGerencialPage() {
       <section className="grid gap-3 lg:grid-cols-2">
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-semibold text-slate-900">Sem?foro de risco financeiro (vis?o contratual)</p>
+            <p className="text-sm font-semibold text-slate-900">Semaforo de risco financeiro (visao contratual)</p>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -2324,10 +2324,10 @@ export default function FinanceiroGerencialPage() {
                 Ver base
               </button>
               <InfoTooltip
-                title="Sem?foro de risco financeiro (vis?o contratual)"
+                title="Semaforo de risco financeiro (visao contratual)"
                 body={[
                   "Classifica risco com base no ciclo completo do projeto: margem, extras pendentes e peso de custo indireto.",
-                  "E uma prioriza??o gerencial e nao substitui an?lise detalhada de caixa.",
+                  "E uma priorizacao gerencial e nao substitui analise detalhada de caixa.",
                 ]}
               />
             </div>
@@ -2335,7 +2335,7 @@ export default function FinanceiroGerencialPage() {
           <p className="mt-1 text-xs text-slate-500">Visao contratual do ciclo completo: margem, extras pendentes e peso de custo indireto.</p>
           {uiAlerts.hasHighRisk ? (
             <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
-              Aten??o: h? projeto(s) em risco alto. Priorize revis?o de margem, extras pendentes e custo indireto.
+              Atencao: ha projeto(s) em risco alto. Priorize revisao de margem, extras pendentes e custo indireto.
             </div>
           ) : uiAlerts.hasModerateRisk ? (
             <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
@@ -2369,7 +2369,7 @@ export default function FinanceiroGerencialPage() {
                 ) : null}
               </div>
             ))}
-            {lifecycleRiskByProject.length === 0 ? <p className="text-sm text-slate-500">Sem projetos para an?lise.</p> : null}
+            {lifecycleRiskByProject.length === 0 ? <p className="text-sm text-slate-500">Sem projetos para analise.</p> : null}
           </div>
           <div className="mt-3 grid gap-2 md:grid-cols-3">
             <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 px-3 py-2">
@@ -2395,7 +2395,7 @@ export default function FinanceiroGerencialPage() {
 
         <div className="rounded-xl border border-slate-200 bg-white p-4">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-semibold text-slate-900">Or?ado x Real (vis?o contratual)</p>
+            <p className="text-sm font-semibold text-slate-900">Orcado x Real (visao contratual)</p>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -2405,10 +2405,10 @@ export default function FinanceiroGerencialPage() {
                 Ver base
               </button>
               <InfoTooltip
-                title="Or?ado x Real (vis?o contratual)"
+                title="Orcado x Real (visao contratual)"
                 body={[
                   "Compara o orcamento com o custo total projetado do ciclo completo do projeto.",
-                  "Top e piores margens ajudam a priorizar a??es da equipe financeira/gest?o.",
+                  "Top e piores margens ajudam a priorizar acoes da equipe financeira/gestao.",
                 ]}
               />
             </div>
@@ -2441,7 +2441,7 @@ export default function FinanceiroGerencialPage() {
           </div>
           <div className="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-700">
             <p>
-              <b>Or?ado:</b> {money(lifecycleSummary.budget)} | <b>Real do ciclo (direto + indireto + folha):</b> {money(lifecycleSummary.totalCost)}
+              <b>Orcado:</b> {money(lifecycleSummary.budget)} | <b>Real do ciclo (direto + indireto + folha):</b> {money(lifecycleSummary.totalCost)}
             </p>
             <p className="mt-1">
               <b>Desvio:</b>{" "}
@@ -2463,7 +2463,7 @@ export default function FinanceiroGerencialPage() {
                 title="Comparativo por projeto"
                 body={[
                   "Tabela analitica por projeto no recorte atual, com orcamento, recebimento, custos e margem.",
-                  "Use a ordena??o por coluna e o export CSV para an?lise detalhada.",
+                  "Use a ordenacao por coluna e o export CSV para analise detalhada.",
                 ]}
               />
             </div>
@@ -2488,7 +2488,7 @@ export default function FinanceiroGerencialPage() {
                   ["Status", "status"],
                   ["Orcamento", "budget"],
                   ["Recebido (R$)", "received"],
-                  ["Receb./Or?ado", "receiptRate"],
+                  ["Receb./Orcado", "receiptRate"],
                   ["Direto", "direct"],
                   ["Indireto", "indirect"],
                   ["Folha", "payroll"],
@@ -2555,9 +2555,10 @@ export default function FinanceiroGerencialPage() {
 
       <section className="rounded-xl border border-slate-200 bg-white p-4">
         <p className="text-xs text-slate-500">
-          Empresa vinculada: {companyId ? (companyName ?? "Carregando nome da empresa...") : "n?o definida (vis?o global)"}.
+          Empresa vinculada: {companyId ? (companyName ?? "Carregando nome da empresa...") : "nao definida (visao global)"}.
         </p>
       </section>
     </div>
   );
 }
+

@@ -173,7 +173,7 @@ export default function AniversariantesPage() {
                 <th className="p-3">Nome</th>
                 <th className="p-3">Cargo</th>
                 <th className="p-3">Departamento</th>
-                <th className="p-3">Pr?xima data</th>
+                <th className="p-3">Proxima data</th>
                 <th className="p-3">Dias</th>
               </tr>
             </thead>

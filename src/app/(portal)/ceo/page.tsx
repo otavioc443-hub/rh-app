@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -201,7 +201,7 @@ export default function CeoPage() {
       try {
         const { data: sess } = await supabase.auth.getSession();
         const meId = sess.session?.user?.id;
-        if (!meId) throw new Error("Usu?rio n?o autenticado.");
+        if (!meId) throw new Error("Usuario nao autenticado.");
         const profRes = await supabase.from("profiles").select("company_id").eq("id", meId).maybeSingle();
         if (profRes.error) throw new Error(profRes.error.message);
         const cId = (profRes.data?.company_id as string | null | undefined) ?? null;
@@ -309,7 +309,7 @@ export default function CeoPage() {
       const savedRotateAnalysis = window.localStorage.getItem("ceo_dashboard_tv_rotate_analysis");
       const savedRotateWindow = window.localStorage.getItem("ceo_dashboard_tv_rotate_window");
       const savedCycle = window.localStorage.getItem("ceo_dashboard_tv_cycle_seconds");
-      // No painel CEO normal, n?o reaplica tvMode salvo (o controle fica na tela dedicada /ceo-tv).
+      // No painel CEO normal, nao reaplica tvMode salvo (o controle fica na tela dedicada /ceo-tv).
       const finalTv = isTvRoute ? "1" : tvParam === "1" ? "1" : tvParam === "0" ? "0" : "0";
       const finalCompact = isTvRoute ? "1" : compactParam === "1" ? "1" : compactParam === "0" ? "0" : savedCompact;
       const finalRefresh = refreshParam ?? savedRefresh;
@@ -473,7 +473,7 @@ export default function CeoPage() {
   );
   const scopedTotal = Math.max(1, scopedProjects.length);
   const shareLabel = (count: number) => `${count} (${pct((count / scopedTotal) * 100)})`;
-  const pendingAditivos = scopedAditivos.filter((a) => a.status === "em_an?lise" || a.status === "registrado");
+  const pendingAditivos = scopedAditivos.filter((a) => a.status === "em_analise" || a.status === "registrado");
   const pendingAditivosValue = pendingAditivos.reduce((acc, a) => acc + Number(a.additional_amount || 0), 0);
   const overdueBulletins = scopedBulletins.filter((b) => b.status === "atrasado").length;
 
@@ -602,7 +602,7 @@ export default function CeoPage() {
     const m: Record<string, string> = {};
     for (const p of profiles) {
       const full = p.full_name?.trim() || "";
-      m[p.id] = full && !isEmailLike(full) ? full : "Usu?rio sem nome";
+      m[p.id] = full && !isEmailLike(full) ? full : "Usuario sem nome";
     }
     return m;
   }, [profiles]);
@@ -631,9 +631,9 @@ export default function CeoPage() {
       const margin = budget > 0 ? ((budget - (pendExtras + ind)) / budget) * 100 : 0;
       const prev = rows.get(m.user_id) ?? {
         userId: m.user_id,
-        nome: profileLabelById[m.user_id] && profileLabelById[m.user_id] !== "Usu?rio sem nome"
+        nome: profileLabelById[m.user_id] && profileLabelById[m.user_id] !== "Usuario sem nome"
           ? profileLabelById[m.user_id]
-          : (collabNameByUserId[m.user_id] ?? "Usu?rio sem nome"),
+          : (collabNameByUserId[m.user_id] ?? "Usuario sem nome"),
         projetos: 0,
         faturamento: 0,
         margemMedia: [],
@@ -696,7 +696,7 @@ export default function CeoPage() {
     if (pendingAditivos.length > 0) {
       alerts.push({
         level: pendingAditivos.length >= 3 || pendingAditivosValue > 50000 ? "alta" : "media",
-        title: "Aditivos pendentes de aprova??o CEO",
+        title: "Aditivos pendentes de aprovacao CEO",
         detail: `${pendingAditivos.length} item(ns), total ${money(pendingAditivosValue)}.`,
       });
     }
@@ -727,7 +727,7 @@ export default function CeoPage() {
     return <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">Carregando painel CEO...</div>;
   }
   if (!canAccess) {
-    return <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">Sem permiss?o para acessar o painel CEO.</div>;
+    return <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-700">Sem permissao para acessar o painel CEO.</div>;
   }
 
   return (
@@ -762,7 +762,7 @@ export default function CeoPage() {
               ) : null}
             </div>
             <h1 className="mt-2 text-2xl font-bold tracking-tight">Performance da empresa</h1>
-            <p className="mt-1 text-sm text-blue-100/90">Visao executiva inspirada em painel gerencial, com foco em caixa, margem e decis?es criticas.</p>
+            <p className="mt-1 text-sm text-blue-100/90">Visao executiva inspirada em painel gerencial, com foco em caixa, margem e decisoes criticas.</p>
           </div>
           <div className={cx("flex items-center gap-2 transition-opacity", tvMode && !showTvControls && "pointer-events-none opacity-0")}>
             <Link href="/home" className="rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold hover:bg-white/15">
@@ -786,7 +786,7 @@ export default function CeoPage() {
                       await document.documentElement.requestFullscreen();
                     }
                   } catch {
-                    // sem suporte/permiss?o
+                    // sem suporte/permissao
                   }
                 }}
                 className={cx(
@@ -857,7 +857,7 @@ export default function CeoPage() {
               onClick={() => setShowPageHelp(true)}
               className="rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold hover:bg-white/15"
             >
-              Ajuda da p?gina
+              Ajuda da pagina
             </button>
             <button type="button" onClick={() => window.location.reload()} className="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-100">
               <RefreshCcw size={15} />
@@ -911,7 +911,7 @@ export default function CeoPage() {
                     onChange={(e) => setTvRotateAnalysis(e.target.checked)}
                     className="h-4 w-4 rounded border-white/20 bg-white/10"
                   />
-                  <span className="text-[11px] font-semibold uppercase tracking-wide text-blue-200">Rotacionar an?lise</span>
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-blue-200">Rotacionar analise</span>
                 </label>
                 <label className="inline-flex items-center gap-2">
                   <input
@@ -947,7 +947,7 @@ export default function CeoPage() {
               <option className="text-slate-900" value="90">90 dias</option>
               <option className="text-slate-900" value="180">180 dias</option>
               <option className="text-slate-900" value="365">365 dias</option>
-              <option className="text-slate-900" value="all">Hist?rico</option>
+              <option className="text-slate-900" value="all">Historico</option>
             </select>
           </div>
           <div>
@@ -980,17 +980,17 @@ export default function CeoPage() {
       <PageHelpModal
         open={showPageHelp}
         onClose={() => setShowPageHelp(false)}
-        title="Ajuda da p?gina - Painel CEO"
+        title="Ajuda da pagina - Painel CEO"
         items={[
           { title: "Resumo", text: "Resumo do que cada bloco mostra e como interpretar os indicadores." },
           { title: "Faturamento recebido", text: "soma de boletins pagos no recorte." },
           { title: "Margem bruta estimada", text: "recebido menos custos estimados (extras + indiretos + folha)." },
           { title: "Receita prevista aberta", text: "saldo ainda a receber de boletins em aberto." },
-          { title: "Aditivos pendentes CEO", text: "quantidade e valor aguardando decis?o da diretoria/CEO." },
+          { title: "Aditivos pendentes CEO", text: "quantidade e valor aguardando decisao da diretoria/CEO." },
           { title: "Recebimento mensal", text: "evolucao de boletins pagos nos ultimos meses." },
           { title: "Ranking por projeto", text: "ordena por faturamento recebido ou menor margem (risco)." },
           { title: "Top gestores/coordenadores", text: "carteira acompanhada e faturamento associado aos projetos do recorte." },
-          { title: "Alertas / Tendencia de margem", text: "blocos de prioridade para decis?o e acompanhamento mensal." },
+          { title: "Alertas / Tendencia de margem", text: "blocos de prioridade para decisao e acompanhamento mensal." },
         ]}
       />
 
@@ -999,7 +999,7 @@ export default function CeoPage() {
           <summary className="flex cursor-pointer list-none items-start justify-between gap-3 p-5">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Alertas criticos (prioridade)</h2>
-              <p className="text-sm text-slate-500">Sinais priorizados para a??o executiva imediata.</p>
+              <p className="text-sm text-slate-500">Sinais priorizados para a acao executiva imediata.</p>
             </div>
             <div className="flex items-center gap-2">
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700">
@@ -1129,8 +1129,8 @@ export default function CeoPage() {
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard title="Faturamento recebido" value={money(receivedNow)} subtitle="Boletins pagos no recorte" tone="pink" helpText="Soma dos valores pagos (boletins com pagamento confirmado) dentro do recorte atual." trend={{ text: `${receivedTrend >= 0 ? "+" : ""}${pct(receivedTrend)} vs janela anterior`, positive: receivedTrend >= 0 }} />
         <StatCard title="Margem bruta estimada" value={money(marginValue)} subtitle={`Margem ${pct(marginPct)} sobre recebido`} tone="amber" helpText="Recebido no recorte menos custos estimados (extras, indiretos e folha projetada)." trend={{ text: marginPct >= 0 ? "Margem positiva" : "Margem negativa", positive: marginPct >= 0 }} />
-        <StatCard title="Receita prevista aberta" value={money(forecastOpen)} subtitle="Boletins em aberto (saldo a receber)" tone="blue" helpText="Saldo a receber de boletins ainda n?o pagos, considerando valor total menos valor recebido." />
-        <StatCard title="Aditivos pendentes CEO" value={String(pendingAditivos.length)} subtitle={`Valor pendente: ${money(pendingAditivosValue)}`} tone="emerald" helpText="Quantidade e valor de aditivos em an?lise/registrado aguardando decis?o do CEO." trend={{ text: overdueBulletins > 0 ? `${overdueBulletins} boletins atrasados` : "Sem boletim atrasado", positive: overdueBulletins === 0 }} />
+        <StatCard title="Receita prevista aberta" value={money(forecastOpen)} subtitle="Boletins em aberto (saldo a receber)" tone="blue" helpText="Saldo a receber de boletins ainda nao pagos, considerando valor total menos valor recebido." />
+        <StatCard title="Aditivos pendentes CEO" value={String(pendingAditivos.length)} subtitle={`Valor pendente: ${money(pendingAditivosValue)}`} tone="emerald" helpText="Quantidade e valor de aditivos em analise/registrado aguardando decisao do CEO." trend={{ text: overdueBulletins > 0 ? `${overdueBulletins} boletins atrasados` : "Sem boletim atrasado", positive: overdueBulletins === 0 }} />
       </section>
 
       <section className={cx("grid gap-6", compactMode ? "xl:grid-cols-[1.45fr_1fr]" : "xl:grid-cols-[1.35fr_1fr]")}>
@@ -1210,7 +1210,7 @@ export default function CeoPage() {
                 </>
               ) : (
                 <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
-                  Ainda n?o h? base de recebimento no ano anterior para comparar este card.
+                  Ainda nao ha base de recebimento no ano anterior para comparar este card.
                 </div>
               )}
             </div>
@@ -1223,7 +1223,7 @@ export default function CeoPage() {
               <h2 className="text-lg font-semibold text-slate-900">
                 {analysis === "faturamento" ? "Ranking por projeto" : "Projetos em risco de margem"}
               </h2>
-              <InfoTooltip title="Ranking por projeto" body={["Ordena os projetos pelo faturamento recebido ou pela menor margem estimada, conforme a an?lise selecionada."]} />
+              <InfoTooltip title="Ranking por projeto" body={["Ordena os projetos pelo faturamento recebido ou pela menor margem estimada, conforme a analise selecionada."]} />
             </div>
             <p className="mt-1 text-sm text-slate-500">
               {analysis === "faturamento" ? "Top projetos por faturamento recebido." : "Menores margens estimadas aparecem primeiro."}
@@ -1303,8 +1303,8 @@ export default function CeoPage() {
           <div className="rounded-2xl border border-slate-200 bg-gradient-to-br from-indigo-900 via-purple-900 to-fuchsia-800 p-5 text-white shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-semibold">Fila de decis?es do CEO</h2>
-                <InfoTooltip title="Fila de decis?es do CEO" body={["Lista aditivos de valor pendentes de aprova??o pela diretoria/CEO.", "Exibe data e valor para prioriza??o."]} />
+                <h2 className="text-lg font-semibold">Fila de decisoes do CEO</h2>
+                <InfoTooltip title="Fila de decisoes do CEO" body={["Lista aditivos de valor pendentes de aprovacao pela diretoria/CEO.", "Exibe data e valor para priorizacao."]} />
               </div>
               <Link href="/ceo/aditivos-contratuais" className="rounded-full border border-white/20 bg-white/10 px-2 py-1 text-xs font-semibold hover:bg-white/15">
                 Abrir fila
@@ -1312,7 +1312,7 @@ export default function CeoPage() {
             </div>
             <div className="mt-4 space-y-3">
               {pendingAditivos.length === 0 ? (
-                <div className="rounded-xl border border-white/15 bg-white/5 p-4 text-sm text-white/85">Nenhum aditivo pendente de aprova??o.</div>
+                <div className="rounded-xl border border-white/15 bg-white/5 p-4 text-sm text-white/85">Nenhum aditivo pendente de aprovacao.</div>
               ) : (
                 pendingAditivos
                   .sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at))
@@ -1348,7 +1348,7 @@ export default function CeoPage() {
             <p className="text-sm text-slate-500">Visao rapida para acompanhamento da empresa (receita, custos e caixa previsto).</p>
           </div>
           <div className="text-xs text-slate-500">
-            {clientFilter === "all" ? "Todos os clientes" : `Cliente: ${clients.find((c) => c.id === clientFilter)?.name ?? "Selecionado"}`} | {windowKey === "all" ? "Hist?rico" : `?ltimos ${windowKey} dias`}
+            {clientFilter === "all" ? "Todos os clientes" : `Cliente: ${clients.find((c) => c.id === clientFilter)?.name ?? "Selecionado"}`} | {windowKey === "all" ? "Historico" : `Ultimos ${windowKey} dias`}
           </div>
         </div>
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1371,7 +1371,7 @@ export default function CeoPage() {
             <p className={cx("text-xs font-semibold uppercase tracking-wide", overdueBulletins > 0 ? "text-rose-700" : "text-emerald-700")}>Boletins atrasados</p>
             <p className={cx("mt-1 text-2xl font-bold", overdueBulletins > 0 ? "text-rose-900" : "text-emerald-900")}>{overdueBulletins}</p>
             <p className={cx("mt-1 text-xs", overdueBulletins > 0 ? "text-rose-800" : "text-emerald-800")}>
-              {overdueBulletins > 0 ? "Requer acao de cobran?a / acompanhamento" : "Sem alerta de atraso"}
+              {overdueBulletins > 0 ? "Requer acao de cobranca / acompanhamento" : "Sem alerta de atraso"}
             </p>
           </div>
         </div>
@@ -1432,25 +1432,25 @@ export default function CeoPage() {
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-2">
-            <h2 className="text-lg font-semibold text-slate-900">Leitura executiva (recomenda??es)</h2>
-            <InfoTooltip title="Leitura executiva (recomenda??es)" body={["Sintese de alertas e recomenda??es operacionais/financeiras para acao da diretoria."]} />
+            <h2 className="text-lg font-semibold text-slate-900">Leitura executiva (recomendacoes)</h2>
+            <InfoTooltip title="Leitura executiva (recomendacoes)" body={["Sintese de alertas e recomendacoes operacionais/financeiras para acao da diretoria."]} />
           </div>
           <p className="mt-1 text-sm text-slate-500">Sintese operacional para acompanhamento da empresa.</p>
           <div className="mt-4 space-y-3 text-sm">
             <div className={cx("rounded-xl border p-3", pendingAditivos.length > 0 ? "border-amber-200 bg-amber-50 text-amber-900" : "border-emerald-200 bg-emerald-50 text-emerald-900")}>
-              <p className="font-semibold">{pendingAditivos.length > 0 ? "Aditivos aguardando decis?o do CEO" : "Fila de aditivos sob controle"}</p>
+              <p className="font-semibold">{pendingAditivos.length > 0 ? "Aditivos aguardando decisao do CEO" : "Fila de aditivos sob controle"}</p>
               <p className="mt-1 text-xs opacity-90">
                 {pendingAditivos.length > 0
                   ? `${pendingAditivos.length} item(ns) pendente(s), total ${money(pendingAditivosValue)}. Priorizar para evitar travar faturamento/execucao.`
-                  : "N?o h? aditivos de valor pendentes no recorte atual."}
+                  : "Nao ha aditivos de valor pendentes no recorte atual."}
               </p>
             </div>
             <div className={cx("rounded-xl border p-3", overdueBulletins > 0 ? "border-rose-200 bg-rose-50 text-rose-900" : "border-slate-200 bg-slate-50 text-slate-900")}>
               <p className="font-semibold">{overdueBulletins > 0 ? "Boletins em atraso detectados" : "Sem boletins atrasados"}</p>
               <p className="mt-1 text-xs opacity-90">
                 {overdueBulletins > 0
-                  ? `${overdueBulletins} boletim(ns) com status atrasado. Recomendado acompanhamento com Diretoria/Financeiro para cobran?a.`
-                  : "A fila financeira n?o apresenta boletins marcados como atrasados."}
+                  ? `${overdueBulletins} boletim(ns) com status atrasado. Recomendado acompanhamento com Diretoria/Financeiro para cobranca.`
+                  : "A fila financeira nao apresenta boletins marcados como atrasados."}
               </p>
             </div>
             <div className={cx("rounded-xl border p-3", marginPct < 15 ? "border-amber-200 bg-amber-50 text-amber-900" : "border-slate-200 bg-slate-50 text-slate-900")}>
@@ -1459,7 +1459,7 @@ export default function CeoPage() {
                 {marginPct < 0
                   ? "Margem negativa no recorte. Revisar custos e velocidade de recebimento."
                   : marginPct < 15
-                    ? "Margem comprimida. Avaliar indiretos, extras pendentes e reprograma??o de caixa."
+                    ? "Margem comprimida. Avaliar indiretos, extras pendentes e reprogramacao de caixa."
                     : "Margem em faixa saudavel no recorte monitorado."}
               </p>
             </div>
@@ -1479,3 +1479,4 @@ function LineIcon() {
     </svg>
   );
 }
+

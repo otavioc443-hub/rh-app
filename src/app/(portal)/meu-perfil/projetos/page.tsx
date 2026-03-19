@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, MoreHorizontal, RefreshCcw } from "lucide-react";
@@ -80,23 +80,23 @@ type Profile = {
 
 function statusLabel(v: string) {
   if (v === "pending") return "Pendente";
-  if (v === "in_progress") return "Em andamen?o";
+  if (v === "in_progress") return "Em andamento";
   if (v === "sent") return "Enviado";
   if (v === "approved") return "Aprovado";
-  if (v === "approved_with_comments") return "Aprovado com coment�rios";
+  if (v === "approved_with_comments") return "Aprovado com comentarios";
   return v || "-";
 }
 
 function deliverableEventLabel(eventType: string) {
   if (eventType === "returned_for_rework") return "Retornou para ajuste";
-  if (eventType === "status_changed") return "Mudan?a de status";
-  if (eventType === "assignment_cancelled") return "Atribui??o cancelada";
+  if (eventType === "status_changed") return "Mudanca de status";
+  if (eventType === "assignment_cancelled") return "Atribuicao cancelada";
   if (eventType === "created") return "Criado";
-  if (eventType === "contribution_added") return "Contribui??o registrada";
-  if (eventType === "contribution_approved") return "Contribui??o aprovada (interna)";
-  if (eventType === "contribution_returned") return "Contribui??o retornada para ajuste (interna)";
-  if (eventType === "assignee_added") return "Respons�vel adicionado";
-  if (eventType === "assignee_removed") return "Respons�vel removido";
+  if (eventType === "contribution_added") return "Contribuicao registrada";
+  if (eventType === "contribution_approved") return "Contribuicao aprovada (interna)";
+  if (eventType === "contribution_returned") return "Contribuicao retornada para ajuste (interna)";
+  if (eventType === "assignee_added") return "Responsavel adicionado";
+  if (eventType === "assignee_removed") return "Responsavel removido";
   if (eventType === "document_uploaded") return "Documento enviado";
   if (eventType === "document_linked") return "Link de documento atualizado";
   return eventType;
@@ -117,7 +117,7 @@ function isLeadershipRole(role?: string | null) {
 function parseReworkComment(raw?: string | null) {
   const text = (raw ?? "").trim();
   if (!text || !/Motivo:\s*Reencaminhamento/i.test(text)) return null;
-  const commentMatch = /Coment?rio:\s*(.+)$/i.exec(text);
+  const commentMatch = /Comentario:\s*(.+)$/i.exec(text);
   return {
     reason: "Reencaminhamento",
     note: commentMatch?.[1]?.trim() ?? "",
@@ -296,7 +296,7 @@ export default function MeuPerfilProjetosPage() {
   const personCargo = (userId: string) => {
     const d = directoryById[userId];
     const cargo = (d?.cargo ?? "").trim();
-    return cargo || "Cargo n?o informado";
+    return cargo || "Cargo nao informado";
   };
 
   const myRoleInSelectedProject = useMemo(() => {
@@ -331,7 +331,7 @@ export default function MeuPerfilProjetosPage() {
     setMsg("");
     try {
       const { data: authData, error: authErr } = await supabase.auth.getUser();
-      if (authErr || !authData?.user) throw new Error("N?o autenticado.");
+      if (authErr || !authData?.user) throw new Error("Nao autenticado.");
       const userId = authData.user.id;
       setMeId(userId);
 
@@ -565,7 +565,7 @@ export default function MeuPerfilProjetosPage() {
       const pms = (pmRes.data ?? []) as ProjectMember[];
       setProjectMembersAll(pms);
 
-      // Teams podem n?o existir (SQL n?o aplicado): n?o bloqueia
+      // Teams podem nao existir (SQL nao aplicado): nao bloqueia
       setTeams(!teamsRes.error ? ((teamsRes.data ?? []) as ProjectTeam[]) : []);
       setTeamMembers(!tmRes.error ? ((tmRes.data ?? []) as ProjectTeamMember[]) : []);
 
@@ -609,7 +609,7 @@ export default function MeuPerfilProjetosPage() {
 
   async function uploadDeliverableFile(deliverable: Deliverable) {
     if (!canCollaboratorEditDeliverable(deliverable.status)) {
-      return setMsg("Este entreg�vel est� bloqueado para edi��o. Aguarde reencaminhamento do coordenador.");
+      return setMsg("Este entregavel esta bloqueado para edicao. Aguarde reencaminhamento do coordenador.");
     }
     const f = fileByDeliverable[deliverable.id] ?? null;
     if (!f) return setMsg("Selecione um arquivo para enviar.");
@@ -642,7 +642,7 @@ export default function MeuPerfilProjetosPage() {
         comment: "Arquivo anexado.",
       });
       setFileByDeliverable((prev) => ({ ...prev, [deliverable.id]: null }));
-      setMsg("Arquivo anexado. Registre a contribui��o para enviar o entreg�vel.");
+      setMsg("Arquivo anexado. Registre a contribuicao para enviar o entregavel.");
       await load();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao enviar arquivo.");
@@ -663,12 +663,12 @@ export default function MeuPerfilProjetosPage() {
   async function addContribution(deliverableId: string) {
     const currentDeliverable = deliverables.find((x) => x.id === deliverableId) ?? null;
     if (currentDeliverable && !canCollaboratorEditDeliverable(currentDeliverable.status)) {
-      return setMsg("Este entreg�vel est� bloqueado para edi��o. Aguarde reencaminhamento do coordenador.");
+      return setMsg("Este entregavel esta bloqueado para edicao. Aguarde reencaminhamento do coordenador.");
     }
     const rawHourMinute = (contribHoursByDeliverable[deliverableId] ?? "").trim();
     const hours = parseHourMinuteToDecimal(rawHourMinute);
     if (!Number.isFinite(hours ?? NaN) || (hours ?? 0) <= 0) {
-      return setMsg("In?orme horas no formato 00H00MIN (ex.: 02H30MIN).");
+      return setMsg("Informe horas no formato 00H00MIN (ex.: 02H30MIN).");
     }
     const note = (contribTextByDeliverable[deliverableId] ?? "").trim();
     setSaving(true);
@@ -693,7 +693,7 @@ export default function MeuPerfilProjetosPage() {
             }),
           });
           const json = (await response.json()) as { ok?: boolean; error?: string };
-          if (!response.ok || !json.ok) throw new Error(json.error || "N?o foi poss�vel salvar o link do documento.");
+          if (!response.ok || !json.ok) throw new Error(json.error || "Nao foi possivel salvar o link do documento.");
           await logDeliverableEvent({
             deliverableId: deliverable.id,
             projectId: deliverable.project_id,
@@ -777,10 +777,10 @@ export default function MeuPerfilProjetosPage() {
       });
       setContribTextByDeliverable((prev) => ({ ...prev, [deliverableId]: "" }));
       setContribHoursByDeliverable((prev) => ({ ...prev, [deliverableId]: "" }));
-      setMsg("Contribui??o registrada e informa??es do entreg?vel enviadas com sucesso.");
+      setMsg("Contribuicao registrada e informacoes do entregavel enviadas com sucesso.");
       await load();
     } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao registrar contribui��o.");
+      setMsg(e instanceof Error ? e.message : "Erro ao registrar contribuicao.");
     } finally {
       setSaving(false);
     }
@@ -805,7 +805,7 @@ export default function MeuPerfilProjetosPage() {
         actor_user_id: meId || null,
       });
     } catch {
-      // n?o bloqueia fluxo principal
+      // nao bloqueia fluxo principal
     }
   }
 
@@ -861,7 +861,7 @@ export default function MeuPerfilProjetosPage() {
                 <div className="text-sm font-semibold text-slate-900">{selectedProject.name}</div>
                 <div className="mt-1 text-xs text-slate-500">
                   {myRoleInSelectedProject ? `Seu papel: ${myRoleInSelectedProject}` : null}
-                  {!myRoleInSelectedProject && isAdmin ? "Vis�o Admin (voc� n?o est� como membro deste projeto)" : ""}
+                  {!myRoleInSelectedProject && isAdmin ? "Visao Admin (voce nao esta como membro deste projeto)" : ""}
                   {selectedProject.start_date ? ` - Inicio: ${formatDateBR(selectedProject.start_date)}` : ""}
                   {selectedProject.end_date ? ` - Fim: ${formatDateBR(selectedProject.end_date)}` : ""}
                 </div>
@@ -878,7 +878,7 @@ export default function MeuPerfilProjetosPage() {
                 {teamOpen ? "Ocultar equipe" : "Ver equipe"}
               </button>
             </div>
-            <div className="mt-1 text-sm text-slate-600">{selectedProject.description ?? "Sem descri??o"}</div>
+            <div className="mt-1 text-sm text-slate-600">{selectedProject.description ?? "Sem descricao"}</div>
           </div>
         ) : null}
 
@@ -940,7 +940,7 @@ export default function MeuPerfilProjetosPage() {
                       })
                     ) : (
                       <div className="text-sm text-slate-700">
-                        Nenhuma equipe criada ainda (ou SQL de equipes ainda n?o foi aplicado).
+                        Nenhuma equipe criada ainda (ou SQL de equipes ainda nao foi aplicado).
                       </div>
                     )}
                   </div>
@@ -957,7 +957,7 @@ export default function MeuPerfilProjetosPage() {
             <h2 className="text-base font-semibold text-slate-900">Documentos atribuidos a voce</h2>
             <InfoTooltip
               title="Documentos atribuidos a voce"
-              body={["Use o botao A??es de cada entregavel para abrir detalhes, enviar link/arquivo e registrar contribuicao."]}
+              body={["Use o botao Acoes de cada entregavel para abrir detalhes, enviar link/arquivo e registrar contribuicao."]}
             />
           </div>
           <button
@@ -965,10 +965,10 @@ export default function MeuPerfilProjetosPage() {
             onClick={() => setShowPageHelp(true)}
             className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
           >
-            Ajuda da p?gina
+            Ajuda da pagina
           </button>
         </div>
-        <p className="mt-1 text-sm text-slate-600">Atualize o link do documento e registre sua contribui��o.</p>
+        <p className="mt-1 text-sm text-slate-600">Atualize o link do documento e registre sua contribuicao.</p>
 
         <div className="mt-4 space-y-4">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
@@ -1053,9 +1053,9 @@ export default function MeuPerfilProjetosPage() {
                         >
                           {financialStatusLabel}
                         </span>
-                        {" | "}Respons�vel:{" "}
+                        {" | "}Responsavel:{" "}
                         <span className="font-medium text-slate-600">
-                          {allAssignees.length ? allAssignees.map((uid) => personLabel(uid)).join(", ") : "N?o definido"}
+                          {allAssignees.length ? allAssignees.map((uid) => personLabel(uid)).join(", ") : "Nao definido"}
                         </span>
                       </div>
                     </div>
@@ -1087,7 +1087,7 @@ export default function MeuPerfilProjetosPage() {
                         className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
                       >
                         <MoreHorizontal size={16} />
-                        A??es
+                        Acoes
                         {actionsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                       </button>
                     </div>
@@ -1097,7 +1097,7 @@ export default function MeuPerfilProjetosPage() {
                     <>
                       <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-indigo-200 bg-indigo-50 px-3 py-2">
                         <div>
-                          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-700">A??es deste entreg�vel</div>
+                          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-indigo-700">Acoes deste entregavel</div>
                           <div className="text-xs text-indigo-900">Os campos abaixo afetam apenas {d.title}.</div>
                         </div>
                         <button
@@ -1110,12 +1110,12 @@ export default function MeuPerfilProjetosPage() {
                       </div>
                       {overdueAwaitingInternalApproval ? (
                         <div className="mb-2 rounded-lg border border-rose-300 bg-rose-100 px-3 py-2 text-xs font-semibold text-rose-800">
-                          Entreg�vel atrasado: envie contribui��o e aguarde valida??o interna.
+                          Entregavel atrasado: envie contribuicao e aguarde validacao interna.
                         </div>
                       ) : null}
                       {financialLocked ? (
                         <div className="mb-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
-                          Entreg�vel vinculado a boletim (financeiro {financialStatusLabel.toLowerCase()}) n?o permite altera??es.
+                          Entregavel vinculado a boletim (financeiro {financialStatusLabel.toLowerCase()}) nao permite alteracoes.
                         </div>
                       ) : null}
                       <div className="min-w-0">
@@ -1151,7 +1151,7 @@ export default function MeuPerfilProjetosPage() {
                         </div>
                       ) : (
                         <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                          Entreg�vel enviado. A edi??o fica bloqueada at? reencaminhamento pelo coordenador.
+                          Entregavel enviado. A edicao fica bloqueada ate reencaminhamento pelo coordenador.
                         </div>
                       )}
 
@@ -1233,7 +1233,7 @@ export default function MeuPerfilProjetosPage() {
                           <input
                             value={contribTextByDeliverable[d.id] ?? ""}
                             onChange={(e) => setContribTextByDeliverable((prev) => ({ ...prev, [d.id]: e.target.value }))}
-                            placeholder="Descri??o da contribui��o (opcional)"
+                            placeholder="Descricao da contribuicao (opcional)"
                             className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
                           />
                           <button
@@ -1242,7 +1242,7 @@ export default function MeuPerfilProjetosPage() {
                             disabled={saving}
                             className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
                           >
-                            Registrar contribui��o
+                            Registrar contribuicao
                           </button>
                         </div>
                       ) : null}
@@ -1293,7 +1293,7 @@ export default function MeuPerfilProjetosPage() {
                             className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs"
                           >
                             <option value="all">Todos</option>
-                            <option value="leadership">Apenas lideran?a</option>
+                            <option value="leadership">Apenas lideranca</option>
                             <option value="rework">Apenas reencaminhamento</option>
                           </select>
                         </div>
@@ -1309,7 +1309,7 @@ export default function MeuPerfilProjetosPage() {
                                   ? ` (${statusLabel(t.status_from ?? "-")} -> ${statusLabel(t.status_to ?? "-")})`
                                   : ""}
                                 {t.comment ? ` - ${t.comment}` : ""}
-                                {isLeadershipRole(t.actor_role) && t.comment ? " [Coment?rio da lideran?a]" : ""}
+                                {isLeadershipRole(t.actor_role) && t.comment ? " [Comentario da lideranca]" : ""}
                                 {t.actor_user_id ? ` - ${personLabel(t.actor_user_id)}` : ""}
                               </div>
                             ))
@@ -1351,7 +1351,7 @@ export default function MeuPerfilProjetosPage() {
             <summary className="cursor-pointer list-none px-4 py-3 text-sm font-semibold text-slate-800">
               <span className="inline-flex items-center gap-2">
                 <ChevronRight size={14} className="inline-block transition-transform group-open:rotate-90" />
-                Itens exclu?dos ({projectDeliverablesExcluded.length})
+                Itens excluidos ({projectDeliverablesExcluded.length})
               </span>
             </summary>
             <div className="border-t border-slate-200 px-4 py-3">
@@ -1368,7 +1368,7 @@ export default function MeuPerfilProjetosPage() {
                   ))}
                 </div>
               ) : (
-                <div className="text-xs text-slate-500">Nenhum item exclu?do no momen?o.</div>
+                <div className="text-xs text-slate-500">Nenhum item excluido no momento.</div>
               )}
             </div>
           </details>
@@ -1376,23 +1376,28 @@ export default function MeuPerfilProjetosPage() {
       </div>
 
       <div className="text-xs text-slate-500">
-        Dica: se voc? n?o est? vendo um projeto, confirme se voc? est? cadastrado como membro em <code>project_members</code>.
+        Dica: se voce nao esta vendo um projeto, confirme se voce esta cadastrado como membro em <code>project_members</code>.
       </div>
 
       <PageHelpModal
         open={showPageHelp}
         onClose={() => setShowPageHelp(false)}
-        title="Ajuda da p?gina - Meus entreg?veis"
+        title="Ajuda da pagina - Meus entregaveis"
         items={[
-          { title: "A??es", text: "abre os detalhes do entregavel para enviar link/arquivo e registrar contribuicao." },
-          { title: "Atrasado (interno)", text: "indica pend?ncia interna de valida??o da contribui��o." },
-          { title: "Itens exclu?dos", text: "entreg?veis atribu?dos a voc?, mas bloqueados para edi??o (ex.: enviados/aprovados)." },
-          { title: "Linha do tempo", text: "mostra coment�rios e movimenta??es (inclusive da lideran?a) quanto o card estiver expandido." },
+          { title: "Acoes", text: "abre os detalhes do entregavel para enviar link/arquivo e registrar contribuicao." },
+          { title: "Atrasado (interno)", text: "indica pendencia interna de validacao da contribuicao." },
+          { title: "Itens excluidos", text: "entregaveis atribuidos a voce, mas bloqueados para edicao (ex.: enviados/aprovados)." },
+          { title: "Linha do tempo", text: "mostra comentarios e movimentacoes (inclusive da lideranca) quando o card estiver expandido." },
         ]}
       />
     </div>
   );
 }
+
+
+
+
+
 
 
 
