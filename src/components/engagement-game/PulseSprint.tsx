@@ -398,10 +398,20 @@ export function PulseSprintPage() {
       ? "Jogar novamente"
       : "Jogar agora"
     : "Rodada concluida hoje";
+  const compactMessage = status?.player.isAdmin && status?.player.playedToday
+    ? "Replay admin liberado."
+    : status?.player.canPlayToday
+    ? "Sua rodada de hoje esta pronta."
+    : "Rodada concluida hoje.";
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <section className="relative overflow-hidden rounded-[2rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.18),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.16),transparent_28%),linear-gradient(135deg,#f8fafc,#ffffff)] p-6 shadow-[0_28px_80px_-48px_rgba(15,23,42,0.45)]">
+      <section
+        className={clsx(
+          "relative overflow-hidden rounded-[2rem] border border-slate-200 bg-[radial-gradient(circle_at_top_left,rgba(245,158,11,0.18),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(14,165,233,0.16),transparent_28%),linear-gradient(135deg,#f8fafc,#ffffff)] shadow-[0_28px_80px_-48px_rgba(15,23,42,0.45)]",
+          heroCollapsed ? "p-4" : "p-6"
+        )}
+      >
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">
             <Rocket size={14} /> Engajamento diario
@@ -416,16 +426,61 @@ export function PulseSprintPage() {
           </button>
         </div>
 
-        <div className={clsx("grid gap-6", heroCollapsed ? "lg:grid-cols-1" : "lg:grid-cols-[1.15fr_0.85fr]")}>
+        {heroCollapsed ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h1 className="text-xl font-semibold tracking-tight text-slate-950">{DAILY_GAME_TITLE}</h1>
+                <p className="mt-1 text-sm text-slate-600">{compactMessage}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-sm font-semibold text-slate-700">
+                  {formatCompactPoints(status?.player.scoreCurrent ?? 0)} pts
+                </div>
+                <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-700">
+                  {status?.player.streak ?? 0}x streak
+                </div>
+                <div className="rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-sm font-semibold text-slate-700">
+                  {status?.player.rankPosition ? `#${status.player.rankPosition}` : "Sem rank"}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleStart()}
+                disabled={starting || loading || !status?.player.canPlayToday || gameState === "playing"}
+                className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+              >
+                <Play size={16} />
+                {primaryActionLabel}
+              </button>
+              <button
+                type="button"
+                onClick={() => void loadStatus()}
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <RefreshCcw size={15} /> Atualizar
+              </button>
+              <Link
+                href="/institucional/rede-social"
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <Share2 size={15} /> Abrir PulseHub
+              </Link>
+            </div>
+          </div>
+        ) : null}
+
+        <div className={clsx("grid gap-6", heroCollapsed ? "hidden" : "lg:grid-cols-[1.15fr_0.85fr]")}>
           <div>
-            <h1 className={clsx("font-semibold tracking-tight text-slate-950", heroCollapsed ? "text-2xl" : "text-4xl")}>
-              {DAILY_GAME_TITLE}
-            </h1>
-            <p className={clsx("max-w-2xl leading-relaxed text-slate-600", heroCollapsed ? "mt-2 text-sm" : "mt-3 text-base")}>
+            <h1 className="text-4xl font-semibold tracking-tight text-slate-950">{DAILY_GAME_TITLE}</h1>
+            <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-600">
               Desafio de reflexo de 40 segundos. Toque os pulsos de energia na grade e acumule pontos base, bonus de performance e bonus de streak.
             </p>
 
-            <div className={clsx("grid gap-3 sm:grid-cols-3", heroCollapsed ? "mt-4" : "mt-6")}>
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
               <div className="rounded-3xl border border-slate-200 bg-white/85 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Placar atual</p>
                 <p className="mt-2 text-3xl font-semibold text-slate-950">
@@ -446,14 +501,14 @@ export function PulseSprintPage() {
               </div>
             </div>
 
-            <div className={clsx("rounded-3xl border border-slate-200 bg-white/75 p-4", heroCollapsed ? "mt-4" : "mt-5")}>
+            <div className="mt-5 rounded-3xl border border-slate-200 bg-white/75 p-4">
               <p className="text-sm font-semibold text-slate-900">Mensagem do dia</p>
               <p className="mt-2 text-sm leading-relaxed text-slate-600">
                 {status?.message ?? "Carregando sua motivacao diaria..."}
               </p>
             </div>
 
-            <div className={clsx("flex flex-wrap items-center gap-3", heroCollapsed ? "mt-4" : "mt-6")}>
+            <div className="mt-6 flex flex-wrap items-center gap-3">
               <button
                 type="button"
                 onClick={() => void handleStart()}
@@ -479,7 +534,7 @@ export function PulseSprintPage() {
             </div>
           </div>
 
-          <div className={clsx("rounded-[1.75rem] border border-slate-200 bg-white/85 p-5", heroCollapsed && "hidden lg:hidden")}>
+          <div className="rounded-[1.75rem] border border-slate-200 bg-white/85 p-5">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Como funciona</p>
             <div className="mt-4 space-y-3">
               {[
