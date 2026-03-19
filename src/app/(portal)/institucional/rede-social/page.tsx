@@ -3024,7 +3024,8 @@ export default function InternalSocialPage() {
               </div>
             </section>
 
-            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)] xl:order-5 xl:col-start-2 xl:self-start">
+            <aside className="space-y-6 xl:col-start-2 xl:row-start-1 xl:self-start">
+            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)]">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Destaques</p>
@@ -3090,9 +3091,9 @@ export default function InternalSocialPage() {
               </div>
             </section>
 
-            <PulseSprintWidget className="xl:order-6 xl:col-start-2 xl:self-start" />
+            <PulseSprintWidget />
 
-            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)] xl:order-7 xl:col-start-2 xl:self-start">
+            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)]">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Painel</p>
@@ -3156,7 +3157,7 @@ export default function InternalSocialPage() {
               </div>
             </section>
 
-            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)] xl:order-8 xl:col-start-2 xl:self-start">
+            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)]">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Canal oficial</p>
@@ -3197,6 +3198,7 @@ export default function InternalSocialPage() {
                 )}
               </div>
             </section>
+            </aside>
 
             <section className="flex flex-wrap items-center gap-2 xl:order-2 xl:col-start-1 xl:self-start xl:max-w-3xl xl:justify-self-center xl:w-full">
               {[
