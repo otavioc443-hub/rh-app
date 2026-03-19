@@ -57,6 +57,7 @@ type ColaboradorName = {
 };
 
 type PortalShellCache = {
+  userId: string | null;
   role: Role | null;
   company: Company | null;
   department: Department | null;
@@ -117,6 +118,10 @@ function writePortalShellCache(cache: PortalShellCache) {
   } catch {
     // noop
   }
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function getFieldDraftKey(element: Element, index: number) {
@@ -222,6 +227,12 @@ function restoreDraftSnapshot(pathname: string) {
   }
 }
 
+function applyCachedPortalShell(cache: PortalShellCache | null, expectedUserId?: string | null) {
+  if (!cache?.role) return null;
+  if (expectedUserId && cache.userId && cache.userId !== expectedUserId) return null;
+  return cache;
+}
+
 export default function PortalShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -242,6 +253,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
   const inFlight = useRef(false);
   const alive = useRef(true);
   const hydratedFromCache = useRef(false);
+  const currentUserIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -275,16 +287,19 @@ export default function PortalShell({ children }: { children: React.ReactNode })
     const cached = readPortalShellCache();
     if (!cached) return;
 
-    hydratedFromCache.current = true;
-    setRole(cached.role);
-    setCompany(cached.company);
-    setDepartment(cached.department);
-    setFullName(cached.fullName);
-    setJobTitle(cached.jobTitle);
-    setAvatarUrl(cached.avatarUrl);
-    setHiddenRoutes(new Set(cached.hiddenRoutes));
-    setHiddenRoutesLoaded(true);
-    setLoading(false);
+    if (cached.role) {
+      hydratedFromCache.current = true;
+      currentUserIdRef.current = cached.userId;
+      setRole(cached.role);
+      setCompany(cached.company);
+      setDepartment(cached.department);
+      setFullName(cached.fullName);
+      setJobTitle(cached.jobTitle);
+      setAvatarUrl(cached.avatarUrl);
+      setHiddenRoutes(new Set(cached.hiddenRoutes));
+      setHiddenRoutesLoaded(true);
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -337,22 +352,56 @@ export default function PortalShell({ children }: { children: React.ReactNode })
 
         clearRecentLoginMarker();
 
-        const { data: profile, error: profileErr } = await supabase
-          .from("profiles")
-          .select("role, active, company_id, department_id, full_name, avatar_url")
-          .eq("id", userId)
-          .maybeSingle<Profile>();
+        currentUserIdRef.current = userId;
+
+        let profile: Profile | null = null;
+        let profileErr: { message: string } | null = null;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const profileRes = await supabase
+            .from("profiles")
+            .select("role, active, company_id, department_id, full_name, avatar_url")
+            .eq("id", userId)
+            .maybeSingle<Profile>();
+          profile = profileRes.data ?? null;
+          profileErr = profileRes.error ? { message: profileRes.error.message } : null;
+          if (profile || !profileErr) break;
+          await sleep(250 * (attempt + 1));
+        }
 
         if (!alive.current) return;
 
         if (profileErr) {
-          setFatalError("Não foi possível ler profiles. Verifique RLS/Policy/GRANT ou cadastro.");
+          const cached = applyCachedPortalShell(readPortalShellCache(), userId);
+          if (cached) {
+            setRole(cached.role);
+            setCompany(cached.company);
+            setDepartment(cached.department);
+            setFullName(cached.fullName);
+            setJobTitle(cached.jobTitle);
+            setAvatarUrl(cached.avatarUrl);
+            setHiddenRoutes(new Set(cached.hiddenRoutes));
+            setHiddenRoutesLoaded(true);
+            return;
+          }
+          setFatalError("Nao foi possivel ler profiles. Verifique RLS/Policy/GRANT ou cadastro.");
           setDebugErr(profileErr.message);
           return;
         }
 
         if (!profile) {
-          setFatalError("Perfil não encontrado na tabela profiles para este usuário.");
+          const cached = applyCachedPortalShell(readPortalShellCache(), userId);
+          if (cached) {
+            setRole(cached.role);
+            setCompany(cached.company);
+            setDepartment(cached.department);
+            setFullName(cached.fullName);
+            setJobTitle(cached.jobTitle);
+            setAvatarUrl(cached.avatarUrl);
+            setHiddenRoutes(new Set(cached.hiddenRoutes));
+            setHiddenRoutesLoaded(true);
+            return;
+          }
+          setFatalError("Perfil nao encontrado na tabela profiles para este usuario.");
           setDebugErr(`Nenhuma linha encontrada para id=${userId}`);
           return;
         }
@@ -365,15 +414,34 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         // Role efetiva: preferimos a funcao do banco (current_role),
         // pois ela pode considerar mapeamento por cargo (cargos.portal_role).
         let r: Role | null = coerceRole(profile.role);
-        try {
-          const { data: cr, error: crErr } = await supabase.rpc("current_role");
-          if (!crErr) r = coerceRole(cr) ?? r;
-        } catch {
-          // fallback silencioso: mantem a role do profile
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          try {
+            const { data: cr, error: crErr } = await supabase.rpc("current_role");
+            if (!crErr) {
+              r = coerceRole(cr) ?? r;
+              break;
+            }
+          } catch {
+            // fallback silencioso: mantem a role do profile
+          }
+          if (r) break;
+          await sleep(200 * (attempt + 1));
         }
 
         if (!r) {
-          setFatalError("Perfil sem função (role). Defina role = colaborador/coordenador/gestor/diretoria/rh/financeiro/pd/admin.");
+          const cached = applyCachedPortalShell(readPortalShellCache(), userId);
+          if (cached) {
+            setRole(cached.role);
+            setCompany(cached.company);
+            setDepartment(cached.department);
+            setFullName(cached.fullName);
+            setJobTitle(cached.jobTitle);
+            setAvatarUrl(cached.avatarUrl);
+            setHiddenRoutes(new Set(cached.hiddenRoutes));
+            setHiddenRoutesLoaded(true);
+            return;
+          }
+          setFatalError("Perfil sem funcao (role). Defina role = colaborador/coordenador/gestor/diretoria/rh/financeiro/pd/admin.");
           return;
         }
 
@@ -486,6 +554,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (!role || !hiddenRoutesLoaded) return;
     writePortalShellCache({
+      userId: currentUserIdRef.current,
       role,
       company,
       department,
