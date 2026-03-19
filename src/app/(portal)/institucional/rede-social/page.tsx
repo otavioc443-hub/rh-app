@@ -2999,7 +2999,7 @@ export default function InternalSocialPage() {
         ) : null}
 
         {!searchSubmitted && activeTab === "inicio" ? (
-          <main id="feed" className="mx-auto max-w-3xl space-y-6">
+          <main id="feed" className="mx-auto grid max-w-6xl gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
             <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_70px_-40px_rgba(15,23,42,0.35)] backdrop-blur">
               <div className="flex gap-4">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-blue-700 text-sm font-semibold text-white shadow-[0_16px_32px_-20px_rgba(37,99,235,0.65)]">
@@ -3017,183 +3017,176 @@ export default function InternalSocialPage() {
               </div>
             </section>
 
-            <section className="grid gap-4 md:grid-cols-2">
-              <div className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)]">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Destaques</p>
-                    <p className="mt-1 text-lg font-semibold text-slate-900">Aniversariantes</p>
-                  </div>
-                  <Link href="/agenda/aniversariantes" className="text-sm font-semibold text-[#0a66c2] hover:underline">
-                    Ver agenda
-                  </Link>
+            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)] xl:col-start-2 xl:row-span-2 xl:self-start">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Destaques</p>
+                  <p className="mt-1 text-lg font-semibold text-slate-900">Equipe em foco</p>
                 </div>
-                <div className="mt-4 space-y-3">
-                  {birthdayHighlights.length ? (
-                    birthdayHighlights.map((item) => (
-                      <Link
-                        key={`birthday-${item.userId}`}
-                        href={`/institucional/rede-social/membros/${item.userId}`}
-                        className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 hover:bg-slate-100"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-slate-900">{item.name}</p>
-                          <p className="truncate text-xs text-slate-500">{item.subtitle}</p>
-                        </div>
-                        <span className="rounded-full bg-pink-50 px-3 py-1 text-xs font-semibold text-pink-700">{item.dateLabel}</span>
-                      </Link>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-500">Nenhum aniversario nos proximos 30 dias.</p>
-                  )}
-                </div>
+                <Link href="/agenda/aniversariantes" className="text-sm font-semibold text-[#0a66c2] hover:underline">
+                  Ver agenda
+                </Link>
               </div>
 
-              <div className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)]">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Boas-vindas</p>
-                    <p className="mt-1 text-lg font-semibold text-slate-900">Novos membros</p>
+              <div className="mt-5 space-y-5">
+                <div>
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-slate-900">Aniversariantes</p>
+                    <span className="text-xs font-semibold text-slate-400">30 dias</span>
                   </div>
-                  <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                    ate 45 dias
-                  </span>
+                  <div className="space-y-2">
+                    {birthdayHighlights.length ? (
+                      birthdayHighlights.map((item) => (
+                        <Link
+                          key={`birthday-${item.userId}`}
+                          href={`/institucional/rede-social/membros/${item.userId}`}
+                          className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3 py-2.5 hover:bg-slate-100"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-slate-900">{item.name}</p>
+                            <p className="truncate text-xs text-slate-500">{item.subtitle}</p>
+                          </div>
+                          <span className="text-xs font-semibold text-pink-700">{item.dateLabel}</span>
+                        </Link>
+                      ))
+                    ) : (
+                      <p className="text-sm text-slate-500">Nenhum aniversario nos proximos 30 dias.</p>
+                    )}
+                  </div>
                 </div>
-                <div className="mt-4 space-y-3">
-                  {newHireHighlights.length ? (
-                    newHireHighlights.map((item) => (
-                      <Link
-                        key={`hire-${item.userId}`}
-                        href={`/institucional/rede-social/membros/${item.userId}`}
-                        className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 hover:bg-slate-100"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-semibold text-slate-900">{item.name}</p>
-                          <p className="truncate text-xs text-slate-500">{item.subtitle}</p>
-                        </div>
-                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{item.dateLabel}</span>
-                      </Link>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-500">Nenhuma admissao recente para destacar.</p>
-                  )}
+
+                <div className="border-t border-slate-100 pt-5">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-slate-900">Novos membros</p>
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">ate 45 dias</span>
+                  </div>
+                  <div className="space-y-2">
+                    {newHireHighlights.length ? (
+                      newHireHighlights.map((item) => (
+                        <Link
+                          key={`hire-${item.userId}`}
+                          href={`/institucional/rede-social/membros/${item.userId}`}
+                          className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3 py-2.5 hover:bg-slate-100"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-semibold text-slate-900">{item.name}</p>
+                            <p className="truncate text-xs text-slate-500">{item.subtitle}</p>
+                          </div>
+                          <span className="text-xs font-semibold text-emerald-700">{item.dateLabel}</span>
+                        </Link>
+                      ))
+                    ) : (
+                      <p className="text-sm text-slate-500">Nenhuma admissao recente para destacar.</p>
+                    )}
+                  </div>
                 </div>
               </div>
             </section>
 
-            <section className="grid gap-4 xl:grid-cols-[1.2fr,0.8fr]">
-              <div className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)]">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Painel</p>
-                    <p className="mt-1 text-lg font-semibold text-slate-900">Analytics do PulseHub</p>
-                  </div>
-                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-                    resumo operacional
-                  </span>
+            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)] xl:col-start-1">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Painel</p>
+                  <p className="mt-1 text-lg font-semibold text-slate-900">Resumo do PulseHub</p>
                 </div>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Posts ativos</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-900">{engagementHighlights.postCount}</p>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+                  visao geral do dia
+                </span>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {[
+                  { label: "Posts ativos", value: engagementHighlights.postCount },
+                  { label: "Comunicados", value: engagementHighlights.officialCount },
+                  { label: "Enquetes", value: engagementHighlights.pollCount },
+                  { label: "Denuncias abertas", value: engagementHighlights.openReports },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-2xl bg-slate-50 px-4 py-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">{item.label}</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900">{item.value}</p>
                   </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Comunicados</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-900">{engagementHighlights.officialCount}</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Enquetes</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-900">{engagementHighlights.pollCount}</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Denuncias abertas</p>
-                    <p className="mt-2 text-2xl font-semibold text-slate-900">{engagementHighlights.openReports}</p>
+                ))}
+              </div>
+              <div className="mt-5 grid gap-5 lg:grid-cols-[1.2fr,0.8fr]">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Assuntos em alta</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {topHashtags.length ? (
+                      topHashtags.map((item) => (
+                        <button
+                          key={`tag-${item.tag}`}
+                          type="button"
+                          onClick={() => {
+                            setSearch(`#${item.tag}`);
+                            setSearchSubmitted(true);
+                            setActiveTab("inicio");
+                          }}
+                          className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+                        >
+                          #{item.tag} • {item.count}
+                        </button>
+                      ))
+                    ) : (
+                      <p className="text-sm text-slate-500">Nenhuma hashtag em destaque.</p>
+                    )}
                   </div>
                 </div>
-                <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-sm font-semibold text-slate-900">Assuntos em alta</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {topHashtags.length ? (
-                        topHashtags.map((item) => (
-                          <button
-                            key={`tag-${item.tag}`}
-                            type="button"
-                            onClick={() => {
-                              setSearch(`#${item.tag}`);
-                              setSearchSubmitted(true);
-                              setActiveTab("inicio");
-                            }}
-                            className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
-                          >
-                            #{item.tag} • {item.count}
-                          </button>
-                        ))
-                      ) : (
-                        <p className="text-sm text-slate-500">Nenhuma hashtag em destaque.</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                    <p className="text-sm font-semibold text-slate-900">Autores com mais posts</p>
-                    <div className="mt-3 space-y-2">
-                      {topAuthors.length ? (
-                        topAuthors.map((author) => (
-                          <div key={`author-${author.userId}`} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2">
-                            <span className="truncate text-sm font-semibold text-slate-900">{author.name}</span>
-                            <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
-                              {author.total} post(s)
-                            </span>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-sm text-slate-500">Sem dados de autoria ainda.</p>
-                      )}
-                    </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Autores em destaque</p>
+                  <div className="mt-3 space-y-2">
+                    {topAuthors.length ? (
+                      topAuthors.map((author) => (
+                        <div key={`author-${author.userId}`} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-3 py-2.5">
+                          <span className="truncate text-sm font-semibold text-slate-900">{author.name}</span>
+                          <span className="text-xs font-semibold text-slate-500">{author.total} post(s)</span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-slate-500">Sem dados de autoria ainda.</p>
+                    )}
                   </div>
                 </div>
               </div>
+            </section>
 
-              <div className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)]">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Canal oficial</p>
-                    <p className="mt-1 text-lg font-semibold text-slate-900">Comunicados recentes</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setFeedFilter("official")}
-                    className="text-sm font-semibold text-[#0a66c2] hover:underline"
-                  >
-                    Ver feed oficial
-                  </button>
+            <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)] xl:col-start-2 xl:self-start">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Canal oficial</p>
+                  <p className="mt-1 text-lg font-semibold text-slate-900">Comunicados recentes</p>
                 </div>
-                <div className="mt-4 space-y-3">
-                  {officialPosts.length ? (
-                    officialPosts.map((post) => (
-                      <div key={`official-${post.id}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">{post.author_name}</p>
-                            <p className="text-xs text-slate-500">{when(post.created_at)}</p>
-                          </div>
-                          <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
-                            {postTypeLabel(post.post_type)}
-                          </span>
+                <button
+                  type="button"
+                  onClick={() => setFeedFilter("official")}
+                  className="text-sm font-semibold text-[#0a66c2] hover:underline"
+                >
+                  Ver todos
+                </button>
+              </div>
+              <div className="mt-4 space-y-2.5">
+                {officialPosts.length ? (
+                  officialPosts.map((post) => (
+                    <div key={`official-${post.id}`} className="rounded-2xl bg-slate-50 px-3 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-slate-900">{post.author_name}</p>
+                          <p className="text-xs text-slate-500">{when(post.created_at)}</p>
                         </div>
-                        {post.text ? (
-                          <RichText
-                            className="mt-3 text-sm text-slate-700 [&_p]:whitespace-pre-wrap"
-                            value={post.text}
-                            mentionDirectory={mentionDirectory.byHandle}
-                          />
-                        ) : null}
+                        <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                          {postTypeLabel(post.post_type)}
+                        </span>
                       </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-slate-500">Nenhum comunicado recente no feed.</p>
-                  )}
-                </div>
+                      {post.text ? (
+                        <RichText
+                          className="mt-2 line-clamp-3 text-sm text-slate-700 [&_p]:whitespace-pre-wrap"
+                          value={post.text}
+                          mentionDirectory={mentionDirectory.byHandle}
+                        />
+                      ) : null}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-500">Nenhum comunicado recente no feed.</p>
+                )}
               </div>
             </section>
 
