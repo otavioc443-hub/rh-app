@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
+import { PulseSprintPage, PulseSprintWidget } from "@/components/engagement-game/PulseSprint";
 
 type Profile = {
   id: string;
@@ -787,7 +788,7 @@ export default function InternalSocialPage() {
   const [projectNotes, setProjectNotes] = useState<Record<string, string>>({});
   const [composerExpanded, setComposerExpanded] = useState(false);
   const [showComposerEmojiPicker, setShowComposerEmojiPicker] = useState(false);
-  const [activeTab, setActiveTab] = useState<"inicio" | "network" | "communities" | "projects" | "messages">("inicio");
+  const [activeTab, setActiveTab] = useState<"inicio" | "network" | "communities" | "projects" | "game" | "messages">("inicio");
   const [messageFilter, setMessageFilter] = useState<"all" | "online" | "with_history">("all");
   const [messageSearch, setMessageSearch] = useState("");
   const [search, setSearch] = useState("");
@@ -1362,7 +1363,7 @@ export default function InternalSocialPage() {
     const project = params.get("project");
     const tag = params.get("tag");
     const community = params.get("community");
-    if (tab === "inicio" || tab === "network" || tab === "communities" || tab === "projects" || tab === "messages") {
+    if (tab === "inicio" || tab === "network" || tab === "communities" || tab === "projects" || tab === "game" || tab === "messages") {
       setActiveTab(tab);
     }
     if (user) setSelectedUserId(user);
@@ -1439,6 +1440,7 @@ export default function InternalSocialPage() {
     if (activeTab === "network") return "Pesquisar membros da rede";
     if (activeTab === "communities") return "Pesquisar comunidades";
     if (activeTab === "projects") return "Pesquisar projetos";
+    if (activeTab === "game") return "Pesquisar publicacoes na rede";
     if (activeTab === "messages") return "Pesquisar conversas";
     return "Pesquisar publicações na rede";
   }, [activeTab]);
@@ -2776,6 +2778,7 @@ export default function InternalSocialPage() {
               { id: "network", label: "Minha rede" },
               { id: "communities", label: "Comunidades" },
               { id: "projects", label: "Projetos" },
+              { id: "game", label: "Jogo" },
               { id: "messages", label: "Mensagens" },
             ].map((item) => {
               const active = activeTab === item.id;
@@ -2784,7 +2787,7 @@ export default function InternalSocialPage() {
                   key={item.id}
                   type="button"
                   onClick={() => {
-                    setActiveTab(item.id as "inicio" | "network" | "communities" | "projects" | "messages");
+                    setActiveTab(item.id as "inicio" | "network" | "communities" | "projects" | "game" | "messages");
                     setSearchSubmitted(false);
                   }}
                   className={`relative rounded-full px-4 py-2 font-medium transition ${
@@ -3151,6 +3154,8 @@ export default function InternalSocialPage() {
                 </div>
               </div>
             </section>
+
+            <PulseSprintWidget className="xl:col-start-2 xl:self-start" />
 
             <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)] xl:col-start-2 xl:self-start">
               <div className="flex items-center justify-between gap-3">
@@ -4009,6 +4014,24 @@ export default function InternalSocialPage() {
                 Selecione um projeto para visualizar os dados basicos e registrar informacoes colaborativas.
               </div>
             )}
+          </section>
+        ) : null}
+
+        {!searchSubmitted && activeTab === "game" ? (
+          <section id="jogo" className="space-y-6">
+            <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[linear-gradient(120deg,#020617_0%,#0f172a_18%,#102c5c_52%,#312e81_100%)] px-6 py-7 text-white shadow-[0_30px_90px_-40px_rgba(15,23,42,0.75)]">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-200">PulseHub</p>
+                  <h1 className="mt-2 text-2xl font-semibold">Arena diaria de engajamento</h1>
+                  <p className="mt-2 max-w-3xl text-sm text-blue-100/90">
+                    O Pulse Sprint agora faz parte do PulseHub para reforcar o retorno diario, a constancia e a competicao saudavel entre colaboradores.
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <PulseSprintPage />
           </section>
         ) : null}
 
