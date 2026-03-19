@@ -23,6 +23,14 @@ function tabHref(companyKey: string, tab: TabKey) {
   return `/canal-de-etica/${companyKey}/codigo-de-etica`;
 }
 
+function tabLabel(tab: TabKey) {
+  if (tab === "home") return "Página Inicial";
+  if (tab === "report") return "Realizar relato";
+  if (tab === "follow-up") return "Acompanhar relato";
+  if (tab === "data") return "Proteção de Dados";
+  return "Código de Ética";
+}
+
 const reportTopics = [
   {
     title: "Assédio e discriminação",
@@ -133,19 +141,13 @@ function ActionLink({
   }
 
   return (
-    <Link href={href} className={className} style={style}>
+    <Link href={href} className={className} style={style} scroll>
       {children}
     </Link>
   );
 }
 
-function TabButton({
-  active,
-  children,
-}: {
-  active: boolean;
-  children: React.ReactNode;
-}) {
+function TabButton({ active, children }: { active: boolean; children: React.ReactNode }) {
   return (
     <span
       className={`rounded-full px-4 py-2 text-sm font-medium transition ${
@@ -183,78 +185,21 @@ function SectionTitle({
   );
 }
 
-export default function EthicsChannelLanding({
+function HomeHero({
   config,
-  companies,
   content,
-  activeTab = "home",
 }: {
   config: EthicsChannelConfig;
-  companies: EthicsChannelConfig[];
   content: EthicsManagedContent;
-  activeTab?: TabKey;
 }) {
   const isSolida = config.companyName
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .includes("solida");
-  const accent = isSolida ? "#99A41A" : "#1E3A8A";
-  const accentSoft = isSolida ? "#2E3647" : "#0F172A";
-  const reportHref = config.reportUrl || (config.contactEmail ? `mailto:${config.contactEmail}?subject=Canal%20de%20Ética` : "#");
-  const followUpHref = config.followUpUrl || "#";
-  const companyTabs = companies.map((item) => ({ ...item, href: `/canal-de-etica/${item.key}` }));
 
   return (
-    <main
-      className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_45%,#ffffff_100%)] text-slate-950"
-      style={{ "--ethics-accent": accent, "--ethics-soft": accentSoft } as React.CSSProperties}
-    >
-      <header className="border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-5 lg:px-10">
-          <Link href="/canal-de-etica" className="flex items-center gap-4">
-            <span
-              className="grid h-14 w-14 place-items-center rounded-2xl text-white shadow-lg"
-              style={{ backgroundColor: "var(--ethics-soft)" }}
-            >
-              <Building2 size={24} />
-            </span>
-            <span>
-              <span className="block text-2xl font-semibold tracking-tight text-slate-950">{config.companyName}</span>
-              <span className="block text-sm text-slate-500">Canal de Ética e Integridade</span>
-            </span>
-          </Link>
-
-          <div className="flex flex-wrap items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-2 shadow-sm">
-            <Link href={tabHref(config.key, "home")}>
-              <TabButton active={activeTab === "home"}>
-                Página Inicial
-              </TabButton>
-            </Link>
-            <Link href={tabHref(config.key, "report")}>
-              <TabButton active={activeTab === "report"}>
-                Realizar relato
-              </TabButton>
-            </Link>
-            <Link href={tabHref(config.key, "follow-up")}>
-              <TabButton active={activeTab === "follow-up"}>
-                Acompanhar relato
-              </TabButton>
-            </Link>
-            <Link href={tabHref(config.key, "data")}>
-              <TabButton active={activeTab === "data"}>
-                Proteção de Dados
-              </TabButton>
-            </Link>
-            <Link href={tabHref(config.key, "code")}>
-              <TabButton active={activeTab === "code"}>
-                Código de Ética
-              </TabButton>
-            </Link>
-          </div>
-        </div>
-      </header>
-
+    <>
       <section className="relative min-h-[460px] overflow-hidden lg:min-h-[620px]">
         <Image
           src={content.heroImageUrl || config.heroImageUrl || "/bg-login.jpg"}
@@ -267,24 +212,6 @@ export default function EthicsChannelLanding({
       </section>
 
       <section className="mx-auto max-w-7xl px-6 pb-16 pt-8 lg:px-10 lg:pt-10">
-        {companyTabs.length > 1 ? (
-          <div className="mb-6 flex flex-wrap gap-2">
-            {companyTabs.map((item) => (
-              <Link
-                key={item.key}
-                href={item.href}
-                className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition ${
-                  item.key === config.key
-                    ? "border-slate-900 bg-slate-900 text-white"
-                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                {item.companyName}
-              </Link>
-            ))}
-          </div>
-        ) : null}
-
         <div className="rounded-[40px] border border-slate-200 bg-white/97 px-7 py-8 shadow-[0_36px_100px_-60px_rgba(15,23,42,0.8)] backdrop-blur lg:px-10 lg:py-10">
           <div className="grid gap-8 lg:grid-cols-[1.15fr,0.85fr] lg:items-start">
             <div>
@@ -298,6 +225,7 @@ export default function EthicsChannelLanding({
                   href={tabHref(config.key, "report")}
                   className="inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-900/20 transition hover:translate-y-[-1px]"
                   style={{ backgroundColor: "var(--ethics-accent)" }}
+                  scroll
                 >
                   Realizar relato
                   <ArrowRight size={16} />
@@ -305,6 +233,7 @@ export default function EthicsChannelLanding({
                 <Link
                   href={tabHref(config.key, "follow-up")}
                   className="inline-flex items-center justify-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-800 transition hover:bg-slate-50"
+                  scroll
                 >
                   Acompanhar relato
                   <SearchCheck size={16} />
@@ -340,8 +269,121 @@ export default function EthicsChannelLanding({
           </div>
         </div>
       </section>
+    </>
+  );
+}
+
+function InnerHero({
+  activeTab,
+  content,
+}: {
+  activeTab: Exclude<TabKey, "home">;
+  content: EthicsManagedContent;
+}) {
+  return (
+    <section className="mx-auto max-w-7xl px-6 pb-10 pt-10 lg:px-10 lg:pt-12">
+      <div className="rounded-[40px] border border-slate-200 bg-white px-7 py-8 shadow-[0_30px_80px_-52px_rgba(15,23,42,0.55)] lg:px-10 lg:py-10">
+        <p className="text-xs font-semibold uppercase tracking-[0.3em] text-slate-500">{tabLabel(activeTab)}</p>
+        <div className="mt-4 grid gap-6 lg:grid-cols-[1.2fr,0.8fr] lg:items-start">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-950 md:text-4xl">{content.heroTitle}</h1>
+            <p className="mt-4 max-w-3xl text-base leading-8 text-slate-600">{content.heroSubtitle}</p>
+          </div>
+          <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Diretriz principal</p>
+            <p className="mt-3 text-base font-semibold text-slate-950">{content.heading}</p>
+            <p className="mt-3 text-sm leading-7 text-slate-600">{content.intro}</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export default function EthicsChannelLanding({
+  config,
+  companies,
+  content,
+  activeTab = "home",
+}: {
+  config: EthicsChannelConfig;
+  companies: EthicsChannelConfig[];
+  content: EthicsManagedContent;
+  activeTab?: TabKey;
+}) {
+  const isSolida = config.companyName
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .includes("solida");
+  const accent = isSolida ? "#99A41A" : "#1E3A8A";
+  const accentSoft = isSolida ? "#2E3647" : "#0F172A";
+  const reportHref = config.reportUrl || (config.contactEmail ? `mailto:${config.contactEmail}?subject=Canal%20de%20Ética` : "#");
+  const followUpHref = config.followUpUrl || "#";
+  const companyTabs = companies.map((item) => ({ ...item, href: `/canal-de-etica/${item.key}` }));
+
+  return (
+    <main
+      className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef2f7_45%,#ffffff_100%)] text-slate-950"
+      style={{ "--ethics-accent": accent, "--ethics-soft": accentSoft } as React.CSSProperties}
+    >
+      <header className="border-b border-slate-200 bg-white/95 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-5 lg:px-10">
+          <Link href="/canal-de-etica" className="flex items-center gap-4" scroll>
+            <span
+              className="grid h-14 w-14 place-items-center rounded-2xl text-white shadow-lg"
+              style={{ backgroundColor: "var(--ethics-soft)" }}
+            >
+              <Building2 size={24} />
+            </span>
+            <span>
+              <span className="block text-2xl font-semibold tracking-tight text-slate-950">{config.companyName}</span>
+              <span className="block text-sm text-slate-500">Canal de Ética e Integridade</span>
+            </span>
+          </Link>
+
+          <div className="flex flex-wrap items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-2 shadow-sm">
+            <Link href={tabHref(config.key, "home")} scroll>
+              <TabButton active={activeTab === "home"}>{tabLabel("home")}</TabButton>
+            </Link>
+            <Link href={tabHref(config.key, "report")} scroll>
+              <TabButton active={activeTab === "report"}>{tabLabel("report")}</TabButton>
+            </Link>
+            <Link href={tabHref(config.key, "follow-up")} scroll>
+              <TabButton active={activeTab === "follow-up"}>{tabLabel("follow-up")}</TabButton>
+            </Link>
+            <Link href={tabHref(config.key, "data")} scroll>
+              <TabButton active={activeTab === "data"}>{tabLabel("data")}</TabButton>
+            </Link>
+            <Link href={tabHref(config.key, "code")} scroll>
+              <TabButton active={activeTab === "code"}>{tabLabel("code")}</TabButton>
+            </Link>
+          </div>
+        </div>
+      </header>
+
+      {activeTab === "home" ? <HomeHero config={config} content={content} /> : <InnerHero activeTab={activeTab} content={content} />}
 
       <section className="mx-auto max-w-7xl px-6 pb-16 lg:px-10">
+        {companyTabs.length > 1 ? (
+          <div className="mb-6 flex flex-wrap gap-2">
+            {companyTabs.map((item) => (
+              <Link
+                key={item.key}
+                href={item.href}
+                className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition ${
+                  item.key === config.key
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+                scroll
+              >
+                {item.companyName}
+              </Link>
+            ))}
+          </div>
+        ) : null}
+
         {activeTab === "home" ? (
           <div className="space-y-10">
             <SectionTitle
