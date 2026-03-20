@@ -666,30 +666,34 @@ export default function EthicsChannelLanding({
           </div>
         ) : null}
       </section>
-
-      <footer className="border-t border-slate-200 bg-white/96">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-8 text-sm text-slate-600 lg:flex-row lg:items-center lg:justify-between lg:px-10">
-          <div>
-            <p className="font-semibold text-slate-900">{config.companyName}</p>
-            <p className="mt-1">
-              Canal de etica institucional com acesso a registro, acompanhamento e orientacoes de integridade.
+      <footer className="bg-[#030712] text-white">
+        <div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-10 lg:flex-row lg:items-center lg:justify-between lg:px-10">
+          <div className="max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/55">Encaminhamento etico</p>
+            <p className="mt-4 text-2xl font-semibold tracking-tight text-white lg:text-[2.15rem]">
+              Se algo nao parece correto, registre. O silencio nao protege a integridade.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            {config.dataProtectionUrl ? (
-              <Link href={config.dataProtectionUrl} className="font-semibold text-slate-700 hover:text-slate-950">
-                Protecao de dados
-              </Link>
-            ) : null}
-            {config.codeOfEthicsUrl ? (
-              <Link href={config.codeOfEthicsUrl} className="font-semibold text-slate-700 hover:text-slate-950">
-                Codigo de etica
-              </Link>
-            ) : null}
-            <span className="text-slate-400">© {new Date().getFullYear()}</span>
+            <a
+              href={reportHref}
+              target={reportHref.startsWith("http") ? "_blank" : undefined}
+              rel={reportHref.startsWith("http") ? "noreferrer" : undefined}
+              className="inline-flex items-center justify-center rounded-full px-7 py-4 text-base font-semibold text-white shadow-[0_18px_40px_-24px_rgba(153,164,26,0.95)] transition hover:brightness-105"
+              style={{ backgroundColor: "var(--ethics-accent)" }}
+            >
+              Registrar agora
+            </a>
+            <Link
+              href="/canal-de-etica"
+              className="inline-flex items-center justify-center rounded-full border border-white/15 bg-transparent px-7 py-4 text-base font-semibold text-white transition hover:border-white/25 hover:bg-white/5"
+              scroll
+            >
+              Trocar empresa
+            </Link>
           </div>
         </div>
-      </footer>
-    </main>
+      </footer>    </main>
   );
 }
+
