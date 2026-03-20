@@ -294,6 +294,7 @@ const DASHBOARD_CONFIG: Record<SectorKey, { title: string; subtitle: string; lin
     links: [
       { href: "/p-d/chamados", label: "Fila de chamados" },
       { href: "/p-d/projetos", label: "Projetos P&D" },
+      { href: "/p-d/equipamentos", label: "Equipamentos" },
       { href: "/gestor/projetos", label: "Projetos operacionais" },
     ],
   },

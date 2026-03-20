@@ -194,6 +194,7 @@ export default function Sidebar({
           { label: "Painel P&D", icon: LayoutDashboard, href: "/p-d", exact: true },
           { label: "Chamados", icon: ClipboardList, href: "/p-d/chamados" },
           { label: "Projetos", icon: Layers, href: "/p-d/projetos" },
+          { label: "Equipamentos", icon: MonitorCheck, href: "/p-d/equipamentos" },
         ],
       },
 
