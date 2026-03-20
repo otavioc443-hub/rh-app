@@ -290,7 +290,8 @@ export function PulseSprintPage() {
   const [elapsedMs, setElapsedMs] = useState(0);
   const [hits, setHits] = useState<DailyGameHit[]>([]);
   const [result, setResult] = useState<SubmitResponse["result"] | null>(null);
-  const [gameState, setGameState] = useState<"idle" | "playing" | "finished">("idle");
+  const [gameState, setGameState] = useState<"idle" | "countdown" | "playing" | "finished">("idle");
+  const [countdownValue, setCountdownValue] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [heroCollapsed, setHeroCollapsed] = useState(false);
   const [showIntroModal, setShowIntroModal] = useState(false);
@@ -350,6 +351,22 @@ export function PulseSprintPage() {
     return () => cancelAnimationFrame(frame);
   }, [durationMs, gameState]);
 
+  useEffect(() => {
+    if (gameState !== "countdown" || countdownValue === null) return undefined;
+
+    const timer = window.setTimeout(() => {
+      if (countdownValue <= 1) {
+        setCountdownValue(null);
+        startedAtRef.current = performance.now();
+        setGameState("playing");
+        return;
+      }
+      setCountdownValue((value) => (value === null ? value : value - 1));
+    }, 700);
+
+    return () => window.clearTimeout(timer);
+  }, [countdownValue, gameState]);
+
   const submitRound = useCallback(async () => {
     if (!sessionId || !status || submitting) return;
     setSubmitting(true);
@@ -403,6 +420,7 @@ export function PulseSprintPage() {
     setCopied(false);
     setShowResultModal(false);
     setShowIntroModal(false);
+    setCountdownValue(null);
     submitGuardRef.current = false;
     try {
       const res = await fetch("/api/institucional/jogo-diario/start", { method: "POST" });
@@ -414,8 +432,8 @@ export function PulseSprintPage() {
       setActiveDifficulty(json.difficulty);
       setHits([]);
       setElapsedMs(0);
-      startedAtRef.current = performance.now();
-      setGameState("playing");
+      setCountdownValue(3);
+      setGameState("countdown");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao iniciar o jogo.");
     } finally {
@@ -429,7 +447,7 @@ export function PulseSprintPage() {
       setShowWeekendModal(true);
       return;
     }
-    if (!status.player.canPlayToday || gameState === "playing") return;
+    if (!status.player.canPlayToday || gameState === "playing" || gameState === "countdown") return;
     setShowIntroModal(true);
   }, [gameState, status]);
 
@@ -463,6 +481,8 @@ export function PulseSprintPage() {
   const progress = Math.max(0, Math.min(100, (elapsedMs / durationMs) * 100));
   const primaryActionLabel = status?.game.isWeekend
     ? "Indisponivel hoje"
+    : gameState === "countdown"
+    ? "Preparando..."
     : status?.player.canPlayToday
     ? "Jogar agora"
     : "Rodada concluida hoje";
@@ -472,7 +492,7 @@ export function PulseSprintPage() {
     ? `Sua rodada ${activeDifficulty?.label?.toLowerCase() ?? "de hoje"} esta pronta.`
     : "Rodada concluida hoje.";
   const streakLabel = `${status?.player.streak ?? 0} dia(s) uteis`;
-  const showArena = gameState === "playing" && !!sessionId && rounds.length > 0;
+  const showArena = (gameState === "countdown" || gameState === "playing") && !!sessionId && rounds.length > 0;
   const introMessage =
     status?.message ??
     "Preparado para mais uma rodada? Seu desempenho de hoje pode melhorar sua posicao no ranking.";
@@ -523,7 +543,7 @@ export function PulseSprintPage() {
               <button
                 type="button"
                 onClick={() => void handleStart()}
-                disabled={starting || loading || !status?.player.canPlayToday || gameState === "playing"}
+                disabled={starting || loading || !status?.player.canPlayToday || gameState === "playing" || gameState === "countdown"}
                 className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 <Play size={16} />
@@ -591,7 +611,7 @@ export function PulseSprintPage() {
               <button
                 type="button"
                 onClick={() => void handleStart()}
-                disabled={starting || loading || !status?.player.canPlayToday || gameState === "playing"}
+                disabled={starting || loading || !status?.player.canPlayToday || gameState === "playing" || gameState === "countdown"}
                 className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
               >
                 <Play size={16} />
@@ -909,6 +929,18 @@ export function PulseSprintPage() {
             <Play size={16} />
             Iniciar desafio
           </button>
+        </div>
+      </OverlayModal>
+
+      <OverlayModal open={countdownValue !== null && gameState === "countdown"} title="Contagem regressiva">
+        <div className="py-6 text-center">
+          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-400">A arena sera liberada em instantes</p>
+          <div className="mt-5 flex items-center justify-center">
+            <div className="flex h-28 w-28 items-center justify-center rounded-full bg-slate-950 text-5xl font-semibold text-white shadow-[0_24px_60px_-30px_rgba(15,23,42,0.7)]">
+              {countdownValue}
+            </div>
+          </div>
+          <p className="mt-5 text-base text-slate-600">Prepare-se para tocar os alvos assim que a contagem terminar.</p>
         </div>
       </OverlayModal>
 
