@@ -103,7 +103,6 @@ export default function Sidebar({
         children: [
           { label: "Visão Geral", icon: LayoutDashboard, href: "/institucional", exact: true },
           { label: "PulseHub", icon: MessageSquareText, href: "/institucional/rede-social" },
-          { label: "Privacidade e LGPD", icon: FileCheck2, href: "/institucional/privacidade" },
           { label: "Organograma", icon: GitBranch, href: "/institucional/organograma", roles: ["gestor", "financeiro", "admin"] },
         ],
       },
@@ -189,7 +188,7 @@ export default function Sidebar({
       {
         label: "P&D",
         icon: Wrench,
-        roles: ["pd"],
+        roles: ["pd", "admin"],
         children: [
           { label: "Painel P&D", icon: LayoutDashboard, href: "/p-d", exact: true },
           { label: "Chamados", icon: ClipboardList, href: "/p-d/chamados" },

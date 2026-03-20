@@ -66,7 +66,7 @@ export async function POST(req: Request) {
   try {
     const requester = await getRequesterUser(req);
     const user = requester.user;
-    if (!user) return NextResponse.json({ error: "Nao autenticado" }, { status: requester.status });
+    if (!user) return NextResponse.json({ error: "Não autenticado" }, { status: requester.status });
 
     // Permissao: usa role/active efetivos via RPC com o token do usuario (cookie ou Bearer).
     // Assim, respeita a mesma logica do app (public.current_role/current_active).
@@ -102,14 +102,14 @@ export async function POST(req: Request) {
     const prefix = safePrefix(form.get("prefix"));
 
     if (!(file instanceof File)) {
-      return NextResponse.json({ error: "Arquivo (file) e obrigatorio" }, { status: 400 });
+      return NextResponse.json({ error: "Arquivo (file) é obrigatório" }, { status: 400 });
     }
 
     const ext = extFromMime(file.type);
-    if (!ext) return NextResponse.json({ error: "Tipo de arquivo nao suportado (PDF/PNG/JPG/WEBP)" }, { status: 400 });
+    if (!ext) return NextResponse.json({ error: "Tipo de arquivo não suportado (PDF/PNG/JPG/WEBP)" }, { status: 400 });
 
     const maxBytes = 5 * 1024 * 1024;
-    if (file.size > maxBytes) return NextResponse.json({ error: "Arquivo muito grande (max 5MB)" }, { status: 400 });
+    if (file.size > maxBytes) return NextResponse.json({ error: "Arquivo muito grande (máx. 5 MB)" }, { status: 400 });
 
     const path = `${prefix}/${Date.now()}-${Math.random().toString(16).slice(2)}.${ext}`;
 

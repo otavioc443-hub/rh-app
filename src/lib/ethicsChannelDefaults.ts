@@ -68,7 +68,7 @@ export function getDefaultEthicsManagedContent(companyName: string, companyKey?:
       ],
       foundationTitle: "Base institucional da Sólida",
       foundationSubtitle:
-        "O canal de ética da Sólida nasce do mesmo conjunto de princípios que orienta nossa atuação técnica, nosso relacionamento com pessoas e a forma como conduzimos decisões.",
+        "O Canal de Ética da Sólida nasce do mesmo conjunto de princípios que orienta nossa atuação técnica, nosso relacionamento com pessoas e a forma como conduzimos decisões.",
       foundationPillars: [
         {
           label: "Propósito",
