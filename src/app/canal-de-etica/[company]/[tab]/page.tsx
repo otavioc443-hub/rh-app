@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import EthicsChannelLanding from "@/components/public/EthicsChannelLanding";
 import { getEthicsChannelPageData } from "@/lib/ethicsChannelServer";
 
@@ -52,6 +52,13 @@ export default async function CanalDeEticaCompanyTabPage({
 
   const routeTab = tab as RouteTab;
   const { config, companies, content } = await getEthicsChannelPageData(company);
+
+  if (routeTab === "codigo-de-etica") {
+    if (config.codeOfEthicsUrl) {
+      redirect(config.codeOfEthicsUrl);
+    }
+    redirect(`/canal-de-etica/${config.key}`);
+  }
 
   return (
     <EthicsChannelLanding

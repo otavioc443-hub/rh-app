@@ -213,6 +213,19 @@ function SectionTitle({
   );
 }
 
+function buildSteerCards(body: string | null) {
+  const text = String(body ?? "").trim();
+  if (!text) return [];
+
+  const matches = Array.from(text.matchAll(/([STEER])\s+representa\s+([^;]+?)(?=(?:;\s*[STEER]\s+representa)|$)/gi));
+  if (!matches.length) return [];
+
+  return matches.map((match) => ({
+    letter: match[1].toUpperCase(),
+    description: match[2].trim().replace(/\.$/, ""),
+  }));
+}
+
 function HomeHero({ config, content }: { config: EthicsChannelConfig; content: EthicsManagedContent }) {
   const isSolida = config.companyName
     .toLowerCase()
@@ -342,8 +355,8 @@ export default function EthicsChannelLanding({
   const accentSoft = isSolida ? "#2E3647" : "#0F172A";
   const reportHref = config.reportUrl || (config.contactEmail ? `mailto:${config.contactEmail}?subject=Canal%20de%20\u00c9tica` : "#");
   const followUpHref = config.followUpUrl || "#";
-  const codeTabHref = config.codeOfEthicsUrl || tabHref(config.key, "code");
-  const codeTabExternal = Boolean(config.codeOfEthicsUrl);
+  const codeTabHref = config.codeOfEthicsUrl;
+  const steerCards = buildSteerCards(content.steerBody);
   const companyTabs = companies.map((item) => ({ ...item, href: `/canal-de-etica/${item.key}` }));
 
   return (
@@ -371,11 +384,9 @@ export default function EthicsChannelLanding({
             <Link href={tabHref(config.key, "report")} scroll><TabButton active={activeTab === "report"}>{tabLabel("report")}</TabButton></Link>
             <Link href={tabHref(config.key, "follow-up")} scroll><TabButton active={activeTab === "follow-up"}>{tabLabel("follow-up")}</TabButton></Link>
             <Link href={tabHref(config.key, "data")} scroll><TabButton active={activeTab === "data"}>{tabLabel("data")}</TabButton></Link>
-            {codeTabExternal ? (
-              <a href={codeTabHref} target="_blank" rel="noreferrer"><TabButton active={activeTab === "code"}>{tabLabel("code")}</TabButton></a>
-            ) : (
-              <Link href={codeTabHref} scroll><TabButton active={activeTab === "code"}>{tabLabel("code")}</TabButton></Link>
-            )}
+            {codeTabHref ? (
+              <a href={codeTabHref} target="_blank" rel="noreferrer"><TabButton active={false}>{tabLabel("code")}</TabButton></a>
+            ) : null}
           </div>
         </div>
       </header>
@@ -421,7 +432,22 @@ export default function EthicsChannelLanding({
                     <aside className="border-t border-slate-200 bg-slate-950 p-7 text-white lg:border-l lg:border-t-0 lg:p-8">
                       <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/60">Cultura</p>
                       <h3 className="mt-3 text-3xl font-semibold tracking-tight">{content.steerTitle}</h3>
-                      <p className="mt-4 text-base leading-8 text-slate-300">{content.steerBody}</p>
+                      {steerCards.length ? (
+                        <div className="mt-5 grid gap-3">
+                          {steerCards.map((item) => (
+                            <article key={`${item.letter}-${item.description}`} className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">
+                              <div className="flex items-start gap-4">
+                                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white text-lg font-semibold text-slate-950">
+                                  {item.letter}
+                                </div>
+                                <p className="text-sm leading-7 text-slate-300">{item.description}</p>
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-4 text-base leading-8 text-slate-300">{content.steerBody}</p>
+                      )}
                     </aside>
                   ) : null}
                 </div>

@@ -98,6 +98,20 @@ type BulletinRow = {
   created_at: string | null;
 };
 
+type DeliverableFinancialStatus = "aberto" | "pendente" | "baixado" | null;
+type DeliverableWorkflowStatus = "pending" | "in_progress" | "sent" | "approved" | "approved_with_comments";
+
+type DeliverableRow = {
+  id: string;
+  project_id: string;
+  title: string;
+  due_date: string | null;
+  review_due_at: string | null;
+  financial_status: DeliverableFinancialStatus;
+  status: DeliverableWorkflowStatus;
+  submitted_at: string | null;
+};
+
 type WindowKey = "30" | "90" | "180" | "365" | "all" | "custom";
 type ProjectSortKey =
   | "name"
@@ -119,6 +133,13 @@ function money(v: number) {
 
 function pct(v: number) {
   return `${v.toFixed(1)}%`;
+}
+
+function formatDateBR(value: string | null | undefined) {
+  if (!value) return "-";
+  const parsed = parseDateOnly(value);
+  if (!parsed) return "-";
+  return parsed.toLocaleDateString("pt-BR");
 }
 
 function monthKey(dateLike: string | null | undefined) {
@@ -216,6 +237,29 @@ function bulletinStatusLabel(v: BulletinStatus) {
   return "Outro";
 }
 
+function deliverableStatusLabel(status: DeliverableWorkflowStatus) {
+  if (status === "pending") return "Pendente";
+  if (status === "in_progress") return "Em andamento";
+  if (status === "sent") return "Enviado";
+  if (status === "approved") return "Aprovado";
+  return "Aprovado com comentarios";
+}
+
+function deliverableFinancialStatusLabel(status: DeliverableFinancialStatus) {
+  if (status === "baixado") return "Baixado";
+  if (status === "pendente") return "Pendente";
+  return "Aberto";
+}
+
+function getDeliverableRealizationPct(deliverable: DeliverableRow) {
+  if (deliverable.financial_status === "baixado") return 100;
+  if (deliverable.status === "approved") return deliverable.financial_status === "pendente" ? 95 : 100;
+  if (deliverable.status === "approved_with_comments") return 90;
+  if (deliverable.status === "sent") return 70;
+  if (deliverable.status === "in_progress") return 40;
+  return 0;
+}
+
 function csvCell(value: string | number) {
   const text = String(value ?? "");
   if (/[",;\n]/.test(text)) {
@@ -243,6 +287,7 @@ export default function FinanceiroGerencialPage() {
   const [showIndirectProjectionDetails, setShowIndirectProjectionDetails] = useState(false);
   const [showRiskDetails, setShowRiskDetails] = useState(false);
   const [showBudgetVsRealDetails, setShowBudgetVsRealDetails] = useState(false);
+  const [showPredictabilityDetails, setShowPredictabilityDetails] = useState<30 | 60 | 90 | null>(null);
   const [projectSort, setProjectSort] = useState<{ key: ProjectSortKey; dir: SortDir }>({
     key: "margin",
     dir: "asc",
@@ -257,9 +302,10 @@ export default function FinanceiroGerencialPage() {
   const [allocationRows, setAllocationRows] = useState<ProjectAllocationRow[]>([]);
   const [remittances, setRemittances] = useState<RemittanceRow[]>([]);
   const [bulletins, setBulletins] = useState<BulletinRow[]>([]);
+  const [deliverables, setDeliverables] = useState<DeliverableRow[]>([]);
 
   useEffect(() => {
-    if (!showRiskDetails && !showBudgetVsRealDetails && !showPayrollProjectionDetails && !showIndirectProjectionDetails) return;
+    if (!showRiskDetails && !showBudgetVsRealDetails && !showPayrollProjectionDetails && !showIndirectProjectionDetails && !showPredictabilityDetails) return;
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key !== "Escape") return;
@@ -267,11 +313,12 @@ export default function FinanceiroGerencialPage() {
       if (showBudgetVsRealDetails) setShowBudgetVsRealDetails(false);
       if (showPayrollProjectionDetails) setShowPayrollProjectionDetails(false);
       if (showIndirectProjectionDetails) setShowIndirectProjectionDetails(false);
+      if (showPredictabilityDetails) setShowPredictabilityDetails(null);
     }
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [showRiskDetails, showBudgetVsRealDetails, showPayrollProjectionDetails, showIndirectProjectionDetails]);
+  }, [showRiskDetails, showBudgetVsRealDetails, showPayrollProjectionDetails, showIndirectProjectionDetails, showPredictabilityDetails]);
 
   function downloadCsv(fileName: string, header: string[], rows: Array<Array<string | number>>) {
     const content = [header, ...rows].map((line) => line.map(csvCell).join(";")).join("\n");
@@ -311,7 +358,7 @@ export default function FinanceiroGerencialPage() {
         setCompanyName((companyRes.data?.name as string | undefined) ?? null);
       }
 
-      const [pRes, pmRes, paRes, pcRes, eRes, iRes, cRes, rRes, bRes] = await Promise.all([
+      const [pRes, pmRes, paRes, pcRes, eRes, iRes, cRes, rRes, bRes, dRes] = await Promise.all([
         supabase
           .from("projects")
           .select("id,name,status,budget_total,start_date,end_date,client_id,company_id,created_at")
@@ -341,6 +388,9 @@ export default function FinanceiroGerencialPage() {
         supabase
           .from("project_measurement_bulletins")
           .select("id,project_id,amount_total,paid_amount,status,expected_payment_date,paid_at,created_at"),
+        supabase
+          .from("project_deliverables")
+          .select("id,project_id,title,due_date,review_due_at,financial_status,status,submitted_at"),
       ]);
 
       if (pRes.error) throw new Error(pRes.error.message);
@@ -352,6 +402,7 @@ export default function FinanceiroGerencialPage() {
       if (cRes.error) throw new Error(cRes.error.message);
       if (rRes.error) throw new Error(rRes.error.message);
       if (bRes.error) throw new Error(bRes.error.message);
+      if (dRes.error) throw new Error(dRes.error.message);
 
       const scopedProjects = ((pRes.data ?? []) as ProjectRow[]).filter((p) =>
         myCompanyId ? p.company_id === myCompanyId || p.company_id === null : true
@@ -365,6 +416,7 @@ export default function FinanceiroGerencialPage() {
       const scopedIndirect = ((iRes.data ?? []) as IndirectCostRow[]).filter((r) => projectIds.has(r.project_id));
       const scopedProjectMembers = ((pmRes.data ?? []) as ProjectMemberRow[]).filter((m) => projectIds.has(m.project_id));
       const scopedAllocations = ((paRes.data ?? []) as ProjectAllocationRow[]).filter((a) => projectIds.has(a.project_id));
+      const scopedDeliverables = ((dRes.data ?? []) as DeliverableRow[]).filter((d) => projectIds.has(d.project_id));
 
       setProjects(scopedProjects);
       setProjectClients(scopedClients);
@@ -377,6 +429,7 @@ export default function FinanceiroGerencialPage() {
       setBulletins(
         ((bRes.data ?? []) as BulletinRow[]).filter((b) => projectIds.has(b.project_id))
       );
+      setDeliverables(scopedDeliverables);
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao carregar visao gerencial.");
     } finally {
@@ -1150,6 +1203,10 @@ export default function FinanceiroGerencialPage() {
         label: "Pressao no orcamento ativo (%)",
         values: cashProjection.map((p) => p.budgetCoveragePct),
       },
+      {
+        label: "Previsibilidade documental (%)",
+        values: predictabilityProjection.map((p) => p.averageRealizationPct),
+      },
     ];
 
     downloadCsv(
@@ -1365,9 +1422,69 @@ export default function FinanceiroGerencialPage() {
     });
   }, [filteredProjects, remittances, extras, bulletins, filteredProjectIdSet, summary.payroll, indirectCosts, resolveMonthlyIndirectAmount]);
 
+  const predictabilityProjection = useMemo(() => {
+    const projectNameById = new Map(filteredProjects.map((project) => [project.id, project.name]));
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+
+    const windows = [
+      { days: 30 as const, minOffset: 0, maxOffset: 30, label: "0-30 dias" },
+      { days: 60 as const, minOffset: 31, maxOffset: 60, label: "31-60 dias" },
+      { days: 90 as const, minOffset: 61, maxOffset: 90, label: "61-90 dias" },
+    ];
+
+    return windows.map((window) => {
+      const items = deliverables
+        .filter((deliverable) => filteredProjectIdSet.has(deliverable.project_id))
+        .map((deliverable) => {
+          const dueDateRaw = deliverable.due_date ?? deliverable.review_due_at;
+          const dueDate = parseDateOnly(dueDateRaw);
+          if (!dueDate) return null;
+
+          const diffMs = dueDate.getTime() - start.getTime();
+          const diffDays = Math.ceil(diffMs / 86400000);
+          if (diffDays < window.minOffset || diffDays > window.maxOffset) return null;
+
+          const realizationPct = getDeliverableRealizationPct(deliverable);
+          return {
+            ...deliverable,
+            dueDate,
+            dueDateRaw,
+            projectName: projectNameById.get(deliverable.project_id) ?? "Projeto sem nome",
+            realizationPct,
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => (a?.dueDate.getTime() ?? 0) - (b?.dueDate.getTime() ?? 0)) as Array<
+          DeliverableRow & {
+            dueDate: Date;
+            dueDateRaw: string | null;
+            projectName: string;
+            realizationPct: number;
+          }
+        >;
+
+      const averageRealizationPct = items.length
+        ? items.reduce((acc, item) => acc + item.realizationPct, 0) / items.length
+        : 0;
+
+      return {
+        ...window,
+        items,
+        count: items.length,
+        averageRealizationPct,
+      };
+    });
+  }, [deliverables, filteredProjectIdSet, filteredProjects]);
+
   const maxMonthly = useMemo(() => {
     return monthly.reduce((acc, m) => Math.max(acc, m.pending + m.approvedPaid + m.indirect), 0);
   }, [monthly]);
+
+  const selectedPredictabilityDetail = useMemo(
+    () => predictabilityProjection.find((item) => item.days === showPredictabilityDetails) ?? null,
+    [predictabilityProjection, showPredictabilityDetails]
+  );
 
   const bulletinCashStats = useMemo(() => {
     const now = new Date();
@@ -1790,6 +1907,80 @@ export default function FinanceiroGerencialPage() {
         </div>
       </section>
 
+      {selectedPredictabilityDetail ? (
+        <div
+          className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-slate-950/40 p-4"
+          onClick={() => setShowPredictabilityDetails(null)}
+        >
+          <div
+            className="relative w-full max-w-6xl rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setShowPredictabilityDetails(null)}
+              className="absolute right-6 top-6 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Fechar
+            </button>
+            <div className="pr-24">
+              <h3 className="text-base font-semibold text-slate-900">Base da previsibilidade documental</h3>
+              <p className="mt-1 text-sm text-slate-600">
+                Documentos previstos para {selectedPredictabilityDetail.label.toLowerCase()}, com percentual de realizacao calculado pelo status atual do entregavel.
+              </p>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs text-slate-500">Janela</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">{selectedPredictabilityDetail.label}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs text-slate-500">Documentos no periodo</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">{selectedPredictabilityDetail.count}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <p className="text-xs text-slate-500">Realizacao media</p>
+                <p className="mt-1 text-sm font-semibold text-slate-900">{selectedPredictabilityDetail.count ? pct(selectedPredictabilityDetail.averageRealizationPct) : "-"}</p>
+              </div>
+            </div>
+            <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+              <table className="min-w-[980px] w-full text-sm">
+                <thead className="bg-slate-50 text-slate-700">
+                  <tr>
+                    <th className="p-3 text-left">Projeto</th>
+                    <th className="p-3 text-left">Documento</th>
+                    <th className="p-3 text-left">Prazo</th>
+                    <th className="p-3 text-left">Status</th>
+                    <th className="p-3 text-left">Financeiro</th>
+                    <th className="p-3 text-right">% realizacao</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedPredictabilityDetail.items.length ? (
+                    selectedPredictabilityDetail.items.map((item) => (
+                      <tr key={`predictability-${selectedPredictabilityDetail.days}-${item.id}`} className="border-t border-slate-100">
+                        <td className="p-3 font-medium text-slate-900">{item.projectName}</td>
+                        <td className="p-3 text-slate-700">{item.title}</td>
+                        <td className="p-3 text-slate-700">{formatDateBR(item.dueDateRaw)}</td>
+                        <td className="p-3 text-slate-700">{deliverableStatusLabel(item.status)}</td>
+                        <td className="p-3 text-slate-700">{deliverableFinancialStatusLabel(item.financial_status)}</td>
+                        <td className={`p-3 text-right font-semibold ${item.realizationPct >= 85 ? "text-emerald-700" : item.realizationPct >= 60 ? "text-amber-700" : "text-slate-700"}`}>
+                          {pct(item.realizationPct)}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="p-3 text-slate-500">Sem documentos previstos nesta janela.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {showBudgetVsRealDetails ? (
         <div
           className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-slate-950/40 p-4"
@@ -2205,6 +2396,7 @@ export default function FinanceiroGerencialPage() {
                   "Entradas consideram apenas boletins com pagamento confirmado (boletins pagos).",
                   "Saidas combinam folha mensal atual, remessas, extras pendentes e indiretos estimados.",
                   "Saldo projetado = entradas realizadas - saidas projetadas.",
+                  "Previsibilidade documental mostra a maturidade dos documentos por janela de entrega e abre o detalhamento ao clicar.",
                 ]}
               />
             </div>
@@ -2296,6 +2488,28 @@ export default function FinanceiroGerencialPage() {
                 ))}
               </tr>
               <tr className="border-t border-slate-100 bg-slate-50/40">
+                <td className="p-3 font-medium text-slate-900">
+                  <span className="inline-flex items-center gap-2">
+                    Previsibilidade de documentos
+                    <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-700">clicar abre base</span>
+                  </span>
+                </td>
+                {predictabilityProjection.map((p) => (
+                  <td key={`predict-${p.days}`} className="p-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setShowPredictabilityDetails(p.days)}
+                      className="inline-flex min-w-[120px] flex-col items-end rounded-lg px-2 py-1 hover:bg-slate-100"
+                    >
+                      <span className={`text-sm font-semibold ${p.averageRealizationPct >= 85 ? "text-emerald-700" : p.averageRealizationPct >= 60 ? "text-amber-700" : "text-slate-700"}`}>
+                        {p.count ? pct(p.averageRealizationPct) : "-"}
+                      </span>
+                      <span className="text-[11px] text-slate-500">{p.count} doc(s)</span>
+                    </button>
+                  </td>
+                ))}
+              </tr>
+              <tr className="border-t border-slate-100">
                 <td className="p-3 font-medium text-slate-900">Pressao no orcamento ativo</td>
                 {cashProjection.map((p) => (
                   <td

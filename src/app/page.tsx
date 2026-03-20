@@ -189,10 +189,16 @@ export default function LoginPage() {
               Ao acessar, voce concorda com as diretrizes internas de uso.
             </p>
 
-            <div className="mt-5 flex items-center justify-center gap-4 text-xs text-slate-500">
-              <Link href="/canal-de-etica" className="font-medium text-slate-700 underline underline-offset-2">
-                Canal de etica
-              </Link>
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-4 shadow-[0_16px_35px_-28px_rgba(15,23,42,0.35)]">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 text-center">Acesso institucional</p>
+              <div className="mt-3 flex justify-center">
+                <Link
+                  href="/canal-de-etica"
+                  className="inline-flex items-center justify-center rounded-full border border-slate-900 bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_16px_30px_-18px_rgba(15,23,42,0.65)] transition hover:-translate-y-0.5 hover:bg-slate-800"
+                >
+                  Canal de Ética
+                </Link>
+              </div>
             </div>
           </form>
         </div>
