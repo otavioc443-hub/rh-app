@@ -650,8 +650,9 @@ export function PulseSprintPage() {
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        {showArena ? (
-          <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-48px_rgba(15,23,42,0.4)]">
+        <div>
+          {showArena ? (
+            <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-48px_rgba(15,23,42,0.4)]">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Arena</p>
@@ -749,8 +750,9 @@ export function PulseSprintPage() {
                 </div>
               </div>
             </div>
-          </section>
-        ) : null}
+            </section>
+          ) : null}
+        </div>
 
         <aside className="space-y-6">
           <section
