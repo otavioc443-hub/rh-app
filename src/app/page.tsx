@@ -128,7 +128,8 @@ export default function LoginPage() {
       <div className="absolute inset-0 bg-black/25" />
 
       <div className="relative min-h-screen w-full flex items-center justify-start p-6 md:pl-24">
-        <div className="w-full max-w-md bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200 p-8">
+        <div className="w-full max-w-md space-y-5">
+        <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200 p-8">
           <div className="flex flex-col items-center text-center">
             <div className="flex items-center justify-center gap-6 mb-4">
               <Image src="/logo.png" alt="Solida" width={160} height={64} className="h-16 w-auto" />
@@ -189,18 +190,19 @@ export default function LoginPage() {
               Ao acessar, voce concorda com as diretrizes internas de uso.
             </p>
 
-            <div className="mt-6 rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-4 py-4 shadow-[0_16px_35px_-28px_rgba(15,23,42,0.35)]">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400 text-center">Acesso institucional</p>
-              <div className="mt-3 flex justify-center">
-                <Link
-                  href="/canal-de-etica"
-                  className="inline-flex items-center justify-center rounded-full border border-slate-900 bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_16px_30px_-18px_rgba(15,23,42,0.65)] transition hover:-translate-y-0.5 hover:bg-slate-800"
-                >
-                  Canal de Ética
-                </Link>
-              </div>
-            </div>
           </form>
+        </div>
+        <div className="rounded-2xl border border-white/60 bg-white/85 px-5 py-5 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.28)] backdrop-blur-md">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400 text-center">Acesso institucional</p>
+          <div className="mt-3 flex justify-center">
+            <Link
+              href="/canal-de-etica"
+              className="inline-flex items-center justify-center rounded-full border border-slate-900 bg-slate-950 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_16px_30px_-18px_rgba(15,23,42,0.65)] transition hover:-translate-y-0.5 hover:bg-slate-800"
+            >
+              Canal de Ética
+            </Link>
+          </div>
+        </div>
         </div>
       </div>
     </main>
