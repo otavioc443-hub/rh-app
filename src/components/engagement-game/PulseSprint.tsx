@@ -181,7 +181,7 @@ function CompactLeaderboard({
                 <p className="truncate text-sm font-semibold text-slate-900">{entry.displayName}</p>
               </div>
               <p className="mt-1 truncate text-xs text-slate-500">
-                {(entry.departmentName ?? "Area interna")} • {entry.streak} dia(s) uteis
+                {(entry.departmentName ?? "Area interna")} - {entry.streak} dia(s) uteis
               </p>
             </div>
             <div className="text-right">
@@ -261,7 +261,7 @@ export function PulseSprintWidget({
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">Jogador do dia</p>
               <p className="mt-1 text-base font-semibold">{data.playerOfDay.displayName}</p>
               <p className="mt-1 text-sm text-white/75">
-                {(data.playerOfDay.departmentName ?? "Area interna")} • {formatCompactPoints(data.playerOfDay.totalPointsAwarded)} pts na rodada de hoje
+                {(data.playerOfDay.departmentName ?? "Area interna")} - {formatCompactPoints(data.playerOfDay.totalPointsAwarded)} pts na rodada de hoje
               </p>
             </div>
           ) : null}
@@ -472,6 +472,7 @@ export function PulseSprintPage() {
     ? `Sua rodada ${activeDifficulty?.label?.toLowerCase() ?? "de hoje"} esta pronta.`
     : "Rodada concluida hoje.";
   const streakLabel = `${status?.player.streak ?? 0} dia(s) uteis`;
+  const showArena = gameState === "playing" && !!sessionId && rounds.length > 0;
   const introMessage =
     status?.message ??
     "Preparado para mais uma rodada? Seu desempenho de hoje pode melhorar sua posicao no ranking.";
@@ -649,28 +650,26 @@ export function PulseSprintPage() {
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-48px_rgba(15,23,42,0.4)]">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Arena</p>
-              <p className="mt-1 text-xl font-semibold text-slate-950">
-                {gameState === "playing" ? "Desafio em andamento" : "Arena pronta para iniciar"}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <Link
-                href="/institucional/rede-social"
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                <ArrowLeft size={15} /> Voltar ao PulseHub
-              </Link>
-              <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-semibold text-slate-700">
-                Ultima rodada: {whenLabel(status?.player.lastPlayedDate ?? null)}
+        {showArena ? (
+          <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_24px_70px_-48px_rgba(15,23,42,0.4)]">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Arena</p>
+                <p className="mt-1 text-xl font-semibold text-slate-950">Desafio em andamento</p>
+              </div>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Link
+                  href="/institucional/rede-social"
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  <ArrowLeft size={15} /> Voltar ao PulseHub
+                </Link>
+                <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-sm font-semibold text-slate-700">
+                  Ultima rodada: {whenLabel(status?.player.lastPlayedDate ?? null)}
+                </div>
               </div>
             </div>
-          </div>
 
-          {gameState === "playing" ? (
             <div className="mt-4 rounded-[1.5rem] border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fafc)] p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
@@ -679,7 +678,7 @@ export function PulseSprintPage() {
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-slate-900">
-                      Pulse Grid 3x3 {activeDifficulty ? `• ${activeDifficulty.label}` : ""}
+                      Pulse Grid 3x3 {activeDifficulty ? `- ${activeDifficulty.label}` : ""}
                     </p>
                     <p className="text-xs text-slate-500">
                       {activeDifficulty?.summary ?? "Um alvo por vez. Reaja antes do pulso mudar."}
@@ -715,9 +714,9 @@ export function PulseSprintPage() {
                       key={cell}
                       type="button"
                       onClick={() => handleCellTap(cell)}
-                      className={clsx(
+                    className={clsx(
                         "aspect-square rounded-[1.2rem] border border-slate-200 bg-slate-50 transition",
-                        gameState === "playing" && "hover:border-slate-300 hover:bg-slate-100",
+                        showArena && "hover:border-slate-300 hover:bg-slate-100",
                         isActive && `border-transparent bg-gradient-to-br ${toneClass} text-white shadow-[0_18px_40px_-24px_rgba(14,165,233,0.65)]`,
                         wasHit && "scale-[0.97]"
                       )}
@@ -745,20 +744,13 @@ export function PulseSprintPage() {
                 <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
                   <p className="text-xs uppercase tracking-[0.18em] text-slate-400">estado</p>
                   <p className="mt-1.5 text-sm font-semibold text-slate-950">
-                    {gameState === "playing" ? "Em andamento" : submitting ? "Processando" : "Pronto"}
+                    {showArena ? "Em andamento" : submitting ? "Processando" : "Pronto"}
                   </p>
                 </div>
               </div>
             </div>
-          ) : (
-            <div className="mt-4 rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50/80 px-5 py-8 text-center">
-              <p className="text-sm font-semibold text-slate-900">A arena fica visivel apenas depois do inicio da rodada.</p>
-              <p className="mt-2 text-sm text-slate-600">
-                Abra o modal do desafio e clique em <span className="font-semibold">Iniciar desafio</span> para liberar o tabuleiro.
-              </p>
-            </div>
-          )}
-        </section>
+          </section>
+        ) : null}
 
         <aside className="space-y-6">
           <section
@@ -795,7 +787,7 @@ export function PulseSprintPage() {
                   <div key={`${entry.created_at}-${entry.event_type}`} className="rounded-2xl bg-slate-50 px-3 py-3">
                     <p className="text-sm font-semibold text-slate-900">{getHistoryEntryLabel(entry.event_type)}</p>
                     <p className="mt-1 text-xs text-slate-500">
-                      {entry.event_date} • streak {entry.streak_after} • atual {formatCompactPoints(entry.score_current_after)}
+                      {entry.event_date} - streak {entry.streak_after} - atual {formatCompactPoints(entry.score_current_after)}
                     </p>
                   </div>
                 ))
@@ -854,7 +846,7 @@ export function PulseSprintPage() {
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">Card do dia</p>
               <p className="mt-2 text-3xl font-semibold">{result.totalPoints} pts</p>
               <p className="mt-2 text-sm text-white/75">
-                streak {result.nextStreak} • rank {result.rankPosition ? `#${result.rankPosition}` : "em formacao"}
+                streak {result.nextStreak} - rank {result.rankPosition ? `#${result.rankPosition}` : "em formacao"}
               </p>
               <div className="mt-6 rounded-3xl bg-white/10 px-4 py-4">
                 <p className="text-sm font-semibold">{status?.player.displayName}</p>
@@ -970,3 +962,4 @@ export function PulseSprintPage() {
     </div>
   );
 }
+

@@ -33,7 +33,7 @@ export async function GET() {
         .select("event_type,points_delta,score_current_after,streak_after,event_date,created_at")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
-        .limit(7),
+        .limit(5),
     ]);
 
     if (recentHistoryRes.error) throw new Error(recentHistoryRes.error.message);

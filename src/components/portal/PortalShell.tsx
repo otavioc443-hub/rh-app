@@ -238,6 +238,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
   const pathname = usePathname();
 
   const [loading, setLoading] = useState(true);
+  const [bootNonce, setBootNonce] = useState(0);
   const [role, setRole] = useState<Role | null>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
   const [debugErr, setDebugErr] = useState<string | null>(null);
@@ -254,6 +255,13 @@ export default function PortalShell({ children }: { children: React.ReactNode })
   const alive = useRef(true);
   const hydratedFromCache = useRef(false);
   const currentUserIdRef = useRef<string | null>(null);
+  const recoveryAttemptsRef = useRef(0);
+
+  const isRecoverableBootstrapError =
+    !!fatalError &&
+    (fatalError.includes("profiles") ||
+      fatalError.includes("Perfil nao encontrado") ||
+      fatalError.includes("Perfil sem funcao"));
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -407,7 +415,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         }
 
         if (profile.active === false) {
-          setFatalError("Usuário inativo. Procure o administrador do sistema.");
+          setFatalError("Usuario inativo. Procure o administrador do sistema.");
           return;
         }
 
@@ -525,7 +533,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         if (!alive.current) return;
 
         if (err instanceof Error && err.message === "timeout") {
-          setFatalError("Tempo esgotado ao validar sessão. Verifique conexão e Supabase.");
+          setFatalError("Tempo esgotado ao validar sessao. Verifique conexao e Supabase.");
           return;
         }
 
@@ -567,7 +575,28 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         window.removeEventListener("portal-profile-updated", onProfileUpdated);
       }
     };
-  }, [router]);
+  }, [router, bootNonce]);
+
+  useEffect(() => {
+    if (role) {
+      recoveryAttemptsRef.current = 0;
+      return;
+    }
+
+    if (!fatalError) return;
+
+    if (!isRecoverableBootstrapError || recoveryAttemptsRef.current >= 3) return;
+
+    const timer = window.setTimeout(() => {
+      recoveryAttemptsRef.current += 1;
+      setFatalError(null);
+      setDebugErr(null);
+      setLoading(true);
+      setBootNonce((value) => value + 1);
+    }, 700);
+
+    return () => window.clearTimeout(timer);
+  }, [fatalError, isRecoverableBootstrapError, role]);
 
   useEffect(() => {
     if (!role || !hiddenRoutesLoaded) return;
@@ -697,6 +726,25 @@ export default function PortalShell({ children }: { children: React.ReactNode })
   }
 
   if (fatalError) {
+    if (isRecoverableBootstrapError) {
+      return (
+        <div className="min-h-screen grid place-items-center bg-slate-50 p-6">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6">
+            <h1 className="text-lg font-semibold text-slate-900">Finalizando acesso</h1>
+            <p className="mt-2 text-sm text-slate-700">Estamos confirmando sua funcao no portal. Se necessario, recarregue a pagina.</p>
+            <div className="mt-4 flex gap-3">
+              <button
+                onClick={() => window.location.reload()}
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+              >
+                Recarregar
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen grid place-items-center bg-slate-50 p-6">
         <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6">
@@ -736,14 +784,14 @@ export default function PortalShell({ children }: { children: React.ReactNode })
     return (
       <div className="min-h-screen grid place-items-center bg-slate-50 p-6">
         <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6">
-          <h1 className="text-lg font-semibold text-slate-900">Carregamento incompleto</h1>
-          <p className="mt-2 text-sm text-slate-700">Não foi possível identificar sua função (role).</p>
+          <h1 className="text-lg font-semibold text-slate-900">Finalizando acesso</h1>
+          <p className="mt-2 text-sm text-slate-700">Estamos confirmando sua funcao no portal. Se necessario, recarregue a pagina.</p>
           <div className="mt-4 flex gap-3">
             <button
-              onClick={() => router.replace("/")}
+              onClick={() => window.location.reload()}
               className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
             >
-              Voltar ao login
+              Recarregar
             </button>
           </div>
         </div>
