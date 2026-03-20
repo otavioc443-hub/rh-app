@@ -84,7 +84,8 @@ export function getDefaultEthicsManagedContent(companyName: string, companyKey?:
         },
       ],
       steerTitle: "STEER",
-      steerBody: "Conduzindo o futuro da engenharia com tecnologia, excelência e responsabilidade.",
+      steerBody:
+        "Na cultura STEER da Sólida, S representa Segurança nas pessoas, nos processos e nas entregas; T representa Transparência nas relações e nas decisões; E representa Excelência técnica com qualidade e disciplina; E representa Ética em cada conduta e escolha profissional; e R representa Responsabilidade com integridade, respeito e impacto positivo.",
     };
   }
 

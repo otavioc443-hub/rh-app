@@ -95,13 +95,13 @@ function mapRowToContent(row: ContentRow | null, companyName: string) {
   } satisfies EthicsManagedContent;
 }
 
-async function uploadHeroImage(file: File, companyId: string) {
+async function uploadEthicsAsset(file: File, companyId: string, folder: "hero" | "pdf") {
   const { data: sess } = await supabase.auth.getSession();
   const token = sess.session?.access_token ?? null;
 
   const fd = new FormData();
   fd.append("file", file);
-  fd.append("prefix", `ethics-channel/${companyId}`);
+  fd.append("prefix", `ethics-channel/${companyId}/${folder}`);
 
   const res = await fetch("/api/rh/institucional/upload", {
     method: "POST",
@@ -432,7 +432,7 @@ export default function AdminCanalDeEticaPage() {
                       setUploading(true);
                       setMsg("");
                       try {
-                        const url = await uploadHeroImage(file, selectedCompanyId);
+                        const url = await uploadEthicsAsset(file, selectedCompanyId, "hero");
                         setField("heroImageUrl", url);
                         setMsg("Imagem enviada. Salve para publicar no canal.");
                       } catch (error: unknown) {
@@ -458,7 +458,38 @@ export default function AdminCanalDeEticaPage() {
               <Field label="Link para acompanhar relato" value={clean(form.followUpUrl)} onChange={(value) => setField("followUpUrl", value)} />
               <Field label="E-mail do canal" value={clean(form.contactEmail)} onChange={(value) => setField("contactEmail", value)} />
               <Field label="Telefone do canal" value={clean(form.contactPhone)} onChange={(value) => setField("contactPhone", value)} />
-              <Field label="Link do código de ética" value={clean(form.codeOfEthicsUrl)} onChange={(value) => setField("codeOfEthicsUrl", value)} />
+              <div className="grid gap-2">
+                <Field label="Link do código de ética" value={clean(form.codeOfEthicsUrl)} onChange={(value) => setField("codeOfEthicsUrl", value)} />
+                <label className="grid gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Upload do PDF do código de ética</span>
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    className="block w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] ?? null;
+                      if (!file || !selectedCompanyId) return;
+                      void (async () => {
+                        setUploading(true);
+                        setMsg("");
+                        try {
+                          const url = await uploadEthicsAsset(file, selectedCompanyId, "pdf");
+                          setField("codeOfEthicsUrl", url);
+                          setMsg("PDF enviado. Salve para publicar o código de ética.");
+                        } catch (error: unknown) {
+                          setMsg(error instanceof Error ? error.message : "Erro ao enviar PDF.");
+                        } finally {
+                          setUploading(false);
+                          e.target.value = "";
+                        }
+                      })();
+                    }}
+                  />
+                  <span className="text-xs text-slate-500">
+                    Quando preenchido, o menu Código de Ética abre diretamente este PDF.
+                  </span>
+                </label>
+              </div>
               <Field label="Link de proteção de dados" value={clean(form.dataProtectionUrl)} onChange={(value) => setField("dataProtectionUrl", value)} />
             </div>
           </section>
@@ -560,3 +591,5 @@ export default function AdminCanalDeEticaPage() {
     </div>
   );
 }
+
+

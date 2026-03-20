@@ -105,3 +105,4 @@ export function findEthicsChannelConfig(companyKey?: string | null) {
 export function getEthicsChannelConfig(companyKey?: string | null) {
   return findEthicsChannelConfig(companyKey) ?? getDefaultEthicsChannelConfig();
 }
+

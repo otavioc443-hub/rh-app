@@ -5,8 +5,8 @@ export async function generateMetadata({ params }: { params: Promise<{ company: 
   const { company } = await params;
   const { config } = await getEthicsChannelPageData(company);
   return {
-    title: `Canal de Etica - ${config.companyName}`,
-    description: `Canal de etica e integridade de ${config.companyName}.`,
+    title: `Canal de Ética - ${config.companyName}`,
+    description: `Canal de ética e integridade de ${config.companyName}.`,
   };
 }
 
@@ -20,3 +20,4 @@ export default async function CanalDeEticaCompanyPage({
 
   return <EthicsChannelLanding config={config} companies={companies} content={content} activeTab="home" />;
 }
+
