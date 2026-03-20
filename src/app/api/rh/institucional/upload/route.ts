@@ -58,6 +58,7 @@ function extFromMime(mime: string) {
   if (mime === "image/png") return "png";
   if (mime === "image/jpeg") return "jpg";
   if (mime === "image/webp") return "webp";
+  if (mime === "application/pdf") return "pdf";
   return null;
 }
 
@@ -105,7 +106,7 @@ export async function POST(req: Request) {
     }
 
     const ext = extFromMime(file.type);
-    if (!ext) return NextResponse.json({ error: "Tipo de arquivo nao suportado (PNG/JPG/WEBP)" }, { status: 400 });
+    if (!ext) return NextResponse.json({ error: "Tipo de arquivo nao suportado (PDF/PNG/JPG/WEBP)" }, { status: 400 });
 
     const maxBytes = 5 * 1024 * 1024;
     if (file.size > maxBytes) return NextResponse.json({ error: "Arquivo muito grande (max 5MB)" }, { status: 400 });

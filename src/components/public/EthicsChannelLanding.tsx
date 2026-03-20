@@ -419,7 +419,7 @@ export default function EthicsChannelLanding({
                   <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{content.foundationTitle}</h2>
                   <p className="mt-4 max-w-3xl text-base leading-8 text-slate-600">{content.foundationSubtitle}</p>
                 </div>
-                <div className="grid gap-0 lg:grid-cols-[1fr,320px]">
+                <div className="grid gap-0">
                   <div className="grid gap-0 md:grid-cols-3">
                     {content.foundationPillars.map((pillar, index) => (
                       <article key={pillar.label} className={`p-7 lg:p-8 ${index < content.foundationPillars.length - 1 ? "border-b border-slate-200 md:border-b-0 md:border-r" : ""}`}>
@@ -429,14 +429,14 @@ export default function EthicsChannelLanding({
                     ))}
                   </div>
                   {content.steerTitle ? (
-                    <aside className="border-t border-slate-200 bg-slate-950 p-7 text-white lg:border-l lg:border-t-0 lg:p-8">
+                    <aside className="border-t border-slate-200 bg-slate-950 p-7 text-white lg:p-8">
                       <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/60">Cultura</p>
                       <h3 className="mt-3 text-3xl font-semibold tracking-tight">{content.steerTitle}</h3>
                       {steerCards.length ? (
-                        <div className="mt-5 grid gap-3">
+                        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                           {steerCards.map((item) => (
                             <article key={`${item.letter}-${item.description}`} className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-4">
-                              <div className="flex items-start gap-4">
+                              <div className="flex flex-col gap-4">
                                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white text-lg font-semibold text-slate-950">
                                   {item.letter}
                                 </div>

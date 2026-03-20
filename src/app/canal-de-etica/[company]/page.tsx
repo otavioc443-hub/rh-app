@@ -20,4 +20,3 @@ export default async function CanalDeEticaCompanyPage({
 
   return <EthicsChannelLanding config={config} companies={companies} content={content} activeTab="home" />;
 }
-

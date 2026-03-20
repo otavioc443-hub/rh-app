@@ -591,5 +591,3 @@ export default function AdminCanalDeEticaPage() {
     </div>
   );
 }
-
-
