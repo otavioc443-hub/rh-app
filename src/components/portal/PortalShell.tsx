@@ -659,6 +659,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
     if (!pathname || !role || !hiddenRoutesLoaded) return;
     if (pathname === "/unauthorized") return;
     if (pathname === "/admin/funcionalidades") return;
+    if (role === "admin") return;
     if (isRouteHidden(pathname, hiddenRoutes)) {
       router.replace("/unauthorized");
     }

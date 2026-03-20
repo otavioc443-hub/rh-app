@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
+import { ShieldCheck } from "lucide-react";
 import {
   clearPortalExitIntent,
   clearRecentLoginMarker,
@@ -24,7 +25,7 @@ export default function LoginPage() {
   const [msgType, setMsgType] = useState<"error" | "success">("error");
   const [loading, setLoading] = useState(false);
   const [recoveryLoading, setRecoveryLoading] = useState(false);
-  const [showPrivacyNotice, setShowPrivacyNotice] = useState(false);
+  const [showPrivacyDetails, setShowPrivacyDetails] = useState(true);
 
   useEffect(() => {
     let alive = true;
@@ -62,15 +63,6 @@ export default function LoginPage() {
       sub.subscription.unsubscribe();
     };
   }, [router]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      setShowPrivacyNotice(window.localStorage.getItem("login-privacy-notice-dismissed") !== "1");
-    } catch {
-      setShowPrivacyNotice(true);
-    }
-  }, []);
 
   async function signIn(e?: React.FormEvent) {
     e?.preventDefault();
@@ -128,15 +120,6 @@ export default function LoginPage() {
     setMsg("Enviamos um link de redefinição para seu e-mail.");
   }
 
-  function dismissPrivacyNotice() {
-    setShowPrivacyNotice(false);
-    try {
-      window.localStorage.setItem("login-privacy-notice-dismissed", "1");
-    } catch {
-      // noop
-    }
-  }
-
   return (
     <main
       className="
@@ -148,13 +131,11 @@ export default function LoginPage() {
 
       <div className="relative min-h-screen w-full flex items-center justify-start p-6 md:pl-24">
         <div className="w-full max-w-md space-y-5">
-          <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-200 p-8">
+          <div className="rounded-2xl border border-slate-200 bg-white/95 p-8 shadow-xl backdrop-blur-md">
             <div className="flex flex-col items-center text-center">
-              <div className="flex items-center justify-center gap-6 mb-4">
+              <div className="mb-4 flex items-center justify-center gap-6">
                 <Image src="/logo.png" alt="Solida" width={160} height={64} className="h-16 w-auto" />
-
                 <span className="h-12 w-[2px] bg-slate-300" />
-
                 <Image src="/logo2.png" alt="Area" width={120} height={48} className="h-12 w-auto" />
               </div>
 
@@ -163,7 +144,7 @@ export default function LoginPage() {
 
             <form onSubmit={signIn} className="mt-6 space-y-3">
               <input
-                className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-black"
+                className="w-full rounded-lg border p-3 focus:outline-none focus:ring-2 focus:ring-black"
                 placeholder="E-mail"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -172,7 +153,7 @@ export default function LoginPage() {
               />
 
               <input
-                className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-black"
+                className="w-full rounded-lg border p-3 focus:outline-none focus:ring-2 focus:ring-black"
                 placeholder="Senha"
                 type="password"
                 value={password}
@@ -194,25 +175,25 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading || recoveryLoading || !email.trim() || !password}
-                className="w-full px-4 py-3 rounded-lg bg-black text-white font-medium disabled:opacity-50"
+                className="w-full rounded-lg bg-black px-4 py-3 font-medium text-white disabled:opacity-50"
               >
                 {loading ? "Entrando..." : "Entrar"}
               </button>
 
               {msg ? (
-                <p className={`text-sm mt-2 text-center ${msgType === "success" ? "text-emerald-700" : "text-red-600"}`}>
+                <p className={`mt-2 text-center text-sm ${msgType === "success" ? "text-emerald-700" : "text-red-600"}`}>
                   {msg}
                 </p>
               ) : null}
 
-              <p className="text-xs text-gray-500 mt-4 text-center">
+              <p className="mt-4 text-center text-xs text-gray-500">
                 Ao acessar, você concorda com as diretrizes internas de uso.
               </p>
             </form>
           </div>
 
           <div className="rounded-2xl border border-white/60 bg-white/85 px-5 py-5 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.28)] backdrop-blur-md">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400 text-center">Acesso institucional</p>
+            <p className="text-center text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Acesso institucional</p>
             <div className="mt-3 flex justify-center">
               <Link
                 href="/canal-de-etica"
@@ -223,35 +204,40 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {showPrivacyNotice ? (
-            <div className="rounded-2xl border border-white/60 bg-white/88 px-5 py-5 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.28)] backdrop-blur-md">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Aviso de privacidade</p>
-                  <p className="mt-2 text-sm leading-6 text-slate-700">
-                    Consulte as diretrizes de privacidade, tratamento de dados e normas de LGPD em uma página dedicada.
-                  </p>
+          <div className="rounded-2xl border border-white/60 bg-white/88 px-5 py-5 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.28)] backdrop-blur-md">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 inline-flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-800">
+                  <ShieldCheck size={18} />
                 </div>
-                <button
-                  type="button"
-                  onClick={dismissPrivacyNotice}
-                  className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-50 hover:text-slate-700"
-                  aria-label="Fechar aviso de privacidade"
-                  title="Fechar aviso de privacidade"
-                >
-                  ×
-                </button>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Privacidade e LGPD</p>
+                  {showPrivacyDetails ? (
+                    <p className="mt-2 text-sm leading-6 text-slate-700">
+                      Consulte fora do portal as diretrizes de privacidade, tratamento de dados e políticas de LGPD.
+                    </p>
+                  ) : null}
+                </div>
               </div>
-              <div className="mt-4">
-                <Link
-                  href="/privacidade"
-                  className="inline-flex items-center justify-center rounded-full border border-slate-900 bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
-                >
-                  Abrir privacidade e LGPD
-                </Link>
-              </div>
+              <button
+                type="button"
+                onClick={() => setShowPrivacyDetails((prev) => !prev)}
+                className="inline-flex rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                aria-label={showPrivacyDetails ? "Ocultar texto de privacidade" : "Mostrar texto de privacidade"}
+                title={showPrivacyDetails ? "Ocultar texto" : "Mostrar texto"}
+              >
+                {showPrivacyDetails ? "Fechar" : "Abrir"}
+              </button>
             </div>
-          ) : null}
+            <div className="mt-4">
+              <Link
+                href="/privacidade"
+                className="inline-flex items-center justify-center rounded-full border border-slate-900 bg-slate-950 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800"
+              >
+                Políticas de LGPD
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
     </main>

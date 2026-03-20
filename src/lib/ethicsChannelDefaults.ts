@@ -61,10 +61,10 @@ export function getDefaultEthicsManagedContent(companyName: string, companyKey?:
       dataProtectionSummary:
         "Os relatos recebidos devem ser tratados com responsabilidade e confidencialidade, com acesso restrito, proteção das informações pessoais e preservação adequada das evidências relacionadas ao caso.",
       principles: [
-        "Projetar o futuro por meio da engenharia, conectando tecnologia, inteligência e pessoas.",
-        "Desenvolver soluções de engenharia inovadoras, seguras e eficientes, com excelência técnica.",
-        "Liderar a transformação digital da engenharia com inovação, BIM e impacto positivo.",
-        "Atuar com integridade, respeito, responsabilidade e proteção contra qualquer forma de retaliação.",
+        "Projetar o futuro por meio da engenharia, conectando tecnologia, inteligência e pessoas para construir soluções que transformam a sociedade.",
+        "Desenvolver soluções de engenharia inovadoras, seguras e eficientes, utilizando tecnologia, BIM e inteligência técnica para entregar projetos de alta qualidade.",
+        "Atuar com excelência técnica e visão estratégica para planejar, projetar e implementar soluções que integram diferentes disciplinas da engenharia.",
+        "Transformar desafios complexos em soluções estruturadas, conectando engenharia, tecnologia e gestão para gerar resultados consistentes.",
       ],
       foundationTitle: "Base institucional da Sólida",
       foundationSubtitle:
@@ -72,20 +72,20 @@ export function getDefaultEthicsManagedContent(companyName: string, companyKey?:
       foundationPillars: [
         {
           label: "Propósito",
-          text: "Projetar o futuro por meio da engenharia, conectando tecnologia, inteligência e pessoas para construir soluções que transformam a sociedade.",
+          text: "Projetar o futuro por meio da engenharia, conectando tecnologia, inteligência e pessoas para construir soluções que transformam a sociedade. A Sólida existe para desenvolver soluções de engenharia que unem conhecimento técnico, inovação digital e responsabilidade profissional, contribuindo para a evolução de projetos, cidades, infraestruturas e sistemas produtivos. Nosso propósito é transformar ideias em soluções concretas, utilizando metodologias avançadas de engenharia, modelagem digital, gestão de projetos e colaboração multidisciplinar para gerar valor sustentável para clientes, parceiros e para a sociedade.",
         },
         {
           label: "Missão",
-          text: "Desenvolver soluções de engenharia inovadoras, seguras e eficientes, utilizando tecnologia, BIM e inteligência técnica para entregar projetos de alta qualidade.",
+          text: "Desenvolver soluções de engenharia inovadoras, seguras e eficientes, utilizando tecnologia, BIM e inteligência técnica para entregar projetos de alta qualidade. Atuamos com excelência técnica e visão estratégica para planejar, projetar e implementar soluções que integram diferentes disciplinas da engenharia, garantindo eficiência, precisão e confiabilidade em todas as etapas dos projetos. Nossa missão é transformar desafios complexos em soluções estruturadas, conectando engenharia, tecnologia e gestão para gerar resultados consistentes.",
         },
         {
           label: "Visão",
-          text: "Ser referência nacional e internacional em soluções de engenharia digital, inovação tecnológica e modelagem BIM.",
+          text: "Ser referência nacional e internacional em soluções de engenharia digital, inovação tecnológica e modelagem BIM. Buscamos consolidar a Sólida como uma empresa reconhecida pela excelência técnica, capacidade de inovação e impacto positivo nos projetos em que atua. Nossa visão é liderar a transformação digital da engenharia, promovendo novas formas de projetar, colaborar e construir.",
         },
       ],
       steerTitle: "STEER",
       steerBody:
-        "Na cultura STEER da Sólida, S representa Segurança nas pessoas, nos processos e nas entregas; T representa Transparência nas relações e nas decisões; E representa Excelência técnica com qualidade e disciplina; E representa Ética em cada conduta e escolha profissional; e R representa Responsabilidade com integridade, respeito e impacto positivo.",
+        "Na cultura STEER da Sólida, S representa Sustentabilidade com soluções de engenharia que consideram eficiência, responsabilidade ambiental e impacto positivo na sociedade; T representa Tecnologia com inovação, BIM e ferramentas digitais para projetar soluções mais inteligentes, precisas e eficientes; E representa Excelência na busca pelos mais altos padrões técnicos em projetos, processos e entregas; E representa Ética e Integridade, com transparência, responsabilidade profissional e respeito em todas as relações; e R representa Rumo ao Futuro, conduzindo a evolução da engenharia com projetos que impulsionam inovação, eficiência e desenvolvimento.",
     };
   }
 

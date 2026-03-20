@@ -225,7 +225,6 @@ export default function Sidebar({
           { label: "Governança Feedback", icon: MessageSquareText, href: "/rh/feedbacks" },
           { label: "Mapa comportamental", icon: BadgeCheck, href: "/rh/mapa-comportamental" },
           { label: "Ausências", icon: CalendarClock, href: "/rh/ausencias" },
-          { label: "LGPD", icon: FileCheck2, href: "/rh/lgpd" },
         ],
       },
 
@@ -264,18 +263,20 @@ export default function Sidebar({
   );
 
   const navByRole = useMemo(() => {
+    const shouldHideRoute = (href: string) => role !== "admin" && isRouteHidden(href, hiddenRoutes);
+
     return nav
       .filter((item) => !item.roles || item.roles.includes(role))
       .map((item) => {
         if (item.children?.length) {
           const children = item.children.filter((c) => {
-            if (isRouteHidden(c.href, hiddenRoutes)) return false;
+            if (shouldHideRoute(c.href)) return false;
             return !c.roles || c.roles.includes(role);
           });
           return { ...item, children };
         }
 
-        if (item.href && isRouteHidden(item.href, hiddenRoutes)) return null;
+        if (item.href && shouldHideRoute(item.href)) return null;
         return item;
       })
       .filter((item): item is NavItem => !!item);
