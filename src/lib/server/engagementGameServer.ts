@@ -1,7 +1,14 @@
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import type { DailyGameLeaderboardEntry, DailyGamePlayerOfDay } from "@/lib/engagementGame";
+import {
+  getBusinessDaysBetween,
+  getDailyDifficulty,
+  getNextBusinessDay,
+  isBusinessDay,
+  type DailyGameLeaderboardEntry,
+  type DailyGamePlayerOfDay,
+} from "@/lib/engagementGame";
 
 type AuthenticatedUser = {
   id: string;
@@ -69,6 +76,42 @@ export function getLocalFortalezaDate(date = new Date()) {
     month: "2-digit",
     day: "2-digit",
   }).format(date);
+}
+
+export function parseLocalDate(value: string) {
+  return new Date(`${value}T12:00:00-03:00`);
+}
+
+export function isWeekendDate(date: Date) {
+  return !isBusinessDay(date);
+}
+
+export function getTodayDifficulty(date = new Date()) {
+  return getDailyDifficulty(date);
+}
+
+export function getNextBusinessDayLabel(date = new Date()) {
+  const next = getNextBusinessDay(date);
+  return new Intl.DateTimeFormat("pt-BR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "America/Fortaleza",
+  }).format(next);
+}
+
+export function getUserStreak(lastPlayedDate: string | null, storedStreak: number, today = new Date()) {
+  if (!lastPlayedDate || storedStreak <= 0) return 0;
+  const lastDate = parseLocalDate(lastPlayedDate);
+  const gap = getBusinessDaysBetween(lastDate, today);
+  if (gap <= 0) return storedStreak;
+  if (gap === 1) return storedStreak;
+  return 0;
+}
+
+export function shouldResetForMissedBusinessDay(lastPlayedDate: string | null, today = new Date()) {
+  if (!lastPlayedDate) return false;
+  return getBusinessDaysBetween(parseLocalDate(lastPlayedDate), today) > 1;
 }
 
 export async function loadPortalRole(userId: string) {
@@ -230,7 +273,8 @@ export async function loadEngagementGamePlayerOfDay(companyId: string | null) {
 }
 
 export function canPlayToday(lastPlayedDate: string | null) {
+  const currentDate = new Date();
+  if (!isBusinessDay(currentDate)) return false;
   if (!lastPlayedDate) return true;
-  const today = getLocalFortalezaDate();
-  return lastPlayedDate !== today;
+  return lastPlayedDate !== getLocalFortalezaDate(currentDate);
 }

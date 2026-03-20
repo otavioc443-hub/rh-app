@@ -17,6 +17,62 @@ export const DAILY_GAME_CONFIG = {
   streakBonusCap: 7,
 } as const;
 
+export type DailyDifficultyKey = "easy" | "medium" | "hard";
+
+export type DailyDifficultyConfig = {
+  key: DailyDifficultyKey;
+  label: string;
+  summary: string;
+  durationMs: number;
+  rounds: number;
+  roundSpacingMs: number;
+  visibleMs: number;
+  graceMs: number;
+  targetScale: number;
+  bonusMultiplier: number;
+};
+
+const DAILY_DIFFICULTY_CYCLE: DailyDifficultyKey[] = ["easy", "medium", "hard", "easy", "medium"];
+
+export const DAILY_DIFFICULTY_CONFIG: Record<DailyDifficultyKey, DailyDifficultyConfig> = {
+  easy: {
+    key: "easy",
+    label: "Fácil",
+    summary: "Alvos maiores, mais tempo de reação e bônus moderado.",
+    durationMs: 38_000,
+    rounds: 20,
+    roundSpacingMs: 1_550,
+    visibleMs: 1_080,
+    graceMs: 140,
+    targetScale: 1.08,
+    bonusMultiplier: 1,
+  },
+  medium: {
+    key: "medium",
+    label: "Médio",
+    summary: "Ritmo equilibrado para manter consistência diária.",
+    durationMs: 36_000,
+    rounds: 24,
+    roundSpacingMs: 1_350,
+    visibleMs: 920,
+    graceMs: 120,
+    targetScale: 1,
+    bonusMultiplier: 1.08,
+  },
+  hard: {
+    key: "hard",
+    label: "Difícil",
+    summary: "Mais alvos, menos tempo de reação e bônus superior.",
+    durationMs: 34_000,
+    rounds: 28,
+    roundSpacingMs: 1_140,
+    visibleMs: 760,
+    graceMs: 100,
+    targetScale: 0.92,
+    bonusMultiplier: 1.18,
+  },
+} as const;
+
 export type DailyGameRound = {
   index: number;
   cell: number;
@@ -31,6 +87,8 @@ export type DailyGameHit = {
 };
 
 export type DailyGameScoreBreakdown = {
+  difficulty: DailyDifficultyKey;
+  difficultyLabel: string;
   validHits: number;
   misses: number;
   accuracy: number;
@@ -72,6 +130,57 @@ export type DailyGamePlayerOfDay = {
   totalPointsAwarded: number;
 };
 
+export function isWeekend(date: Date) {
+  const weekday = getFortalezaWeekday(date);
+  return weekday === "Sat" || weekday === "Sun";
+}
+
+function getFortalezaWeekday(date: Date) {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Fortaleza",
+    weekday: "short",
+  }).format(date);
+}
+
+export function isBusinessDay(date: Date) {
+  return !isWeekend(date);
+}
+
+export function getNextBusinessDay(date: Date) {
+  const next = new Date(date);
+  do {
+    next.setDate(next.getDate() + 1);
+  } while (!isBusinessDay(next));
+  return next;
+}
+
+export function getDailyDifficulty(date = new Date()) {
+  const weekday = getFortalezaWeekday(date);
+  if (weekday === "Sat" || weekday === "Sun") return null;
+  const index =
+    weekday === "Mon" ? 0 : weekday === "Tue" ? 1 : weekday === "Wed" ? 2 : weekday === "Thu" ? 3 : 4;
+  const key = DAILY_DIFFICULTY_CYCLE[index] ?? "medium";
+  return DAILY_DIFFICULTY_CONFIG[key];
+}
+
+export function getBusinessDaysBetween(startDate: Date, endDate: Date) {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  start.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+  if (start.getTime() === end.getTime()) return 0;
+  const direction = start < end ? 1 : -1;
+  let count = 0;
+  const cursor = new Date(start);
+
+  while (cursor.getTime() !== end.getTime()) {
+    cursor.setDate(cursor.getDate() + direction);
+    if (isBusinessDay(cursor)) count += direction;
+  }
+
+  return count;
+}
+
 function hashSeed(seed: string) {
   let h = 1779033703 ^ seed.length;
   for (let i = 0; i < seed.length; i += 1) {
@@ -95,26 +204,26 @@ function mulberry32(seed: number) {
   };
 }
 
-export function buildDailyGameRounds(seed: string): DailyGameRound[] {
+export function buildDailyGameRounds(seed: string, difficulty: DailyDifficultyConfig = DAILY_DIFFICULTY_CONFIG.medium): DailyGameRound[] {
   const nextSeed = hashSeed(seed)();
   const random = mulberry32(nextSeed);
   const tones: DailyGameRound["tone"][] = ["amber", "emerald", "blue"];
   let previousCell = -1;
   const rounds: DailyGameRound[] = [];
 
-  for (let index = 0; index < DAILY_GAME_CONFIG.rounds; index += 1) {
+  for (let index = 0; index < difficulty.rounds; index += 1) {
     let cell = Math.floor(random() * DAILY_GAME_CONFIG.gridSize);
     if (cell === previousCell) {
       cell = (cell + 1 + Math.floor(random() * (DAILY_GAME_CONFIG.gridSize - 1))) % DAILY_GAME_CONFIG.gridSize;
     }
     previousCell = cell;
-    const startMs = index * DAILY_GAME_CONFIG.roundSpacingMs;
+    const startMs = index * difficulty.roundSpacingMs;
     rounds.push({
       index,
       cell,
       tone: tones[index % tones.length],
       startMs,
-      endMs: startMs + DAILY_GAME_CONFIG.visibleMs,
+      endMs: startMs + difficulty.visibleMs,
     });
   }
 
@@ -124,13 +233,14 @@ export function buildDailyGameRounds(seed: string): DailyGameRound[] {
 export function scoreDailyGameSession(
   rounds: DailyGameRound[],
   hits: DailyGameHit[],
-  previousStreak: number
+  previousStreak: number,
+  difficulty: DailyDifficultyConfig = DAILY_DIFFICULTY_CONFIG.medium
 ): DailyGameScoreBreakdown {
   const uniqueHits = new Map<number, number>();
   for (const hit of hits) {
     if (!Number.isInteger(hit.roundIndex) || !Number.isFinite(hit.hitAtMs)) continue;
     if (hit.roundIndex < 0 || hit.roundIndex >= rounds.length) continue;
-    if (hit.hitAtMs < 0 || hit.hitAtMs > DAILY_GAME_CONFIG.durationMs + 5_000) continue;
+    if (hit.hitAtMs < 0 || hit.hitAtMs > difficulty.durationMs + 5_000) continue;
     const existing = uniqueHits.get(hit.roundIndex);
     if (existing === undefined || hit.hitAtMs < existing) uniqueHits.set(hit.roundIndex, hit.hitAtMs);
   }
@@ -145,7 +255,7 @@ export function scoreDailyGameSession(
     const isValid =
       typeof hitAtMs === "number" &&
       hitAtMs >= round.startMs &&
-      hitAtMs <= round.endMs + DAILY_GAME_CONFIG.graceMs;
+      hitAtMs <= round.endMs + difficulty.graceMs;
 
     if (isValid && typeof hitAtMs === "number") {
       validHits += 1;
@@ -164,18 +274,20 @@ export function scoreDailyGameSession(
   const speedRatio =
     avgReactionMs === null
       ? 0
-      : Math.max(0, Math.min(1, (DAILY_GAME_CONFIG.visibleMs - avgReactionMs) / DAILY_GAME_CONFIG.visibleMs));
+      : Math.max(0, Math.min(1, (difficulty.visibleMs - avgReactionMs) / difficulty.visibleMs));
   const speedBonus = Math.round(speedRatio * DAILY_GAME_CONFIG.maxSpeedBonus);
   const accuracyBonus = Math.round(accuracy * DAILY_GAME_CONFIG.maxAccuracyBonus);
   const hitPoints = validHits * DAILY_GAME_CONFIG.pointsPerHit;
   const comboPoints = comboBest * DAILY_GAME_CONFIG.comboPointMultiplier;
-  const performancePoints = hitPoints + comboPoints + speedBonus + accuracyBonus;
+  const performancePoints = Math.round((hitPoints + comboPoints + speedBonus + accuracyBonus) * difficulty.bonusMultiplier);
   const nextStreak = Math.max(1, previousStreak + 1);
   const streakBonus =
     Math.min(nextStreak, DAILY_GAME_CONFIG.streakBonusCap) * DAILY_GAME_CONFIG.streakBonusStep;
-  const totalPoints = DAILY_GAME_CONFIG.basePoints + performancePoints + streakBonus;
+  const totalPoints = Math.round((DAILY_GAME_CONFIG.basePoints + performancePoints + streakBonus) * difficulty.bonusMultiplier);
 
   return {
+    difficulty: difficulty.key,
+    difficultyLabel: difficulty.label,
     validHits,
     misses,
     accuracy: Number((accuracy * 100).toFixed(2)),
@@ -192,13 +304,19 @@ export function scoreDailyGameSession(
 export function buildDailyMotivationMessage(
   streak: number,
   canPlayToday: boolean,
-  scoreCurrent: number
+  scoreCurrent: number,
+  options?: { weekend?: boolean; difficultyLabel?: string | null; nextBusinessDayLabel?: string | null }
 ) {
-  if (!canPlayToday) return "Desafio concluido hoje. Volte amanha para manter sua sequencia.";
-  if (streak >= 7) return "Sua sequencia esta forte. Mais uma rodada e voce pressiona o topo do ranking.";
-  if (streak >= 3) return "Consistencia gera destaque. Garanta mais um dia sem quebrar o ritmo.";
+  if (options?.weekend) {
+    return options.nextBusinessDayLabel
+      ? `Hoje e dia de recarregar as energias. O proximo desafio abre em ${options.nextBusinessDayLabel}.`
+      : "Hoje e dia de recarregar as energias. O proximo desafio abre no proximo dia util.";
+  }
+  if (!canPlayToday) return "Desafio concluido hoje. Volte no proximo dia util para manter sua sequencia.";
+  if (streak >= 7) return `Sua sequencia esta forte. O nivel ${options?.difficultyLabel ?? "de hoje"} pode consolidar sua liderança.`;
+  if (streak >= 3) return "Consistencia gera destaque. Garanta mais um dia util sem quebrar o ritmo.";
   if (scoreCurrent > 0) return "Seu saldo esta valendo. Entre hoje para defender sua posicao.";
-  return "Uma rodada por dia. Se faltar, o placar atual zera. Vale entrar agora.";
+  return "Uma rodada por dia util. Se faltar em um dia util, o placar atual zera.";
 }
 
 export function buildDailyShareText(result: {

@@ -1,10 +1,13 @@
 import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
-import { DAILY_GAME_CONFIG, buildDailyGameRounds } from "@/lib/engagementGame";
+import { buildDailyGameRounds } from "@/lib/engagementGame";
 import {
   canPlayToday,
   ensureEngagementGamePlayer,
   getAuthenticatedPortalUser,
+  getNextBusinessDayLabel,
+  getTodayDifficulty,
+  isWeekendDate,
   isEngagementGameAdmin,
   syncEngagementGameResets,
 } from "@/lib/server/engagementGameServer";
@@ -17,6 +20,21 @@ export async function POST() {
 
     await syncEngagementGameResets();
     const [player, isAdmin] = await Promise.all([ensureEngagementGamePlayer(user.id), isEngagementGameAdmin(user.id)]);
+    const now = new Date();
+    if (isWeekendDate(now)) {
+      return NextResponse.json(
+        {
+          error: "Hoje nao ha rodada.",
+          isWeekend: true,
+          nextBusinessDayLabel: getNextBusinessDayLabel(now),
+        },
+        { status: 409 }
+      );
+    }
+    const difficulty = getTodayDifficulty(now);
+    if (!difficulty) {
+      return NextResponse.json({ error: "Nivel do dia indisponivel." }, { status: 409 });
+    }
     if (!isAdmin && !canPlayToday(player.last_played_date)) {
       return NextResponse.json({ error: "Voce ja jogou hoje." }, { status: 409 });
     }
@@ -36,8 +54,9 @@ export async function POST() {
       if (notExpired) {
         return NextResponse.json({
           sessionId: pendingSession.id,
-          rounds: buildDailyGameRounds(pendingSession.challenge_seed),
-          durationMs: DAILY_GAME_CONFIG.durationMs,
+          rounds: buildDailyGameRounds(pendingSession.challenge_seed, difficulty),
+          durationMs: difficulty.durationMs,
+          difficulty,
         });
       }
 
@@ -56,7 +75,7 @@ export async function POST() {
         company_id: player.company_id,
         department_id: player.department_id,
         challenge_seed: seed,
-        challenge_config: DAILY_GAME_CONFIG,
+        challenge_config: difficulty,
         expires_at: expiresAt,
       })
       .select("id")
@@ -66,8 +85,9 @@ export async function POST() {
 
     return NextResponse.json({
       sessionId: session.id,
-      rounds: buildDailyGameRounds(seed),
-      durationMs: DAILY_GAME_CONFIG.durationMs,
+      rounds: buildDailyGameRounds(seed, difficulty),
+      durationMs: difficulty.durationMs,
+      difficulty,
     });
   } catch (error) {
     return NextResponse.json(

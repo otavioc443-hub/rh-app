@@ -5,6 +5,10 @@ import {
   ensureEngagementGamePlayer,
   getAuthenticatedPortalUser,
   getLocalFortalezaDate,
+  getNextBusinessDayLabel,
+  getTodayDifficulty,
+  getUserStreak,
+  isWeekendDate,
   isEngagementGameAdmin,
   loadEngagementGameLeaderboard,
   loadEngagementGamePlayerOfDay,
@@ -34,16 +38,38 @@ export async function GET() {
 
     if (recentHistoryRes.error) throw new Error(recentHistoryRes.error.message);
 
-    const playedToday = player.last_played_date === getLocalFortalezaDate();
-    const playable = isAdmin ? true : canPlayToday(player.last_played_date);
-    const message = buildDailyMotivationMessage(player.streak, playable, player.score_current);
+    const now = new Date();
+    const today = getLocalFortalezaDate(now);
+    const weekend = isWeekendDate(now);
+    const difficulty = getTodayDifficulty(now);
+    const playedToday = player.last_played_date === today;
+    const effectiveStreak = getUserStreak(player.last_played_date, player.streak, now);
+    const playable = weekend ? false : isAdmin ? true : canPlayToday(player.last_played_date);
+    const message = buildDailyMotivationMessage(effectiveStreak, playable, player.score_current, {
+      weekend,
+      difficultyLabel: difficulty?.label ?? null,
+      nextBusinessDayLabel: weekend ? getNextBusinessDayLabel(now) : null,
+    });
 
     return NextResponse.json({
       game: {
         slug: "pulse-sprint",
         title: "Pulse Sprint",
-        summary: "Toque os pulsos de energia na grade antes que eles sumam. Uma rodada por dia.",
-        durationMs: 36_000,
+        summary: weekend
+          ? "Nos finais de semana o desafio faz uma pausa e retorna no proximo dia util."
+          : `Toque os pulsos de energia na grade antes que eles sumam. Nivel de hoje: ${difficulty?.label ?? "Medio"}.`,
+        durationMs: difficulty?.durationMs ?? 0,
+        difficulty: difficulty
+          ? {
+              key: difficulty.key,
+              label: difficulty.label,
+              summary: difficulty.summary,
+              targetScale: difficulty.targetScale,
+              rounds: difficulty.rounds,
+            }
+          : null,
+        isWeekend: weekend,
+        nextBusinessDayLabel: weekend ? getNextBusinessDayLabel(now) : null,
       },
       player: {
         userId: player.user_id,
@@ -51,7 +77,7 @@ export async function GET() {
         departmentName: player.department_name,
         scoreCurrent: player.score_current,
         scoreTotal: player.score_total,
-        streak: player.streak,
+        streak: effectiveStreak,
         lastPlayedDate: player.last_played_date,
         canPlayToday: playable,
         playedToday,

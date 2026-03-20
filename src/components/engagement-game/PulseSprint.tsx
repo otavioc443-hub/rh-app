@@ -24,6 +24,7 @@ import {
   DAILY_GAME_TITLE,
   formatCompactPoints,
   type DailyGameHit,
+  type DailyDifficultyKey,
   type DailyGameLeaderboardEntry,
   type DailyGameRound,
 } from "@/lib/engagementGame";
@@ -34,6 +35,15 @@ type StatusResponse = {
     title: string;
     summary: string;
     durationMs: number;
+    difficulty: {
+      key: DailyDifficultyKey;
+      label: string;
+      summary: string;
+      targetScale: number;
+      rounds: number;
+    } | null;
+    isWeekend: boolean;
+    nextBusinessDayLabel: string | null;
   };
   player: {
     userId: string;
@@ -70,11 +80,20 @@ type StartResponse = {
   sessionId: string;
   rounds: DailyGameRound[];
   durationMs: number;
+  difficulty: {
+    key: DailyDifficultyKey;
+    label: string;
+    summary: string;
+    targetScale: number;
+    rounds: number;
+  };
 };
 
 type SubmitResponse = {
   result: {
     totalPoints: number;
+    difficulty: DailyDifficultyKey;
+    difficultyLabel: string;
     basePoints: number;
     performancePoints: number;
     streakBonus: number;
@@ -107,6 +126,26 @@ function whenLabel(value: string | null) {
 
 function clsx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
+}
+
+function OverlayModal({
+  open,
+  title,
+  children,
+}: {
+  open: boolean;
+  title: string;
+  children: React.ReactNode;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-2xl rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_30px_90px_-45px_rgba(15,23,42,0.65)]">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{title}</p>
+        <div className="mt-4">{children}</div>
+      </div>
+    </div>
+  );
 }
 
 function getHistoryEntryLabel(eventType: string) {
@@ -142,7 +181,7 @@ function CompactLeaderboard({
                 <p className="truncate text-sm font-semibold text-slate-900">{entry.displayName}</p>
               </div>
               <p className="mt-1 truncate text-xs text-slate-500">
-                {(entry.departmentName ?? "Area interna")} • {entry.streak} dia(s)
+                {(entry.departmentName ?? "Area interna")} • {entry.streak} dia(s) uteis
               </p>
             </div>
             <div className="text-right">
@@ -254,7 +293,12 @@ export function PulseSprintPage() {
   const [gameState, setGameState] = useState<"idle" | "playing" | "finished">("idle");
   const [copied, setCopied] = useState(false);
   const [heroCollapsed, setHeroCollapsed] = useState(false);
+  const [showIntroModal, setShowIntroModal] = useState(false);
+  const [showWeekendModal, setShowWeekendModal] = useState(false);
+  const [showResultModal, setShowResultModal] = useState(false);
+  const [activeDifficulty, setActiveDifficulty] = useState<StatusResponse["game"]["difficulty"] | null>(null);
   const resultCardRef = useRef<HTMLDivElement | null>(null);
+  const rankingRef = useRef<HTMLElement | null>(null);
   const startedAtRef = useRef<number>(0);
   const submitGuardRef = useRef(false);
 
@@ -276,6 +320,12 @@ export function PulseSprintPage() {
   useEffect(() => {
     void loadStatus();
   }, [loadStatus]);
+
+  useEffect(() => {
+    if (!status) return;
+    setActiveDifficulty(status.game.difficulty);
+    setShowWeekendModal(status.game.isWeekend);
+  }, [status]);
 
   const activeRound = useMemo(() => {
     if (gameState !== "playing") return null;
@@ -342,11 +392,17 @@ export function PulseSprintPage() {
     void submitRound();
   }, [gameState, submitRound]);
 
-  const handleStart = useCallback(async () => {
+  useEffect(() => {
+    if (result) setShowResultModal(true);
+  }, [result]);
+
+  const startRound = useCallback(async () => {
     setStarting(true);
     setError("");
     setResult(null);
     setCopied(false);
+    setShowResultModal(false);
+    setShowIntroModal(false);
     submitGuardRef.current = false;
     try {
       const res = await fetch("/api/institucional/jogo-diario/start", { method: "POST" });
@@ -355,6 +411,7 @@ export function PulseSprintPage() {
       setSessionId(json.sessionId);
       setRounds(json.rounds);
       setDurationMs(json.durationMs);
+      setActiveDifficulty(json.difficulty);
       setHits([]);
       setElapsedMs(0);
       startedAtRef.current = performance.now();
@@ -365,6 +422,16 @@ export function PulseSprintPage() {
       setStarting(false);
     }
   }, []);
+
+  const handleStart = useCallback(() => {
+    if (!status) return;
+    if (status.game.isWeekend) {
+      setShowWeekendModal(true);
+      return;
+    }
+    if (!status.player.canPlayToday || gameState === "playing") return;
+    setShowIntroModal(true);
+  }, [gameState, status]);
 
   const handleCellTap = useCallback(
     (cellIndex: number) => {
@@ -394,8 +461,20 @@ export function PulseSprintPage() {
   }, [result]);
 
   const progress = Math.max(0, Math.min(100, (elapsedMs / durationMs) * 100));
-  const primaryActionLabel = status?.player.canPlayToday ? "Jogar agora" : "Rodada concluida hoje";
-  const compactMessage = status?.player.canPlayToday ? "Sua rodada de hoje esta pronta." : "Rodada concluida hoje.";
+  const primaryActionLabel = status?.game.isWeekend
+    ? "Indisponivel hoje"
+    : status?.player.canPlayToday
+    ? "Jogar agora"
+    : "Rodada concluida hoje";
+  const compactMessage = status?.game.isWeekend
+    ? "O desafio retorna no proximo dia util."
+    : status?.player.canPlayToday
+    ? `Sua rodada ${activeDifficulty?.label?.toLowerCase() ?? "de hoje"} esta pronta.`
+    : "Rodada concluida hoje.";
+  const streakLabel = `${status?.player.streak ?? 0} dia(s) uteis`;
+  const introMessage =
+    status?.message ??
+    "Preparado para mais uma rodada? Seu desempenho de hoje pode melhorar sua posicao no ranking.";
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
@@ -431,7 +510,7 @@ export function PulseSprintPage() {
                   {formatCompactPoints(status?.player.scoreCurrent ?? 0)} pts
                 </div>
                 <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-sm font-semibold text-amber-700">
-                  {status?.player.streak ?? 0}x streak
+                  {status?.player.streak ?? 0}x streak util
                 </div>
                 <div className="rounded-full border border-slate-200 bg-white/90 px-3 py-1.5 text-sm font-semibold text-slate-700">
                   {status?.player.rankPosition ? `#${status.player.rankPosition}` : "Sem rank"}
@@ -470,7 +549,7 @@ export function PulseSprintPage() {
           <div>
             <h1 className="text-4xl font-semibold tracking-tight text-slate-950">{DAILY_GAME_TITLE}</h1>
             <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-600">
-              Desafio de reflexo de 40 segundos. Toque os pulsos de energia na grade e acumule pontos base, bonus de performance e bonus de streak.
+              Desafio diario com nivel automatico por dia util. Toque os pulsos de energia na grade e acumule pontos base, bonus de performance e bonus de streak.
             </p>
 
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
@@ -485,11 +564,17 @@ export function PulseSprintPage() {
                 <p className="mt-2 flex items-center gap-2 text-3xl font-semibold text-amber-600">
                   <Flame size={24} /> {status?.player.streak ?? 0}
                 </p>
+                <p className="mt-1 text-xs text-slate-500">dias uteis</p>
               </div>
               <div className="rounded-3xl border border-slate-200 bg-white/85 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Posicao</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+                  {activeDifficulty ? `Nivel ${activeDifficulty.label}` : "Posicao"}
+                </p>
                 <p className="mt-2 text-3xl font-semibold text-slate-950">
-                  {status?.player.rankPosition ? `#${status.player.rankPosition}` : "--"}
+                  {activeDifficulty ? `${activeDifficulty.rounds}` : status?.player.rankPosition ? `#${status.player.rankPosition}` : "--"}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  {activeDifficulty ? "alvos previstos" : "ranking atual"}
                 </p>
               </div>
             </div>
@@ -533,10 +618,10 @@ export function PulseSprintPage() {
               {[ 
                 {
                   icon: Target,
-                  title: "1 rodada por dia",
-                  body: "Jogou hoje, soma. Pulou um dia, seu placar atual zera.",
+                  title: "1 rodada por dia util",
+                  body: "Jogou no dia util, soma. Pulou um dia util, seu placar atual zera.",
                 },
-                { icon: Bolt, title: "Resposta rapida", body: "Toque cada pulso antes que ele desapareca para aumentar hits, combo e bonus de velocidade." },
+                { icon: Bolt, title: "Nivel automatico", body: "Facil, medio e dificil se revezam automaticamente entre segunda e sexta." },
                 { icon: Trophy, title: "Top 5 visivel", body: "O ranking da empresa aparece aqui, na area institucional e no PulseHub." },
               ].map((item) => (
                 <div key={item.title} className="rounded-2xl bg-slate-50 px-4 py-3">
@@ -553,7 +638,7 @@ export function PulseSprintPage() {
               ))}
             </div>
             <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-              Pontuacao: base diaria + performance no desafio + bonus progressivo de streak.
+              Pontuacao: base diaria + performance no desafio + bonus progressivo de streak em dias uteis.
             </div>
           </div>
         </div>
@@ -590,8 +675,12 @@ export function PulseSprintPage() {
                   <Target size={20} />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">Pulse Grid 3x3</p>
-                  <p className="text-xs text-slate-500">Um alvo por vez. Reaja antes do pulso mudar.</p>
+                  <p className="text-sm font-semibold text-slate-900">
+                    Pulse Grid 3x3 {activeDifficulty ? `• ${activeDifficulty.label}` : ""}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {activeDifficulty?.summary ?? "Um alvo por vez. Reaja antes do pulso mudar."}
+                  </p>
                 </div>
               </div>
               <div className="text-right">
@@ -630,7 +719,10 @@ export function PulseSprintPage() {
                       wasHit && "scale-[0.97]"
                     )}
                   >
-                    <div className="flex h-full items-center justify-center">
+                    <div
+                      className="flex h-full items-center justify-center"
+                      style={isActive ? { transform: `scale(${activeDifficulty?.targetScale ?? 1})` } : undefined}
+                    >
                       {isActive ? <Bolt size={22} /> : <span className="text-[11px] font-semibold text-slate-300">pulse</span>}
                     </div>
                   </button>
@@ -645,7 +737,7 @@ export function PulseSprintPage() {
               </div>
               <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-400">rodadas</p>
-                <p className="mt-1.5 text-xl font-semibold text-slate-950">{DAILY_GAME_CONFIG.rounds}</p>
+                <p className="mt-1.5 text-xl font-semibold text-slate-950">{activeDifficulty?.rounds ?? DAILY_GAME_CONFIG.rounds}</p>
               </div>
               <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
                 <p className="text-xs uppercase tracking-[0.18em] text-slate-400">estado</p>
@@ -658,7 +750,10 @@ export function PulseSprintPage() {
         </section>
 
         <aside className="space-y-6">
-          <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_20px_50px_-40px_rgba(15,23,42,0.35)]">
+          <section
+            ref={rankingRef}
+            className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-[0_20px_50px_-40px_rgba(15,23,42,0.35)]"
+          >
             <div className="flex items-center gap-3">
               <div className="rounded-2xl bg-amber-50 p-3 text-amber-700">
                 <Crown size={20} />
@@ -758,6 +853,109 @@ export function PulseSprintPage() {
           </div>
         </section>
       ) : null}
+
+      <OverlayModal open={showWeekendModal} title="Pausa do desafio">
+        <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Hoje e dia de recarregar as energias!</h2>
+        <p className="mt-3 text-base leading-relaxed text-slate-600">
+          O proximo desafio estara disponivel no proximo dia util{status?.game.nextBusinessDayLabel ? `, ${status.game.nextBusinessDayLabel}` : ""}.
+        </p>
+        <div className="mt-6 flex justify-end">
+          <button
+            type="button"
+            onClick={() => setShowWeekendModal(false)}
+            className="inline-flex items-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+          >
+            Ok, entendi
+          </button>
+        </div>
+      </OverlayModal>
+
+      <OverlayModal open={showIntroModal} title="Desafio do dia">
+        <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Preparado para mais uma rodada?</h2>
+        <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl bg-slate-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Nivel de hoje</p>
+            <p className="mt-2 text-lg font-semibold text-slate-950">{status?.game.difficulty?.label ?? "Medio"}</p>
+          </div>
+          <div className="rounded-2xl bg-slate-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Sequencia atual</p>
+            <p className="mt-2 text-lg font-semibold text-slate-950">{streakLabel}</p>
+          </div>
+          <div className="rounded-2xl bg-slate-50 px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Arena</p>
+            <p className="mt-2 text-lg font-semibold text-slate-950">{status?.game.difficulty?.rounds ?? DAILY_GAME_CONFIG.rounds} alvos</p>
+          </div>
+        </div>
+        <p className="mt-5 text-base leading-relaxed text-slate-600">{introMessage}</p>
+        <div className="mt-6 flex flex-wrap justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => setShowIntroModal(false)}
+            className="inline-flex items-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Agora nao
+          </button>
+          <button
+            type="button"
+            onClick={() => void startRound()}
+            disabled={starting}
+            className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300"
+          >
+            <Play size={16} />
+            Iniciar desafio
+          </button>
+        </div>
+      </OverlayModal>
+
+      <OverlayModal open={showResultModal && !!result} title="Resultado da rodada">
+        {result ? (
+          <>
+            <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Mandou bem!</h2>
+            <p className="mt-3 text-base text-slate-600">
+              Voce concluiu o nivel {result.difficultyLabel} com {formatCompactPoints(result.totalPoints)} pontos.
+            </p>
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Pontuacao do dia</p>
+                <p className="mt-2 text-lg font-semibold text-slate-950">{formatCompactPoints(result.totalPoints)}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Nivel jogado</p>
+                <p className="mt-2 text-lg font-semibold text-slate-950">{result.difficultyLabel}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Posicao</p>
+                <p className="mt-2 text-lg font-semibold text-slate-950">{result.rankPosition ? `#${result.rankPosition}` : "Em formacao"}</p>
+              </div>
+            </div>
+            <div className="mt-5">
+              <p className="text-sm font-semibold text-slate-900">Top 5 da empresa</p>
+              <div className="mt-3 max-h-[260px] overflow-auto pr-1">
+                <CompactLeaderboard leaderboard={status?.leaderboard ?? []} />
+              </div>
+            </div>
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowResultModal(false)}
+                className="inline-flex items-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Fechar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowResultModal(false);
+                  rankingRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                className="inline-flex items-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+              >
+                Ver ranking completo
+              </button>
+            </div>
+          </>
+        ) : null}
+      </OverlayModal>
     </div>
   );
 }

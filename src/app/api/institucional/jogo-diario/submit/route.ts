@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  DAILY_GAME_CONFIG,
+  DAILY_DIFFICULTY_CONFIG,
   buildDailyGameRounds,
   buildDailyShareText,
   scoreDailyGameSession,
@@ -11,6 +11,9 @@ import {
   ensureEngagementGamePlayer,
   getAuthenticatedPortalUser,
   getLocalFortalezaDate,
+  getTodayDifficulty,
+  getUserStreak,
+  isWeekendDate,
   isEngagementGameAdmin,
   loadEngagementGameLeaderboard,
   loadEngagementGameRankPosition,
@@ -34,18 +37,23 @@ export async function POST(req: Request) {
 
     await syncEngagementGameResets();
     const [player, isAdmin] = await Promise.all([ensureEngagementGamePlayer(user.id), isEngagementGameAdmin(user.id)]);
+    const now = new Date();
+    if (isWeekendDate(now)) {
+      return NextResponse.json({ error: "O desafio fica indisponivel nos finais de semana." }, { status: 409 });
+    }
     if (!isAdmin && !canPlayToday(player.last_played_date)) {
       return NextResponse.json({ error: "Voce ja concluiu a rodada de hoje." }, { status: 409 });
     }
 
     const { data: session, error: sessionError } = await supabaseAdmin
       .from("engagement_game_sessions")
-      .select("id,user_id,challenge_seed,session_state,expires_at,started_at")
+      .select("id,user_id,challenge_seed,challenge_config,session_state,expires_at,started_at")
       .eq("id", sessionId)
       .maybeSingle<{
         id: string;
         user_id: string;
         challenge_seed: string;
+        challenge_config: { key?: string } | null;
         session_state: "started" | "completed" | "expired" | "cancelled";
         expires_at: string;
         started_at: string;
@@ -70,11 +78,17 @@ export async function POST(req: Request) {
       }))
       .filter((item) => Number.isInteger(item.roundIndex) && Number.isFinite(item.hitAtMs));
 
-    const rounds = buildDailyGameRounds(session.challenge_seed);
+    const difficultyConfig = (() => {
+      const key = String((session as { challenge_config?: { key?: string } }).challenge_config?.key ?? "");
+      if (key === "easy" || key === "medium" || key === "hard") return DAILY_DIFFICULTY_CONFIG[key];
+      return getTodayDifficulty(now) ?? DAILY_DIFFICULTY_CONFIG.medium;
+    })();
+    const rounds = buildDailyGameRounds(session.challenge_seed, difficultyConfig);
     const localToday = getLocalFortalezaDate();
     const playedToday = player.last_played_date === localToday;
-    const replayBaseStreak = isAdmin && playedToday ? Math.max(0, player.streak - 1) : player.streak;
-    const breakdown = scoreDailyGameSession(rounds, hits, replayBaseStreak);
+    const currentStreak = getUserStreak(player.last_played_date, player.streak, now);
+    const replayBaseStreak = isAdmin && playedToday ? Math.max(0, currentStreak - 1) : currentStreak;
+    const breakdown = scoreDailyGameSession(rounds, hits, replayBaseStreak, difficultyConfig);
 
     let replacedSession:
       | {
@@ -204,6 +218,8 @@ export async function POST(req: Request) {
       ok: true,
       result: {
         totalPoints: breakdown.totalPoints,
+        difficulty: breakdown.difficulty,
+        difficultyLabel: breakdown.difficultyLabel,
         basePoints: breakdown.basePoints,
         performancePoints: breakdown.performancePoints,
         streakBonus: breakdown.streakBonus,
@@ -223,7 +239,7 @@ export async function POST(req: Request) {
         }),
       },
       leaderboard,
-      config: DAILY_GAME_CONFIG,
+      config: difficultyConfig,
     });
   } catch (error) {
     return NextResponse.json(
