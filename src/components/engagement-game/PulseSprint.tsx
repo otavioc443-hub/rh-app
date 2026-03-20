@@ -653,7 +653,9 @@ export function PulseSprintPage() {
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Arena</p>
-              <p className="mt-1 text-xl font-semibold text-slate-950">Desafio de hoje</p>
+              <p className="mt-1 text-xl font-semibold text-slate-950">
+                {gameState === "playing" ? "Desafio em andamento" : "Arena pronta para iniciar"}
+              </p>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <Link
@@ -668,85 +670,94 @@ export function PulseSprintPage() {
             </div>
           </div>
 
-          <div className="mt-4 rounded-[1.5rem] border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fafc)] p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-slate-950 p-2.5 text-white">
-                  <Target size={20} />
+          {gameState === "playing" ? (
+            <div className="mt-4 rounded-[1.5rem] border border-slate-200 bg-[linear-gradient(180deg,#ffffff,#f8fafc)] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-2xl bg-slate-950 p-2.5 text-white">
+                    <Target size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">
+                      Pulse Grid 3x3 {activeDifficulty ? `• ${activeDifficulty.label}` : ""}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {activeDifficulty?.summary ?? "Um alvo por vez. Reaja antes do pulso mudar."}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">
-                    Pulse Grid 3x3 {activeDifficulty ? `• ${activeDifficulty.label}` : ""}
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    {activeDifficulty?.summary ?? "Um alvo por vez. Reaja antes do pulso mudar."}
-                  </p>
+                <div className="text-right">
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-400">tempo</p>
+                  <p className="mt-1 text-lg font-semibold text-slate-950">{Math.max(0, Math.ceil((durationMs - elapsedMs) / 1000))}s</p>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-400">tempo</p>
-                <p className="mt-1 text-lg font-semibold text-slate-950">{Math.max(0, Math.ceil((durationMs - elapsedMs) / 1000))}s</p>
+
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-[linear-gradient(90deg,#f59e0b,#0ea5e9)] transition-[width]"
+                  style={{ width: `${progress}%` }}
+                />
               </div>
-            </div>
 
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-              <div
-                className="h-full rounded-full bg-[linear-gradient(90deg,#f59e0b,#0ea5e9)] transition-[width]"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
+              <div className="mx-auto mt-4 grid max-w-[360px] grid-cols-3 gap-2.5 sm:max-w-[390px]">
+                {GRID_CELLS.map((cell) => {
+                  const isActive = activeRound?.cell === cell;
+                  const wasHit = activeRound ? hitLookup.has(activeRound.index) && activeRound.cell === cell : false;
+                  const toneClass =
+                    activeRound?.tone === "amber"
+                      ? "from-amber-400 to-orange-500"
+                      : activeRound?.tone === "emerald"
+                      ? "from-emerald-400 to-teal-500"
+                      : "from-sky-400 to-blue-500";
 
-            <div className="mx-auto mt-4 grid max-w-[360px] grid-cols-3 gap-2.5 sm:max-w-[390px]">
-              {GRID_CELLS.map((cell) => {
-                const isActive = activeRound?.cell === cell;
-                const wasHit = activeRound ? hitLookup.has(activeRound.index) && activeRound.cell === cell : false;
-                const toneClass =
-                  activeRound?.tone === "amber"
-                    ? "from-amber-400 to-orange-500"
-                    : activeRound?.tone === "emerald"
-                    ? "from-emerald-400 to-teal-500"
-                    : "from-sky-400 to-blue-500";
-
-                return (
-                  <button
-                    key={cell}
-                    type="button"
-                    onClick={() => handleCellTap(cell)}
-                    className={clsx(
-                      "aspect-square rounded-[1.2rem] border border-slate-200 bg-slate-50 transition",
-                      gameState === "playing" && "hover:border-slate-300 hover:bg-slate-100",
-                      isActive && `border-transparent bg-gradient-to-br ${toneClass} text-white shadow-[0_18px_40px_-24px_rgba(14,165,233,0.65)]`,
-                      wasHit && "scale-[0.97]"
-                    )}
-                  >
-                    <div
-                      className="flex h-full items-center justify-center"
-                      style={isActive ? { transform: `scale(${activeDifficulty?.targetScale ?? 1})` } : undefined}
+                  return (
+                    <button
+                      key={cell}
+                      type="button"
+                      onClick={() => handleCellTap(cell)}
+                      className={clsx(
+                        "aspect-square rounded-[1.2rem] border border-slate-200 bg-slate-50 transition",
+                        gameState === "playing" && "hover:border-slate-300 hover:bg-slate-100",
+                        isActive && `border-transparent bg-gradient-to-br ${toneClass} text-white shadow-[0_18px_40px_-24px_rgba(14,165,233,0.65)]`,
+                        wasHit && "scale-[0.97]"
+                      )}
                     >
-                      {isActive ? <Bolt size={22} /> : <span className="text-[11px] font-semibold text-slate-300">pulse</span>}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
+                      <div
+                        className="flex h-full items-center justify-center"
+                        style={isActive ? { transform: `scale(${activeDifficulty?.targetScale ?? 1})` } : undefined}
+                      >
+                        {isActive ? <Bolt size={22} /> : <span className="text-[11px] font-semibold text-slate-300">pulse</span>}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
 
-            <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
-              <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-400">hits</p>
-                <p className="mt-1.5 text-xl font-semibold text-slate-950">{hits.length}</p>
-              </div>
-              <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-400">rodadas</p>
-                <p className="mt-1.5 text-xl font-semibold text-slate-950">{activeDifficulty?.rounds ?? DAILY_GAME_CONFIG.rounds}</p>
-              </div>
-              <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
-                <p className="text-xs uppercase tracking-[0.18em] text-slate-400">estado</p>
-                <p className="mt-1.5 text-sm font-semibold text-slate-950">
-                  {gameState === "playing" ? "Em andamento" : submitting ? "Processando" : "Pronto"}
-                </p>
+              <div className="mt-4 grid gap-2.5 sm:grid-cols-3">
+                <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-400">hits</p>
+                  <p className="mt-1.5 text-xl font-semibold text-slate-950">{hits.length}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-400">rodadas</p>
+                  <p className="mt-1.5 text-xl font-semibold text-slate-950">{activeDifficulty?.rounds ?? DAILY_GAME_CONFIG.rounds}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 px-3 py-2.5">
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-400">estado</p>
+                  <p className="mt-1.5 text-sm font-semibold text-slate-950">
+                    {gameState === "playing" ? "Em andamento" : submitting ? "Processando" : "Pronto"}
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
+          ) : (
+            <div className="mt-4 rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50/80 px-5 py-8 text-center">
+              <p className="text-sm font-semibold text-slate-900">A arena fica visivel apenas depois do inicio da rodada.</p>
+              <p className="mt-2 text-sm text-slate-600">
+                Abra o modal do desafio e clique em <span className="font-semibold">Iniciar desafio</span> para liberar o tabuleiro.
+              </p>
+            </div>
+          )}
         </section>
 
         <aside className="space-y-6">
