@@ -233,6 +233,16 @@ function applyCachedPortalShell(cache: PortalShellCache | null, expectedUserId?:
   return cache;
 }
 
+function PortalLoadingScreen() {
+  return (
+    <div className="min-h-screen grid place-items-center bg-slate-50">
+      <div className="rounded-2xl border border-slate-200 bg-white px-6 py-4">
+        <p className="text-sm text-slate-600">Carregando portal...</p>
+      </div>
+    </div>
+  );
+}
+
 export default function PortalShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -716,33 +726,12 @@ export default function PortalShell({ children }: { children: React.ReactNode })
   }, [pathname]);
 
   if (loading || !hiddenRoutesLoaded) {
-    return (
-      <div className="min-h-screen grid place-items-center bg-slate-50">
-        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-4">
-          <p className="text-sm text-slate-600">Carregando portal...</p>
-        </div>
-      </div>
-    );
+    return <PortalLoadingScreen />;
   }
 
   if (fatalError) {
     if (isRecoverableBootstrapError) {
-      return (
-        <div className="min-h-screen grid place-items-center bg-slate-50 p-6">
-          <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6">
-            <h1 className="text-lg font-semibold text-slate-900">Finalizando acesso</h1>
-            <p className="mt-2 text-sm text-slate-700">Estamos confirmando sua funcao no portal. Se necessario, recarregue a pagina.</p>
-            <div className="mt-4 flex gap-3">
-              <button
-                onClick={() => window.location.reload()}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-              >
-                Recarregar
-              </button>
-            </div>
-          </div>
-        </div>
-      );
+      return <PortalLoadingScreen />;
     }
 
     return (
@@ -781,22 +770,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
   }
 
   if (!role) {
-    return (
-      <div className="min-h-screen grid place-items-center bg-slate-50 p-6">
-        <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-6">
-          <h1 className="text-lg font-semibold text-slate-900">Finalizando acesso</h1>
-          <p className="mt-2 text-sm text-slate-700">Estamos confirmando sua funcao no portal. Se necessario, recarregue a pagina.</p>
-          <div className="mt-4 flex gap-3">
-            <button
-              onClick={() => window.location.reload()}
-              className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-            >
-              Recarregar
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+    return <PortalLoadingScreen />;
   }
 
   return (
