@@ -399,6 +399,18 @@ function roleOfficialLabel(role: string | null | undefined) {
   return null;
 }
 
+function officialAuthorName(role: string | null | undefined) {
+  if (role === "diretoria" || role === "admin" || role === "rh") return "Sólida";
+  return null;
+}
+
+function canRenderImageUrl(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (trimmed.startsWith("/")) return true;
+  return /^https?:\/\//i.test(trimmed);
+}
+
 function formatMonthDay(value: string) {
   const date = new Date(`${value}T00:00:00`);
   if (Number.isNaN(date.getTime())) return "-";
@@ -2283,12 +2295,15 @@ export default function InternalSocialPage() {
     setError("");
     try {
       const normalizedPostType = canPublishOfficial ? postType : "social";
+      const isOfficial = isOfficialPostType(normalizedPostType);
+      const postAuthorName = isOfficial ? officialAuthorName(me.role) || currentName : currentName;
+      const postAuthorAvatarUrl = isOfficial ? null : resolvePortalAvatarUrl(me.avatar_url ?? null);
       let res = await supabase
         .from("internal_social_posts")
         .insert({
           author_user_id: me.id,
-          author_name: currentName,
-          author_avatar_url: resolvePortalAvatarUrl(me.avatar_url ?? null),
+          author_name: postAuthorName,
+          author_avatar_url: postAuthorAvatarUrl,
           audience_type: scopeType,
           audience_project_id: scopeType === "project" ? projectId || null : null,
           audience_group_id: scopeType === "group" ? groupId || null : null,
@@ -2300,7 +2315,7 @@ export default function InternalSocialPage() {
               : "Toda a empresa",
           text: postText.trim(),
           post_type: normalizedPostType,
-          official_author_label: isOfficialPostType(normalizedPostType) ? roleOfficialLabel(me.role) : null,
+          official_author_label: isOfficial ? roleOfficialLabel(me.role) : null,
         })
         .select("id")
         .single<{ id: string }>();
@@ -2309,8 +2324,8 @@ export default function InternalSocialPage() {
           .from("internal_social_posts")
           .insert({
             author_user_id: me.id,
-            author_name: currentName,
-            author_avatar_url: resolvePortalAvatarUrl(me.avatar_url ?? null),
+            author_name: postAuthorName,
+            author_avatar_url: postAuthorAvatarUrl,
             audience_type: scopeType,
             audience_project_id: scopeType === "project" ? projectId || null : null,
             audience_group_id: scopeType === "group" ? groupId || null : null,
@@ -3471,7 +3486,8 @@ export default function InternalSocialPage() {
                             <div key={attachment.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
                               {(() => {
                                 const mediaUrl = attachment.resolvedUrl || attachment.url;
-                                return attachment.type === "image" ? (
+                                const imageReady = canRenderImageUrl(mediaUrl);
+                                return attachment.type === "image" && imageReady ? (
                                   <Image
                                     src={mediaUrl}
                                     alt={attachment.label ?? "Imagem do post"}
@@ -3480,7 +3496,7 @@ export default function InternalSocialPage() {
                                     unoptimized
                                     className="max-h-[280px] w-full object-cover"
                                   />
-                                ) : attachment.type === "video" ? (
+                                ) : attachment.type === "video" && imageReady ? (
                                   <video
                                     controls
                                     className="max-h-[280px] w-full bg-slate-950"
@@ -3488,12 +3504,12 @@ export default function InternalSocialPage() {
                                   />
                                 ) : (
                                   <a
-                                    href={mediaUrl}
+                                    href={canRenderImageUrl(mediaUrl) ? mediaUrl : "#"}
                                     target="_blank"
                                     rel="noreferrer"
                                     className="block px-4 py-3 text-sm font-semibold text-blue-700 hover:underline"
                                   >
-                                    {attachment.label || mediaUrl}
+                                    {attachment.label || "Abrir anexo"}
                                   </a>
                                 );
                               })()}
@@ -4939,7 +4955,8 @@ export default function InternalSocialPage() {
                       <div key={attachment.id} className="overflow-hidden rounded-3xl border border-slate-200 bg-slate-50">
                         {(() => {
                           const mediaUrl = attachment.resolvedUrl || attachment.url;
-                          return attachment.type === "image" ? (
+                          const mediaReady = canRenderImageUrl(mediaUrl);
+                          return attachment.type === "image" && mediaReady ? (
                             <Image
                               src={mediaUrl}
                               alt={attachment.label ?? "Imagem do post"}
@@ -4948,11 +4965,11 @@ export default function InternalSocialPage() {
                               unoptimized
                               className="max-h-[280px] w-full object-cover"
                             />
-                          ) : attachment.type === "video" ? (
+                          ) : attachment.type === "video" && mediaReady ? (
                             <video controls src={mediaUrl} className="max-h-[280px] w-full bg-slate-950" />
                           ) : (
                             <a
-                              href={mediaUrl}
+                              href={mediaReady ? mediaUrl : "#"}
                               target="_blank"
                               rel="noreferrer"
                               className="block px-4 py-3 text-sm font-semibold text-blue-700 hover:underline"
