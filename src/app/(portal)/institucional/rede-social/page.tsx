@@ -525,13 +525,29 @@ function isAbsoluteUrl(value: string) {
 function extractInternalSocialStoragePath(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return "";
+  const knownMarkers = [
+    "/storage/v1/object/sign/internal-social-media/",
+    "/storage/v1/object/public/internal-social-media/",
+    "/storage/v1/object/internal-social-media/",
+  ];
+  for (const marker of knownMarkers) {
+    const markerIndex = trimmed.indexOf(marker);
+    if (markerIndex !== -1) {
+      const tail = trimmed.slice(markerIndex + marker.length);
+      const cleanTail = tail.split("?")[0].split("#")[0];
+      return decodeURIComponent(cleanTail);
+    }
+  }
   if (!isAbsoluteUrl(trimmed)) return trimmed;
   try {
     const url = new URL(trimmed);
-    const marker = "/storage/v1/object/sign/internal-social-media/";
-    const index = url.pathname.indexOf(marker);
-    if (index === -1) return "";
-    return decodeURIComponent(url.pathname.slice(index + marker.length));
+    for (const marker of knownMarkers) {
+      const index = url.pathname.indexOf(marker);
+      if (index !== -1) {
+        return decodeURIComponent(url.pathname.slice(index + marker.length));
+      }
+    }
+    return "";
   } catch {
     return "";
   }
