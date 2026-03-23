@@ -189,6 +189,12 @@ type SocialHighlightRow = {
   avatarUrl: string | null;
 };
 
+type PulseSticker = {
+  id: string;
+  label: string;
+  url: string;
+};
+
 type SyncBody =
   | {
       type: "post_sync";
@@ -309,6 +315,13 @@ const EMOJI_GROUPS: EmojiGroup[] = [
     icon: "🏳️",
     emojis: ["🏁", "🚩", "🏳️", "🏴", "🇧🇷", "🇺🇸", "🇵🇹", "🇪🇸", "🇫🇷", "🇮🇹", "🇩🇪", "🇦🇷", "🇨🇦", "🇯🇵", "🇨🇳", "🇲🇽", "🇬🇧", "🇦🇴", "🇨🇱", "🇺🇾"],
   },
+];
+
+const PULSE_STICKERS: PulseSticker[] = [
+  { id: "time", label: "Time entregando", url: "/pulsehub-stickers/time-entregando.svg" },
+  { id: "cafe", label: "Cafe e foco", url: "/pulsehub-stickers/cafe-foco.svg" },
+  { id: "bim", label: "BIM aprovado", url: "/pulsehub-stickers/bim-aprovado.svg" },
+  { id: "checkpoint", label: "Checkpoint concluido", url: "/pulsehub-stickers/checkpoint.svg" },
 ];
 const REACTION_EMOJIS = ["👍", "❤️", "🎉", "👏", "🔥", "🚀"] as const;
 const MIGRATION = "supabase/sql/2026-03-03_create_internal_social_network_tables.sql";
@@ -495,6 +508,21 @@ function inferAttachmentTypeFromUrl(url: string): AttachmentType {
 
 function isAbsoluteUrl(value: string) {
   return /^https?:\/\//i.test(value);
+}
+
+function extractInternalSocialStoragePath(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (!isAbsoluteUrl(trimmed)) return trimmed;
+  try {
+    const url = new URL(trimmed);
+    const marker = "/storage/v1/object/sign/internal-social-media/";
+    const index = url.pathname.indexOf(marker);
+    if (index === -1) return "";
+    return decodeURIComponent(url.pathname.slice(index + marker.length));
+  } catch {
+    return "";
+  }
 }
 
 function normalizeError(message: string) {
@@ -797,6 +825,11 @@ export default function InternalSocialPage() {
   const [projectId, setProjectId] = useState("");
   const [groupId, setGroupId] = useState("");
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
+  const [commentAttachments, setCommentAttachments] = useState<Record<string, DraftAttachment[]>>({});
+  const [commentMediaUrls, setCommentMediaUrls] = useState<Record<string, string>>({});
+  const [activeCommentUploadPostId, setActiveCommentUploadPostId] = useState("");
+  const [showCommentEmojiPickerForPostId, setShowCommentEmojiPickerForPostId] = useState("");
+  const [showCommentStickerPickerForPostId, setShowCommentStickerPickerForPostId] = useState("");
   const [selectedConversationType, setSelectedConversationType] = useState<"direct" | "group">("direct");
   const [selectedConversationId, setSelectedConversationId] = useState("");
   const [messageText, setMessageText] = useState("");
@@ -843,11 +876,17 @@ export default function InternalSocialPage() {
   const postActionsRef = useRef<HTMLDivElement | null>(null);
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const messageFileInputRef = useRef<HTMLInputElement | null>(null);
+  const commentFileInputRef = useRef<HTMLInputElement | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const editingPostTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   async function resolvePostAttachmentUrls(items: AttachmentRow[]) {
-    const toResolve = items.filter((item) => item.url && !isAbsoluteUrl(item.url));
+    const toResolve = items
+      .map((item) => ({
+        postId: item.post_id,
+        storagePath: extractInternalSocialStoragePath(item.url),
+      }))
+      .filter((item) => item.storagePath);
     if (!toResolve.length) return items;
 
     const sessionRes = await supabase.auth.getSession();
@@ -861,8 +900,8 @@ export default function InternalSocialPage() {
       body: JSON.stringify({
         items: toResolve.map((item) => ({
           kind: "post",
-          ownerId: item.post_id,
-          path: item.url,
+          ownerId: item.postId,
+          path: item.storagePath,
         })),
       }),
     });
@@ -880,7 +919,9 @@ export default function InternalSocialPage() {
 
     return items.map((item) => ({
       ...item,
-      resolvedUrl: signedMap.get(`${item.post_id}:${item.url}`) ?? (isAbsoluteUrl(item.url) ? item.url : ""),
+      resolvedUrl:
+        signedMap.get(`${item.post_id}:${extractInternalSocialStoragePath(item.url)}`) ??
+        (isAbsoluteUrl(item.url) ? item.url : ""),
     }));
   }
 
@@ -888,12 +929,12 @@ export default function InternalSocialPage() {
     const attachmentItems = items.flatMap((item) => {
       const parsed = splitMessageContent(item.text);
       return parsed.attachmentRefs
-        .filter((ref) => !isAbsoluteUrl(ref))
         .map((ref) => ({
           kind: "message" as const,
           ownerId: item.id,
-          path: ref,
-        }));
+          path: extractInternalSocialStoragePath(ref),
+        }))
+        .filter((entry) => entry.path);
     });
 
     if (!attachmentItems.length) {
@@ -930,6 +971,56 @@ export default function InternalSocialPage() {
       nextMap[`${item.ownerId}:${item.path}`] = item.signedUrl;
     }
     setMessageMediaUrls(nextMap);
+  }
+
+  async function resolveCommentAttachmentUrls(items: CommentRow[]) {
+    const attachmentItems = items.flatMap((item) => {
+      const parsed = splitMessageContent(item.text);
+      return parsed.attachmentRefs
+        .map((ref) => ({
+          ownerId: item.id,
+          path: extractInternalSocialStoragePath(ref),
+        }))
+        .filter((entry) => entry.path);
+    });
+
+    if (!attachmentItems.length) {
+      setCommentMediaUrls({});
+      return;
+    }
+
+    const deduped = Array.from(new Map(attachmentItems.map((item) => [`${item.ownerId}:${item.path}`, item])).values());
+    const sessionRes = await supabase.auth.getSession();
+    const token = sessionRes.data.session?.access_token;
+    const res = await fetch("/api/institucional/rede-social/media-urls", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        items: deduped.map((item) => ({
+          kind: "message",
+          ownerId: item.ownerId,
+          path: item.path,
+        })),
+      }),
+    });
+
+    const json = (await res.json().catch(() => ({}))) as {
+      items?: Array<{ ownerId: string; path: string; signedUrl: string }>;
+    };
+
+    if (!res.ok) {
+      setCommentMediaUrls({});
+      return;
+    }
+
+    const nextMap: Record<string, string> = {};
+    for (const item of json.items ?? []) {
+      nextMap[`${item.ownerId}:${item.path}`] = item.signedUrl;
+    }
+    setCommentMediaUrls(nextMap);
   }
 
   async function load() {
@@ -1375,6 +1466,7 @@ export default function InternalSocialPage() {
       setMessageGroups(nextMessageGroups);
       setMessageGroupMembers(nextMessageGroupMembers);
       setMessages(nextMessages);
+      await resolveCommentAttachmentUrls((commentsRes.data ?? []) as CommentRow[]);
       await resolveMessageAttachmentUrls(nextMessages);
     } catch (err) {
       setError(normalizeError(err instanceof Error ? err.message : "Erro ao carregar rede social."));
@@ -2139,6 +2231,52 @@ export default function InternalSocialPage() {
     }
   }
 
+  async function uploadCommentAttachment(postId: string, file: File) {
+    if (!file) return;
+    setUploadingMedia(true);
+    setError("");
+    try {
+      const sessionRes = await supabase.auth.getSession();
+      const token = sessionRes.data.session?.access_token;
+      const form = new FormData();
+      form.append("file", file);
+      form.append("context", "message");
+      const res = await fetch("/api/institucional/rede-social/upload", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: form,
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        attachmentType?: AttachmentType;
+        url?: string;
+        label?: string;
+        path?: string;
+      };
+      if (!res.ok || !json.url || !json.attachmentType) {
+        const message = json.error || "Nao foi possivel enviar o anexo do comentario.";
+        throw new Error(message);
+      }
+      const nextAttachment: DraftAttachment = {
+        type: json.attachmentType,
+        url: json.url,
+        label: json.label || file.name,
+        storagePath: json.path || undefined,
+      };
+      setCommentAttachments((prev) => ({
+        ...prev,
+        [postId]: [
+          ...(prev[postId] ?? []),
+          nextAttachment,
+        ],
+      }));
+    } catch (err) {
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao enviar anexo do comentario."));
+    } finally {
+      setUploadingMedia(false);
+    }
+  }
+
   async function submitPost() {
     if (!me?.id || (!postText.trim() && !draftAttachments.length && !pollEnabled)) return;
     setBusy(true);
@@ -2273,16 +2411,23 @@ export default function InternalSocialPage() {
   async function submitComment(postId: string) {
     if (!me?.id) return;
     const content = (commentDrafts[postId] ?? "").trim();
-    if (!content) return;
+    const attachments = commentAttachments[postId] ?? [];
+    if (!content && !attachments.length) return;
     setError("");
     try {
+      const composedText = [
+        content,
+        ...attachments.map((item) => `Anexo: ${item.storagePath || item.url}`),
+      ]
+        .filter(Boolean)
+        .join("\n");
       const res = await supabase
         .from("internal_social_post_comments")
         .insert({
         post_id: postId,
         author_user_id: me.id,
         author_name: currentName,
-        text: content,
+        text: composedText,
       })
         .select("id")
         .single<{ id: string }>();
@@ -2291,10 +2436,13 @@ export default function InternalSocialPage() {
         type: "comment_sync",
         postId,
         commentId: res.data.id,
-        text: content,
+        text: content || "Anexo compartilhado.",
         notifyPostAuthor: true,
       });
       setCommentDrafts((prev) => ({ ...prev, [postId]: "" }));
+      setCommentAttachments((prev) => ({ ...prev, [postId]: [] }));
+      setShowCommentEmojiPickerForPostId("");
+      setShowCommentStickerPickerForPostId("");
       await load();
     } catch (err) {
       setError(normalizeError(err instanceof Error ? err.message : "Erro ao comentar."));
@@ -3416,6 +3564,10 @@ export default function InternalSocialPage() {
                       <div className="mt-3 space-y-3 border-t border-slate-100 pt-4">
                         {post.comments.map((comment) => (
                           <div key={comment.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                            {(() => {
+                              const parsedComment = splitMessageContent(comment.text);
+                              return (
+                                <>
                             <div className="flex items-center justify-between gap-3">
                               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                                 {comment.author_name || displayName(profileById.get(comment.author_user_id))}
@@ -3469,20 +3621,175 @@ export default function InternalSocialPage() {
                                 </div>
                               </div>
                             ) : (
-                              <RichText
-                                className="mt-1 text-sm text-slate-700 [&_p]:whitespace-pre-wrap"
-                                value={comment.text}
-                                mentionDirectory={mentionDirectory.byHandle}
-                              />
+                              <>
+                                {parsedComment.body ? (
+                                  <RichText
+                                    className="mt-1 text-sm text-slate-700 [&_p]:whitespace-pre-wrap"
+                                    value={parsedComment.body}
+                                    mentionDirectory={mentionDirectory.byHandle}
+                                  />
+                                ) : null}
+                                {parsedComment.attachmentRefs.length ? (
+                                  <div className="mt-3 space-y-2">
+                                    {parsedComment.attachmentRefs.map((attachmentRef) => {
+                                      const storagePath = extractInternalSocialStoragePath(attachmentRef);
+                                      const attachmentUrl =
+                                        commentMediaUrls[`${comment.id}:${storagePath}`] ||
+                                        (isAbsoluteUrl(attachmentRef) ? attachmentRef : attachmentRef);
+                                      const attachmentType = inferAttachmentTypeFromUrl(attachmentRef);
+                                      return (
+                                        <div key={`${comment.id}-${attachmentRef}`} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                                          {attachmentType === "image" ? (
+                                            <Image
+                                              src={attachmentUrl}
+                                              alt="Anexo do comentario"
+                                              width={900}
+                                              height={700}
+                                              unoptimized
+                                              className="max-h-[280px] w-full object-cover"
+                                            />
+                                          ) : attachmentType === "video" ? (
+                                            <video src={attachmentUrl} controls className="max-h-[280px] w-full bg-slate-950" />
+                                          ) : (
+                                            <a
+                                              href={attachmentUrl}
+                                              target="_blank"
+                                              rel="noreferrer"
+                                              className="block px-4 py-3 text-sm font-semibold text-[#0a66c2] hover:underline"
+                                            >
+                                              Abrir anexo
+                                            </a>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : null}
+                              </>
                             )}
+                                </>
+                              );
+                            })()}
                           </div>
                         ))}
+                        <input
+                          ref={commentFileInputRef}
+                          type="file"
+                          accept="image/*,.gif"
+                          className="hidden"
+                          onChange={(event) => {
+                            const file = event.target.files?.[0];
+                            const targetPostId = activeCommentUploadPostId;
+                            if (file && targetPostId) void uploadCommentAttachment(targetPostId, file);
+                            event.currentTarget.value = "";
+                          }}
+                        />
+                        <div className="space-y-3">
+                          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-400">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setShowCommentEmojiPickerForPostId((current) => (current === post.id ? "" : post.id))
+                              }
+                              className="rounded-full border border-slate-200 px-2 py-1 text-slate-500 hover:bg-slate-50"
+                            >
+                              🙂 Emoji
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setShowCommentStickerPickerForPostId((current) => (current === post.id ? "" : post.id))
+                              }
+                              className="rounded-full border border-slate-200 px-2 py-1 text-slate-500 hover:bg-slate-50"
+                            >
+                              Figurinhas
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveCommentUploadPostId(post.id);
+                                commentFileInputRef.current?.click();
+                              }}
+                              className="rounded-full border border-slate-200 px-2 py-1 text-slate-500 hover:bg-slate-50"
+                            >
+                              Imagem ou GIF
+                            </button>
+                          </div>
+                          {showCommentEmojiPickerForPostId === post.id ? (
+                            <EmojiPicker
+                              groups={EMOJI_GROUPS}
+                              className="rounded-2xl border border-slate-200 bg-white p-3"
+                              panelClassName="max-h-48"
+                              onSelect={(emoji) => {
+                                setCommentDrafts((prev) => ({
+                                  ...prev,
+                                  [post.id]: `${prev[post.id] ?? ""}${prev[post.id] ? " " : ""}${emoji}`,
+                                }));
+                              }}
+                            />
+                          ) : null}
+                          {showCommentStickerPickerForPostId === post.id ? (
+                            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                              {PULSE_STICKERS.map((sticker) => (
+                                <button
+                                  key={sticker.id}
+                                  type="button"
+                                  onClick={() =>
+                                    setCommentAttachments((prev) => ({
+                                      ...prev,
+                                      [post.id]: [
+                                        ...(prev[post.id] ?? []),
+                                        {
+                                          type: "image",
+                                          url: sticker.url,
+                                          label: sticker.label,
+                                        },
+                                      ],
+                                    }))
+                                  }
+                                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 text-left hover:bg-slate-50"
+                                >
+                                  <Image src={sticker.url} alt={sticker.label} width={320} height={180} unoptimized className="h-24 w-full rounded-xl object-cover" />
+                                  <p className="mt-2 text-xs font-semibold text-slate-600">{sticker.label}</p>
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                          {(commentAttachments[post.id] ?? []).length ? (
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              {(commentAttachments[post.id] ?? []).map((attachment, index) => (
+                                <div key={`${attachment.url}-${index}`} className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-2">
+                                  {attachment.type === "image" ? (
+                                    <Image src={attachment.url} alt={attachment.label} width={640} height={360} unoptimized className="h-28 w-full rounded-xl object-cover" />
+                                  ) : attachment.type === "video" ? (
+                                    <video src={attachment.url} controls className="h-28 w-full rounded-xl bg-slate-950 object-cover" />
+                                  ) : null}
+                                  <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+                                    <span className="truncate font-semibold text-slate-600">{attachment.label}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setCommentAttachments((prev) => ({
+                                          ...prev,
+                                          [post.id]: (prev[post.id] ?? []).filter((_, currentIndex) => currentIndex !== index),
+                                        }))
+                                      }
+                                      className="font-semibold text-rose-600 hover:text-rose-700"
+                                    >
+                                      Remover
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
                         <div className="flex gap-2">
-                          <input
+                          <textarea
                             value={commentDrafts[post.id] ?? ""}
                             onChange={(event) => setCommentDrafts((prev) => ({ ...prev, [post.id]: event.target.value }))}
-                            placeholder="Escreva um comentario. Use @handle e #assunto."
-                            className="h-11 flex-1 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                            placeholder="Escreva um comentario. Use @handle, #assunto, emojis, imagem ou GIF."
+                            rows={2}
+                            className="min-h-[88px] flex-1 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900"
                           />
                           <button
                             type="button"
@@ -3491,6 +3798,7 @@ export default function InternalSocialPage() {
                           >
                             Comentar
                           </button>
+                        </div>
                         </div>
                       </div>
                     </article>
@@ -4548,6 +4856,18 @@ export default function InternalSocialPage() {
                           }
                           className="h-4 w-4 rounded border-slate-300 text-[#0a66c2]"
                         />
+                        <div className="h-11 w-11 shrink-0 rounded-full">
+                          {contact.avatar_url ? (
+                            <div
+                              className="h-full w-full rounded-full bg-cover bg-center"
+                              style={{ backgroundImage: `url(${contact.avatar_url})` }}
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-blue-700 text-xs font-semibold text-white">
+                              {initials(displayName(contact))}
+                            </div>
+                          )}
+                        </div>
                         <div className="min-w-0">
                           <p className="truncate font-semibold text-slate-900">{displayName(contact)}</p>
                           <p className="truncate text-xs text-slate-500">{profileRoleLine(contact)}</p>

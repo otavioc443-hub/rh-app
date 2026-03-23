@@ -1,17 +1,3 @@
-create or replace function public.internal_social_is_message_group_member(target_group_id uuid, target_user_id uuid default auth.uid())
-returns boolean
-language sql
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1
-    from public.internal_social_message_group_members mgm
-    where mgm.group_id = target_group_id
-      and mgm.user_id = coalesce(target_user_id, auth.uid())
-  );
-$$;
-
 create table if not exists public.internal_social_message_groups (
   id uuid primary key default gen_random_uuid(),
   name text not null,
@@ -44,6 +30,20 @@ create index if not exists idx_internal_social_message_group_members_user
 
 create index if not exists idx_internal_social_group_messages_group
   on public.internal_social_group_messages(group_id, created_at desc);
+
+create or replace function public.internal_social_is_message_group_member(target_group_id uuid, target_user_id uuid default auth.uid())
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.internal_social_message_group_members mgm
+    where mgm.group_id = target_group_id
+      and mgm.user_id = coalesce(target_user_id, auth.uid())
+  );
+$$;
 
 alter table public.internal_social_message_groups enable row level security;
 alter table public.internal_social_message_group_members enable row level security;
