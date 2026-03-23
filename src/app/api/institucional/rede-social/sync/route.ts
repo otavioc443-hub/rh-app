@@ -29,6 +29,12 @@ type SyncBody =
       messageId: string;
       toUserId: string;
       preview?: string | null;
+    }
+  | {
+      type: "group_message_notify";
+      messageId: string;
+      groupId: string;
+      preview?: string | null;
     };
 
 type DirectoryProfile = {
@@ -426,6 +432,53 @@ async function notifyMessage(
   return NextResponse.json({ ok: true });
 }
 
+async function notifyGroupMessage(
+  supabaseUser: SupabaseClient,
+  requesterUserId: string,
+  body: Extract<SyncBody, { type: "group_message_notify" }>
+) {
+  const { data: message, error } = await supabaseUser
+    .from("internal_social_group_messages")
+    .select("id,group_id,from_user_id")
+    .eq("id", body.messageId)
+    .maybeSingle<{ id: string; group_id: string; from_user_id: string }>();
+  if (error) throw new Error(error.message);
+  if (!message?.id || message.from_user_id !== requesterUserId || message.group_id !== body.groupId) {
+    return NextResponse.json({ error: "Sem permissao" }, { status: 403 });
+  }
+
+  const { data: group, error: groupError } = await supabaseUser
+    .from("internal_social_message_groups")
+    .select("id,name")
+    .eq("id", body.groupId)
+    .maybeSingle<{ id: string; name: string }>();
+  if (groupError) throw new Error(groupError.message);
+
+  const { data: members, error: membersError } = await supabaseUser
+    .from("internal_social_message_group_members")
+    .select("user_id")
+    .eq("group_id", body.groupId);
+  if (membersError) throw new Error(membersError.message);
+
+  const recipients = ((members ?? []) as Array<{ user_id: string }>).map((item) => item.user_id).filter((userId) => userId !== requesterUserId);
+  if (!recipients.length) return NextResponse.json({ ok: true });
+
+  await supabaseAdmin.from("internal_social_notifications").insert(
+    recipients.map((userId) => ({
+      user_id: userId,
+      actor_user_id: requesterUserId,
+      kind: "message",
+      entity_type: "message",
+      entity_id: body.messageId,
+      title: `Nova mensagem em ${group?.name ?? "grupo"}`,
+      body: compactText(body.preview),
+      link_url: `/institucional/rede-social?tab=messages&group=${encodeURIComponent(body.groupId)}`,
+    }))
+  );
+
+  return NextResponse.json({ ok: true });
+}
+
 export async function POST(req: Request) {
   try {
     const requester = await getRequesterUser(req);
@@ -446,6 +499,9 @@ export async function POST(req: Request) {
     }
     if (body.type === "message_notify") {
       return await notifyMessage(supabaseUser, requester.user.id, body);
+    }
+    if (body.type === "group_message_notify") {
+      return await notifyGroupMessage(supabaseUser, requester.user.id, body);
     }
 
     return NextResponse.json({ error: "Tipo nao suportado" }, { status: 400 });

@@ -105,9 +105,40 @@ type MessageRow = {
   id: string;
   from_user_id: string;
   from_name: string;
-  to_user_id: string;
+  to_user_id: string | null;
+  group_id: string | null;
+  message_kind: "direct" | "group";
   text: string;
   created_at: string;
+};
+
+type MessageGroupRow = {
+  id: string;
+  name: string;
+  created_by: string;
+  created_at: string;
+};
+
+type MessageGroupMemberRow = {
+  id: string;
+  group_id: string;
+  user_id: string;
+  created_at: string;
+};
+
+type ConversationListItem = {
+  key: string;
+  kind: "direct" | "group";
+  id: string;
+  title: string;
+  subtitle: string;
+  avatarUrl?: string | null;
+  initialsText: string;
+  online?: boolean;
+  lastMessageAt: string | null;
+  lastMessagePreview: string;
+  unreadCount: number;
+  memberCount?: number;
 };
 
 type FeedPost = PostRow & {
@@ -134,20 +165,6 @@ type FeedPollOption = {
   position: number;
   votes: number;
   votedByMe: boolean;
-};
-
-type NotificationRow = {
-  id: string;
-  user_id: string;
-  actor_user_id: string | null;
-  kind: "comment" | "reaction" | "mention" | "message" | "announcement" | "campaign";
-  entity_type: "post" | "comment" | "message" | "system";
-  entity_id: string | null;
-  title: string;
-  body: string | null;
-  link_url: string | null;
-  read_at: string | null;
-  created_at: string;
 };
 
 type ReportRow = {
@@ -197,12 +214,19 @@ type SyncBody =
       messageId: string;
       toUserId: string;
       preview?: string | null;
+    }
+  | {
+      type: "group_message_notify";
+      messageId: string;
+      groupId: string;
+      preview?: string | null;
     };
 
 type SearchSuggestionItem = {
   key: string;
   kind: "person" | "post" | "project" | "conversation";
   id: string;
+  conversationType?: "direct" | "group";
 };
 
 type EmojiGroup = {
@@ -761,6 +785,8 @@ export default function InternalSocialPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [groupMembers, setGroupMembers] = useState<GroupMemberRow[]>([]);
+  const [messageGroups, setMessageGroups] = useState<MessageGroupRow[]>([]);
+  const [messageGroupMembers, setMessageGroupMembers] = useState<MessageGroupMemberRow[]>([]);
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [reports, setReports] = useState<ReportRow[]>([]);
   const [messages, setMessages] = useState<MessageRow[]>([]);
@@ -771,11 +797,15 @@ export default function InternalSocialPage() {
   const [projectId, setProjectId] = useState("");
   const [groupId, setGroupId] = useState("");
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
-  const [selectedUserId, setSelectedUserId] = useState("");
+  const [selectedConversationType, setSelectedConversationType] = useState<"direct" | "group">("direct");
+  const [selectedConversationId, setSelectedConversationId] = useState("");
   const [messageText, setMessageText] = useState("");
   const [messageAttachments, setMessageAttachments] = useState<DraftAttachment[]>([]);
   const [messageDropActive, setMessageDropActive] = useState(false);
   const [showMessageEmojiPicker, setShowMessageEmojiPicker] = useState(false);
+  const [showCreateMessageGroup, setShowCreateMessageGroup] = useState(false);
+  const [messageGroupName, setMessageGroupName] = useState("");
+  const [messageGroupSelection, setMessageGroupSelection] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [editingPostId, setEditingPostId] = useState("");
@@ -799,8 +829,6 @@ export default function InternalSocialPage() {
   const [messageMediaUrls, setMessageMediaUrls] = useState<Record<string, string>>({});
   const [readThreadAt, setReadThreadAt] = useState<Record<string, string>>({});
   const [savedPostIds, setSavedPostIds] = useState<string[]>([]);
-  const [notifications, setNotifications] = useState<NotificationRow[]>([]);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [openPostActionsId, setOpenPostActionsId] = useState("");
   const [birthdayHighlights, setBirthdayHighlights] = useState<SocialHighlightRow[]>([]);
   const [newHireHighlights, setNewHireHighlights] = useState<SocialHighlightRow[]>([]);
@@ -812,7 +840,6 @@ export default function InternalSocialPage() {
   const [communityFilter, setCommunityFilter] = useState<"all" | "joined" | "discover">("all");
   const [selectedCommunityId, setSelectedCommunityId] = useState("");
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
-  const notificationsRef = useRef<HTMLDivElement | null>(null);
   const postActionsRef = useRef<HTMLDivElement | null>(null);
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const messageFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -913,13 +940,22 @@ export default function InternalSocialPage() {
       if (auth.error || !auth.data.user) throw new Error("Sessao invalida.");
       const userId = auth.data.user.id;
 
-      const [profilesRes, memberRes, msgRes] = await Promise.all([
+      const [profilesRes, memberRes, msgRes, messageGroupsRes, messageGroupMembersRes, groupMessagesRes] = await Promise.all([
         supabase.from("profiles").select("id,full_name,email,role,avatar_url").order("full_name", { ascending: true }),
         supabase.from("project_members").select("project_id").eq("user_id", userId),
         supabase
           .from("internal_social_direct_messages")
           .select("id,from_user_id,from_name,to_user_id,text,created_at")
           .or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`)
+          .order("created_at", { ascending: true }),
+        supabase.from("internal_social_message_groups").select("id,name,created_by,created_at").order("created_at", { ascending: false }),
+        supabase
+          .from("internal_social_message_group_members")
+          .select("id,group_id,user_id,created_at")
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("internal_social_group_messages")
+          .select("id,group_id,from_user_id,from_name,text,created_at")
           .order("created_at", { ascending: true }),
       ]);
 
@@ -951,6 +987,9 @@ export default function InternalSocialPage() {
       if (memberRes.error) throw new Error(memberRes.error.message);
       if (postsError) throw new Error(postsError.message);
       if (msgRes.error) throw new Error(msgRes.error.message);
+      if (messageGroupsRes.error && !isSchemaCompatError(messageGroupsRes.error.message)) throw new Error(messageGroupsRes.error.message);
+      if (messageGroupMembersRes.error && !isSchemaCompatError(messageGroupMembersRes.error.message)) throw new Error(messageGroupMembersRes.error.message);
+      if (groupMessagesRes.error && !isSchemaCompatError(groupMessagesRes.error.message)) throw new Error(groupMessagesRes.error.message);
 
       const baseProfiles = (profilesRes.data ?? []) as Profile[];
       let nextProfiles = baseProfiles.map((profile) => ({
@@ -1303,25 +1342,6 @@ export default function InternalSocialPage() {
       }
 
       try {
-        const notificationsRes = await supabase
-          .from("internal_social_notifications")
-          .select("id,user_id,actor_user_id,kind,entity_type,entity_id,title,body,link_url,read_at,created_at")
-          .eq("user_id", userId)
-          .order("created_at", { ascending: false })
-          .limit(20);
-        if (!notificationsRes.error) {
-          setNotifications((notificationsRes.data ?? []) as NotificationRow[]);
-        } else if (isSchemaCompatError(notificationsRes.error.message)) {
-          setNotifications([]);
-        } else {
-          throw new Error(notificationsRes.error.message);
-        }
-      } catch (notificationsErr) {
-        if (!isSchemaCompatError(notificationsErr instanceof Error ? notificationsErr.message : "")) throw notificationsErr;
-        setNotifications([]);
-      }
-
-      try {
         const pinnedRes = await supabase
           .from("internal_social_posts")
           .select("id")
@@ -1338,7 +1358,22 @@ export default function InternalSocialPage() {
       } catch (pinnedErr) {
         if (!isSchemaCompatError(pinnedErr instanceof Error ? pinnedErr.message : "")) throw pinnedErr;
       }
-      const nextMessages = (msgRes.data ?? []) as MessageRow[];
+      const nextMessageGroups = (messageGroupsRes.data ?? []) as MessageGroupRow[];
+      const nextMessageGroupMembers = (messageGroupMembersRes.data ?? []) as MessageGroupMemberRow[];
+      const nextMessages = [
+        ...((msgRes.data ?? []) as Array<Omit<MessageRow, "group_id" | "message_kind">>).map((item) => ({
+          ...item,
+          group_id: null,
+          message_kind: "direct" as const,
+        })),
+        ...((groupMessagesRes.data ?? []) as Array<Omit<MessageRow, "to_user_id" | "message_kind">>).map((item) => ({
+          ...item,
+          to_user_id: null,
+          message_kind: "group" as const,
+        })),
+      ].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      setMessageGroups(nextMessageGroups);
+      setMessageGroupMembers(nextMessageGroupMembers);
       setMessages(nextMessages);
       await resolveMessageAttachmentUrls(nextMessages);
     } catch (err) {
@@ -1360,13 +1395,20 @@ export default function InternalSocialPage() {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get("tab");
     const user = params.get("user");
+    const group = params.get("group");
     const project = params.get("project");
     const tag = params.get("tag");
     const community = params.get("community");
     if (tab === "inicio" || tab === "network" || tab === "communities" || tab === "projects" || tab === "game" || tab === "messages") {
       setActiveTab(tab);
     }
-    if (user) setSelectedUserId(user);
+    if (group) {
+      setSelectedConversationType("group");
+      setSelectedConversationId(group);
+    } else if (user) {
+      setSelectedConversationType("direct");
+      setSelectedConversationId(user);
+    }
     if (project) setProjectBoardProjectId(project);
     if (community) setSelectedCommunityId(community);
     if (tag) {
@@ -1403,6 +1445,15 @@ export default function InternalSocialPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "internal_social_direct_messages" }, () => {
         void load();
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "internal_social_message_groups" }, () => {
+        void load();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "internal_social_message_group_members" }, () => {
+        void load();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "internal_social_group_messages" }, () => {
+        void load();
+      })
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
@@ -1416,10 +1467,6 @@ export default function InternalSocialPage() {
     return map;
   }, [profiles]);
   const mentionDirectory = useMemo(() => buildMentionDirectory(profiles), [profiles]);
-  const unreadNotificationsCount = useMemo(
-    () => notifications.filter((item) => !item.read_at).length,
-    [notifications]
-  );
   const canPublishOfficial = me?.role === "admin" || me?.role === "diretoria" || me?.role === "rh";
   const composerMentionOptions = useMemo(() => {
     const term = mentionQuery.trim().toLowerCase();
@@ -1445,14 +1492,29 @@ export default function InternalSocialPage() {
     return "Pesquisar publicações na rede";
   }, [activeTab]);
   const contacts = useMemo(() => profiles.filter((item) => item.id !== me?.id), [profiles, me?.id]);
+  const myMessageGroupIds = useMemo(
+    () => new Set(messageGroupMembers.filter((item) => item.user_id === me?.id).map((item) => item.group_id)),
+    [me?.id, messageGroupMembers]
+  );
+  const availableMessageGroups = useMemo(
+    () => messageGroups.filter((item) => myMessageGroupIds.has(item.id)),
+    [messageGroups, myMessageGroupIds]
+  );
+  const selectedUserId = selectedConversationType === "direct" ? selectedConversationId : "";
+  const selectedMessageGroupId = selectedConversationType === "group" ? selectedConversationId : "";
   const activeThread = useMemo(() => {
-    if (!me?.id || !selectedUserId) return [] as MessageRow[];
-    return messages.filter(
-      (item) =>
-        (item.from_user_id === me.id && item.to_user_id === selectedUserId) ||
-        (item.from_user_id === selectedUserId && item.to_user_id === me.id)
-    );
-  }, [messages, me?.id, selectedUserId]);
+    if (!me?.id || !selectedConversationId) return [] as MessageRow[];
+    return messages.filter((item) => {
+      if (selectedConversationType === "group") {
+        return item.message_kind === "group" && item.group_id === selectedConversationId;
+      }
+      return (
+        item.message_kind === "direct" &&
+        ((item.from_user_id === me.id && item.to_user_id === selectedConversationId) ||
+          (item.from_user_id === selectedConversationId && item.to_user_id === me.id))
+      );
+    });
+  }, [messages, me?.id, selectedConversationId, selectedConversationType]);
   const canModeratePosts = me?.role === "admin" || me?.role === "diretoria";
   const visiblePostsForRole = useMemo(
     () => posts.filter((item) => canModeratePosts || !item.hidden_at),
@@ -1489,37 +1551,85 @@ export default function InternalSocialPage() {
     }
     return ids;
   }, [presenceMap]);
-  const recentConversationContacts = useMemo(() => {
-      const lastByUser = new Map<string, number>();
-      for (const item of messages) {
-        if (!me?.id) continue;
-        const otherId = item.from_user_id === me.id ? item.to_user_id : item.from_user_id;
-        const stamp = new Date(item.created_at).getTime();
-        const prev = lastByUser.get(otherId) ?? 0;
-        if (stamp > prev) lastByUser.set(otherId, stamp);
-      }
-      return [...contacts].sort((a, b) => {
-        const aOnline = presenceMap[a.id]?.online ? 1 : 0;
-        const bOnline = presenceMap[b.id]?.online ? 1 : 0;
-        if (aOnline !== bOnline) return bOnline - aOnline;
-        return (lastByUser.get(b.id) ?? 0) - (lastByUser.get(a.id) ?? 0);
+  const conversationItems = useMemo(() => {
+    const items: ConversationListItem[] = [];
+    for (const contact of contacts) {
+      const thread = messages
+        .filter(
+          (item) =>
+            item.message_kind === "direct" &&
+            ((item.from_user_id === me?.id && item.to_user_id === contact.id) ||
+              (item.from_user_id === contact.id && item.to_user_id === me?.id))
+        )
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      const last = thread[0];
+      const lastMessage = last ? splitMessageContent(last.text) : null;
+      const unreadCount = messages.filter((item) => {
+        if (item.message_kind !== "direct") return false;
+        if (item.from_user_id !== contact.id || item.to_user_id !== me?.id) return false;
+        const readAt = readThreadAt[`direct:${contact.id}`];
+        return !readAt || item.created_at > readAt;
+      }).length;
+      items.push({
+        key: `direct:${contact.id}`,
+        kind: "direct",
+        id: contact.id,
+        title: displayName(contact),
+        subtitle: profileRoleLine(contact),
+        avatarUrl: contact.avatar_url ?? null,
+        initialsText: initials(displayName(contact)),
+        online: onlineUserIds.has(contact.id),
+        lastMessageAt: last?.created_at ?? null,
+        lastMessagePreview: last ? lastMessage?.body || (lastMessage?.attachmentRefs?.length ? "Anexo compartilhado." : "") : "Clique para iniciar a conversa.",
+        unreadCount,
       });
-    }, [contacts, me?.id, messages, presenceMap]);
-  const filteredConversationContacts = useMemo(() => {
+    }
+    for (const group of availableMessageGroups) {
+      const members = messageGroupMembers.filter((item) => item.group_id === group.id);
+      const thread = messages
+        .filter((item) => item.message_kind === "group" && item.group_id === group.id)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      const last = thread[0];
+      const lastMessage = last ? splitMessageContent(last.text) : null;
+      const unreadCount = messages.filter((item) => {
+        if (item.message_kind !== "group" || item.group_id !== group.id) return false;
+        if (item.from_user_id === me?.id) return false;
+        const readAt = readThreadAt[`group:${group.id}`];
+        return !readAt || item.created_at > readAt;
+      }).length;
+      items.push({
+        key: `group:${group.id}`,
+        kind: "group",
+        id: group.id,
+        title: group.name,
+        subtitle: `${Math.max(members.length, 1)} participante(s)`,
+        initialsText: initials(group.name),
+        lastMessageAt: last?.created_at ?? null,
+        lastMessagePreview: last
+          ? `${last.from_name}: ${lastMessage?.body || (lastMessage?.attachmentRefs?.length ? "Anexo compartilhado." : "")}`
+          : "Grupo criado. Inicie a conversa.",
+        unreadCount,
+        memberCount: members.length,
+      });
+    }
+    return items.sort((a, b) => {
+      if (a.kind === "direct" && b.kind === "direct") {
+        const aOnline = a.online ? 1 : 0;
+        const bOnline = b.online ? 1 : 0;
+        if (aOnline !== bOnline) return bOnline - aOnline;
+      }
+      return new Date(b.lastMessageAt ?? 0).getTime() - new Date(a.lastMessageAt ?? 0).getTime();
+    });
+  }, [availableMessageGroups, contacts, me?.id, messageGroupMembers, messages, onlineUserIds, readThreadAt]);
+  const filteredConversationItems = useMemo(() => {
     if (messageFilter === "online") {
-      return recentConversationContacts.filter((contact) => onlineUserIds.has(contact.id));
+      return conversationItems.filter((item) => item.kind === "direct" && item.online);
     }
     if (messageFilter === "with_history") {
-      return recentConversationContacts.filter((contact) =>
-        messages.some(
-          (item) =>
-            (item.from_user_id === me?.id && item.to_user_id === contact.id) ||
-            (item.from_user_id === contact.id && item.to_user_id === me?.id)
-        )
-      );
+      return conversationItems.filter((item) => Boolean(item.lastMessageAt));
     }
-    return recentConversationContacts;
-  }, [messageFilter, messages, me?.id, onlineUserIds, recentConversationContacts]);
+    return conversationItems;
+  }, [conversationItems, messageFilter]);
   const visibleContacts = useMemo(() => {
     if (!searchTerm) return contacts;
     return contacts.filter((contact) => {
@@ -1621,29 +1731,18 @@ export default function InternalSocialPage() {
     const haystack = [pinnedPost.author_name, pinnedPost.audience_label, pinnedPost.text, commentText].join(" ").toLowerCase();
     return haystack.includes(searchTerm) ? pinnedPost : null;
   }, [pinnedPost, searchTerm]);
-  const visibleConversationContacts = useMemo(() => {
-    if (!searchTerm) return filteredConversationContacts;
-    return filteredConversationContacts.filter((contact) => {
-      const haystack = [
-        displayName(contact),
-        (contact.cargo ?? "").trim(),
-        (contact.setor ?? "").trim(),
-      ]
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(searchTerm);
-    });
-  }, [filteredConversationContacts, searchTerm]);
+  const visibleConversationItems = useMemo(() => {
+    if (!searchTerm) return filteredConversationItems;
+    return filteredConversationItems.filter((item) => `${item.title} ${item.subtitle} ${item.lastMessagePreview}`.toLowerCase().includes(searchTerm));
+  }, [filteredConversationItems, searchTerm]);
   const visibleMessagePanelContacts = useMemo(() => {
     const term = messageSearch.trim().toLowerCase();
-    if (!term) return visibleConversationContacts;
-    return visibleConversationContacts.filter((contact) => {
-      const haystack = [displayName(contact), (contact.cargo ?? "").trim(), (contact.setor ?? "").trim()]
-        .join(" ")
-        .toLowerCase();
+    if (!term) return visibleConversationItems;
+    return visibleConversationItems.filter((item) => {
+      const haystack = `${item.title} ${item.subtitle} ${item.lastMessagePreview}`.toLowerCase();
       return haystack.includes(term);
     });
-  }, [messageSearch, visibleConversationContacts]);
+  }, [messageSearch, visibleConversationItems]);
   const globalPeopleResults = useMemo(() => {
     if (!searchTerm) return [] as Profile[];
     return contacts.filter((contact) => {
@@ -1664,26 +1763,9 @@ export default function InternalSocialPage() {
     });
   }, [posts, searchTerm]);
   const globalConversationResults = useMemo(() => {
-    if (!searchTerm) return [] as Profile[];
-    return recentConversationContacts.filter((contact) => {
-      const haystack = [
-        displayName(contact),
-        (contact.cargo ?? "").trim(),
-        (contact.setor ?? "").trim(),
-        messages
-          .filter(
-            (item) =>
-              (item.from_user_id === me?.id && item.to_user_id === contact.id) ||
-              (item.from_user_id === contact.id && item.to_user_id === me?.id)
-          )
-          .map((item) => item.text)
-          .join(" "),
-      ]
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(searchTerm);
-    });
-  }, [me?.id, messages, recentConversationContacts, searchTerm]);
+    if (!searchTerm) return [] as ConversationListItem[];
+    return conversationItems.filter((item) => `${item.title} ${item.subtitle} ${item.lastMessagePreview}`.toLowerCase().includes(searchTerm));
+  }, [conversationItems, searchTerm]);
   const searchSuggestions = useMemo(
     () => ({
       people: globalPeopleResults.slice(0, 3),
@@ -1703,9 +1785,10 @@ export default function InternalSocialPage() {
         id: project.id,
       })),
       ...searchSuggestions.conversations.map((person) => ({
-        key: `conversation-${person.id}`,
+        key: `conversation-${person.key}`,
         kind: "conversation" as const,
         id: person.id,
+        conversationType: person.kind,
       })),
     ],
     [searchSuggestions]
@@ -1749,59 +1832,71 @@ export default function InternalSocialPage() {
       return;
     }
     setActiveTab("messages");
-    setSelectedUserId(item.id);
+    const conversationType = item.conversationType ?? "direct";
+    setSelectedConversationType(conversationType);
+    setSelectedConversationId(item.id);
     setSearchSubmitted(false);
-    router.push(`/institucional/rede-social?tab=messages&user=${encodeURIComponent(item.id)}`);
+    router.push(
+      conversationType === "group"
+        ? `/institucional/rede-social?tab=messages&group=${encodeURIComponent(item.id)}`
+        : `/institucional/rede-social?tab=messages&user=${encodeURIComponent(item.id)}`
+    );
   }
   const selectedMessageProfile = useMemo(
     () => profileById.get(selectedUserId) ?? contacts.find((item) => item.id === selectedUserId) ?? null,
     [contacts, profileById, selectedUserId]
   );
+  const selectedMessageGroup = useMemo(
+    () => messageGroups.find((item) => item.id === selectedMessageGroupId) ?? null,
+    [messageGroups, selectedMessageGroupId]
+  );
 
-  const markThreadAsRead = useCallback((userId: string) => {
-    if (!userId || !me?.id) return;
+  const markThreadAsRead = useCallback((kind: "direct" | "group", id: string) => {
+    if (!id || !me?.id) return;
     const latestThreadAt = messages
-      .filter(
-        (item) =>
-          (item.from_user_id === me.id && item.to_user_id === userId) ||
-          (item.from_user_id === userId && item.to_user_id === me.id)
-      )
+      .filter((item) => {
+        if (kind === "group") return item.message_kind === "group" && item.group_id === id;
+        return (
+          item.message_kind === "direct" &&
+          ((item.from_user_id === me.id && item.to_user_id === id) || (item.from_user_id === id && item.to_user_id === me.id))
+        );
+      })
       .map((item) => item.created_at)
       .sort()
       .at(-1);
     if (!latestThreadAt) return;
-    setReadThreadAt((prev) => (prev[userId] === latestThreadAt ? prev : { ...prev, [userId]: latestThreadAt }));
+    const threadKey = `${kind}:${id}`;
+    setReadThreadAt((prev) => (prev[threadKey] === latestThreadAt ? prev : { ...prev, [threadKey]: latestThreadAt }));
   }, [me?.id, messages]);
 
   useEffect(() => {
-    if (activeTab !== "messages" || !selectedUserId) return;
-    markThreadAsRead(selectedUserId);
-  }, [activeTab, markThreadAsRead, selectedUserId]);
+    if (activeTab !== "messages" || !selectedConversationId) return;
+    markThreadAsRead(selectedConversationType, selectedConversationId);
+  }, [activeTab, markThreadAsRead, selectedConversationId, selectedConversationType]);
 
   useEffect(() => {
-    if (activeTab !== "messages" || !selectedUserId || !activeThread.length) return;
+    if (activeTab !== "messages" || !selectedConversationId || !activeThread.length) return;
     threadEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [activeTab, activeThread, selectedUserId]);
+  }, [activeTab, activeThread, selectedConversationId]);
 
   useEffect(() => {
     if (activeTab !== "messages") return;
-    if (!visibleMessagePanelContacts.length || !selectedUserId) {
-      if (selectedUserId && !visibleMessagePanelContacts.length) setSelectedUserId("");
+    if (!visibleMessagePanelContacts.length || !selectedConversationId) {
+      if (selectedConversationId && !visibleMessagePanelContacts.length) setSelectedConversationId("");
       return;
     }
-    const selectedStillVisible = visibleMessagePanelContacts.some((contact) => contact.id === selectedUserId);
+    const selectedStillVisible = visibleMessagePanelContacts.some(
+      (item) => item.id === selectedConversationId && item.kind === selectedConversationType
+    );
     if (!selectedStillVisible) {
-      setSelectedUserId("");
+      setSelectedConversationId("");
     }
-  }, [activeTab, selectedUserId, visibleMessagePanelContacts]);
+  }, [activeTab, selectedConversationId, selectedConversationType, visibleMessagePanelContacts]);
 
   useEffect(() => {
     function handleDocumentPointerDown(event: MouseEvent) {
       if (searchBoxRef.current && !searchBoxRef.current.contains(event.target as Node)) {
         setSearchDropdownIndex(-1);
-      }
-      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
-        setNotificationsOpen(false);
       }
       if (postActionsRef.current && !postActionsRef.current.contains(event.target as Node)) {
         setOpenPostActionsId("");
@@ -1941,26 +2036,6 @@ export default function InternalSocialPage() {
       }
     } catch (err) {
       setError(normalizeError(err instanceof Error ? err.message : "Erro ao atualizar post salvo."));
-    }
-  }
-
-  async function markNotificationsAsRead(ids?: string[]) {
-    if (!me?.id) return;
-    const unreadIds = (ids ?? notifications.filter((item) => !item.read_at).map((item) => item.id)).filter(Boolean);
-    if (!unreadIds.length) return;
-    try {
-      const nowIso = new Date().toISOString();
-      const res = await supabase
-        .from("internal_social_notifications")
-        .update({ read_at: nowIso })
-        .in("id", unreadIds)
-        .eq("user_id", me.id);
-      if (res.error) throw new Error(res.error.message);
-      setNotifications((prev) =>
-        prev.map((item) => (unreadIds.includes(item.id) ? { ...item, read_at: item.read_at ?? nowIso } : item))
-      );
-    } catch (err) {
-      setError(normalizeError(err instanceof Error ? err.message : "Erro ao atualizar notificacoes."));
     }
   }
 
@@ -2228,7 +2303,7 @@ export default function InternalSocialPage() {
 
   async function sendMessage() {
     const trimmedMessage = messageText.trim();
-    if (!me?.id || !selectedUserId || (!trimmedMessage && !messageAttachments.length)) return;
+    if (!me?.id || !selectedConversationId || (!trimmedMessage && !messageAttachments.length)) return;
     setBusy(true);
     setError("");
     try {
@@ -2238,29 +2313,91 @@ export default function InternalSocialPage() {
       ]
         .filter(Boolean)
         .join("\n");
-      const res = await supabase
-        .from("internal_social_direct_messages")
-        .insert({
-          from_user_id: me.id,
-          from_name: currentName,
-          to_user_id: selectedUserId,
-          text: composedText,
-        })
-        .select("id")
-        .single<{ id: string }>();
+      const res =
+        selectedConversationType === "group"
+          ? await supabase
+              .from("internal_social_group_messages")
+              .insert({
+                from_user_id: me.id,
+                from_name: currentName,
+                group_id: selectedConversationId,
+                text: composedText,
+              })
+              .select("id")
+              .single<{ id: string }>()
+          : await supabase
+              .from("internal_social_direct_messages")
+              .insert({
+                from_user_id: me.id,
+                from_name: currentName,
+                to_user_id: selectedConversationId,
+                text: composedText,
+              })
+              .select("id")
+              .single<{ id: string }>();
       if (res.error) throw new Error(res.error.message);
-      await syncPulseHubEvent({
-        type: "message_notify",
-        messageId: res.data.id,
-        toUserId: selectedUserId,
-        preview: trimmedMessage || "Anexo compartilhado.",
-      });
+      if (selectedConversationType === "group") {
+        await syncPulseHubEvent({
+          type: "group_message_notify",
+          messageId: res.data.id,
+          groupId: selectedConversationId,
+          preview: trimmedMessage || "Anexo compartilhado.",
+        });
+      } else {
+        await syncPulseHubEvent({
+          type: "message_notify",
+          messageId: res.data.id,
+          toUserId: selectedConversationId,
+          preview: trimmedMessage || "Anexo compartilhado.",
+        });
+      }
       setMessageText("");
       setMessageAttachments([]);
       setShowMessageEmojiPicker(false);
       await load();
     } catch (err) {
       setError(normalizeError(err instanceof Error ? err.message : "Erro ao enviar mensagem."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createMessageGroup() {
+    const memberIds = Array.from(new Set([...(messageGroupSelection ?? []), me?.id ?? ""])).filter(Boolean);
+    const safeName = messageGroupName.trim();
+    if (!me?.id || !safeName || memberIds.length < 2) {
+      setError("Informe o nome do grupo e selecione pelo menos duas pessoas incluindo voce.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const groupRes = await supabase
+        .from("internal_social_message_groups")
+        .insert({
+          name: safeName,
+          created_by: me.id,
+        })
+        .select("id")
+        .single<{ id: string }>();
+      if (groupRes.error) throw new Error(groupRes.error.message);
+      const membersRes = await supabase.from("internal_social_message_group_members").insert(
+        memberIds.map((userId) => ({
+          group_id: groupRes.data.id,
+          user_id: userId,
+        }))
+      );
+      if (membersRes.error) throw new Error(membersRes.error.message);
+      setShowCreateMessageGroup(false);
+      setMessageGroupName("");
+      setMessageGroupSelection([]);
+      setActiveTab("messages");
+      setSelectedConversationType("group");
+      setSelectedConversationId(groupRes.data.id);
+      router.push(`/institucional/rede-social?tab=messages&group=${encodeURIComponent(groupRes.data.id)}`);
+      await load();
+    } catch (err) {
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao criar grupo de mensagens."));
     } finally {
       setBusy(false);
     }
@@ -2737,25 +2874,26 @@ export default function InternalSocialPage() {
                     <div className="px-4 py-3">
                       <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Mensagens</p>
                         <div className="space-y-2">
-                          {searchSuggestions.conversations.map((person) => (
+                          {searchSuggestions.conversations.map((conversation) => (
                             <button
-                              key={`message-${person.id}`}
+                              key={`message-${conversation.key}`}
                               type="button"
                               onClick={() =>
                                 selectSearchSuggestion({
-                                  key: `conversation-${person.id}`,
+                                  key: `conversation-${conversation.key}`,
                                   kind: "conversation",
-                                  id: person.id,
+                                  id: conversation.id,
+                                  conversationType: conversation.kind,
                                 })
                               }
                               className={`block w-full rounded-xl border-l-2 px-2 py-1 text-left ${
-                                searchSuggestionIndexMap.get(`conversation-${person.id}`) === searchDropdownIndex
+                                searchSuggestionIndexMap.get(`conversation-${conversation.key}`) === searchDropdownIndex
                                   ? "border-[#0a66c2] bg-slate-100"
                                   : "border-transparent hover:bg-slate-50"
                               }`}
                             >
-                              <p className="text-sm font-semibold text-slate-900">{highlightMatch(displayName(person), searchTerm)}</p>
-                              <p className="text-xs text-slate-500">{highlightMatch(profileRoleLine(person), searchTerm)}</p>
+                              <p className="text-sm font-semibold text-slate-900">{highlightMatch(conversation.title, searchTerm)}</p>
+                              <p className="text-xs text-slate-500">{highlightMatch(conversation.subtitle, searchTerm)}</p>
                             </button>
                           ))}
                         </div>
@@ -2805,74 +2943,7 @@ export default function InternalSocialPage() {
               );
             })}
           </nav>
-          <div className="flex items-center gap-3">
-            <div ref={notificationsRef} className="relative">
-              <button
-                type="button"
-                onClick={() => {
-                  const nextOpen = !notificationsOpen;
-                  setNotificationsOpen(nextOpen);
-                  if (nextOpen) void markNotificationsAsRead();
-                }}
-                className="relative inline-flex h-11 items-center rounded-full border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-[0_10px_24px_-22px_rgba(15,23,42,0.45)] hover:bg-slate-50"
-              >
-                Alertas
-                {unreadNotificationsCount ? (
-                  <span className="ml-2 inline-flex min-w-5 items-center justify-center rounded-full bg-rose-600 px-1.5 py-0.5 text-[11px] font-bold text-white">
-                    {unreadNotificationsCount}
-                  </span>
-                ) : null}
-              </button>
-              {notificationsOpen ? (
-                <div className="absolute right-0 top-14 z-30 w-[22rem] overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_80px_-32px_rgba(15,23,42,0.45)]">
-                  <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">Notificacoes</p>
-                      <p className="text-xs text-slate-500">Atualizadas em tempo real apos recarregar o feed.</p>
-                    </div>
-                    {unreadNotificationsCount ? (
-                      <button
-                        type="button"
-                        onClick={() => void markNotificationsAsRead()}
-                        className="text-xs font-semibold text-[#0a66c2] hover:underline"
-                      >
-                        Marcar tudo
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="max-h-[26rem] overflow-y-auto">
-                    {notifications.length ? (
-                      notifications.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => {
-                            if (!item.read_at) void markNotificationsAsRead([item.id]);
-                            setNotificationsOpen(false);
-                            router.push(item.link_url || "/institucional/rede-social");
-                          }}
-                          className={`block w-full border-b border-slate-100 px-4 py-3 text-left hover:bg-slate-50 ${
-                            item.read_at ? "bg-white" : "bg-blue-50/50"
-                          }`}
-                        >
-                          <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                          {item.body ? <p className="mt-1 text-xs leading-5 text-slate-600">{item.body}</p> : null}
-                          <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                            {when(item.created_at)}
-                          </p>
-                        </button>
-                      ))
-                    ) : (
-                      <div className="px-4 py-6 text-sm text-slate-500">Nenhuma notificacao por enquanto.</div>
-                    )}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 text-xs font-semibold text-white shadow-[0_14px_30px_-18px_rgba(59,130,246,0.8)]">
-              {initials(currentName)}
-            </div>
-          </div>
+          <div className="hidden h-11 w-11 lg:block" aria-hidden="true" />
         </div>
       </header>
 
@@ -2980,20 +3051,25 @@ export default function InternalSocialPage() {
                 <p className="text-sm font-semibold text-slate-900">Mensagens</p>
                 <div className="mt-3 space-y-3">
                   {globalConversationResults.length ? (
-                    globalConversationResults.slice(0, 6).map((person) => (
+                    globalConversationResults.slice(0, 6).map((conversation) => (
                       <button
-                        key={`search-message-${person.id}`}
+                        key={`search-message-${conversation.key}`}
                         type="button"
                         onClick={() => {
                           setActiveTab("messages");
-                          setSelectedUserId(person.id);
+                          setSelectedConversationType(conversation.kind);
+                          setSelectedConversationId(conversation.id);
                           setSearchSubmitted(false);
-                          router.push(`/institucional/rede-social?tab=messages&user=${encodeURIComponent(person.id)}`);
+                          router.push(
+                            conversation.kind === "group"
+                              ? `/institucional/rede-social?tab=messages&group=${encodeURIComponent(conversation.id)}`
+                              : `/institucional/rede-social?tab=messages&user=${encodeURIComponent(conversation.id)}`
+                          );
                         }}
                         className="block w-full rounded-xl bg-white px-3 py-3 text-left hover:bg-slate-100"
                       >
-                        <p className="text-sm font-semibold text-slate-900">{highlightMatch(displayName(person), searchTerm)}</p>
-                        <p className="text-xs text-slate-500">{highlightMatch(profileRoleLine(person), searchTerm)}</p>
+                        <p className="text-sm font-semibold text-slate-900">{highlightMatch(conversation.title, searchTerm)}</p>
+                        <p className="text-xs text-slate-500">{highlightMatch(conversation.subtitle, searchTerm)}</p>
                       </button>
                     ))
                   ) : (
@@ -4051,8 +4127,9 @@ export default function InternalSocialPage() {
                     </div>
                     <button
                       type="button"
+                      onClick={() => setShowCreateMessageGroup(true)}
                       className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-50"
-                      aria-label="Nova conversa"
+                      aria-label="Novo grupo"
                     >
                       +
                     </button>
@@ -4088,67 +4165,60 @@ export default function InternalSocialPage() {
                 </div>
                 <div className="mt-4 max-h-[620px] space-y-2 overflow-y-auto pr-1">
                   {visibleMessagePanelContacts.length ? (
-                    visibleMessagePanelContacts.map((contact) => {
-                      const contactThread = messages
-                        .filter(
-                          (item) =>
-                            (item.from_user_id === me?.id && item.to_user_id === contact.id) ||
-                            (item.from_user_id === contact.id && item.to_user_id === me?.id)
-                        )
-                        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-                      const last = contactThread[0];
-                      const lastMessage = last ? splitMessageContent(last.text) : null;
-                      const online = onlineUserIds.has(contact.id);
-                      const unreadCount = messages.filter((item) => {
-                        if (item.from_user_id !== contact.id || item.to_user_id !== me?.id) return false;
-                        const readAt = readThreadAt[contact.id];
-                        return !readAt || item.created_at > readAt;
-                      }).length;
+                    visibleMessagePanelContacts.map((conversation) => {
                       return (
                         <button
-                          key={contact.id}
+                          key={conversation.key}
                           type="button"
                           onClick={() => {
-                            setSelectedUserId(contact.id);
-                            markThreadAsRead(contact.id);
+                            setSelectedConversationType(conversation.kind);
+                            setSelectedConversationId(conversation.id);
+                            markThreadAsRead(conversation.kind, conversation.id);
+                            router.push(
+                              conversation.kind === "group"
+                                ? `/institucional/rede-social?tab=messages&group=${encodeURIComponent(conversation.id)}`
+                                : `/institucional/rede-social?tab=messages&user=${encodeURIComponent(conversation.id)}`
+                            );
                           }}
                           className={`flex w-full items-start gap-3 rounded-2xl border-l-4 px-3 py-3 text-left transition ${
-                            contact.id === selectedUserId
+                            conversation.id === selectedConversationId && conversation.kind === selectedConversationType
                               ? "border-blue-300 border-l-[#0a66c2] bg-blue-50 shadow-sm"
-                              : unreadCount > 0
+                              : conversation.unreadCount > 0
                                 ? "border-blue-200 border-l-blue-300 bg-blue-50/40 hover:bg-blue-50"
                                 : "border-slate-200 border-l-transparent bg-white hover:bg-slate-50"
                           }`}
                         >
                           <div className="relative mt-0.5 h-11 w-11 shrink-0 rounded-full">
-                            {contact.avatar_url ? (
-                              <div className="h-full w-full rounded-full bg-cover bg-center" style={{ backgroundImage: `url(${contact.avatar_url})` }} />
+                            {conversation.avatarUrl ? (
+                              <div className="h-full w-full rounded-full bg-cover bg-center" style={{ backgroundImage: `url(${conversation.avatarUrl})` }} />
                             ) : (
                               <div className="flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-blue-700 text-xs font-semibold text-white">
-                                {initials(displayName(contact))}
+                                {conversation.initialsText}
                               </div>
                             )}
-                            {online ? <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" /> : null}
+                            {conversation.kind === "direct" && conversation.online ? <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" /> : null}
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center justify-between gap-2">
-                              <p className="truncate text-sm font-semibold text-slate-900">{highlightMatch(displayName(contact), searchTerm)}</p>
+                              <p className="truncate text-sm font-semibold text-slate-900">{highlightMatch(conversation.title, searchTerm)}</p>
                               <div className="flex shrink-0 items-center gap-2">
-                                {unreadCount > 0 ? (
+                                {conversation.unreadCount > 0 ? (
                                   <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-[#0a66c2] px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                                    {unreadCount}
+                                    {conversation.unreadCount}
                                   </span>
                                 ) : null}
-                              <span className="text-[11px] text-slate-400">{last ? when(last.created_at) : "Sem conversa"}</span>
+                              <span className="text-[11px] text-slate-400">{conversation.lastMessageAt ? when(conversation.lastMessageAt) : "Sem conversa"}</span>
                               </div>
                             </div>
                             <p className="mt-0.5 text-xs text-slate-500">
-                              {online ? "Online agora" : lastSeenLabel(presenceMap[contact.id]?.lastSeenAt)}
+                              {conversation.kind === "direct"
+                                ? conversation.online
+                                  ? "Online agora"
+                                  : lastSeenLabel(presenceMap[conversation.id]?.lastSeenAt)
+                                : conversation.subtitle}
                             </p>
                             <p className="mt-1 truncate text-xs text-slate-500">
-                              {last
-                                ? lastMessage?.body || (lastMessage?.attachmentRefs?.length ? "Anexo compartilhado." : "")
-                                : "Clique para iniciar a conversa."}
+                              {conversation.lastMessagePreview}
                             </p>
                           </div>
                         </button>
@@ -4163,39 +4233,58 @@ export default function InternalSocialPage() {
               </div>
 
               <div className="flex min-h-[680px] flex-col p-4">
-                {selectedUserId && selectedMessageProfile ? (
+                {selectedConversationId && ((selectedConversationType === "direct" && selectedMessageProfile) || (selectedConversationType === "group" && selectedMessageGroup)) ? (
                   <div className="flex h-full flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
                     <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3">
                       <div className="h-10 w-10 rounded-full">
-                        {selectedMessageProfile.avatar_url ? (
+                        {selectedConversationType === "direct" && selectedMessageProfile?.avatar_url ? (
                           <div
                             className="h-full w-full rounded-full bg-cover bg-center"
                             style={{ backgroundImage: `url(${selectedMessageProfile.avatar_url})` }}
                           />
                         ) : (
                           <div className="flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-blue-700 text-xs font-semibold text-white">
-                            {initials(displayName(selectedMessageProfile))}
+                            {selectedConversationType === "direct"
+                              ? initials(displayName(selectedMessageProfile))
+                              : initials(selectedMessageGroup?.name ?? "Grupo")}
                           </div>
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="truncate text-sm font-semibold text-slate-900">{displayName(selectedMessageProfile)}</p>
-                          <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                              onlineUserIds.has(selectedUserId) ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"
-                            }`}
-                          >
-                            {onlineUserIds.has(selectedUserId) ? "Online" : "Offline"}
-                          </span>
+                          <p className="truncate text-sm font-semibold text-slate-900">
+                            {selectedConversationType === "direct" ? displayName(selectedMessageProfile) : selectedMessageGroup?.name}
+                          </p>
+                          {selectedConversationType === "direct" ? (
+                            <span
+                              className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                onlineUserIds.has(selectedUserId) ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"
+                              }`}
+                            >
+                              {onlineUserIds.has(selectedUserId) ? "Online" : "Offline"}
+                            </span>
+                          ) : (
+                            <span className="inline-flex rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                              Grupo
+                            </span>
+                          )}
                         </div>
-                        <p className="text-xs text-slate-500">{profileRoleLine(selectedMessageProfile)}</p>
-                        <p className="text-xs text-slate-400">
-                          {onlineUserIds.has(selectedUserId) ? "Online agora" : lastSeenLabel(presenceMap[selectedUserId]?.lastSeenAt)}
+                        <p className="text-xs text-slate-500">
+                          {selectedConversationType === "direct"
+                            ? profileRoleLine(selectedMessageProfile)
+                            : `${messageGroupMembers.filter((item) => item.group_id === selectedMessageGroupId).length} participante(s)`}
                         </p>
+                        {selectedConversationType === "direct" ? (
+                          <p className="text-xs text-slate-400">
+                            {onlineUserIds.has(selectedUserId) ? "Online agora" : lastSeenLabel(presenceMap[selectedUserId]?.lastSeenAt)}
+                          </p>
+                        ) : null}
                       </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto bg-slate-50 px-4 py-4" onMouseDown={() => markThreadAsRead(selectedUserId)}>
+                    <div
+                      className="flex-1 overflow-y-auto bg-slate-50 px-4 py-4"
+                      onMouseDown={() => markThreadAsRead(selectedConversationType, selectedConversationId)}
+                    >
                       <div className="space-y-3">
                         {activeThread.length ? (
                           activeThread.map((item, index) => {
@@ -4221,6 +4310,9 @@ export default function InternalSocialPage() {
                                       mine ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-800"
                                     }`}
                                   >
+                                    {selectedConversationType === "group" && !mine ? (
+                                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">{item.from_name}</p>
+                                    ) : null}
                                     {parsedMessage.body ? <p className="whitespace-pre-wrap">{parsedMessage.body}</p> : null}
                                     {parsedMessage.attachmentRefs.length ? (
                                       <div className="mt-2 space-y-2">
@@ -4272,7 +4364,9 @@ export default function InternalSocialPage() {
                           })
                         ) : (
                           <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-center text-sm text-slate-500">
-                            Nenhuma mensagem ainda nesta conversa.
+                            {selectedConversationType === "group"
+                              ? "Nenhuma mensagem ainda neste grupo."
+                              : "Nenhuma mensagem ainda nesta conversa."}
                           </div>
                         )}
                         <div ref={threadEndRef} />
@@ -4385,7 +4479,7 @@ export default function InternalSocialPage() {
                         />
                         <button
                           type="button"
-                          disabled={busy || (!messageText.trim() && !messageAttachments.length) || !selectedUserId}
+                          disabled={busy || (!messageText.trim() && !messageAttachments.length) || !selectedConversationId}
                           onClick={() => void sendMessage()}
                           className="self-end rounded-2xl bg-[#0a66c2] px-5 py-3 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-60"
                         >
@@ -4396,7 +4490,7 @@ export default function InternalSocialPage() {
                   </div>
                 ) : (
                   <div className="flex min-h-[520px] flex-1 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-                            Nenhuma mensagem ainda nesta conversa. Selecione um membro da lista para abrir o histórico ou iniciar uma nova conversa.
+                    Nenhuma conversa selecionada. Escolha uma conversa direta ou crie um grupo para comecar.
                   </div>
                 )}
               </div>
@@ -4404,6 +4498,86 @@ export default function InternalSocialPage() {
           </section>
         ) : null}
       </div>
+
+      {showCreateMessageGroup ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm">
+          <div className="w-full max-w-2xl rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_40px_120px_-36px_rgba(15,23,42,0.55)]">
+            <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4">
+              <div>
+                <p className="text-lg font-semibold text-slate-900">Novo grupo de mensagens</p>
+                <p className="mt-1 text-sm text-slate-500">Selecione os participantes e inicie uma conversa em grupo no PulseHub.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateMessageGroup(false)}
+                className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Fechar criacao de grupo"
+              >
+                <span className="text-2xl leading-none">×</span>
+              </button>
+            </div>
+            <div className="space-y-4 px-5 py-5">
+              <div>
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Nome do grupo</label>
+                <input
+                  value={messageGroupName}
+                  onChange={(event) => setMessageGroupName(event.target.value)}
+                  placeholder="Ex.: Squad comercial"
+                  className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900"
+                />
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Participantes</p>
+                <div className="grid max-h-72 gap-2 overflow-y-auto rounded-3xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2">
+                  {contacts.map((contact) => {
+                    const checked = messageGroupSelection.includes(contact.id);
+                    return (
+                      <label
+                        key={contact.id}
+                        className={`flex cursor-pointer items-center gap-3 rounded-2xl border px-3 py-3 text-sm transition ${
+                          checked ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() =>
+                            setMessageGroupSelection((prev) =>
+                              prev.includes(contact.id) ? prev.filter((item) => item !== contact.id) : [...prev, contact.id]
+                            )
+                          }
+                          className="h-4 w-4 rounded border-slate-300 text-[#0a66c2]"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-slate-900">{displayName(contact)}</p>
+                          <p className="truncate text-xs text-slate-500">{profileRoleLine(contact)}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-slate-100 px-5 py-4">
+              <button
+                type="button"
+                onClick={() => setShowCreateMessageGroup(false)}
+                className="rounded-2xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void createMessageGroup()}
+                disabled={busy || !messageGroupName.trim() || messageGroupSelection.length < 1}
+                className="rounded-2xl bg-[#0a66c2] px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-600 disabled:opacity-60"
+              >
+                Criar grupo
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {editingPost ? (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/55 px-4 py-6 backdrop-blur-sm">
