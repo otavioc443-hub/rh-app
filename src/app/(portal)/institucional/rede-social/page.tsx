@@ -12,6 +12,7 @@ type Profile = {
   id: string;
   full_name: string | null;
   email: string | null;
+  company_id?: string | null;
   role?: string | null;
   avatar_url?: string | null;
   cargo?: string | null;
@@ -409,6 +410,12 @@ function canRenderImageUrl(value: string) {
   if (!trimmed) return false;
   if (trimmed.startsWith("/")) return true;
   return /^https?:\/\//i.test(trimmed);
+}
+
+function activeMentionQuery(value: string, cursor: number) {
+  const slice = value.slice(0, cursor);
+  const match = slice.match(/(?:^|\s)@([a-z0-9._-]{0,50})$/i);
+  return match ? match[1] ?? "" : null;
 }
 
 function formatMonthDay(value: string) {
@@ -858,6 +865,8 @@ export default function InternalSocialPage() {
   const [activeCommentUploadPostId, setActiveCommentUploadPostId] = useState("");
   const [showCommentEmojiPickerForPostId, setShowCommentEmojiPickerForPostId] = useState("");
   const [showCommentStickerPickerForPostId, setShowCommentStickerPickerForPostId] = useState("");
+  const [showCommentMentionPickerForPostId, setShowCommentMentionPickerForPostId] = useState("");
+  const [commentMentionQueryByPostId, setCommentMentionQueryByPostId] = useState<Record<string, string>>({});
   const [selectedConversationType, setSelectedConversationType] = useState<"direct" | "group">("direct");
   const [selectedConversationId, setSelectedConversationId] = useState("");
   const [messageText, setMessageText] = useState("");
@@ -907,6 +916,7 @@ export default function InternalSocialPage() {
   const commentFileInputRef = useRef<HTMLInputElement | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const editingPostTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const commentTextareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
 
   async function resolvePostAttachmentUrls(items: AttachmentRow[]) {
     const toResolve = items
@@ -1060,7 +1070,7 @@ export default function InternalSocialPage() {
       const userId = auth.data.user.id;
 
       const [profilesRes, memberRes, msgRes, messageGroupsRes, messageGroupMembersRes, groupMessagesRes] = await Promise.all([
-        supabase.from("profiles").select("id,full_name,email,role,avatar_url").order("full_name", { ascending: true }),
+        supabase.from("profiles").select("id,full_name,email,company_id,role,avatar_url").order("full_name", { ascending: true }),
         supabase.from("project_members").select("project_id").eq("user_id", userId),
         supabase
           .from("internal_social_direct_messages")
@@ -1587,11 +1597,14 @@ export default function InternalSocialPage() {
     return map;
   }, [profiles]);
   const mentionDirectory = useMemo(() => buildMentionDirectory(profiles), [profiles]);
+  const sameCompanyProfiles = useMemo(
+    () => profiles.filter((item) => item.id !== me?.id && item.company_id && item.company_id === me?.company_id),
+    [me?.company_id, me?.id, profiles]
+  );
   const canPublishOfficial = me?.role === "admin" || me?.role === "diretoria" || me?.role === "rh";
   const composerMentionOptions = useMemo(() => {
     const term = mentionQuery.trim().toLowerCase();
-    return profiles
-      .filter((item) => item.id !== me?.id)
+    return sameCompanyProfiles
       .filter((item) => {
         const mentionMeta = mentionDirectory.byUserId.get(item.id);
         if (!mentionMeta) return false;
@@ -1600,7 +1613,23 @@ export default function InternalSocialPage() {
         return haystack.includes(term);
       })
       .slice(0, 10);
-  }, [mentionDirectory.byUserId, mentionQuery, me?.id, profiles]);
+  }, [mentionDirectory.byUserId, mentionQuery, sameCompanyProfiles]);
+  const commentMentionOptionsByPostId = useMemo(() => {
+    const next: Record<string, Profile[]> = {};
+    for (const [postId, query] of Object.entries(commentMentionQueryByPostId)) {
+      const term = query.trim().toLowerCase();
+      next[postId] = sameCompanyProfiles
+        .filter((item) => {
+          const mentionMeta = mentionDirectory.byUserId.get(item.id);
+          if (!mentionMeta) return false;
+          if (!term) return true;
+          const haystack = `${mentionMeta.handle} ${mentionMeta.label} ${(item.cargo ?? "").trim()} ${(item.setor ?? "").trim()}`.toLowerCase();
+          return haystack.includes(term);
+        })
+        .slice(0, 10);
+    }
+    return next;
+  }, [commentMentionQueryByPostId, mentionDirectory.byUserId, sameCompanyProfiles]);
 
   const searchTerm = useMemo(() => search.trim().toLowerCase(), [search]);
   const searchPlaceholder = useMemo(() => {
@@ -2095,20 +2124,19 @@ export default function InternalSocialPage() {
     });
   }
 
-  function insertTextAtCursor(
+  function replaceActiveMention(
     value: string,
     setValue: (nextValue: string) => void,
     textarea: HTMLTextAreaElement | null,
-    insertion: string
+    handle: string
   ) {
-    if (!textarea) {
-      setValue(`${value}${insertion}`);
-      return;
-    }
-    const start = textarea.selectionStart ?? value.length;
-    const end = textarea.selectionEnd ?? value.length;
-    const nextValue = `${value.slice(0, start)}${insertion}${value.slice(end)}`;
-    const nextCursor = start + insertion.length;
+    if (!textarea) return;
+    const cursor = textarea.selectionStart ?? value.length;
+    const before = value.slice(0, cursor);
+    const after = value.slice(cursor);
+    const nextBefore = before.replace(/(^|\s)@([a-z0-9._-]{0,50})$/i, `$1@${handle} `);
+    const nextValue = `${nextBefore}${after}`;
+    const nextCursor = nextBefore.length;
     setValue(nextValue);
     window.requestAnimationFrame(() => {
       textarea.focus();
@@ -3760,6 +3788,43 @@ export default function InternalSocialPage() {
                               }}
                             />
                           ) : null}
+                          {showCommentMentionPickerForPostId === post.id ? (
+                            <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                              <div className="space-y-2">
+                                {(commentMentionOptionsByPostId[post.id] ?? []).length ? (
+                                  (commentMentionOptionsByPostId[post.id] ?? []).map((profile) => {
+                                    const mentionMeta = mentionDirectory.byUserId.get(profile.id);
+                                    if (!mentionMeta) return null;
+                                    return (
+                                      <button
+                                        key={`comment-mention-${post.id}-${profile.id}`}
+                                        type="button"
+                                        onClick={() => {
+                                          replaceActiveMention(
+                                            commentDrafts[post.id] ?? "",
+                                            (nextValue) => setCommentDrafts((prev) => ({ ...prev, [post.id]: nextValue })),
+                                            commentTextareaRefs.current[post.id],
+                                            mentionMeta.handle
+                                          );
+                                          setShowCommentMentionPickerForPostId("");
+                                          setCommentMentionQueryByPostId((prev) => ({ ...prev, [post.id]: "" }));
+                                        }}
+                                        className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left hover:bg-slate-50"
+                                      >
+                                        <div>
+                                          <p className="text-sm font-semibold text-slate-900">{mentionMeta.label}</p>
+                                          <p className="text-xs text-slate-500">@{mentionMeta.handle}</p>
+                                        </div>
+                                        <span className="text-xs text-slate-400">{profileRoleLine(profile)}</span>
+                                      </button>
+                                    );
+                                  })
+                                ) : (
+                                  <p className="text-sm text-slate-500">Nenhum usuario encontrado para essa mencao.</p>
+                                )}
+                              </div>
+                            </div>
+                          ) : null}
                           {showCommentStickerPickerForPostId === post.id ? (
                             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                               {PULSE_STICKERS.map((sticker) => (
@@ -3817,8 +3882,22 @@ export default function InternalSocialPage() {
                           ) : null}
                         <div className="flex gap-2">
                           <textarea
+                            ref={(element) => {
+                              commentTextareaRefs.current[post.id] = element;
+                            }}
                             value={commentDrafts[post.id] ?? ""}
-                            onChange={(event) => setCommentDrafts((prev) => ({ ...prev, [post.id]: event.target.value }))}
+                            onChange={(event) => {
+                              const nextValue = event.target.value;
+                              setCommentDrafts((prev) => ({ ...prev, [post.id]: nextValue }));
+                              const query = activeMentionQuery(nextValue, event.target.selectionStart ?? nextValue.length);
+                              if (query !== null) {
+                                setCommentMentionQueryByPostId((prev) => ({ ...prev, [post.id]: query }));
+                                setShowCommentMentionPickerForPostId(post.id);
+                              } else {
+                                setCommentMentionQueryByPostId((prev) => ({ ...prev, [post.id]: "" }));
+                                setShowCommentMentionPickerForPostId((current) => (current === post.id ? "" : current));
+                              }
+                            }}
                             placeholder="Escreva um comentario. Use @handle, #assunto, emojis, imagem ou GIF."
                             rows={2}
                             className="min-h-[88px] flex-1 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900"
@@ -5132,7 +5211,18 @@ export default function InternalSocialPage() {
                 id="social-post-textarea"
                 ref={composerTextareaRef}
                 value={postText}
-                onChange={(event) => setPostText(event.target.value)}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  setPostText(nextValue);
+                  const query = activeMentionQuery(nextValue, event.target.selectionStart ?? nextValue.length);
+                  if (query !== null) {
+                    setMentionQuery(query);
+                    setShowComposerMentionPicker(true);
+                  } else {
+                    setMentionQuery("");
+                    setShowComposerMentionPicker(false);
+                  }
+                }}
                 rows={6}
                 placeholder="Sobre o que você quer falar?"
                 className="min-h-[180px] w-full resize-none rounded-[1.5rem] border border-transparent bg-white px-2 py-2 text-[16px] leading-7 text-slate-700 outline-none placeholder:text-slate-400 focus:border-transparent focus:ring-0"
@@ -5307,12 +5397,7 @@ export default function InternalSocialPage() {
                                 key={`mention-${profile.id}`}
                                 type="button"
                                 onClick={() => {
-                                  insertTextAtCursor(
-                                    postText,
-                                    setPostText,
-                                    composerTextareaRef.current,
-                                    `${postText && !postText.endsWith(" ") ? " " : ""}@${mentionMeta.handle} `
-                                  );
+                                  replaceActiveMention(postText, setPostText, composerTextareaRef.current, mentionMeta.handle);
                                   setShowComposerMentionPicker(false);
                                   setMentionQuery("");
                                 }}
