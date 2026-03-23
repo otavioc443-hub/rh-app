@@ -1,0 +1,11 @@
+<svg width="320" height="180" viewBox="0 0 320 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="320" height="180" rx="28" fill="#FFF1F2"/>
+  <rect x="14" y="14" width="292" height="152" rx="24" fill="#FFE4E6"/>
+  <circle cx="90" cy="88" r="36" fill="#FECACA"/>
+  <circle cx="77" cy="78" r="6" fill="#0F172A"/>
+  <circle cx="103" cy="78" r="6" fill="#0F172A"/>
+  <circle cx="90" cy="101" r="9" fill="#0F172A"/>
+  <text x="154" y="66" fill="#0F172A" font-family="Arial, sans-serif" font-size="26" font-weight="700">Eita...</text>
+  <text x="154" y="96" fill="#64748B" font-family="Arial, sans-serif" font-size="14">Aquele momento de surpresa etica</text>
+  <text x="154" y="124" fill="#E11D48" font-family="Arial, sans-serif" font-size="16" font-weight="700">Respira e revisa</text>
+</svg>

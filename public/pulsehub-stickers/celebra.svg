@@ -1,0 +1,15 @@
+<svg width="320" height="180" viewBox="0 0 320 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="320" height="180" rx="28" fill="#FFF7ED"/>
+  <rect x="14" y="14" width="292" height="152" rx="24" fill="#FFEDD5"/>
+  <circle cx="88" cy="88" r="36" fill="#FDE68A"/>
+  <circle cx="76" cy="80" r="5" fill="#0F172A"/>
+  <circle cx="101" cy="80" r="5" fill="#0F172A"/>
+  <path d="M73 97C81 109 97 109 105 97" stroke="#0F172A" stroke-width="4" stroke-linecap="round"/>
+  <path d="M61 53L68 64" stroke="#FB7185" stroke-width="4" stroke-linecap="round"/>
+  <path d="M116 53L109 64" stroke="#FB7185" stroke-width="4" stroke-linecap="round"/>
+  <path d="M44 93L58 93" stroke="#60A5FA" stroke-width="4" stroke-linecap="round"/>
+  <path d="M118 93L132 93" stroke="#60A5FA" stroke-width="4" stroke-linecap="round"/>
+  <text x="152" y="70" fill="#0F172A" font-family="Arial, sans-serif" font-size="22" font-weight="700">Entrega aprovada</text>
+  <text x="152" y="98" fill="#64748B" font-family="Arial, sans-serif" font-size="14">Hora da comemoracao em equipe</text>
+  <text x="152" y="126" fill="#EA580C" font-family="Arial, sans-serif" font-size="16" font-weight="700">Confete liberado</text>
+</svg>

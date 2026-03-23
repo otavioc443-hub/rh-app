@@ -28,6 +28,8 @@ import {
   type DailyGameLeaderboardEntry,
   type DailyGameRound,
 } from "@/lib/engagementGame";
+import { supabase } from "@/lib/supabaseClient";
+import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 
 type StatusResponse = {
   game: {
@@ -111,6 +113,27 @@ type SubmitResponse = {
   leaderboard: DailyGameLeaderboardEntry[];
 };
 
+type ShareMode = "community" | "message_group" | "direct";
+
+type ShareDirectoryProfile = {
+  id: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  company_id: string | null;
+  cargo?: string | null;
+  setor?: string | null;
+};
+
+type ShareCommunity = {
+  id: string;
+  name: string;
+};
+
+type ShareMessageGroup = {
+  id: string;
+  name: string;
+};
+
 const GRID_CELLS = Array.from({ length: 9 }, (_, index) => index);
 
 function whenLabel(value: string | null) {
@@ -126,6 +149,23 @@ function whenLabel(value: string | null) {
 
 function clsx(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ");
+}
+
+function initials(value: string) {
+  return value
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("") || "PU";
+}
+
+function compactText(value: string | null | undefined, max = 160) {
+  const normalized = String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normalized.length <= max) return normalized;
+  return `${normalized.slice(0, max - 1)}...`;
 }
 
 function OverlayModal({
@@ -292,12 +332,21 @@ export function PulseSprintPage() {
   const [result, setResult] = useState<SubmitResponse["result"] | null>(null);
   const [gameState, setGameState] = useState<"idle" | "countdown" | "playing" | "finished">("idle");
   const [countdownValue, setCountdownValue] = useState<number | null>(null);
-  const [copied, setCopied] = useState(false);
   const [heroCollapsed, setHeroCollapsed] = useState(false);
   const [showIntroModal, setShowIntroModal] = useState(false);
   const [showWeekendModal, setShowWeekendModal] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
   const [activeDifficulty, setActiveDifficulty] = useState<StatusResponse["game"]["difficulty"] | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareMode, setShareMode] = useState<ShareMode>("community");
+  const [shareCommunities, setShareCommunities] = useState<ShareCommunity[]>([]);
+  const [shareMessageGroups, setShareMessageGroups] = useState<ShareMessageGroup[]>([]);
+  const [sharePeople, setSharePeople] = useState<ShareDirectoryProfile[]>([]);
+  const [selectedCommunityId, setSelectedCommunityId] = useState("");
+  const [selectedMessageGroupId, setSelectedMessageGroupId] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareFeedback, setShareFeedback] = useState("");
   const resultCardRef = useRef<HTMLDivElement | null>(null);
   const rankingRef = useRef<HTMLElement | null>(null);
   const startedAtRef = useRef<number>(0);
@@ -417,7 +466,6 @@ export function PulseSprintPage() {
     setStarting(true);
     setError("");
     setResult(null);
-    setCopied(false);
     setShowResultModal(false);
     setShowIntroModal(false);
     setCountdownValue(null);
@@ -460,14 +508,163 @@ export function PulseSprintPage() {
     [activeRound, elapsedMs, hitLookup]
   );
 
-  const shareText = result?.shareText ?? "";
+  const handleOpenShare = useCallback(async () => {
+    if (!result) return;
+    setShowShareModal(true);
+    setShareFeedback("");
+    try {
+      const auth = await supabase.auth.getUser();
+      const userId = auth.data.user?.id;
+      if (!userId) throw new Error("Sessao invalida.");
 
-  const handleCopy = useCallback(async () => {
-    if (!shareText) return;
-    await navigator.clipboard.writeText(shareText);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
-  }, [shareText]);
+      const { data: profilesData, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id,full_name,avatar_url,company_id,role")
+        .order("full_name", { ascending: true });
+      if (profilesError) throw new Error(profilesError.message);
+
+      const profiles = (profilesData ?? []) as ShareDirectoryProfile[];
+      const me = profiles.find((item) => item.id === userId) ?? null;
+      const people = profiles.filter((item) => item.id !== userId && item.company_id && item.company_id === me?.company_id);
+
+      const [communityMembersRes, communitiesRes, messageGroupsRes, messageGroupMembersRes] = await Promise.all([
+        supabase.from("internal_social_group_members").select("group_id,user_id").eq("user_id", userId),
+        supabase.from("internal_social_groups").select("id,name").order("name", { ascending: true }),
+        supabase.from("internal_social_message_groups").select("id,name").order("name", { ascending: true }),
+        supabase.from("internal_social_message_group_members").select("group_id,user_id").eq("user_id", userId),
+      ]);
+
+      if (communityMembersRes.error) throw new Error(communityMembersRes.error.message);
+      if (communitiesRes.error) throw new Error(communitiesRes.error.message);
+      if (messageGroupsRes.error) throw new Error(messageGroupsRes.error.message);
+      if (messageGroupMembersRes.error) throw new Error(messageGroupMembersRes.error.message);
+
+      const joinedCommunityIds = new Set(((communityMembersRes.data ?? []) as Array<{ group_id: string; user_id: string }>).map((item) => item.group_id));
+      const joinedMessageGroupIds = new Set(((messageGroupMembersRes.data ?? []) as Array<{ group_id: string; user_id: string }>).map((item) => item.group_id));
+
+      const nextCommunities = ((communitiesRes.data ?? []) as ShareCommunity[]).filter((item) => joinedCommunityIds.has(item.id));
+      const nextMessageGroups = ((messageGroupsRes.data ?? []) as ShareMessageGroup[]).filter((item) => joinedMessageGroupIds.has(item.id));
+
+      setShareCommunities(nextCommunities);
+      setShareMessageGroups(nextMessageGroups);
+      setSharePeople(people);
+      setSelectedCommunityId((prev) => prev || nextCommunities[0]?.id || "");
+      setSelectedMessageGroupId((prev) => prev || nextMessageGroups[0]?.id || "");
+      setSelectedUserId((prev) => prev || people[0]?.id || "");
+    } catch (err) {
+      setShareFeedback(err instanceof Error ? err.message : "Nao foi possivel carregar os destinos.");
+    }
+  }, [result]);
+
+  const handleShareToPulseHub = useCallback(async () => {
+    if (!result || !status) return;
+    setShareBusy(true);
+    setShareFeedback("");
+    try {
+      const auth = await supabase.auth.getUser();
+      const userId = auth.data.user?.id;
+      if (!userId) throw new Error("Sessao invalida.");
+      const sessionRes = await supabase.auth.getSession();
+      const token = sessionRes.data.session?.access_token;
+      const preview = compactText(result.shareText);
+      if (shareMode === "community") {
+        if (!selectedCommunityId) throw new Error("Selecione uma comunidade.");
+        const { data: profile, error: profileError } = await supabase
+          .from("profiles")
+          .select("full_name,avatar_url")
+          .eq("id", userId)
+          .maybeSingle<{ full_name: string | null; avatar_url: string | null }>();
+        if (profileError) throw new Error(profileError.message);
+        const community = shareCommunities.find((item) => item.id === selectedCommunityId);
+        const postRes = await supabase
+          .from("internal_social_posts")
+          .insert({
+            author_user_id: userId,
+            author_name: status.player.displayName || profile?.full_name || "Colaborador",
+            author_avatar_url: resolvePortalAvatarUrl(profile?.avatar_url ?? null),
+            audience_type: "group",
+            audience_group_id: selectedCommunityId,
+            audience_label: community?.name ?? "Comunidade",
+            text: `🎯 Resultado do Pulse Sprint\n\n${result.shareText}`,
+            post_type: "social",
+          })
+          .select("id")
+          .single<{ id: string }>();
+        if (postRes.error) throw new Error(postRes.error.message);
+        await fetch("/api/institucional/rede-social/sync", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            type: "post_sync",
+            postId: postRes.data.id,
+            text: result.shareText,
+            postType: "social",
+          }),
+        });
+      } else if (shareMode === "message_group") {
+        if (!selectedMessageGroupId) throw new Error("Selecione um grupo de conversa.");
+        const messageRes = await supabase
+          .from("internal_social_group_messages")
+          .insert({
+            group_id: selectedMessageGroupId,
+            from_user_id: userId,
+            from_name: status.player.displayName,
+            text: `🎯 ${result.shareText}`,
+          })
+          .select("id")
+          .single<{ id: string }>();
+        if (messageRes.error) throw new Error(messageRes.error.message);
+        await fetch("/api/institucional/rede-social/sync", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            type: "group_message_notify",
+            messageId: messageRes.data.id,
+            groupId: selectedMessageGroupId,
+            preview,
+          }),
+        });
+      } else {
+        if (!selectedUserId) throw new Error("Selecione uma conversa individual.");
+        const messageRes = await supabase
+          .from("internal_social_direct_messages")
+          .insert({
+            from_user_id: userId,
+            from_name: status.player.displayName,
+            to_user_id: selectedUserId,
+            text: `🎯 ${result.shareText}`,
+          })
+          .select("id")
+          .single<{ id: string }>();
+        if (messageRes.error) throw new Error(messageRes.error.message);
+        await fetch("/api/institucional/rede-social/sync", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            type: "message_notify",
+            messageId: messageRes.data.id,
+            toUserId: selectedUserId,
+            preview,
+          }),
+        });
+      }
+      setShareFeedback("Resultado compartilhado com sucesso.");
+      setShowShareModal(false);
+    } catch (err) {
+      setShareFeedback(err instanceof Error ? err.message : "Nao foi possivel compartilhar.");
+    } finally {
+      setShareBusy(false);
+    }
+  }, [result, selectedCommunityId, selectedMessageGroupId, selectedUserId, shareCommunities, shareMode, status]);
 
   const handleDownloadCard = useCallback(async () => {
     if (!resultCardRef.current || !result) return;
@@ -831,10 +1028,10 @@ export function PulseSprintPage() {
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
-                onClick={() => void handleCopy()}
+                onClick={() => void handleOpenShare()}
                 className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
-                <Share2 size={16} /> {copied ? "Copiado" : "Copiar resultado"}
+                <Share2 size={16} /> Compartilhar no PulseHub
               </button>
               <button
                 type="button"
@@ -891,6 +1088,128 @@ export function PulseSprintPage() {
             className="inline-flex items-center rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
           >
             Ok, entendi
+          </button>
+        </div>
+      </OverlayModal>
+
+      <OverlayModal open={showShareModal} title="Compartilhar resultado">
+        <h2 className="text-2xl font-semibold tracking-tight text-slate-950">Compartilhar no PulseHub</h2>
+        <p className="mt-3 text-base leading-relaxed text-slate-600">
+          Escolha onde voce quer publicar seu resultado: comunidade, grupo de conversa ou conversa individual.
+        </p>
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          {[
+            { id: "community" as const, label: "Comunidade" },
+            { id: "message_group" as const, label: "Grupo de conversa" },
+            { id: "direct" as const, label: "Conversa individual" },
+          ].map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setShareMode(item.id)}
+              className={clsx(
+                "rounded-full px-3 py-2 text-sm font-semibold transition",
+                shareMode === item.id ? "bg-slate-950 text-white" : "border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              )}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-5">
+          {shareMode === "community" ? (
+            <select
+              value={selectedCommunityId}
+              onChange={(event) => setSelectedCommunityId(event.target.value)}
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900"
+            >
+              <option value="">Selecione a comunidade</option>
+              {shareCommunities.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {shareMode === "message_group" ? (
+            <select
+              value={selectedMessageGroupId}
+              onChange={(event) => setSelectedMessageGroupId(event.target.value)}
+              className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-900"
+            >
+              <option value="">Selecione o grupo de conversa</option>
+              {shareMessageGroups.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          {shareMode === "direct" ? (
+            <div className="max-h-72 space-y-2 overflow-y-auto rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              {sharePeople.length ? (
+                sharePeople.map((person) => (
+                  <button
+                    key={person.id}
+                    type="button"
+                    onClick={() => setSelectedUserId(person.id)}
+                    className={clsx(
+                      "flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition",
+                      selectedUserId === person.id ? "border-blue-200 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"
+                    )}
+                  >
+                    <div className="h-10 w-10 shrink-0 rounded-full">
+                      {resolvePortalAvatarUrl(person.avatar_url ?? null) ? (
+                        <div
+                          className="h-full w-full rounded-full bg-cover bg-center"
+                          style={{ backgroundImage: `url(${resolvePortalAvatarUrl(person.avatar_url ?? null)})` }}
+                        />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-blue-700 text-xs font-semibold text-white">
+                          {initials(person.full_name ?? "Colaborador")}
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{person.full_name ?? "Colaborador"}</p>
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <p className="text-sm text-slate-500">Nenhuma conversa individual disponivel.</p>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          {result?.shareText}
+        </div>
+        {shareFeedback ? <p className="mt-3 text-sm text-slate-600">{shareFeedback}</p> : null}
+
+        <div className="mt-6 flex flex-wrap justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => setShowShareModal(false)}
+            className="inline-flex items-center rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleShareToPulseHub()}
+            disabled={
+              shareBusy ||
+              (shareMode === "community" && !selectedCommunityId) ||
+              (shareMode === "message_group" && !selectedMessageGroupId) ||
+              (shareMode === "direct" && !selectedUserId)
+            }
+            className="inline-flex items-center gap-2 rounded-2xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:bg-slate-300"
+          >
+            <Share2 size={16} />
+            {shareBusy ? "Compartilhando..." : "Compartilhar"}
           </button>
         </div>
       </OverlayModal>

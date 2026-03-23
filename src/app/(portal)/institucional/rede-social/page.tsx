@@ -323,6 +323,14 @@ const PULSE_STICKERS: PulseSticker[] = [
   { id: "cafe", label: "Cafe e foco", url: "/pulsehub-stickers/cafe-foco.svg" },
   { id: "bim", label: "BIM aprovado", url: "/pulsehub-stickers/bim-aprovado.svg" },
   { id: "checkpoint", label: "Checkpoint concluido", url: "/pulsehub-stickers/checkpoint.svg" },
+  { id: "calculando", label: "Modo calculando", url: "/pulsehub-stickers/calculando.svg" },
+  { id: "celebra", label: "Entrega aprovada", url: "/pulsehub-stickers/celebra.svg" },
+  { id: "dancinha", label: "Dancinha do ok", url: "/pulsehub-stickers/dancinha.svg" },
+  { id: "eita", label: "Eita", url: "/pulsehub-stickers/eita.svg" },
+  { id: "forca", label: "Forca total", url: "/pulsehub-stickers/forca-total.svg" },
+  { id: "gatinho", label: "Oi, time", url: "/pulsehub-stickers/gatinho-oi.svg" },
+  { id: "sem-palavras", label: "Sem palavras", url: "/pulsehub-stickers/sem-palavras.svg" },
+  { id: "vitoria", label: "Vitoria do dia", url: "/pulsehub-stickers/vitoria.svg" },
 ];
 const REACTION_EMOJIS = ["👍", "❤️", "🎉", "👏", "🔥", "🚀"] as const;
 const MIGRATION = "supabase/sql/2026-03-03_create_internal_social_network_tables.sql";
@@ -3866,24 +3874,28 @@ export default function InternalSocialPage() {
                           ) : null}
                         <div className="flex gap-2">
                           <div className="flex-1 rounded-2xl border border-slate-200 bg-white px-3 py-2">
-                            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-400">
+                            <div className="mb-1.5 flex flex-wrap items-center justify-end gap-1.5 text-xs font-semibold text-slate-400">
                               <button
                                 type="button"
                                 onClick={() =>
                                   setShowCommentEmojiPickerForPostId((current) => (current === post.id ? "" : post.id))
                                 }
-                                className="rounded-full border border-slate-200 px-2 py-1 text-slate-500 hover:bg-slate-50"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-sm text-slate-500 hover:bg-slate-50"
+                                aria-label="Adicionar emoji"
+                                title="Emoji"
                               >
-                                🙂 Emoji
+                                🙂
                               </button>
                               <button
                                 type="button"
                                 onClick={() =>
                                   setShowCommentStickerPickerForPostId((current) => (current === post.id ? "" : post.id))
                                 }
-                                className="rounded-full border border-slate-200 px-2 py-1 text-slate-500 hover:bg-slate-50"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-sm text-slate-500 hover:bg-slate-50"
+                                aria-label="Adicionar figurinha"
+                                title="Figurinhas"
                               >
-                                Figurinhas
+                                ✦
                               </button>
                               <button
                                 type="button"
@@ -3891,9 +3903,11 @@ export default function InternalSocialPage() {
                                   setActiveCommentUploadPostId(post.id);
                                   commentFileInputRef.current?.click();
                                 }}
-                                className="rounded-full border border-slate-200 px-2 py-1 text-slate-500 hover:bg-slate-50"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-sm text-slate-500 hover:bg-slate-50"
+                                aria-label="Adicionar imagem ou GIF"
+                                title="Imagem ou GIF"
                               >
-                                Imagem ou GIF
+                                🖼
                               </button>
                             </div>
                             <textarea
@@ -3923,7 +3937,7 @@ export default function InternalSocialPage() {
                               }}
                               placeholder="Escreva um comentario. Use @handle, #assunto, emojis, imagem ou GIF."
                               rows={1}
-                              className="min-h-[44px] w-full resize-none border-0 bg-transparent px-0 py-0 text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                              className="min-h-[36px] w-full resize-none border-0 bg-transparent px-0 py-0 text-sm text-slate-900 outline-none placeholder:text-slate-400"
                             />
                           </div>
                           <button

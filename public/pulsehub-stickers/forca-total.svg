@@ -1,0 +1,10 @@
+<svg width="320" height="180" viewBox="0 0 320 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="320" height="180" rx="28" fill="#EFF6FF"/>
+  <rect x="14" y="14" width="292" height="152" rx="24" fill="#DBEAFE"/>
+  <circle cx="88" cy="88" r="36" fill="#93C5FD"/>
+  <path d="M70 82L88 66L106 82" stroke="#0F172A" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M76 106H100" stroke="#0F172A" stroke-width="6" stroke-linecap="round"/>
+  <text x="152" y="66" fill="#0F172A" font-family="Arial, sans-serif" font-size="22" font-weight="700">Forca total</text>
+  <text x="152" y="96" fill="#64748B" font-family="Arial, sans-serif" font-size="14">Energia para entrar no modo execucao</text>
+  <text x="152" y="124" fill="#2563EB" font-family="Arial, sans-serif" font-size="16" font-weight="700">Vamos nessa</text>
+</svg>

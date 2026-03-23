@@ -1,0 +1,14 @@
+<svg width="320" height="180" viewBox="0 0 320 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="320" height="180" rx="28" fill="#F8FAFC"/>
+  <rect x="14" y="14" width="292" height="152" rx="24" fill="#E2E8F0"/>
+  <circle cx="92" cy="88" r="36" fill="#FDE68A"/>
+  <circle cx="80" cy="80" r="5" fill="#0F172A"/>
+  <circle cx="105" cy="80" r="5" fill="#0F172A"/>
+  <path d="M76 102C84 94 102 94 110 102" stroke="#0F172A" stroke-width="4" stroke-linecap="round"/>
+  <text x="154" y="62" fill="#0F172A" font-family="Arial, sans-serif" font-size="16" font-weight="700">Modo</text>
+  <text x="154" y="84" fill="#0F172A" font-family="Arial, sans-serif" font-size="22" font-weight="700">calculando</text>
+  <text x="154" y="112" fill="#64748B" font-family="Arial, sans-serif" font-size="14">Quando o prazo vira equacao</text>
+  <text x="46" y="42" fill="#2563EB" font-family="Arial, sans-serif" font-size="16" font-weight="700">30%</text>
+  <text x="42" y="142" fill="#2563EB" font-family="Arial, sans-serif" font-size="16" font-weight="700">60%</text>
+  <text x="250" y="54" fill="#2563EB" font-family="Arial, sans-serif" font-size="16" font-weight="700">90%</text>
+</svg>
