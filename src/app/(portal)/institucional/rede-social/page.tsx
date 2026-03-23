@@ -3745,36 +3745,6 @@ export default function InternalSocialPage() {
                           }}
                         />
                         <div className="space-y-3">
-                          <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-400">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setShowCommentEmojiPickerForPostId((current) => (current === post.id ? "" : post.id))
-                              }
-                              className="rounded-full border border-slate-200 px-2 py-1 text-slate-500 hover:bg-slate-50"
-                            >
-                              🙂 Emoji
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setShowCommentStickerPickerForPostId((current) => (current === post.id ? "" : post.id))
-                              }
-                              className="rounded-full border border-slate-200 px-2 py-1 text-slate-500 hover:bg-slate-50"
-                            >
-                              Figurinhas
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setActiveCommentUploadPostId(post.id);
-                                commentFileInputRef.current?.click();
-                              }}
-                              className="rounded-full border border-slate-200 px-2 py-1 text-slate-500 hover:bg-slate-50"
-                            >
-                              Imagem ou GIF
-                            </button>
-                          </div>
                           {showCommentEmojiPickerForPostId === post.id ? (
                             <EmojiPicker
                               groups={EMOJI_GROUPS}
@@ -3895,27 +3865,67 @@ export default function InternalSocialPage() {
                             </div>
                           ) : null}
                         <div className="flex gap-2">
-                          <textarea
-                            ref={(element) => {
-                              commentTextareaRefs.current[post.id] = element;
-                            }}
-                            value={commentDrafts[post.id] ?? ""}
-                            onChange={(event) => {
-                              const nextValue = event.target.value;
-                              setCommentDrafts((prev) => ({ ...prev, [post.id]: nextValue }));
-                              const query = activeMentionQuery(nextValue, event.target.selectionStart ?? nextValue.length);
-                              if (query !== null) {
-                                setCommentMentionQueryByPostId((prev) => ({ ...prev, [post.id]: query }));
-                                setShowCommentMentionPickerForPostId(post.id);
-                              } else {
-                                setCommentMentionQueryByPostId((prev) => ({ ...prev, [post.id]: "" }));
-                                setShowCommentMentionPickerForPostId((current) => (current === post.id ? "" : current));
-                              }
-                            }}
-                            placeholder="Escreva um comentario. Use @handle, #assunto, emojis, imagem ou GIF."
-                            rows={2}
-                            className="min-h-[88px] flex-1 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900"
-                          />
+                          <div className="flex-1 rounded-2xl border border-slate-200 bg-white px-3 py-2">
+                            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-400">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setShowCommentEmojiPickerForPostId((current) => (current === post.id ? "" : post.id))
+                                }
+                                className="rounded-full border border-slate-200 px-2 py-1 text-slate-500 hover:bg-slate-50"
+                              >
+                                🙂 Emoji
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setShowCommentStickerPickerForPostId((current) => (current === post.id ? "" : post.id))
+                                }
+                                className="rounded-full border border-slate-200 px-2 py-1 text-slate-500 hover:bg-slate-50"
+                              >
+                                Figurinhas
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveCommentUploadPostId(post.id);
+                                  commentFileInputRef.current?.click();
+                                }}
+                                className="rounded-full border border-slate-200 px-2 py-1 text-slate-500 hover:bg-slate-50"
+                              >
+                                Imagem ou GIF
+                              </button>
+                            </div>
+                            <textarea
+                              ref={(element) => {
+                                commentTextareaRefs.current[post.id] = element;
+                              }}
+                              value={commentDrafts[post.id] ?? ""}
+                              onChange={(event) => {
+                                const target = event.target;
+                                const nextValue = target.value;
+                                setCommentDrafts((prev) => ({ ...prev, [post.id]: nextValue }));
+                                target.style.height = "0px";
+                                target.style.height = `${Math.min(target.scrollHeight, 220)}px`;
+                                const query = activeMentionQuery(nextValue, target.selectionStart ?? nextValue.length);
+                                if (query !== null) {
+                                  setCommentMentionQueryByPostId((prev) => ({ ...prev, [post.id]: query }));
+                                  setShowCommentMentionPickerForPostId(post.id);
+                                } else {
+                                  setCommentMentionQueryByPostId((prev) => ({ ...prev, [post.id]: "" }));
+                                  setShowCommentMentionPickerForPostId((current) => (current === post.id ? "" : current));
+                                }
+                              }}
+                              onFocus={(event) => {
+                                const target = event.target;
+                                target.style.height = "0px";
+                                target.style.height = `${Math.min(target.scrollHeight, 220)}px`;
+                              }}
+                              placeholder="Escreva um comentario. Use @handle, #assunto, emojis, imagem ou GIF."
+                              rows={1}
+                              className="min-h-[44px] w-full resize-none border-0 bg-transparent px-0 py-0 text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                            />
+                          </div>
                           <button
                             type="button"
                             onClick={() => void submitComment(post.id)}
