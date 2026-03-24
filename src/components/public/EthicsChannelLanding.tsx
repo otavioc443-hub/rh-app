@@ -591,9 +591,10 @@ export default function EthicsChannelLanding({
                     onClick={() => setReportIdentityChoice("identified")}
                     className={`min-w-28 rounded-2xl px-8 py-4 text-base font-semibold transition ${
                       reportIdentityChoice === "identified"
-                        ? "bg-[#635bff] text-white shadow-[0_12px_30px_-18px_rgba(99,91,255,0.8)]"
+                        ? "text-white shadow-[0_12px_30px_-18px_rgba(15,23,42,0.35)]"
                         : "border border-slate-200 bg-white text-slate-900 shadow-sm hover:bg-slate-50"
                     }`}
+                    style={reportIdentityChoice === "identified" ? { backgroundColor: "var(--ethics-accent)" } : undefined}
                   >
                     Sim
                   </button>
@@ -602,9 +603,10 @@ export default function EthicsChannelLanding({
                     onClick={() => setReportIdentityChoice("anonymous")}
                     className={`min-w-28 rounded-2xl px-8 py-4 text-base font-semibold transition ${
                       reportIdentityChoice === "anonymous"
-                        ? "bg-[#635bff] text-white shadow-[0_12px_30px_-18px_rgba(99,91,255,0.8)]"
+                        ? "text-white shadow-[0_12px_30px_-18px_rgba(15,23,42,0.35)]"
                         : "border border-slate-200 bg-white text-slate-900 shadow-sm hover:bg-slate-50"
                     }`}
+                    style={reportIdentityChoice === "anonymous" ? { backgroundColor: "var(--ethics-accent)" } : undefined}
                   >
                     Não
                   </button>
@@ -696,20 +698,23 @@ export default function EthicsChannelLanding({
               <input
                 value={followUpProtocol}
                 onChange={(event) => setFollowUpProtocol(event.target.value)}
-                className="h-12 w-full rounded-md border border-slate-300 px-4 text-base text-slate-900 outline-none focus:border-[#635bff]"
+                className="h-12 w-full rounded-md border border-slate-300 px-4 text-base text-slate-900 outline-none"
+                style={{ borderColor: followUpProtocol ? "var(--ethics-accent)" : undefined }}
               />
             </div>
 
             <div className="mt-10 flex flex-wrap gap-6">
               <a
                 href={followUpHref !== "#" ? `${followUpHref}${followUpHref.includes("?") ? "&" : "?"}protocolo=${encodeURIComponent(followUpProtocol)}` : "#"}
-                className="inline-flex min-w-64 items-center justify-center rounded-3xl bg-[#635bff] px-8 py-4 text-lg font-semibold text-white shadow-[0_12px_30px_-18px_rgba(99,91,255,0.75)] transition hover:bg-[#5148f5]"
+                className="inline-flex min-w-64 items-center justify-center rounded-3xl px-8 py-4 text-lg font-semibold text-white shadow-[0_12px_30px_-18px_rgba(15,23,42,0.35)] transition hover:brightness-105"
+                style={{ backgroundColor: "var(--ethics-accent)" }}
               >
                 Consultar protocolo
               </a>
               <Link
                 href={tabHref(config.key, "home")}
-                className="inline-flex min-w-40 items-center justify-center rounded-3xl bg-[#635bff] px-8 py-4 text-lg font-semibold text-white shadow-[0_12px_30px_-18px_rgba(99,91,255,0.75)] transition hover:bg-[#5148f5]"
+                className="inline-flex min-w-40 items-center justify-center rounded-3xl px-8 py-4 text-lg font-semibold text-white shadow-[0_12px_30px_-18px_rgba(15,23,42,0.35)] transition hover:brightness-105"
+                style={{ backgroundColor: "var(--ethics-accent)" }}
               >
                 Cancelar
               </Link>
