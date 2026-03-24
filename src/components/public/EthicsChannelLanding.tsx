@@ -4,11 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
-  BadgeAlert,
   Building2,
   FileWarning,
-  HeartHandshake,
-  Scale,
   SearchCheck,
   ShieldCheck,
 } from "lucide-react";
@@ -72,59 +69,11 @@ function innerHeroContent(activeTab: Exclude<TabKey, "home">, content: EthicsMan
   };
 }
 
-const reportTopics = [
-  {
-    title: "Ass\u00e9dio e discrimina\u00e7\u00e3o",
-    description:
-      "Ass\u00e9dio moral, ass\u00e9dio sexual, humilha\u00e7\u00e3o, preconceito, retalia\u00e7\u00e3o ou condutas que comprometam a dignidade.",
-    icon: HeartHandshake,
-  },
-  {
-    title: "Fraude e corrup\u00e7\u00e3o",
-    description: "Suborno, fraude documental, desvio de recursos, conflito de interesses ou favorecimento indevido.",
-    icon: Scale,
-  },
-  {
-    title: "Conduta inadequada",
-    description:
-      "Viola\u00e7\u00f5es do c\u00f3digo de \u00e9tica, abuso de autoridade, quebra de regras internas ou comportamento anti\u00e9tico.",
-    icon: BadgeAlert,
-  },
-  {
-    title: "Seguran\u00e7a e dados",
-    description: "Vazamento de informa\u00e7\u00f5es, falhas de controle, acesso indevido ou risco relevante para pessoas e ativos.",
-    icon: ShieldCheck,
-  },
-];
-
 const guarantees = [
   "Tratamento confidencial do relato e das evid\u00eancias.",
   "Triagem com crit\u00e9rio, registro formal e restri\u00e7\u00e3o de acesso.",
   "N\u00e3o toler\u00e2ncia \u00e0 retalia\u00e7\u00e3o contra relatos feitos de boa-f\u00e9.",
   "Encaminhamento para apura\u00e7\u00e3o com rastreabilidade e imparcialidade.",
-];
-
-const flow = [
-  {
-    step: "01",
-    title: "Registro do relato",
-    body: "Informe o contexto, a data aproximada, as pessoas envolvidas e, se houver, documentos ou evid\u00eancias.",
-  },
-  {
-    step: "02",
-    title: "Triagem e classifica\u00e7\u00e3o",
-    body: "O caso \u00e9 avaliado por natureza, gravidade, urg\u00eancia e necessidade de investiga\u00e7\u00e3o complementar.",
-  },
-  {
-    step: "03",
-    title: "Apura\u00e7\u00e3o protegida",
-    body: "As evid\u00eancias s\u00e3o analisadas com sigilo, acesso controlado e documenta\u00e7\u00e3o das decis\u00f5es do processo.",
-  },
-  {
-    step: "04",
-    title: "Desfecho",
-    body: "O caso recebe tratamento, medidas cab\u00edveis e, quando houver protocolo, possibilidade de acompanhamento.",
-  },
 ];
 
 const faq = [
@@ -548,61 +497,65 @@ export default function EthicsChannelLanding({
 
         {activeTab === "report" ? (
           <div className="space-y-8">
-            <SectionTitle kicker="Realizar relato" title="Escolha a forma mais adequada para registrar o caso." body="Use este canal para comunicar situa\u00e7\u00f5es que contrariem o C\u00f3digo de \u00c9tica, as pol\u00edticas internas, a legisla\u00e7\u00e3o ou a integridade do ambiente de trabalho." />
+            <SectionTitle
+              kicker="Realizar relato"
+              title="Registre um relato com sigilo, clareza e tratamento respons\u00e1vel."
+              body="Use este canal para comunicar situa\u00e7\u00f5es que contrariem o C\u00f3digo de \u00c9tica, as pol\u00edticas internas, a legisla\u00e7\u00e3o ou a integridade do ambiente de trabalho."
+            />
             <div className="flex flex-wrap gap-3">
               <ActionLink href={reportHref} primary>Abrir canal de relato<ArrowRight size={16} /></ActionLink>
               {config.contactEmail ? <ActionLink href={`mailto:${config.contactEmail}`}>Falar por e-mail</ActionLink> : null}
             </div>
-            <div className="grid gap-4 xl:grid-cols-[1.1fr,0.9fr]">
-              <article className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Como este canal funciona</p>
-                <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">Recebimento especializado, sigilo e tratamento responsável.</h3>
-                <div className="mt-5 space-y-4 text-sm leading-8 text-slate-600">
-                  <p>
-                    As informa\u00e7\u00f5es aqui registradas ser\u00e3o recebidas por uma empresa independente e especializada, a Aliant,
-                    assegurando sigilo absoluto e o tratamento adequado de cada situa\u00e7\u00e3o para a S\u00f3lida, sem conflitos de interesses.
-                  </p>
-                  <p>
-                    A veracidade das informa\u00e7\u00f5es fornecidas \u00e9 de responsabilidade do relator. Todas as informa\u00e7\u00f5es ser\u00e3o
-                    verificadas durante o processo de averigua\u00e7\u00e3o, e as a\u00e7\u00f5es decorrentes ser\u00e3o tomadas conforme os crit\u00e9rios
-                    internos aplic\u00e1veis.
-                  </p>
-                  <p>
-                    Se preferir, utilize tamb\u00e9m os contatos oficiais disponibilizados pela empresa para orienta\u00e7\u00f5es adicionais sobre o
-                    encaminhamento do caso.
-                  </p>
+            <article className="rounded-[34px] border border-slate-200 bg-white p-8 shadow-sm">
+              <h2 className="text-5xl font-semibold tracking-tight text-[#635bff]">Realizar relato</h2>
+              <div className="mt-10 space-y-8 text-[1.05rem] leading-9 text-slate-800">
+                <p>
+                  As informa\u00e7\u00f5es aqui registradas ser\u00e3o recebidas por uma empresa independente e especializada, a Aliant,
+                  assegurando sigilo absoluto e o tratamento adequado de cada situa\u00e7\u00e3o pela alta administra\u00e7\u00e3o da S\u00f3lida,
+                  sem conflitos de interesses.
+                </p>
+                <p>
+                  A veracidade das informa\u00e7\u00f5es providas \u00e9 uma responsabilidade do relator. Todas as informa\u00e7\u00f5es ser\u00e3o
+                  verificadas durante o processo de averigua\u00e7\u00e3o, e as a\u00e7\u00f5es decorrentes ser\u00e3o tomadas a crit\u00e9rio exclusivo
+                  da S\u00f3lida.
+                </p>
+                <div>
+                  <h3 className="text-2xl font-semibold tracking-tight text-slate-950">Prote\u00e7\u00e3o de Dados</h3>
+                  <div className="mt-6 space-y-8">
+                    <p>
+                      Todas as informa\u00e7\u00f5es aqui registradas ser\u00e3o tratadas de forma confidencial por sua organiza\u00e7\u00e3o e pela
+                      Aliant, uma empresa independente e especializada na capta\u00e7\u00e3o e tratamento de den\u00fancias.
+                    </p>
+                    <p>
+                      A capta\u00e7\u00e3o dessas informa\u00e7\u00f5es tem por finalidade a apura\u00e7\u00e3o de poss\u00edveis condutas consideradas
+                      anti\u00e9ticas ou que violem os princ\u00edpios \u00e9ticos e padr\u00f5es de conduta e/ou a legisla\u00e7\u00e3o vigente.
+                    </p>
+                    <p>
+                      Todos os relatos ser\u00e3o armazenados pelo tempo necess\u00e1rio para realiza\u00e7\u00e3o do processo de apura\u00e7\u00e3o e
+                      delibera\u00e7\u00e3o sobre o caso, observando-se as exig\u00eancias legais espec\u00edficas. Al\u00e9m disso, informa\u00e7\u00f5es
+                      consolidadas poder\u00e3o ser utilizadas para gera\u00e7\u00e3o de estat\u00edsticas da opera\u00e7\u00e3o, sem exposi\u00e7\u00e3o de nomes
+                      envolvidos ou dados pessoais.
+                    </p>
+                    <p>
+                      Eventuais dados pessoais informados ser\u00e3o tratados conforme as normativas estabelecidas pela
+                      legisla\u00e7\u00e3o vigente no que diz respeito \u00e0 prote\u00e7\u00e3o de dados pessoais, observadas pela Aliant no
+                      processo de capta\u00e7\u00e3o e pela S\u00f3lida no processo de apura\u00e7\u00e3o dos relatos aqui registrados.
+                    </p>
+                    <p>
+                      Ao clicar em &quot;Concordo&quot; voc\u00ea indica ci\u00eancia e concord\u00e2ncia com o fornecimento de informa\u00e7\u00f5es
+                      que ser\u00e3o \u00fanica e exclusivamente utilizadas para esta finalidade.
+                    </p>
+                  </div>
                 </div>
-              </article>
-              <article className="rounded-[34px] border border-slate-200 bg-slate-950 p-7 text-white shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/60">Prote\u00e7\u00e3o de dados</p>
-                <h3 className="mt-3 text-2xl font-semibold tracking-tight">Tratamento confidencial durante toda a apura\u00e7\u00e3o.</h3>
-                <div className="mt-5 space-y-3 text-sm leading-7 text-slate-200">
-                  <p>
-                    Todas as informa\u00e7\u00f5es registradas ser\u00e3o tratadas de forma confidencial pela sua organiza\u00e7\u00e3o e pela Aliant,
-                    empresa independente e especializada na capta\u00e7\u00e3o e tratamento de den\u00fancias.
-                  </p>
-                  <p>
-                    A coleta dessas informa\u00e7\u00f5es tem por finalidade a apura\u00e7\u00e3o de poss\u00edveis condutas anti\u00e9ticas ou que violem
-                    princ\u00edpios \u00e9ticos, padr\u00f5es de conduta e a legisla\u00e7\u00e3o vigente.
-                  </p>
-                  <p>
-                    Os relatos podem ser armazenados pelo tempo necess\u00e1rio para apura\u00e7\u00e3o, delibera\u00e7\u00e3o e cumprimento das exig\u00eancias
-                    legais aplic\u00e1veis, al\u00e9m da gera\u00e7\u00e3o de estat\u00edsticas consolidadas sem exposi\u00e7\u00e3o indevida de nomes ou dados pessoais.
-                  </p>
-                  <p>
-                    Ao prosseguir com o registro, voc\u00ea declara ci\u00eancia de que as informa\u00e7\u00f5es fornecidas ser\u00e3o utilizadas \u00fanica e
-                    exclusivamente para esta finalidade.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setReportConsentOpen((prev) => !prev)}
-                  className="mt-6 w-full rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-left text-sm font-semibold text-white transition hover:bg-white/15"
-                >
-                  Declaro que li e compreendi as informa\u00e7\u00f5es acima, e desejo prosseguir com a manifesta\u00e7\u00e3o.
-                </button>
-              </article>
-            </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReportConsentOpen((prev) => !prev)}
+                className="mt-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-left text-lg font-semibold text-slate-950 transition hover:bg-slate-100"
+              >
+                Declaro que li e compreendi as informa\u00e7\u00f5es acima, e desejo prosseguir com a manifesta\u00e7\u00e3o.
+              </button>
+            </article>
             {reportConsentOpen ? (
               <div className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Identifica\u00e7\u00e3o do relator</p>
@@ -705,29 +658,6 @@ export default function EthicsChannelLanding({
                 ) : null}
               </div>
             ) : null}
-            <div className="grid gap-4 xl:grid-cols-[1fr,0.9fr]">
-              <div className="grid gap-4 md:grid-cols-2">
-                {reportTopics.map((topic) => {
-                  const Icon = topic.icon;
-                  return (
-                    <article key={topic.title} className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl text-white" style={{ backgroundColor: "var(--ethics-soft)" }}><Icon size={20} /></div>
-                      <h3 className="mt-5 text-lg font-semibold text-slate-950">{topic.title}</h3>
-                      <p className="mt-3 text-sm leading-7 text-slate-600">{topic.description}</p>
-                    </article>
-                  );
-                })}
-              </div>
-              <div className="rounded-[34px] border border-slate-200 bg-slate-950 p-7 text-white shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/60">Antes de enviar</p>
-                <h3 className="mt-3 text-2xl font-semibold tracking-tight">Prepare um relato claro, verific\u00e1vel e \u00fatil para apura\u00e7\u00e3o.</h3>
-                <div className="mt-6 space-y-3">
-                  {["Descreva objetivamente o fato, sem suposi\u00e7\u00f5es desnecess\u00e1rias.", "Informe data aproximada, local, \u00e1rea e pessoas envolvidas.", "Anexe documentos, prints ou evid\u00eancias quando existirem.", "Se houver risco imediato \u00e0 seguran\u00e7a, use tamb\u00e9m o canal emergencial da empresa."].map((item) => (
-                    <div key={item} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm leading-7 text-slate-200">{item}</div>
-                  ))}
-                </div>
-              </div>
-            </div>
           </div>
         ) : null}
 
