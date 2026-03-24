@@ -12,7 +12,6 @@ import {
   Target,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-import { PulseSprintWidget } from "@/components/engagement-game/PulseSprint";
 
 type InstitutionalItem = { title: string; description?: string; year?: string; image_url?: string; focus_x?: number; focus_y?: number };
 
@@ -589,8 +588,6 @@ export default function InstitucionalPage() {
         <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full" style={{ background: `${SOLIDA_GOLD}18` }} />
         <div className="pointer-events-none absolute -right-12 bottom-[-70px] h-80 w-80 rounded-full" style={{ background: `${SOLIDA_GREEN}14` }} />
       </section>
-
-      <PulseSprintWidget />
 
       <section id="historia" className="rounded-3xl border border-slate-200 bg-white p-6">
         <div className="flex items-center justify-between gap-3">

@@ -1,3 +1,5 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -10,7 +12,7 @@ import {
   SearchCheck,
   ShieldCheck,
 } from "lucide-react";
-import type { CSSProperties, ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
 import type { EthicsChannelConfig } from "@/lib/ethicsChannel";
 import type { EthicsManagedContent } from "@/lib/ethicsChannelDefaults";
 
@@ -145,6 +147,36 @@ const faq = [
     question: "Como acompanho o meu caso?",
     answer:
       "Quando houver fluxo de acompanhamento por protocolo, utilize o acesso espec\u00edfico desta p\u00e1gina para consultar andamento e retorno.",
+  },
+  {
+    question: "Qual \u00e9 o compromisso da S\u00f3lida com a prote\u00e7\u00e3o de dados pessoais?",
+    answer:
+      "A S\u00f3lida trata os dados informados no canal de \u00e9tica com sigilo, necessidade de conhecimento e finalidade espec\u00edfica de apura\u00e7\u00e3o, protegendo as pessoas envolvidas, a integridade do processo e a conformidade com a legisla\u00e7\u00e3o aplic\u00e1vel.",
+  },
+  {
+    question: "Quais informa\u00e7\u00f5es devo registrar em meu relato?",
+    answer:
+      "Registre apenas as informa\u00e7\u00f5es necess\u00e1rias para compreender o fato: contexto, data aproximada, local, \u00e1rea envolvida, pessoas relacionadas e evid\u00eancias dispon\u00edveis. Evite excesso de dados pessoais sem rela\u00e7\u00e3o com a apura\u00e7\u00e3o.",
+  },
+  {
+    question: "Quem ter\u00e1 acesso ao meu relato e aos meus dados?",
+    answer:
+      "O acesso deve ser restrito \u00e0s pessoas e estruturas autorizadas para triagem, investiga\u00e7\u00e3o, delibera\u00e7\u00e3o e tratamento do caso, al\u00e9m da empresa parceira respons\u00e1vel pela recep\u00e7\u00e3o do relato quando o fluxo assim exigir.",
+  },
+  {
+    question: "O que ser\u00e1 feito com meu relato e por quanto tempo ele poder\u00e1 ser armazenado?",
+    answer:
+      "O relato ser\u00e1 registrado, analisado e tratado conforme a gravidade, a necessidade de investiga\u00e7\u00e3o e as exig\u00eancias legais aplic\u00e1veis. As informa\u00e7\u00f5es podem ser mantidas pelo tempo necess\u00e1rio \u00e0 apura\u00e7\u00e3o, \u00e0 ado\u00e7\u00e3o de medidas cab\u00edveis e ao atendimento de obriga\u00e7\u00f5es legais e regulat\u00f3rias.",
+  },
+  {
+    question: "Quais s\u00e3o os meus direitos em rela\u00e7\u00e3o aos dados informados?",
+    answer:
+      "Os titulares podem exercer os direitos previstos na legisla\u00e7\u00e3o de prote\u00e7\u00e3o de dados, observados os limites legais e a necessidade de preserva\u00e7\u00e3o da investiga\u00e7\u00e3o, da confidencialidade e da integridade do canal.",
+  },
+  {
+    question: "D\u00favidas? Mais informa\u00e7\u00f5es?",
+    answer:
+      "Em caso de d\u00favidas sobre privacidade, tratamento de dados ou funcionamento do canal, utilize os contatos oficiais da S\u00f3lida indicados nesta p\u00e1gina para receber a orienta\u00e7\u00e3o adequada ao seu caso.",
   },
 ];
 
@@ -377,6 +409,9 @@ export default function EthicsChannelLanding({
   content: EthicsManagedContent;
   activeTab?: TabKey;
 }) {
+  const [reportConsentOpen, setReportConsentOpen] = useState(false);
+  const [reportIdentityChoice, setReportIdentityChoice] = useState<"identified" | "anonymous" | null>(null);
+  const [followUpProtocol, setFollowUpProtocol] = useState("");
   const isSolida = config.companyName
     .toLowerCase()
     .normalize("NFD")
@@ -442,7 +477,6 @@ export default function EthicsChannelLanding({
 
         {activeTab === "home" ? (
           <div className="space-y-10">
-            <SectionTitle kicker="Mensagem central" title="Canal exclusivo para preservar \u00e9tica, respeito e confian\u00e7a." body={content.codeSummary ?? ""} />
             {content.foundationTitle ? (
               <div className="overflow-hidden rounded-[36px] border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-200 px-7 py-7 lg:px-8">
@@ -484,6 +518,31 @@ export default function EthicsChannelLanding({
                 </div>
               </div>
             ) : null}
+            <section className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Orienta\u00e7\u00f5es do canal</p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Canal exclusivo para comunica\u00e7\u00e3o segura e tratamento respons\u00e1vel de relatos.</h2>
+              <div className="mt-5 space-y-4 text-base leading-8 text-slate-600">
+                <p>
+                  Este \u00e9 um canal exclusivo da {config.companyName} para comunica\u00e7\u00e3o segura e, quando aplic\u00e1vel ao fluxo adotado,
+                  tamb\u00e9m reservada, de condutas consideradas anti\u00e9ticas ou que contrariem princ\u00edpios \u00e9ticos, padr\u00f5es de conduta
+                  e a legisla\u00e7\u00e3o vigente.
+                </p>
+                <p>
+                  As informa\u00e7\u00f5es registradas neste espa\u00e7o devem receber tratamento adequado, com sigilo, crit\u00e9rio e rastreabilidade,
+                  evitando conflitos de interesse e preservando a seriedade de cada situa\u00e7\u00e3o reportada.
+                </p>
+                {config.contactPhone ? (
+                  <p>
+                    Se preferir, seu relato tamb\u00e9m pode ser feito pelo telefone {config.contactPhone}, conforme a disponibilidade e
+                    o fluxo de atendimento configurado pela empresa.
+                  </p>
+                ) : null}
+                <p>
+                  Aten\u00e7\u00e3o: se a sua demanda estiver relacionada a atendimento ao cliente, suporte operacional, produtos ou servi\u00e7os,
+                  utilize o canal oficial de atendimento da empresa para que a solicita\u00e7\u00e3o siga para o fluxo correto.
+                </p>
+              </div>
+            </section>
           </div>
         ) : null}
 
@@ -494,6 +553,158 @@ export default function EthicsChannelLanding({
               <ActionLink href={reportHref} primary>Abrir canal de relato<ArrowRight size={16} /></ActionLink>
               {config.contactEmail ? <ActionLink href={`mailto:${config.contactEmail}`}>Falar por e-mail</ActionLink> : null}
             </div>
+            <div className="grid gap-4 xl:grid-cols-[1.1fr,0.9fr]">
+              <article className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Como este canal funciona</p>
+                <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">Recebimento especializado, sigilo e tratamento responsável.</h3>
+                <div className="mt-5 space-y-4 text-sm leading-8 text-slate-600">
+                  <p>
+                    As informa\u00e7\u00f5es aqui registradas ser\u00e3o recebidas por uma empresa independente e especializada, a Aliant,
+                    assegurando sigilo absoluto e o tratamento adequado de cada situa\u00e7\u00e3o para a S\u00f3lida, sem conflitos de interesses.
+                  </p>
+                  <p>
+                    A veracidade das informa\u00e7\u00f5es fornecidas \u00e9 de responsabilidade do relator. Todas as informa\u00e7\u00f5es ser\u00e3o
+                    verificadas durante o processo de averigua\u00e7\u00e3o, e as a\u00e7\u00f5es decorrentes ser\u00e3o tomadas conforme os crit\u00e9rios
+                    internos aplic\u00e1veis.
+                  </p>
+                  <p>
+                    Se preferir, utilize tamb\u00e9m os contatos oficiais disponibilizados pela empresa para orienta\u00e7\u00f5es adicionais sobre o
+                    encaminhamento do caso.
+                  </p>
+                </div>
+              </article>
+              <article className="rounded-[34px] border border-slate-200 bg-slate-950 p-7 text-white shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/60">Prote\u00e7\u00e3o de dados</p>
+                <h3 className="mt-3 text-2xl font-semibold tracking-tight">Tratamento confidencial durante toda a apura\u00e7\u00e3o.</h3>
+                <div className="mt-5 space-y-3 text-sm leading-7 text-slate-200">
+                  <p>
+                    Todas as informa\u00e7\u00f5es registradas ser\u00e3o tratadas de forma confidencial pela sua organiza\u00e7\u00e3o e pela Aliant,
+                    empresa independente e especializada na capta\u00e7\u00e3o e tratamento de den\u00fancias.
+                  </p>
+                  <p>
+                    A coleta dessas informa\u00e7\u00f5es tem por finalidade a apura\u00e7\u00e3o de poss\u00edveis condutas anti\u00e9ticas ou que violem
+                    princ\u00edpios \u00e9ticos, padr\u00f5es de conduta e a legisla\u00e7\u00e3o vigente.
+                  </p>
+                  <p>
+                    Os relatos podem ser armazenados pelo tempo necess\u00e1rio para apura\u00e7\u00e3o, delibera\u00e7\u00e3o e cumprimento das exig\u00eancias
+                    legais aplic\u00e1veis, al\u00e9m da gera\u00e7\u00e3o de estat\u00edsticas consolidadas sem exposi\u00e7\u00e3o indevida de nomes ou dados pessoais.
+                  </p>
+                  <p>
+                    Ao prosseguir com o registro, voc\u00ea declara ci\u00eancia de que as informa\u00e7\u00f5es fornecidas ser\u00e3o utilizadas \u00fanica e
+                    exclusivamente para esta finalidade.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setReportConsentOpen((prev) => !prev)}
+                  className="mt-6 w-full rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-left text-sm font-semibold text-white transition hover:bg-white/15"
+                >
+                  Declaro que li e compreendi as informa\u00e7\u00f5es acima, e desejo prosseguir com a manifesta\u00e7\u00e3o.
+                </button>
+              </article>
+            </div>
+            {reportConsentOpen ? (
+              <div className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Identifica\u00e7\u00e3o do relator</p>
+                <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">Voc\u00ea pode escolher fazer um relato an\u00f4nimo ou identificar-se.</h3>
+                <div className="mt-5 space-y-4 text-sm leading-8 text-slate-600">
+                  <p>
+                    A op\u00e7\u00e3o identificada \u00e9 voltada para os casos em que o relator se disponibiliza a ser contatado para esclarecimento
+                    de poss\u00edveis d\u00favidas sobre o relato fornecido.
+                  </p>
+                  <p>
+                    Relatos com identifica\u00e7\u00e3o s\u00e3o muito importantes, pois podem tornar a apura\u00e7\u00e3o mais efetiva. Este \u00e9 um canal
+                    seguro e confi\u00e1vel.
+                  </p>
+                  <p className="font-semibold text-slate-900">Voc\u00ea quer se identificar?</p>
+                </div>
+
+                <div className="mt-6 flex flex-wrap gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setReportIdentityChoice("identified")}
+                    className={`min-w-28 rounded-2xl px-8 py-4 text-base font-semibold transition ${
+                      reportIdentityChoice === "identified"
+                        ? "bg-[#635bff] text-white shadow-[0_12px_30px_-18px_rgba(99,91,255,0.8)]"
+                        : "border border-slate-200 bg-white text-slate-900 shadow-sm hover:bg-slate-50"
+                    }`}
+                  >
+                    Sim
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReportIdentityChoice("anonymous")}
+                    className={`min-w-28 rounded-2xl px-8 py-4 text-base font-semibold transition ${
+                      reportIdentityChoice === "anonymous"
+                        ? "bg-[#635bff] text-white shadow-[0_12px_30px_-18px_rgba(99,91,255,0.8)]"
+                        : "border border-slate-200 bg-white text-slate-900 shadow-sm hover:bg-slate-50"
+                    }`}
+                  >
+                    N\u00e3o
+                  </button>
+                </div>
+
+                {reportIdentityChoice === "identified" ? (
+                  <div className="mt-8 space-y-5">
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-semibold text-slate-900">* Nome</span>
+                      <input className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none" />
+                    </label>
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-semibold text-slate-900">* Fun\u00e7\u00e3o ou sua rela\u00e7\u00e3o com a empresa</span>
+                      <input className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none" />
+                    </label>
+                    <p className="text-sm font-medium text-orange-600">\u00c9 necess\u00e1rio preencher pelo menos um dos campos abaixo:</p>
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-semibold text-slate-900">* E-mail</span>
+                      <input
+                        type="email"
+                        placeholder="nome@exemplo.com"
+                        className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-semibold text-slate-900">* Telefone</span>
+                      <input className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none" />
+                    </label>
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-semibold text-slate-900">* Celular</span>
+                      <input className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none" />
+                    </label>
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-semibold text-slate-900">* Voc\u00ea j\u00e1 denunciou esta situa\u00e7\u00e3o anteriormente?</span>
+                      <input className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none" />
+                    </label>
+                    <div className="pt-2">
+                      <ActionLink href={reportHref} primary>
+                        Continuar
+                      </ActionLink>
+                    </div>
+                  </div>
+                ) : null}
+
+                {reportIdentityChoice === "anonymous" ? (
+                  <div className="mt-8 space-y-5">
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-semibold text-slate-900">E-mail an\u00f4nimo opcional</span>
+                      <input
+                        type="email"
+                        className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none"
+                      />
+                    </label>
+                    <p className="text-sm text-slate-700">
+                      *Se seu relato for an\u00f4nimo, utilize endere\u00e7o de e-mail que n\u00e3o permita a sua identifica\u00e7\u00e3o
+                      (ex.: anonimo123@gmail.com).
+                    </p>
+                    <div className="pt-2">
+                      <ActionLink href={reportHref} primary>
+                        Continuar
+                      </ActionLink>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <div className="grid gap-4 xl:grid-cols-[1fr,0.9fr]">
               <div className="grid gap-4 md:grid-cols-2">
                 {reportTopics.map((topic) => {
@@ -521,30 +732,36 @@ export default function EthicsChannelLanding({
         ) : null}
 
         {activeTab === "follow-up" ? (
-          <div className="space-y-8">
-            <SectionTitle kicker="Acompanhar relato" title="Uma jornada clara para receber, analisar e tratar cada caso." body="O objetivo do canal n\u00e3o \u00e9 apenas receber relatos, mas garantir tratamento estruturado, documentado e coerente com a gravidade de cada situa\u00e7\u00e3o." dark />
-            <div className="flex flex-wrap gap-3"><ActionLink href={followUpHref} primary>Consultar andamento<SearchCheck size={16} /></ActionLink></div>
-            <div className="grid gap-4 xl:grid-cols-[1fr,0.9fr]">
-              <div className="grid gap-4 lg:grid-cols-4">
-                {flow.map((item) => (
-                  <article key={item.step} className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-                    <div className="inline-flex h-11 w-11 items-center justify-center rounded-full text-sm font-semibold text-white" style={{ backgroundColor: "var(--ethics-accent)" }}>{item.step}</div>
-                    <h3 className="mt-4 text-lg font-semibold text-slate-950">{item.title}</h3>
-                    <p className="mt-3 text-sm leading-7 text-slate-600">{item.body}</p>
-                  </article>
-                ))}
-              </div>
-              <div className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">O que ter em m\u00e3os</p>
-                <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">Facilite a consulta do protocolo.</h3>
-                <div className="mt-6 space-y-3">
-                  {["Tenha em m\u00e3os o n\u00famero de protocolo ou identificador do atendimento.", "Mantenha atualizados os meios de contato informados no registro.", "Use o acompanhamento apenas para consultas ligadas ao caso j\u00e1 aberto."].map((item) => (
-                    <div key={item} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm leading-7 text-slate-700">{item}</div>
-                  ))}
-                </div>
-              </div>
+          <section className="rounded-[34px] border border-slate-200 bg-white p-8 shadow-sm">
+            <h2 className="text-5xl font-semibold tracking-tight text-[#635bff]">Acompanhar relato</h2>
+            <p className="mt-10 max-w-5xl text-[1.05rem] leading-8 text-slate-800">
+              Para acompanhar o andamento do seu relato, por favor digite o n\u00famero do seu protocolo no campo abaixo e clique no bot\u00e3o
+              &quot;Consultar protocolo&quot;.
+            </p>
+
+            <div className="mt-10 max-w-md">
+              <input
+                value={followUpProtocol}
+                onChange={(event) => setFollowUpProtocol(event.target.value)}
+                className="h-12 w-full rounded-md border border-slate-300 px-4 text-base text-slate-900 outline-none focus:border-[#635bff]"
+              />
             </div>
-          </div>
+
+            <div className="mt-10 flex flex-wrap gap-6">
+              <a
+                href={followUpHref !== "#" ? `${followUpHref}${followUpHref.includes("?") ? "&" : "?"}protocolo=${encodeURIComponent(followUpProtocol)}` : "#"}
+                className="inline-flex min-w-64 items-center justify-center rounded-3xl bg-[#635bff] px-8 py-4 text-lg font-semibold text-white shadow-[0_12px_30px_-18px_rgba(99,91,255,0.75)] transition hover:bg-[#5148f5]"
+              >
+                Consultar protocolo
+              </a>
+              <Link
+                href={tabHref(config.key, "home")}
+                className="inline-flex min-w-40 items-center justify-center rounded-3xl bg-[#635bff] px-8 py-4 text-lg font-semibold text-white shadow-[0_12px_30px_-18px_rgba(99,91,255,0.75)] transition hover:bg-[#5148f5]"
+              >
+                Cancelar
+              </Link>
+            </div>
+          </section>
         ) : null}
 
         {activeTab === "data" ? (
