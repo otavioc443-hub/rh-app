@@ -68,21 +68,13 @@ export default function EthicsCompanySelector({
       });
   }, [companies, query, selectedCity, selectedState]);
 
-  const configuredCount = companies.filter((item) => item.configured).length;
   const directOptions = filteredCompanies
     .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 
   return (
     <section className="mx-auto max-w-6xl px-6 py-10 lg:px-10 lg:py-12">
-      <div className="mb-6 flex flex-col gap-4 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Empresas cadastradas</p>
-          <p className="mt-2 text-sm text-slate-600">
-            {configuredCount} canal(is) configurado(s) de {companies.length} empresa(s) cadastrada(s).
-          </p>
-        </div>
-
-        <div className="grid w-full gap-3 lg:max-w-2xl lg:grid-cols-[1fr,auto,220px]">
+      <div className="mb-6 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr),220px,220px,220px]">
           <label className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
             <Search size={16} className="text-slate-400" />
             <input

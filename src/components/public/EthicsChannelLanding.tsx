@@ -220,10 +220,58 @@ function buildSteerCards(body: string | null) {
   const matches = Array.from(text.matchAll(/([STEER])\s+representa\s+([^;]+?)(?=(?:;\s*[STEER]\s+representa)|$)/gi));
   if (!matches.length) return [];
 
-  return matches.map((match) => ({
+  const cards = matches.map((match) => ({
     letter: match[1].toUpperCase(),
     description: match[2].trim().replace(/\.$/, ""),
   }));
+
+  const ethicsDescription =
+    "Ética e Integridade. Atuamos com transparência, responsabilidade profissional e respeito em todas as nossas relações";
+
+  const ethicsCardExists = cards.some((item) => normalizeSteerText(item.description).includes("etica e integridade"));
+  const eCount = cards.filter((item) => item.letter === "E").length;
+
+  if (eCount < 2 && !ethicsCardExists) {
+    const rIndex = cards.findIndex((item) => item.letter === "R");
+    const insertAt = rIndex >= 0 ? rIndex : cards.length;
+    cards.splice(insertAt, 0, {
+      letter: "E",
+      description: ethicsDescription,
+    });
+  }
+
+  return cards;
+}
+
+function normalizeSteerText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
+
+function summarizeFoundationText(label: string, text: string) {
+  const normalizedLabel = label
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+
+  if (normalizedLabel === "proposito") {
+    return "Projetar o futuro por meio da engenharia, conectando tecnologia, inteligência e pessoas.";
+  }
+
+  if (normalizedLabel === "missao") {
+    return "Desenvolver soluções de engenharia inovadoras, seguras e eficientes com tecnologia, BIM e excelência técnica.";
+  }
+
+  if (normalizedLabel === "visao") {
+    return "Ser referência em engenharia digital, inovação tecnológica e modelagem BIM, com excelência técnica e impacto positivo.";
+  }
+
+  const firstSentence = text.match(/.*?[.!?](?:\s|$)/)?.[0]?.trim();
+  return firstSentence || text;
 }
 
 function HomeHero({ config, content }: { config: EthicsChannelConfig; content: EthicsManagedContent }) {
@@ -283,23 +331,6 @@ function HomeHero({ config, content }: { config: EthicsChannelConfig; content: E
             </div>
           </div>
 
-          <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Sigilo</p>
-              <p className="mt-3 text-base font-semibold text-slate-950">Recebimento reservado</p>
-              <p className="mt-2 text-sm leading-7 text-slate-600">Informa\u00e7\u00f5es e evid\u00eancias devem circular com acesso restrito.</p>
-            </div>
-            <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Integridade</p>
-              <p className="mt-3 text-base font-semibold text-slate-950">An\u00e1lise imparcial</p>
-              <p className="mt-2 text-sm leading-7 text-slate-600">Cada caso precisa ser triado, registrado e tratado com crit\u00e9rio.</p>
-            </div>
-            <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Prote\u00e7\u00e3o</p>
-              <p className="mt-3 text-base font-semibold text-slate-950">Sem retalia\u00e7\u00e3o</p>
-              <p className="mt-2 text-sm leading-7 text-slate-600">Relatos de boa-f\u00e9 devem ser acolhidos com seriedade e prote\u00e7\u00e3o.</p>
-            </div>
-          </div>
         </div>
       </section>
     </>
@@ -424,7 +455,7 @@ export default function EthicsChannelLanding({
                     {content.foundationPillars.map((pillar, index) => (
                       <article key={pillar.label} className={`p-7 lg:p-8 ${index < content.foundationPillars.length - 1 ? "border-b border-slate-200 md:border-b-0 md:border-r" : ""}`}>
                         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">{pillar.label}</p>
-                        <p className="mt-4 text-base leading-8 text-slate-700">{pillar.text}</p>
+                        <p className="mt-4 text-base leading-8 text-slate-700">{summarizeFoundationText(pillar.label, pillar.text)}</p>
                       </article>
                     ))}
                   </div>
