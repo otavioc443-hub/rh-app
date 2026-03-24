@@ -360,10 +360,11 @@ export default function EthicsChannelLanding({
   activeTab?: TabKey;
 }) {
   const [reportConsentChecked, setReportConsentChecked] = useState(false);
-  const [reportStep, setReportStep] = useState<"intro" | "identity">("intro");
+  const [reportStep, setReportStep] = useState<"intro" | "identity" | "incident">("intro");
   const [reportIdentityChoice, setReportIdentityChoice] = useState<"identified" | "anonymous" | null>(null);
   const [followUpProtocol, setFollowUpProtocol] = useState("");
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
+  const [incidentFiles, setIncidentFiles] = useState<File[]>([]);
   const isSolida = config.companyName
     .toLowerCase()
     .normalize("NFD")
@@ -499,11 +500,11 @@ export default function EthicsChannelLanding({
         ) : null}
 
         {activeTab === "report" ? (
-          <div className="space-y-8">
+          <div className="space-y-6">
             {reportStep === "intro" ? (
-              <article className="rounded-[34px] border border-slate-200 bg-white p-8 shadow-sm">
-                <h2 className="text-5xl font-semibold tracking-tight text-slate-950">Realizar relato</h2>
-                <div className="mt-10 space-y-8 text-[1.05rem] leading-9 text-slate-800">
+              <article className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
+                <h2 className="text-4xl font-semibold tracking-tight text-slate-950">Realizar relato</h2>
+                <div className="mt-7 space-y-5 text-[0.98rem] leading-7 text-slate-800 [text-align:justify]">
                   <p>
                     As informações aqui registradas serão recebidas e tratadas pelo comitê interno responsável da Sólida,
                     assegurando sigilo, análise adequada de cada situação e tratamento sem conflitos de interesses.
@@ -515,7 +516,7 @@ export default function EthicsChannelLanding({
                   </p>
                   <div>
                     <h3 className="text-2xl font-semibold tracking-tight text-slate-950">Proteção de Dados</h3>
-                    <div className="mt-6 space-y-8">
+                    <div className="mt-4 space-y-5">
                       <p>
                         Todas as informações aqui registradas serão tratadas de forma confidencial pela própria Sólida,
                         por meio do comitê interno responsável pela recepção, análise e apuração dos relatos.
@@ -542,18 +543,18 @@ export default function EthicsChannelLanding({
                     </div>
                   </div>
                 </div>
-                <label className="mt-10 flex items-start gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
+                <label className="mt-7 flex items-start gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
                   <input
                     type="checkbox"
                     checked={reportConsentChecked}
                     onChange={(event) => setReportConsentChecked(event.target.checked)}
                     className="mt-1 h-5 w-5 rounded border-slate-300"
                   />
-                  <span className="text-lg font-semibold text-slate-950">
+                  <span className="text-base font-semibold text-slate-950">
                     Declaro que li e compreendi as informações acima, e desejo prosseguir com a manifestação.
                   </span>
                 </label>
-                <div className="mt-6 flex flex-wrap gap-3">
+                <div className="mt-5 flex flex-wrap gap-3">
                   <button
                     type="button"
                     disabled={!reportConsentChecked}
@@ -574,8 +575,8 @@ export default function EthicsChannelLanding({
             ) : null}
             {reportStep === "identity" ? (
               <div className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
-                <h2 className="text-5xl font-semibold tracking-tight text-slate-950">Realizar relato</h2>
-                <div className="mt-10 space-y-8 text-[1.05rem] leading-9 text-slate-900">
+                <h2 className="text-4xl font-semibold tracking-tight text-slate-950">Realizar relato</h2>
+                <div className="mt-7 space-y-5 text-[0.98rem] leading-7 text-slate-900 [text-align:justify]">
                   <p>Você pode escolher fazer um relato anônimo ou pode identificar-se.</p>
                   <p>
                     A opção identificada é voltada para os casos em que o relator se disponibiliza a ser contatado para esclarecimento de possíveis dúvidas sobre o relato fornecido.
@@ -586,7 +587,7 @@ export default function EthicsChannelLanding({
                   <p className="font-semibold">Você quer se identificar?</p>
                 </div>
 
-                <div className="mt-6 flex flex-wrap gap-4">
+                <div className="mt-5 flex flex-wrap gap-4">
                   <button
                     type="button"
                     onClick={() => setReportIdentityChoice("identified")}
@@ -624,7 +625,7 @@ export default function EthicsChannelLanding({
                 </div>
 
                 {reportIdentityChoice === "identified" ? (
-                  <div className="mt-8 space-y-5">
+                  <div className="mt-6 space-y-4">
                     <label className="block">
                       <span className="mb-2 block text-sm font-semibold text-slate-900">* Nome</span>
                       <input className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none" />
@@ -655,15 +656,19 @@ export default function EthicsChannelLanding({
                       <input className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none" />
                     </label>
                     <div className="pt-2">
-                      <ActionLink href={reportHref} primary>
+                      <button
+                        type="button"
+                        onClick={() => setReportStep("incident")}
+                        className="inline-flex items-center justify-center rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                      >
                         Continuar
-                      </ActionLink>
+                      </button>
                     </div>
                   </div>
                 ) : null}
 
                 {reportIdentityChoice === "anonymous" ? (
-                  <div className="mt-8 space-y-5">
+                  <div className="mt-6 space-y-4">
                     <label className="block">
                       <span className="mb-2 block text-sm font-semibold text-slate-900">E-mail anônimo opcional</span>
                       <input
@@ -676,13 +681,112 @@ export default function EthicsChannelLanding({
                       (ex.: anonimo123@gmail.com).
                     </p>
                     <div className="pt-2">
-                      <ActionLink href={reportHref} primary>
+                      <button
+                        type="button"
+                        onClick={() => setReportStep("incident")}
+                        className="inline-flex items-center justify-center rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                      >
                         Continuar
-                      </ActionLink>
+                      </button>
                     </div>
                   </div>
                 ) : null}
               </div>
+            ) : null}
+            {reportStep === "incident" ? (
+              <article className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
+                <h2 className="text-4xl font-semibold tracking-tight text-slate-950">Realizar relato</h2>
+                <div className="mt-7 space-y-4 text-[0.98rem] leading-7 text-slate-800 [text-align:justify]">
+                  <p>
+                    Por favor, descreva a situação que o motiva a procurar este canal. É importante que seu relato seja completo e detalhado.
+                    Não se esqueça de incluir na descrição:
+                  </p>
+                  <ul className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm leading-6 text-slate-700">
+                    <li>O quê (descrição da situação);</li>
+                    <li>Quem (nome das pessoas envolvidas, inclusive testemunhas);</li>
+                    <li>Quando (data em que aconteceu, acontece ou acontecerá a situação);</li>
+                    <li>Onde (local do ocorrido);</li>
+                    <li>Por que (a causa ou motivo);</li>
+                    <li>Quanto (se for possível medir);</li>
+                    <li>Provas (se elas existem e onde podem ser encontradas).</li>
+                  </ul>
+                  <p>
+                    Para acompanhar o andamento de seu relato, você receberá um número de protocolo que lhe será fornecido após o registro do relato.
+                  </p>
+                  <p>Agradecemos sua iniciativa e confiança.</p>
+                </div>
+
+                <div className="mt-8 space-y-5">
+                  <h3 className="text-2xl font-semibold tracking-tight text-slate-950">Dados do incidente</h3>
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-semibold text-slate-900">* Tipo do relato</span>
+                    <select className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none">
+                      <option value="">Selecione</option>
+                      <option value="assedio">Assédio</option>
+                      <option value="fraude">Fraude</option>
+                      <option value="conduta">Conduta inadequada</option>
+                      <option value="conflito">Conflito de interesses</option>
+                      <option value="outro">Outro</option>
+                    </select>
+                  </label>
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-semibold text-slate-900">* Local do ocorrido</span>
+                    <input className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none" />
+                  </label>
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-semibold text-slate-900">* Descrição</span>
+                    <textarea
+                      rows={8}
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none"
+                    />
+                  </label>
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-5 py-5">
+                    <p className="text-sm leading-6 text-slate-700">
+                      Se você quiser anexar arquivos como fotos e documentos, adicione-os aqui. O tamanho máximo do conjunto de arquivos é de 100 MB.
+                    </p>
+                    <div className="mt-4">
+                      <label className="inline-flex cursor-pointer items-center justify-center rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100">
+                        Anexar arquivo
+                        <input
+                          type="file"
+                          multiple
+                          className="hidden"
+                          onChange={(event) => setIncidentFiles(Array.from(event.target.files ?? []))}
+                        />
+                      </label>
+                    </div>
+                    {incidentFiles.length ? (
+                      <ul className="mt-4 space-y-2 text-sm text-slate-600">
+                        {incidentFiles.map((file) => (
+                          <li key={`${file.name}-${file.size}`}>{file.name}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="mt-8 flex flex-wrap gap-3">
+                  {reportHref !== "#" ? (
+                    <ActionLink href={reportHref} primary>
+                      Gravar
+                    </ActionLink>
+                  ) : (
+                    <button
+                      type="button"
+                      className="inline-flex items-center justify-center rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+                    >
+                      Gravar
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setReportStep("identity")}
+                    className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </article>
             ) : null}
           </div>
         ) : null}
