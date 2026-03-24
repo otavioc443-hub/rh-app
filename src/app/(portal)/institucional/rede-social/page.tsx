@@ -3884,17 +3884,27 @@ export default function InternalSocialPage() {
                               </div>
                             </div>
                           ) : null}
-                          {(commentAttachments[post.id] ?? []).length ? (
-                            <div className="grid gap-3 sm:grid-cols-2">
-                              {(commentAttachments[post.id] ?? []).map((attachment, index) => (
-                                <div key={`${attachment.url}-${index}`} className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-2">
-                                  {attachment.type === "image" ? (
-                                    <Image src={attachment.url} alt={attachment.label} width={640} height={360} unoptimized className="h-28 w-full rounded-xl object-cover" />
-                                  ) : attachment.type === "video" ? (
-                                    <video src={attachment.url} controls className="h-28 w-full rounded-xl bg-slate-950 object-cover" />
-                                  ) : null}
-                                  <div className="mt-2 flex items-center justify-between gap-2 text-xs">
-                                    <span className="truncate font-semibold text-slate-600">{attachment.label}</span>
+                        <div className="flex gap-2">
+                          <div className="flex-1 rounded-2xl border border-slate-200 bg-white px-3 py-2">
+                            {(commentAttachments[post.id] ?? []).length ? (
+                              <div className="mb-3 flex flex-wrap gap-2">
+                                {(commentAttachments[post.id] ?? []).map((attachment, index) => (
+                                  <div
+                                    key={`${attachment.url}-${index}`}
+                                    className="relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-2"
+                                  >
+                                    {attachment.type === "image" ? (
+                                      <Image
+                                        src={attachment.url}
+                                        alt={attachment.label}
+                                        width={160}
+                                        height={160}
+                                        unoptimized
+                                        className="h-full w-full rounded-xl object-contain"
+                                      />
+                                    ) : attachment.type === "video" ? (
+                                      <video src={attachment.url} controls className="h-full w-full rounded-xl bg-slate-950 object-contain" />
+                                    ) : null}
                                     <button
                                       type="button"
                                       onClick={() =>
@@ -3903,17 +3913,16 @@ export default function InternalSocialPage() {
                                           [post.id]: (prev[post.id] ?? []).filter((_, currentIndex) => currentIndex !== index),
                                         }))
                                       }
-                                      className="font-semibold text-rose-600 hover:text-rose-700"
+                                      className="absolute right-1.5 top-1.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/95 text-xs font-bold text-rose-600 shadow-sm hover:bg-white"
+                                      aria-label={`Remover ${attachment.label}`}
+                                      title="Remover"
                                     >
-                                      Remover
+                                      ×
                                     </button>
                                   </div>
-                                </div>
-                              ))}
-                            </div>
-                          ) : null}
-                        <div className="flex gap-2">
-                          <div className="flex-1 rounded-2xl border border-slate-200 bg-white px-3 py-2">
+                                ))}
+                              </div>
+                            ) : null}
                             <div className="mb-1.5 flex flex-wrap items-center justify-end gap-1.5 text-xs font-semibold text-slate-400">
                               <button
                                 type="button"
