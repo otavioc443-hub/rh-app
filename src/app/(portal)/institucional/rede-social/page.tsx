@@ -3818,30 +3818,70 @@ export default function InternalSocialPage() {
                             </div>
                           ) : null}
                           {showCommentStickerPickerForPostId === post.id ? (
-                            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                              {PULSE_STICKERS.map((sticker) => (
+                            <div className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+                              <div className="mb-3 flex items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-semibold text-slate-900">Figurinhas</p>
+                                  <p className="text-xs text-slate-500">Role para ver mais ou adicione uma nova.</p>
+                                </div>
                                 <button
-                                  key={sticker.id}
                                   type="button"
-                                  onClick={() =>
-                                    setCommentAttachments((prev) => ({
-                                      ...prev,
-                                      [post.id]: [
-                                        ...(prev[post.id] ?? []),
-                                        {
-                                          type: "image",
-                                          url: sticker.url,
-                                          label: sticker.label,
-                                        },
-                                      ],
-                                    }))
-                                  }
-                                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 text-left hover:bg-slate-50"
+                                  onClick={() => {
+                                    setActiveCommentUploadPostId(post.id);
+                                    commentFileInputRef.current?.click();
+                                  }}
+                                  className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-lg font-semibold text-slate-600 hover:bg-slate-100"
+                                  aria-label="Adicionar nova figurinha"
+                                  title="Adicionar nova figurinha"
                                 >
-                                  <Image src={sticker.url} alt={sticker.label} width={320} height={180} unoptimized className="h-24 w-full rounded-xl object-cover" />
-                                  <p className="mt-2 text-xs font-semibold text-slate-600">{sticker.label}</p>
+                                  +
                                 </button>
-                              ))}
+                              </div>
+                              <div className="flex gap-3 overflow-x-auto pb-2 pr-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setActiveCommentUploadPostId(post.id);
+                                    commentFileInputRef.current?.click();
+                                  }}
+                                  className="flex h-28 w-28 shrink-0 items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-center text-sm font-semibold text-slate-500 hover:bg-slate-100"
+                                  aria-label="Adicionar outra figurinha"
+                                  title="Adicionar outra figurinha"
+                                >
+                                  <span className="text-3xl leading-none">+</span>
+                                </button>
+                                {PULSE_STICKERS.map((sticker) => (
+                                  <button
+                                    key={sticker.id}
+                                    type="button"
+                                    onClick={() =>
+                                      setCommentAttachments((prev) => ({
+                                        ...prev,
+                                        [post.id]: [
+                                          ...(prev[post.id] ?? []),
+                                          {
+                                            type: "image",
+                                            url: sticker.url,
+                                            label: sticker.label,
+                                          },
+                                        ],
+                                      }))
+                                    }
+                                    className="h-28 w-28 shrink-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-slate-100"
+                                    aria-label={`Adicionar figurinha ${sticker.label}`}
+                                    title={sticker.label}
+                                  >
+                                    <Image
+                                      src={sticker.url}
+                                      alt={sticker.label}
+                                      width={320}
+                                      height={320}
+                                      unoptimized
+                                      className="h-full w-full object-cover"
+                                    />
+                                  </button>
+                                ))}
+                              </div>
                             </div>
                           ) : null}
                           {(commentAttachments[post.id] ?? []).length ? (
