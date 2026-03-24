@@ -13,9 +13,9 @@ import NotificationBell from "@/components/portal/NotificationBell";
 import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 import { isRouteHidden } from "@/lib/featureVisibility";
 
-type Role = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "financeiro" | "pd" | "admin";
+type Role = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "financeiro" | "pd" | "admin" | "compliance";
 
-const ROLE_SET = new Set<Role>(["colaborador", "coordenador", "gestor", "diretoria", "rh", "financeiro", "pd", "admin"]);
+const ROLE_SET = new Set<Role>(["colaborador", "coordenador", "gestor", "diretoria", "rh", "financeiro", "pd", "admin", "compliance"]);
 function coerceRole(v: unknown): Role | null {
   if (!v) return null;
   const raw = String(v).trim().toLowerCase();

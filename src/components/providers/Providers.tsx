@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from "
 import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 import { supabase } from "../../lib/supabaseClient"; // <- use relativo pra nÃ£o depender do "@"
 
-type Role = "user" | "rh" | "admin";
+type Role = "user" | "rh" | "admin" | "compliance";
 
 type AuthState = {
   loading: boolean;

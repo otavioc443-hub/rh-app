@@ -38,7 +38,7 @@ import { forceClientLogout } from "@/lib/supabaseClient";
 import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 import { isRouteHidden } from "@/lib/featureVisibility";
 
-type Role = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "financeiro" | "pd" | "admin";
+type Role = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "financeiro" | "pd" | "admin" | "compliance";
 
 type NavChild = { label: string; icon?: LucideIcon; href: string; exact?: boolean; roles?: Role[] };
 type NavItem = {
@@ -93,13 +93,13 @@ export default function Sidebar({
         label: "Home",
         icon: Home,
         href: "/home",
-        roles: ["colaborador", "coordenador", "gestor", "diretoria", "rh", "financeiro", "pd", "admin"],
+        roles: ["colaborador", "coordenador", "gestor", "diretoria", "rh", "financeiro", "pd", "admin", "compliance"],
       },
 
       {
         label: "Institucional",
         icon: Building2,
-        roles: ["colaborador", "coordenador", "gestor", "diretoria", "rh", "financeiro", "pd", "admin"],
+        roles: ["colaborador", "coordenador", "gestor", "diretoria", "rh", "financeiro", "pd", "admin", "compliance"],
         children: [
           { label: "Visão Geral", icon: LayoutDashboard, href: "/institucional", exact: true },
           { label: "PulseHub", icon: MessageSquareText, href: "/institucional/rede-social" },
@@ -110,7 +110,7 @@ export default function Sidebar({
       {
         label: "Meu perfil",
         icon: UserRound,
-        roles: ["colaborador", "coordenador", "gestor", "rh", "admin"],
+        roles: ["colaborador", "coordenador", "gestor", "rh", "admin", "compliance"],
         children: [
           { label: "Meus dados", icon: UserRound, href: "/meu-perfil/meus-dados" },
           { label: "Chamados", icon: ClipboardList, href: "/meu-perfil/chamados" },
@@ -128,7 +128,7 @@ export default function Sidebar({
       {
         label: "Agenda",
         icon: Calendar,
-        roles: ["colaborador", "coordenador", "gestor", "rh", "admin"],
+        roles: ["colaborador", "coordenador", "gestor", "rh", "admin", "compliance"],
         children: [
           { label: "Aniversariantes", icon: Cake, href: "/agenda/aniversariantes" },
           { label: "Agenda institucional", icon: CalendarClock, href: "/agenda/agenda-institucional" },
@@ -182,7 +182,7 @@ export default function Sidebar({
         icon: Target,
         href: "/metas",
         exact: true,
-        roles: ["colaborador", "coordenador", "gestor", "rh", "financeiro", "pd", "admin"],
+        roles: ["colaborador", "coordenador", "gestor", "rh", "financeiro", "pd", "admin", "compliance"],
       },
 
       {
@@ -245,17 +245,17 @@ export default function Sidebar({
       {
         label: "Admin",
         icon: Shield,
-        roles: ["admin"],
+        roles: ["admin", "rh", "compliance"],
         children: [
-          { label: "Painel Admin", icon: LayoutDashboard, href: "/admin", exact: true },
-          { label: "Cadastro de empresas", icon: Building2, href: "/admin/empresas" },
-          { label: "Canal de ética", icon: FileCheck2, href: "/admin/canal-de-etica" },
-          { label: "Configuração SLA", icon: CalendarClock, href: "/admin/sla" },
-          { label: "Notificações", icon: MessageSquareText, href: "/admin/notificacoes" },
-          { label: "Visibilidade", icon: Layers, href: "/admin/funcionalidades" },
-          { label: "Limpeza de dados", icon: Trash2, href: "/admin/limpeza-dados" },
-          { label: "Sessões", icon: MonitorCheck, href: "/admin/sessoes" },
-          { label: "Permissões", icon: UserCog, href: "/admin/permissoes" },
+          { label: "Painel Admin", icon: LayoutDashboard, href: "/admin", exact: true, roles: ["admin"] },
+          { label: "Cadastro de empresas", icon: Building2, href: "/admin/empresas", roles: ["admin"] },
+          { label: "Canal de ética", icon: FileCheck2, href: "/admin/canal-de-etica", roles: ["admin", "rh", "compliance"] },
+          { label: "Configuração SLA", icon: CalendarClock, href: "/admin/sla", roles: ["admin"] },
+          { label: "Notificações", icon: MessageSquareText, href: "/admin/notificacoes", roles: ["admin"] },
+          { label: "Visibilidade", icon: Layers, href: "/admin/funcionalidades", roles: ["admin"] },
+          { label: "Limpeza de dados", icon: Trash2, href: "/admin/limpeza-dados", roles: ["admin"] },
+          { label: "Sessões", icon: MonitorCheck, href: "/admin/sessoes", roles: ["admin", "rh"] },
+          { label: "Permissões", icon: UserCog, href: "/admin/permissoes", roles: ["admin", "rh"] },
         ],
       },
     ],

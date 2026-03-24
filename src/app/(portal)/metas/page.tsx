@@ -5,7 +5,7 @@ import { RefreshCcw, Target } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserRole } from "@/hooks/useUserRole";
 
-type Role = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "financeiro" | "pd" | "admin";
+type Role = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "financeiro" | "pd" | "admin" | "compliance";
 type GoalStatus = "draft" | "active" | "in_progress" | "completed" | "blocked" | "cancelled";
 type GoalPriority = "low" | "medium" | "high" | "critical";
 
@@ -75,6 +75,7 @@ const TARGETS_BY_ROLE: Partial<Record<Role, Role[]>> = {
   gestor: ["coordenador"],
   diretoria: ["gestor", "rh", "financeiro"],
   admin: ["financeiro", "admin", "rh", "gestor"],
+  compliance: [],
 };
 
 function roleLabel(role: Role) {
@@ -83,6 +84,7 @@ function roleLabel(role: Role) {
   if (role === "gestor") return "Gestor";
   if (role === "rh") return "RH";
   if (role === "financeiro") return "Financeiro";
+  if (role === "compliance") return "Compliance";
   return "Diretoria";
 }
 

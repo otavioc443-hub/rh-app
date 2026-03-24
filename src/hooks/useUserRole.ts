@@ -4,11 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { forceClientLogout } from "@/lib/supabaseClient";
 
-type Role = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "financeiro" | "pd" | "admin";
+type Role = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "financeiro" | "pd" | "admin" | "compliance";
 type ProfileRow = { role: Role | null; active: boolean | null };
 type CurrentRoleResult = string | null;
 
-const ROLE_SET = new Set<Role>(["colaborador", "coordenador", "gestor", "diretoria", "rh", "financeiro", "pd", "admin"]);
+const ROLE_SET = new Set<Role>(["colaborador", "coordenador", "gestor", "diretoria", "rh", "financeiro", "pd", "admin", "compliance"]);
 
 function coerceRole(v: unknown): Role | null {
   if (!v) return null;
@@ -158,7 +158,7 @@ export function useUserRole() {
 
         // Se vier role null, já avisa
         if (!cached.role) {
-          setError("Seu perfil está sem role. Defina role = colaborador/coordenador/gestor/diretoria/rh/financeiro/pd/admin.");
+          setError("Seu perfil está sem role. Defina role = colaborador/coordenador/gestor/diretoria/rh/financeiro/pd/admin/compliance.");
         }
       } catch (e: unknown) {
         if (isJwtExpiredError(e)) {
@@ -200,9 +200,10 @@ export function useUserRole() {
 
   const isAdmin = active && role === "admin";
   const isRH = active && (role === "rh" || role === "admin");
+  const isCompliance = active && (role === "compliance" || role === "admin");
   const isGestor = active && role === "gestor";
   const isFinanceiro = active && (role === "financeiro" || role === "admin");
 
-  return { loading, role, active, isAdmin, isRH, isGestor, isFinanceiro, error };
+  return { loading, role, active, isAdmin, isRH, isCompliance, isGestor, isFinanceiro, error };
 }
 

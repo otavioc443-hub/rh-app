@@ -12,7 +12,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     if (loading) return;
 
-    const allowed = active && role === "admin";
+    const allowed = active && (role === "admin" || role === "rh" || role === "compliance");
     if (!allowed) router.replace("/unauthorized");
   }, [loading, active, role, router]);
 
