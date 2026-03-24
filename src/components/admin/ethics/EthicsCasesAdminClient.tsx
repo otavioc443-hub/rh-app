@@ -164,21 +164,21 @@ export function EthicsCasesAdminClient({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6 overflow-x-hidden">
       <section className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-[0_18px_36px_-28px_rgba(15,23,42,0.35)]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="flex items-start gap-4">
+        <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+          <div className="flex min-w-0 items-start gap-4">
             <div className="grid h-14 w-14 place-items-center rounded-3xl bg-slate-950 text-white">
               <ShieldCheck size={24} />
             </div>
-            <div>
+            <div className="min-w-0">
               <h1 className="text-3xl font-semibold tracking-tight text-slate-950">Canal de Ética</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
                 Gerencie denúncias, acompanhe tratativas e registre atualizações com rastreabilidade.
               </p>
             </div>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          <div className="max-w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 xl:max-w-[340px]">
             Perfis com acesso: <span className="font-semibold text-slate-900">admin, rh e compliance</span>
           </div>
         </div>

@@ -34,7 +34,7 @@ function SortButton({
   onSort: (key: EthicsCasesSortKey) => void;
 }) {
   return (
-    <button type="button" onClick={() => onSort(sortKey)} className="inline-flex items-center gap-2 text-left text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+    <button type="button" onClick={() => onSort(sortKey)} className="inline-flex items-center gap-1 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
       <span>{label}</span>
       <ArrowDownUp size={12} className={current.key === sortKey ? "text-slate-900" : "text-slate-300"} />
     </button>
@@ -44,42 +44,44 @@ function SortButton({
 export function EthicsCasesTable({ cases, page, pageCount, sort, onSort, onPageChange, onView }: EthicsCasesTableProps) {
   return (
     <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_14px_32px_-24px_rgba(15,23,42,0.28)]">
-      <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-slate-200">
+      <div className="min-w-0">
+        <table className="w-full table-fixed divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
-              <th className="px-4 py-3 text-left"><SortButton label="Protocolo" sortKey="protocol" current={sort} onSort={onSort} /></th>
-              <th className="px-4 py-3 text-left"><SortButton label="Data de abertura" sortKey="created_at" current={sort} onSort={onSort} /></th>
-              <th className="px-4 py-3 text-left"><SortButton label="Assunto" sortKey="subject" current={sort} onSort={onSort} /></th>
-              <th className="px-4 py-3 text-left"><SortButton label="Tipo" sortKey="category" current={sort} onSort={onSort} /></th>
-              <th className="px-4 py-3 text-left"><SortButton label="Status" sortKey="status" current={sort} onSort={onSort} /></th>
-              <th className="px-4 py-3 text-left"><SortButton label="Risco" sortKey="risk_level" current={sort} onSort={onSort} /></th>
-              <th className="px-4 py-3 text-left"><SortButton label="Origem" sortKey="origin" current={sort} onSort={onSort} /></th>
-              <th className="px-4 py-3 text-left"><SortButton label="Responsável" sortKey="assigned_to_name" current={sort} onSort={onSort} /></th>
-              <th className="px-4 py-3 text-left"><SortButton label="Última atualização" sortKey="last_update_at" current={sort} onSort={onSort} /></th>
-              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Ações</th>
+              <th className="w-[12%] px-3 py-3 text-left"><SortButton label="Protocolo" sortKey="protocol" current={sort} onSort={onSort} /></th>
+              <th className="w-[13%] px-3 py-3 text-left"><SortButton label="Abertura" sortKey="created_at" current={sort} onSort={onSort} /></th>
+              <th className="w-[28%] px-3 py-3 text-left"><SortButton label="Assunto" sortKey="subject" current={sort} onSort={onSort} /></th>
+              <th className="hidden w-[16%] px-3 py-3 text-left xl:table-cell"><SortButton label="Tipo" sortKey="category" current={sort} onSort={onSort} /></th>
+              <th className="w-[12%] px-3 py-3 text-left"><SortButton label="Status" sortKey="status" current={sort} onSort={onSort} /></th>
+              <th className="w-[10%] px-3 py-3 text-left"><SortButton label="Risco" sortKey="risk_level" current={sort} onSort={onSort} /></th>
+              <th className="hidden w-[11%] px-3 py-3 text-left lg:table-cell"><SortButton label="Responsável" sortKey="assigned_to_name" current={sort} onSort={onSort} /></th>
+              <th className="w-[9%] px-3 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {cases.map((item) => (
               <tr key={item.id} className="hover:bg-slate-50/70">
-                <td className="px-4 py-4 text-sm font-semibold text-slate-900">{item.protocol}</td>
-                <td className="px-4 py-4 text-sm text-slate-600">{formatDateTime(item.created_at)}</td>
-                <td className="px-4 py-4 text-sm text-slate-800">{item.subject}</td>
-                <td className="px-4 py-4 text-sm text-slate-600">{item.category}</td>
-                <td className="px-4 py-4 text-sm"><EthicsStatusBadge status={item.status} /></td>
-                <td className="px-4 py-4 text-sm"><EthicsRiskBadge risk={item.risk_level} /></td>
-                <td className="px-4 py-4 text-sm text-slate-600">{item.is_anonymous ? "Anônima" : "Identificada"}</td>
-                <td className="px-4 py-4 text-sm text-slate-600">{item.assigned_to_name ?? "Não atribuído"}</td>
-                <td className="px-4 py-4 text-sm text-slate-600">{formatDateTime(item.last_update_at)}</td>
-                <td className="px-4 py-4 text-right">
+                <td className="truncate px-3 py-4 text-sm font-semibold text-slate-900">{item.protocol}</td>
+                <td className="px-3 py-4 text-sm text-slate-600">{formatDateTime(item.created_at)}</td>
+                <td className="px-3 py-4 text-sm text-slate-800">
+                  <span className="block truncate">{item.subject}</span>
+                </td>
+                <td className="hidden px-3 py-4 text-sm text-slate-600 xl:table-cell">
+                  <span className="block truncate">{item.category}</span>
+                </td>
+                <td className="px-3 py-4 text-sm"><EthicsStatusBadge status={item.status} /></td>
+                <td className="px-3 py-4 text-sm"><EthicsRiskBadge risk={item.risk_level} /></td>
+                <td className="hidden px-3 py-4 text-sm text-slate-600 lg:table-cell">
+                  <span className="block truncate">{item.assigned_to_name ?? "Não atribuído"}</span>
+                </td>
+                <td className="px-3 py-4 text-right">
                   <button
                     type="button"
                     onClick={() => onView(item)}
-                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                    className="inline-flex items-center gap-1 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
                   >
                     <Eye size={16} />
-                    Detalhes
+                    <span className="hidden 2xl:inline">Detalhes</span>
                   </button>
                 </td>
               </tr>
