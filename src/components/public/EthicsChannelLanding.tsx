@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   ArrowRight,
   Building2,
+  ChevronDown,
   FileWarning,
   SearchCheck,
   ShieldCheck,
@@ -362,6 +363,7 @@ export default function EthicsChannelLanding({
   const [reportStep, setReportStep] = useState<"intro" | "identity">("intro");
   const [reportIdentityChoice, setReportIdentityChoice] = useState<"identified" | "anonymous" | null>(null);
   const [followUpProtocol, setFollowUpProtocol] = useState("");
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
   const isSolida = config.companyName
     .toLowerCase()
     .normalize("NFD")
@@ -747,15 +749,29 @@ export default function EthicsChannelLanding({
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Perguntas frequentes</p>
               <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Dúvidas comuns antes de registrar um caso.</h2>
               <div className="mt-8 grid gap-4">
-                {faq.map((item) => (
-                  <article key={item.question} className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
-                    <div className="flex items-start gap-4">
-                      <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-2xl text-white" style={{ backgroundColor: "var(--ethics-soft)" }}><FileWarning size={18} /></div>
-                      <div>
-                        <h3 className="text-base font-semibold text-slate-950">{item.question}</h3>
-                        <p className="mt-3 text-sm leading-7 text-slate-600">{item.answer}</p>
+                {faq.map((item, index) => (
+                  <article key={item.question} className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50">
+                    <button
+                      type="button"
+                      onClick={() => setOpenFaqIndex((current) => (current === index ? null : index))}
+                      className="flex w-full items-center gap-4 px-5 py-5 text-left"
+                    >
+                      <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white" style={{ backgroundColor: "var(--ethics-soft)" }}>
+                        <FileWarning size={18} />
                       </div>
-                    </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-base font-semibold text-slate-950">{item.question}</h3>
+                      </div>
+                      <ChevronDown
+                        size={18}
+                        className={`shrink-0 text-slate-500 transition ${openFaqIndex === index ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                    {openFaqIndex === index ? (
+                      <div className="border-t border-slate-200 px-5 pb-5 pt-4">
+                        <p className="pl-14 text-sm leading-7 text-slate-600">{item.answer}</p>
+                      </div>
+                    ) : null}
                   </article>
                 ))}
               </div>
