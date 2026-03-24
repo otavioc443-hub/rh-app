@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ArrowRight, Building2, Search } from "lucide-react";
-import { useRouter } from "next/navigation";
 
 type EthicsCompanyCard = {
   id: string;
@@ -29,27 +28,7 @@ export default function EthicsCompanySelector({
 }: {
   companies: EthicsCompanyCard[];
 }) {
-  const router = useRouter();
   const [query, setQuery] = useState("");
-  const [selectedState, setSelectedState] = useState("");
-  const [selectedCity, setSelectedCity] = useState("");
-
-  const stateOptions = useMemo(
-    () =>
-      Array.from(new Set(companies.map((item) => String(item.estado ?? "").trim()).filter(Boolean))).sort((a, b) =>
-        a.localeCompare(b, "pt-BR")
-      ),
-    [companies]
-  );
-
-  const cityOptions = useMemo(() => {
-    const scope = selectedState
-      ? companies.filter((item) => String(item.estado ?? "").trim() === selectedState)
-      : companies;
-    return Array.from(new Set(scope.map((item) => String(item.cidade ?? "").trim()).filter(Boolean))).sort((a, b) =>
-      a.localeCompare(b, "pt-BR")
-    );
-  }, [companies, selectedState]);
 
   const filteredCompanies = useMemo(() => {
     const term = normalizeText(query);
@@ -61,20 +40,15 @@ export default function EthicsCompanySelector({
       .filter((company) => {
         const companyState = String(company.estado ?? "").trim();
         const companyCity = String(company.cidade ?? "").trim();
-        if (selectedState && companyState !== selectedState) return false;
-        if (selectedCity && companyCity !== selectedCity) return false;
         if (!term) return true;
         return [company.name, companyCity, companyState].some((value) => normalizeText(value).includes(term));
       });
-  }, [companies, query, selectedCity, selectedState]);
-
-  const directOptions = filteredCompanies
-    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  }, [companies, query]);
 
   return (
     <section className="mx-auto max-w-6xl px-6 py-10 lg:px-10 lg:py-12">
       <div className="mb-6 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr),220px,220px,220px]">
+        <div className="grid gap-3">
           <label className="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
             <Search size={16} className="text-slate-400" />
             <input
@@ -84,52 +58,6 @@ export default function EthicsCompanySelector({
               className="w-full bg-transparent outline-none placeholder:text-slate-400"
             />
           </label>
-
-          <select
-            value={selectedState}
-            onChange={(e) => {
-              setSelectedState(e.target.value);
-              setSelectedCity("");
-            }}
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none"
-          >
-            <option value="">Escolha um estado</option>
-            {stateOptions.map((state) => (
-              <option key={state} value={state}>
-                {state}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={selectedCity}
-            onChange={(e) => setSelectedCity(e.target.value)}
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none"
-          >
-            <option value="">Escolha uma cidade</option>
-            {cityOptions.map((city) => (
-              <option key={city} value={city}>
-                {city}
-              </option>
-            ))}
-          </select>
-
-          <select
-            defaultValue=""
-            onChange={(e) => {
-              const next = e.target.value;
-              if (!next) return;
-              router.push(`/canal-de-etica/${next}`);
-            }}
-            className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none"
-          >
-            <option value="">Acesso rapido</option>
-            {directOptions.map((company) => (
-              <option key={company.id} value={company.slug}>
-                {company.cidade ? `${company.name} - ${company.cidade}` : company.name}
-              </option>
-            ))}
-          </select>
         </div>
       </div>
 
