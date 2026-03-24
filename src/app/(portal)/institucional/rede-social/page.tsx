@@ -319,18 +319,18 @@ const EMOJI_GROUPS: EmojiGroup[] = [
 ];
 
 const PULSE_STICKERS: PulseSticker[] = [
-  { id: "time", label: "Time entregando", url: "/pulsehub-stickers/time-entregando.svg" },
-  { id: "cafe", label: "Cafe e foco", url: "/pulsehub-stickers/cafe-foco.svg" },
-  { id: "bim", label: "BIM aprovado", url: "/pulsehub-stickers/bim-aprovado.svg" },
-  { id: "checkpoint", label: "Checkpoint concluido", url: "/pulsehub-stickers/checkpoint.svg" },
-  { id: "calculando", label: "Modo calculando", url: "/pulsehub-stickers/calculando.svg" },
-  { id: "celebra", label: "Entrega aprovada", url: "/pulsehub-stickers/celebra.svg" },
-  { id: "dancinha", label: "Dancinha do ok", url: "/pulsehub-stickers/dancinha.svg" },
-  { id: "eita", label: "Eita", url: "/pulsehub-stickers/eita.svg" },
-  { id: "forca", label: "Forca total", url: "/pulsehub-stickers/forca-total.svg" },
-  { id: "gatinho", label: "Oi, time", url: "/pulsehub-stickers/gatinho-oi.svg" },
-  { id: "sem-palavras", label: "Sem palavras", url: "/pulsehub-stickers/sem-palavras.svg" },
-  { id: "vitoria", label: "Vitoria do dia", url: "/pulsehub-stickers/vitoria.svg" },
+  { id: "time", label: "Time entregando", url: "/pulsehub-stickers/time-entregando.webp" },
+  { id: "cafe", label: "Cafe e foco", url: "/pulsehub-stickers/cafe-foco.webp" },
+  { id: "bim", label: "BIM aprovado", url: "/pulsehub-stickers/bim-aprovado.webp" },
+  { id: "checkpoint", label: "Checkpoint concluido", url: "/pulsehub-stickers/checkpoint.webp" },
+  { id: "calculando", label: "Modo calculando", url: "/pulsehub-stickers/calculando.webp" },
+  { id: "celebra", label: "Entrega aprovada", url: "/pulsehub-stickers/celebra.webp" },
+  { id: "dancinha", label: "Dancinha do ok", url: "/pulsehub-stickers/dancinha.webp" },
+  { id: "eita", label: "Eita", url: "/pulsehub-stickers/eita.webp" },
+  { id: "forca", label: "Forca total", url: "/pulsehub-stickers/forca-total.webp" },
+  { id: "gatinho", label: "Oi, time", url: "/pulsehub-stickers/gatinho-oi.webp" },
+  { id: "sem-palavras", label: "Sem palavras", url: "/pulsehub-stickers/sem-palavras.webp" },
+  { id: "vitoria", label: "Vitoria do dia", url: "/pulsehub-stickers/vitoria.webp" },
 ];
 const REACTION_EMOJIS = ["👍", "❤️", "🎉", "👏", "🔥", "🚀"] as const;
 const MIGRATION = "supabase/sql/2026-03-03_create_internal_social_network_tables.sql";
