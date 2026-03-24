@@ -896,6 +896,7 @@ export default function InternalSocialPage() {
   const [projectNotes, setProjectNotes] = useState<Record<string, string>>({});
   const [composerExpanded, setComposerExpanded] = useState(false);
   const [showComposerEmojiPicker, setShowComposerEmojiPicker] = useState(false);
+  const [showComposerOptionsMenu, setShowComposerOptionsMenu] = useState(false);
   const [activeTab, setActiveTab] = useState<"inicio" | "network" | "communities" | "projects" | "game" | "messages">("inicio");
   const [messageFilter, setMessageFilter] = useState<"all" | "online" | "with_history">("all");
   const [messageSearch, setMessageSearch] = useState("");
@@ -3926,9 +3927,10 @@ export default function InternalSocialPage() {
                             <div className="mb-1.5 flex flex-wrap items-center justify-end gap-1.5 text-xs font-semibold text-slate-400">
                               <button
                                 type="button"
-                                onClick={() =>
-                                  setShowCommentEmojiPickerForPostId((current) => (current === post.id ? "" : post.id))
-                                }
+                                onClick={() => {
+                                  setShowCommentStickerPickerForPostId("");
+                                  setShowCommentEmojiPickerForPostId((current) => (current === post.id ? "" : post.id));
+                                }}
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-sm text-slate-500 hover:bg-slate-50"
                                 aria-label="Adicionar emoji"
                                 title="Emoji"
@@ -3937,9 +3939,10 @@ export default function InternalSocialPage() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() =>
-                                  setShowCommentStickerPickerForPostId((current) => (current === post.id ? "" : post.id))
-                                }
+                                onClick={() => {
+                                  setShowCommentEmojiPickerForPostId("");
+                                  setShowCommentStickerPickerForPostId((current) => (current === post.id ? "" : post.id));
+                                }}
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 text-sm text-slate-500 hover:bg-slate-50"
                                 aria-label="Adicionar figurinha"
                                 title="Figurinhas"
@@ -5223,75 +5226,129 @@ export default function InternalSocialPage() {
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setComposerExpanded(false)}
-                className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
-                aria-label="Fechar criação de publicação"
-              >
-                <span className="text-2xl leading-none">×</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowComposerOptionsMenu((prev) => !prev)}
+                    className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                    aria-label="Abrir opções da publicação"
+                    title="Opções da publicação"
+                  >
+                    <span className="text-2xl leading-none">⋯</span>
+                  </button>
+                  {showComposerOptionsMenu ? (
+                    <div className="absolute right-0 top-[calc(100%+0.5rem)] z-20 w-[22rem] rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_24px_70px_-32px_rgba(15,23,42,0.38)]">
+                      <div className="space-y-3">
+                        <div>
+                          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Escopo</p>
+                          <select
+                            value={scopeType}
+                            onChange={(event) => {
+                              const raw = event.target.value;
+                              const next = raw === "project" ? "project" : raw === "group" ? "group" : "company";
+                              setScopeType(next);
+                              if (next !== "project") setProjectId("");
+                              if (next !== "group") setGroupId("");
+                            }}
+                            className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900"
+                          >
+                            <option value="company">Toda a empresa</option>
+                            <option value="project">Equipe de projeto</option>
+                            <option value="group">Comunidade</option>
+                          </select>
+                        </div>
+                        {scopeType === "project" ? (
+                          <div>
+                            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Projeto</p>
+                            <select
+                              value={projectId}
+                              onChange={(event) => setProjectId(event.target.value)}
+                              className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900"
+                            >
+                              <option value="">Selecione o projeto</option>
+                              {projects.map((project) => (
+                                <option key={project.id} value={project.id}>
+                                  {project.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : null}
+                        {scopeType === "group" ? (
+                          <div>
+                            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Comunidade</p>
+                            <select
+                              value={groupId}
+                              onChange={(event) => setGroupId(event.target.value)}
+                              className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900"
+                            >
+                              <option value="">Selecione a comunidade</option>
+                              {groups
+                                .filter((item) => joinedGroupIds.has(item.id))
+                                .map((group) => (
+                                  <option key={group.id} value={group.id}>
+                                    {group.name}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                        ) : null}
+                        {canPublishOfficial ? (
+                          <div>
+                            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Tipo</p>
+                            <select
+                              value={postType}
+                              onChange={(event) => setPostType((event.target.value as PostType) || "social")}
+                              className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900"
+                            >
+                              <option value="social">Post social</option>
+                              <option value="announcement">Comunicado oficial</option>
+                              <option value="campaign">Campanha interna</option>
+                              <option value="event">Evento</option>
+                              <option value="recognition">Reconhecimento</option>
+                            </select>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setComposerExpanded(false);
+                    setShowComposerOptionsMenu(false);
+                  }}
+                  className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                  aria-label="Fechar criação de publicação"
+                >
+                  <span className="text-2xl leading-none">×</span>
+                </button>
+              </div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5">
               <div className="space-y-4 pb-2">
-              <div className={`grid gap-3 ${canPublishOfficial ? "md:grid-cols-[1fr,1fr,1fr,1fr]" : "md:grid-cols-[1fr,1fr,1fr]"}`}>
-                <select
-                  value={scopeType}
-                  onChange={(event) => {
-                    const raw = event.target.value;
-                    const next = raw === "project" ? "project" : raw === "group" ? "group" : "company";
-                    setScopeType(next);
-                    if (next !== "project") setProjectId("");
-                    if (next !== "group") setGroupId("");
-                  }}
-                  className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 shadow-[0_8px_22px_-20px_rgba(15,23,42,0.4)]"
-                >
-                  <option value="company">Toda a empresa</option>
-                  <option value="project">Equipe de projeto</option>
-                  <option value="group">Comunidade</option>
-                </select>
-                <select
-                  value={projectId}
-                  onChange={(event) => setProjectId(event.target.value)}
-                  disabled={scopeType !== "project"}
-                  className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 shadow-[0_8px_22px_-20px_rgba(15,23,42,0.4)] disabled:bg-slate-100"
-                >
-                  <option value="">Selecione o projeto</option>
-                  {projects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={groupId}
-                  onChange={(event) => setGroupId(event.target.value)}
-                  disabled={scopeType !== "group"}
-                  className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 shadow-[0_8px_22px_-20px_rgba(15,23,42,0.4)] disabled:bg-slate-100"
-                >
-                  <option value="">Selecione a comunidade</option>
-                  {groups
-                    .filter((item) => joinedGroupIds.has(item.id))
-                    .map((group) => (
-                      <option key={group.id} value={group.id}>
-                        {group.name}
-                      </option>
-                    ))}
-                </select>
-                {canPublishOfficial ? (
-                  <select
-                    value={postType}
-                    onChange={(event) => setPostType((event.target.value as PostType) || "social")}
-                    className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 shadow-[0_8px_22px_-20px_rgba(15,23,42,0.4)]"
-                  >
-                    <option value="social">Post social</option>
-                    <option value="announcement">Comunicado oficial</option>
-                    <option value="campaign">Campanha interna</option>
-                    <option value="event">Evento</option>
-                    <option value="recognition">Reconhecimento</option>
-                  </select>
-                ) : null}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700">
+                  {scopeType === "project"
+                    ? `Projeto: ${projects.find((item) => item.id === projectId)?.name ?? "Selecione um projeto"}`
+                    : scopeType === "group"
+                      ? `Comunidade: ${groups.find((item) => item.id === groupId)?.name ?? "Selecione uma comunidade"}`
+                      : "Toda a empresa"}
+                </span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700">
+                  {postType === "announcement"
+                    ? "Comunicado oficial"
+                    : postType === "campaign"
+                      ? "Campanha interna"
+                      : postType === "event"
+                        ? "Evento"
+                        : postType === "recognition"
+                          ? "Reconhecimento"
+                          : "Post social"}
+                </span>
               </div>
 
               <textarea
@@ -5420,13 +5477,14 @@ export default function InternalSocialPage() {
 
             <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-slate-100 bg-white px-5 py-4">
               <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setComposerExpanded(false);
-                    setShowComposerEmojiPicker(false);
-                    setShowComposerMentionPicker(false);
-                    setMentionQuery("");
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setComposerExpanded(false);
+                      setShowComposerOptionsMenu(false);
+                      setShowComposerEmojiPicker(false);
+                      setShowComposerMentionPicker(false);
+                      setMentionQuery("");
                     setPostText("");
                     setPostType("social");
                     setDraftAttachments([]);
