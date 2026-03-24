@@ -1,3 +1,5 @@
+import { normalizeDisplayText } from "@/lib/textEncoding";
+
 export type EthicsFoundationPillar = {
   label: string;
   text: string;
@@ -33,8 +35,39 @@ function normalizeValue(value: string | null | undefined) {
 }
 
 function clean(value: string | null | undefined) {
-  const text = String(value ?? "").trim();
-  return text ? text : null;
+  return normalizeDisplayText(value);
+}
+
+function normalizePillars(pillars: EthicsFoundationPillar[]) {
+  return pillars.map((pillar) => ({
+    label: normalizeDisplayText(pillar.label) ?? "",
+    text: normalizeDisplayText(pillar.text) ?? "",
+  }));
+}
+
+function normalizeManagedContent(content: EthicsManagedContent): EthicsManagedContent {
+  return {
+    ...content,
+    heroTitle: normalizeDisplayText(content.heroTitle),
+    heroSubtitle: normalizeDisplayText(content.heroSubtitle),
+    heading: normalizeDisplayText(content.heading),
+    intro: normalizeDisplayText(content.intro),
+    heroImageUrl: normalizeDisplayText(content.heroImageUrl),
+    reportUrl: normalizeDisplayText(content.reportUrl),
+    followUpUrl: normalizeDisplayText(content.followUpUrl),
+    contactEmail: normalizeDisplayText(content.contactEmail),
+    contactPhone: normalizeDisplayText(content.contactPhone),
+    codeOfEthicsUrl: normalizeDisplayText(content.codeOfEthicsUrl),
+    dataProtectionUrl: normalizeDisplayText(content.dataProtectionUrl),
+    codeSummary: normalizeDisplayText(content.codeSummary),
+    dataProtectionSummary: normalizeDisplayText(content.dataProtectionSummary),
+    principles: content.principles.map((item) => normalizeDisplayText(item) ?? "").filter(Boolean),
+    foundationTitle: normalizeDisplayText(content.foundationTitle),
+    foundationSubtitle: normalizeDisplayText(content.foundationSubtitle),
+    foundationPillars: normalizePillars(content.foundationPillars),
+    steerTitle: normalizeDisplayText(content.steerTitle),
+    steerBody: normalizeDisplayText(content.steerBody),
+  };
 }
 
 export function getDefaultEthicsManagedContent(companyName: string, companyKey?: string | null): EthicsManagedContent {
@@ -42,7 +75,7 @@ export function getDefaultEthicsManagedContent(companyName: string, companyKey?:
   const isSolida = normalized.includes("solida");
 
   if (isSolida) {
-    return {
+    return normalizeManagedContent({
       heroTitle: "Bem-vindo ao Canal de Ética da Sólida",
       heroSubtitle:
         "Um ambiente seguro, imparcial e protegido para comunicar condutas que possam violar o Código de Ética e Conduta, as políticas internas ou a legislação aplicável.",
@@ -86,10 +119,10 @@ export function getDefaultEthicsManagedContent(companyName: string, companyKey?:
       steerTitle: "STEER",
       steerBody:
         "Na cultura STEER da Sólida, S representa Sustentabilidade com soluções de engenharia que consideram eficiência, responsabilidade ambiental e impacto positivo na sociedade; T representa Tecnologia com inovação, BIM e ferramentas digitais para projetar soluções mais inteligentes, precisas e eficientes; E representa Excelência na busca pelos mais altos padrões técnicos em projetos, processos e entregas; E representa Ética e Integridade, com transparência, responsabilidade profissional e respeito em todas as relações; e R representa Rumo ao Futuro, conduzindo a evolução da engenharia com projetos que impulsionam inovação, eficiência e desenvolvimento.",
-    };
+    });
   }
 
-  return {
+  return normalizeManagedContent({
     heroTitle: `Canal de Ética de ${companyName}`,
     heroSubtitle:
       "Um espaço preparado para receber relatos com seriedade, sigilo, imparcialidade e orientação para apuração.",
@@ -118,7 +151,7 @@ export function getDefaultEthicsManagedContent(companyName: string, companyKey?:
     foundationPillars: [],
     steerTitle: null,
     steerBody: null,
-  };
+  });
 }
 
 export function mergeEthicsManagedContent(
@@ -142,12 +175,15 @@ export function mergeEthicsManagedContent(
     dataProtectionUrl: clean(overrides.dataProtectionUrl) ?? base.dataProtectionUrl,
     codeSummary: clean(overrides.codeSummary) ?? base.codeSummary,
     dataProtectionSummary: clean(overrides.dataProtectionSummary) ?? base.dataProtectionSummary,
-    principles: Array.isArray(overrides.principles) && overrides.principles.length ? overrides.principles : base.principles,
+    principles:
+      Array.isArray(overrides.principles) && overrides.principles.length
+        ? overrides.principles.map((item) => normalizeDisplayText(item) ?? "").filter(Boolean)
+        : base.principles,
     foundationTitle: clean(overrides.foundationTitle) ?? base.foundationTitle,
     foundationSubtitle: clean(overrides.foundationSubtitle) ?? base.foundationSubtitle,
     foundationPillars:
       Array.isArray(overrides.foundationPillars) && overrides.foundationPillars.length
-        ? overrides.foundationPillars
+        ? normalizePillars(overrides.foundationPillars)
         : base.foundationPillars,
     steerTitle: clean(overrides.steerTitle) ?? base.steerTitle,
     steerBody: clean(overrides.steerBody) ?? base.steerBody,

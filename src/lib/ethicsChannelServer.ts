@@ -11,6 +11,7 @@ import {
   type EthicsFoundationPillar,
   type EthicsManagedContent,
 } from "@/lib/ethicsChannelDefaults";
+import { normalizeDisplayText } from "@/lib/textEncoding";
 
 type CompanyRow = {
   id: string;
@@ -45,13 +46,12 @@ type EthicsContentRow = {
 };
 
 function clean(value: string | null | undefined) {
-  const text = String(value ?? "").trim();
-  return text ? text : null;
+  return normalizeDisplayText(value);
 }
 
 function coerceStringArray(value: unknown) {
   if (!Array.isArray(value)) return [];
-  return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+  return value.map((item) => normalizeDisplayText(String(item ?? ""))).filter(Boolean) as string[];
 }
 
 function coercePillars(value: unknown): EthicsFoundationPillar[] {
@@ -60,8 +60,8 @@ function coercePillars(value: unknown): EthicsFoundationPillar[] {
     .map((item) => {
       if (!item || typeof item !== "object") return null;
       const row = item as Record<string, unknown>;
-      const label = String(row.label ?? "").trim();
-      const text = String(row.text ?? "").trim();
+      const label = normalizeDisplayText(String(row.label ?? "")) ?? "";
+      const text = normalizeDisplayText(String(row.text ?? "")) ?? "";
       if (!label && !text) return null;
       return { label, text };
     })

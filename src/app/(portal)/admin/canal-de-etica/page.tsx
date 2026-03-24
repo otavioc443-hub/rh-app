@@ -12,6 +12,7 @@ import {
   type EthicsManagedContent,
 } from "@/lib/ethicsChannelDefaults";
 import { supabase } from "@/lib/supabaseClient";
+import { normalizeDisplayText } from "@/lib/textEncoding";
 
 type Company = {
   id: string;
@@ -46,12 +47,12 @@ type ContentRow = {
 };
 
 function clean(value: string | null | undefined) {
-  return String(value ?? "").trim();
+  return normalizeDisplayText(value) ?? "";
 }
 
 function coerceStringArray(value: unknown) {
   if (!Array.isArray(value)) return [];
-  return value.map((item) => String(item ?? "").trim()).filter(Boolean);
+  return value.map((item) => normalizeDisplayText(String(item ?? "")) ?? "").filter(Boolean);
 }
 
 function coercePillars(value: unknown): EthicsFoundationPillar[] {
@@ -60,8 +61,8 @@ function coercePillars(value: unknown): EthicsFoundationPillar[] {
     .map((item) => {
       if (!item || typeof item !== "object") return null;
       const row = item as Record<string, unknown>;
-      const label = String(row.label ?? "").trim();
-      const text = String(row.text ?? "").trim();
+      const label = normalizeDisplayText(String(row.label ?? "")) ?? "";
+      const text = normalizeDisplayText(String(row.text ?? "")) ?? "";
       if (!label && !text) return null;
       return { label, text };
     })

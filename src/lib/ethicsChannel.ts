@@ -1,3 +1,5 @@
+import { normalizeDisplayText } from "@/lib/textEncoding";
+
 export type EthicsChannelConfig = {
   key: string;
   companyName: string;
@@ -23,8 +25,7 @@ type RawEthicsChannelConfig = Partial<EthicsChannelConfig> & {
 };
 
 function clean(value: string | undefined | null) {
-  const text = String(value ?? "").trim();
-  return text ? text : null;
+  return normalizeDisplayText(value);
 }
 
 function normalizeKey(value: string | null | undefined) {

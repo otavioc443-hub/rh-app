@@ -358,7 +358,8 @@ export default function EthicsChannelLanding({
   content: EthicsManagedContent;
   activeTab?: TabKey;
 }) {
-  const [reportConsentOpen, setReportConsentOpen] = useState(false);
+  const [reportConsentChecked, setReportConsentChecked] = useState(false);
+  const [reportStep, setReportStep] = useState<"intro" | "identity">("intro");
   const [reportIdentityChoice, setReportIdentityChoice] = useState<"identified" | "anonymous" | null>(null);
   const [followUpProtocol, setFollowUpProtocol] = useState("");
   const isSolida = config.companyName
@@ -390,7 +391,7 @@ export default function EthicsChannelLanding({
             </span>
             <span>
               <span className="block text-2xl font-semibold tracking-tight text-slate-950">{config.companyName}</span>
-              <span className="block text-sm text-slate-500">Canal de \u00c9tica e Integridade</span>
+              <span className="block text-sm text-slate-500">Canal de Ética e Integridade</span>
             </span>
           </Link>
 
@@ -468,27 +469,27 @@ export default function EthicsChannelLanding({
               </div>
             ) : null}
             <section className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Orienta\u00e7\u00f5es do canal</p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Canal exclusivo para comunica\u00e7\u00e3o segura e tratamento respons\u00e1vel de relatos.</h2>
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Orientações do canal</p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Canal exclusivo para comunicação segura e tratamento responsável de relatos.</h2>
               <div className="mt-5 space-y-4 text-base leading-8 text-slate-600">
                 <p>
-                  Este \u00e9 um canal exclusivo da {config.companyName} para comunica\u00e7\u00e3o segura e, quando aplic\u00e1vel ao fluxo adotado,
-                  tamb\u00e9m reservada, de condutas consideradas anti\u00e9ticas ou que contrariem princ\u00edpios \u00e9ticos, padr\u00f5es de conduta
-                  e a legisla\u00e7\u00e3o vigente.
+                  Este é um canal exclusivo da {config.companyName} para comunicação segura e, quando aplicável ao fluxo adotado,
+                  também reservada, de condutas consideradas antiéticas ou que contrariem princípios éticos, padrões de conduta
+                  e a legislação vigente.
                 </p>
                 <p>
-                  As informa\u00e7\u00f5es registradas neste espa\u00e7o devem receber tratamento adequado, com sigilo, crit\u00e9rio e rastreabilidade,
-                  evitando conflitos de interesse e preservando a seriedade de cada situa\u00e7\u00e3o reportada.
+                  As informações registradas neste espaço devem receber tratamento adequado, com sigilo, critério e rastreabilidade,
+                  evitando conflitos de interesse e preservando a seriedade de cada situação reportada.
                 </p>
                 {config.contactPhone ? (
                   <p>
-                    Se preferir, seu relato tamb\u00e9m pode ser feito pelo telefone {config.contactPhone}, conforme a disponibilidade e
+                    Se preferir, seu relato também pode ser feito pelo telefone {config.contactPhone}, conforme a disponibilidade e
                     o fluxo de atendimento configurado pela empresa.
                   </p>
                 ) : null}
                 <p>
-                  Aten\u00e7\u00e3o: se a sua demanda estiver relacionada a atendimento ao cliente, suporte operacional, produtos ou servi\u00e7os,
-                  utilize o canal oficial de atendimento da empresa para que a solicita\u00e7\u00e3o siga para o fluxo correto.
+                  Atenção: se a sua demanda estiver relacionada a atendimento ao cliente, suporte operacional, produtos ou serviços,
+                  utilize o canal oficial de atendimento da empresa para que a solicitação siga para o fluxo correto.
                 </p>
               </div>
             </section>
@@ -497,79 +498,91 @@ export default function EthicsChannelLanding({
 
         {activeTab === "report" ? (
           <div className="space-y-8">
-            <SectionTitle
-              kicker="Realizar relato"
-              title="Registre um relato com sigilo, clareza e tratamento respons\u00e1vel."
-              body="Use este canal para comunicar situa\u00e7\u00f5es que contrariem o C\u00f3digo de \u00c9tica, as pol\u00edticas internas, a legisla\u00e7\u00e3o ou a integridade do ambiente de trabalho."
-            />
-            <div className="flex flex-wrap gap-3">
-              <ActionLink href={reportHref} primary>Abrir canal de relato<ArrowRight size={16} /></ActionLink>
-              {config.contactEmail ? <ActionLink href={`mailto:${config.contactEmail}`}>Falar por e-mail</ActionLink> : null}
-            </div>
-            <article className="rounded-[34px] border border-slate-200 bg-white p-8 shadow-sm">
-              <h2 className="text-5xl font-semibold tracking-tight text-[#635bff]">Realizar relato</h2>
-              <div className="mt-10 space-y-8 text-[1.05rem] leading-9 text-slate-800">
-                <p>
-                  As informa\u00e7\u00f5es aqui registradas ser\u00e3o recebidas por uma empresa independente e especializada, a Aliant,
-                  assegurando sigilo absoluto e o tratamento adequado de cada situa\u00e7\u00e3o pela alta administra\u00e7\u00e3o da S\u00f3lida,
-                  sem conflitos de interesses.
-                </p>
-                <p>
-                  A veracidade das informa\u00e7\u00f5es providas \u00e9 uma responsabilidade do relator. Todas as informa\u00e7\u00f5es ser\u00e3o
-                  verificadas durante o processo de averigua\u00e7\u00e3o, e as a\u00e7\u00f5es decorrentes ser\u00e3o tomadas a crit\u00e9rio exclusivo
-                  da S\u00f3lida.
-                </p>
-                <div>
-                  <h3 className="text-2xl font-semibold tracking-tight text-slate-950">Prote\u00e7\u00e3o de Dados</h3>
-                  <div className="mt-6 space-y-8">
-                    <p>
-                      Todas as informa\u00e7\u00f5es aqui registradas ser\u00e3o tratadas de forma confidencial por sua organiza\u00e7\u00e3o e pela
-                      Aliant, uma empresa independente e especializada na capta\u00e7\u00e3o e tratamento de den\u00fancias.
-                    </p>
-                    <p>
-                      A capta\u00e7\u00e3o dessas informa\u00e7\u00f5es tem por finalidade a apura\u00e7\u00e3o de poss\u00edveis condutas consideradas
-                      anti\u00e9ticas ou que violem os princ\u00edpios \u00e9ticos e padr\u00f5es de conduta e/ou a legisla\u00e7\u00e3o vigente.
-                    </p>
-                    <p>
-                      Todos os relatos ser\u00e3o armazenados pelo tempo necess\u00e1rio para realiza\u00e7\u00e3o do processo de apura\u00e7\u00e3o e
-                      delibera\u00e7\u00e3o sobre o caso, observando-se as exig\u00eancias legais espec\u00edficas. Al\u00e9m disso, informa\u00e7\u00f5es
-                      consolidadas poder\u00e3o ser utilizadas para gera\u00e7\u00e3o de estat\u00edsticas da opera\u00e7\u00e3o, sem exposi\u00e7\u00e3o de nomes
-                      envolvidos ou dados pessoais.
-                    </p>
-                    <p>
-                      Eventuais dados pessoais informados ser\u00e3o tratados conforme as normativas estabelecidas pela
-                      legisla\u00e7\u00e3o vigente no que diz respeito \u00e0 prote\u00e7\u00e3o de dados pessoais, observadas pela Aliant no
-                      processo de capta\u00e7\u00e3o e pela S\u00f3lida no processo de apura\u00e7\u00e3o dos relatos aqui registrados.
-                    </p>
-                    <p>
-                      Ao clicar em &quot;Concordo&quot; voc\u00ea indica ci\u00eancia e concord\u00e2ncia com o fornecimento de informa\u00e7\u00f5es
-                      que ser\u00e3o \u00fanica e exclusivamente utilizadas para esta finalidade.
-                    </p>
+            {reportStep === "intro" ? (
+              <article className="rounded-[34px] border border-slate-200 bg-white p-8 shadow-sm">
+                <h2 className="text-5xl font-semibold tracking-tight text-slate-950">Realizar relato</h2>
+                <div className="mt-10 space-y-8 text-[1.05rem] leading-9 text-slate-800">
+                  <p>
+                    As informações aqui registradas serão recebidas por uma empresa independente e especializada, a Aliant,
+                    assegurando sigilo absoluto e o tratamento adequado de cada situação pela alta administração da Sólida,
+                    sem conflitos de interesses.
+                  </p>
+                  <p>
+                    A veracidade das informações providas é uma responsabilidade do relator. Todas as informações serão
+                    verificadas durante o processo de averiguação, e as ações decorrentes serão tomadas a critério exclusivo
+                    da Sólida.
+                  </p>
+                  <div>
+                    <h3 className="text-2xl font-semibold tracking-tight text-slate-950">Proteção de Dados</h3>
+                    <div className="mt-6 space-y-8">
+                      <p>
+                        Todas as informações aqui registradas serão tratadas de forma confidencial por sua organização e pela
+                        Aliant, uma empresa independente e especializada na captação e tratamento de denúncias.
+                      </p>
+                      <p>
+                        A captação dessas informações tem por finalidade a apuração de possíveis condutas consideradas
+                        antiéticas ou que violem os princípios éticos e padrões de conduta e/ou a legislação vigente.
+                      </p>
+                      <p>
+                        Todos os relatos serão armazenados pelo tempo necessário para realização do processo de apuração e
+                        deliberação sobre o caso, observando-se as exigências legais específicas. Além disso, informações
+                        consolidadas poderão ser utilizadas para geração de estatísticas da operação, sem exposição de nomes
+                        envolvidos ou dados pessoais.
+                      </p>
+                      <p>
+                        Eventuais dados pessoais informados serão tratados conforme as normativas estabelecidas pela
+                        legislação vigente no que diz respeito à proteção de dados pessoais, observadas pela Aliant no
+                        processo de captação e pela Sólida no processo de apuração dos relatos aqui registrados.
+                      </p>
+                      <p>
+                        Ao clicar em &quot;Concordo&quot; você indica ciência e concordância com o fornecimento de informações
+                        que serão única e exclusivamente utilizadas para esta finalidade.
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setReportConsentOpen((prev) => !prev)}
-                className="mt-10 w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-left text-lg font-semibold text-slate-950 transition hover:bg-slate-100"
-              >
-                Declaro que li e compreendi as informa\u00e7\u00f5es acima, e desejo prosseguir com a manifesta\u00e7\u00e3o.
-              </button>
-            </article>
-            {reportConsentOpen ? (
+                <label className="mt-10 flex items-start gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
+                  <input
+                    type="checkbox"
+                    checked={reportConsentChecked}
+                    onChange={(event) => setReportConsentChecked(event.target.checked)}
+                    className="mt-1 h-5 w-5 rounded border-slate-300"
+                  />
+                  <span className="text-lg font-semibold text-slate-950">
+                    Declaro que li e compreendi as informações acima, e desejo prosseguir com a manifestação.
+                  </span>
+                </label>
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    disabled={!reportConsentChecked}
+                    onClick={() => {
+                      setReportStep("identity");
+                      setReportIdentityChoice(null);
+                    }}
+                    className={`inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-semibold transition ${
+                      reportConsentChecked
+                        ? "bg-slate-950 text-white hover:bg-slate-800"
+                        : "cursor-not-allowed bg-slate-200 text-slate-500"
+                    }`}
+                  >
+                    Continuar
+                  </button>
+                </div>
+              </article>
+            ) : null}
+            {reportStep === "identity" ? (
               <div className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Identifica\u00e7\u00e3o do relator</p>
-                <h3 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">Voc\u00ea pode escolher fazer um relato an\u00f4nimo ou identificar-se.</h3>
-                <div className="mt-5 space-y-4 text-sm leading-8 text-slate-600">
+                <h2 className="text-5xl font-semibold tracking-tight text-slate-950">Realizar relato</h2>
+                <div className="mt-10 space-y-8 text-[1.05rem] leading-9 text-slate-900">
+                  <p>Você pode escolher fazer um relato anônimo ou pode identificar-se.</p>
                   <p>
-                    A op\u00e7\u00e3o identificada \u00e9 voltada para os casos em que o relator se disponibiliza a ser contatado para esclarecimento
-                    de poss\u00edveis d\u00favidas sobre o relato fornecido.
+                    A opção identificada é voltada para os casos em que o relator se disponibiliza a ser contatado para esclarecimento de possíveis dúvidas sobre o relato fornecido.
                   </p>
                   <p>
-                    Relatos com identifica\u00e7\u00e3o s\u00e3o muito importantes, pois podem tornar a apura\u00e7\u00e3o mais efetiva. Este \u00e9 um canal
-                    seguro e confi\u00e1vel.
+                    Relatos com identificação são muito importantes, pois podem fazer com que a apuração seja mais efetiva. Lembramos que este é um canal seguro e confiável.
                   </p>
-                  <p className="font-semibold text-slate-900">Voc\u00ea quer se identificar?</p>
+                  <p className="font-semibold">Você quer se identificar?</p>
                 </div>
 
                 <div className="mt-6 flex flex-wrap gap-4">
@@ -593,7 +606,17 @@ export default function EthicsChannelLanding({
                         : "border border-slate-200 bg-white text-slate-900 shadow-sm hover:bg-slate-50"
                     }`}
                   >
-                    N\u00e3o
+                    Não
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReportStep("intro");
+                      setReportIdentityChoice(null);
+                    }}
+                    className="min-w-28 rounded-2xl border border-slate-200 bg-white px-8 py-4 text-base font-semibold text-slate-900 shadow-sm transition hover:bg-slate-50"
+                  >
+                    Voltar
                   </button>
                 </div>
 
@@ -604,10 +627,10 @@ export default function EthicsChannelLanding({
                       <input className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none" />
                     </label>
                     <label className="block">
-                      <span className="mb-2 block text-sm font-semibold text-slate-900">* Fun\u00e7\u00e3o ou sua rela\u00e7\u00e3o com a empresa</span>
+                      <span className="mb-2 block text-sm font-semibold text-slate-900">* Função ou sua relação com a empresa</span>
                       <input className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none" />
                     </label>
-                    <p className="text-sm font-medium text-orange-600">\u00c9 necess\u00e1rio preencher pelo menos um dos campos abaixo:</p>
+                    <p className="text-sm font-medium text-orange-600">É necessário preencher pelo menos um dos campos abaixo:</p>
                     <label className="block">
                       <span className="mb-2 block text-sm font-semibold text-slate-900">* E-mail</span>
                       <input
@@ -625,7 +648,7 @@ export default function EthicsChannelLanding({
                       <input className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none" />
                     </label>
                     <label className="block">
-                      <span className="mb-2 block text-sm font-semibold text-slate-900">* Voc\u00ea j\u00e1 denunciou esta situa\u00e7\u00e3o anteriormente?</span>
+                      <span className="mb-2 block text-sm font-semibold text-slate-900">* Você já denunciou esta situação anteriormente?</span>
                       <input className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none" />
                     </label>
                     <div className="pt-2">
@@ -639,14 +662,14 @@ export default function EthicsChannelLanding({
                 {reportIdentityChoice === "anonymous" ? (
                   <div className="mt-8 space-y-5">
                     <label className="block">
-                      <span className="mb-2 block text-sm font-semibold text-slate-900">E-mail an\u00f4nimo opcional</span>
+                      <span className="mb-2 block text-sm font-semibold text-slate-900">E-mail anônimo opcional</span>
                       <input
                         type="email"
                         className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none"
                       />
                     </label>
                     <p className="text-sm text-slate-700">
-                      *Se seu relato for an\u00f4nimo, utilize endere\u00e7o de e-mail que n\u00e3o permita a sua identifica\u00e7\u00e3o
+                      *Se seu relato for anônimo, utilize endereço de e-mail que não permita a sua identificação
                       (ex.: anonimo123@gmail.com).
                     </p>
                     <div className="pt-2">
@@ -663,9 +686,9 @@ export default function EthicsChannelLanding({
 
         {activeTab === "follow-up" ? (
           <section className="rounded-[34px] border border-slate-200 bg-white p-8 shadow-sm">
-            <h2 className="text-5xl font-semibold tracking-tight text-[#635bff]">Acompanhar relato</h2>
+            <h2 className="text-5xl font-semibold tracking-tight text-slate-950">Acompanhar relato</h2>
             <p className="mt-10 max-w-5xl text-[1.05rem] leading-8 text-slate-800">
-              Para acompanhar o andamento do seu relato, por favor digite o n\u00famero do seu protocolo no campo abaixo e clique no bot\u00e3o
+              Para acompanhar o andamento do seu relato, por favor digite o número do seu protocolo no campo abaixo e clique no botão
               &quot;Consultar protocolo&quot;.
             </p>
 
@@ -700,7 +723,7 @@ export default function EthicsChannelLanding({
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl text-white" style={{ backgroundColor: "var(--ethics-soft)" }}><ShieldCheck size={22} /></div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Prote\u00e7\u00e3o de dados</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Proteção de dados</p>
                   <h2 className="mt-1 text-2xl font-semibold tracking-tight text-slate-950">Sigilo e necessidade de conhecimento.</h2>
                 </div>
               </div>
@@ -711,13 +734,13 @@ export default function EthicsChannelLanding({
                 ))}
               </div>
               {config.dataProtectionUrl ? (
-                <div className="mt-6"><ActionLink href={config.dataProtectionUrl}>Ver pol\u00edtica de prote\u00e7\u00e3o de dados<ArrowRight size={16} /></ActionLink></div>
+                <div className="mt-6"><ActionLink href={config.dataProtectionUrl}>Ver política de proteção de dados<ArrowRight size={16} /></ActionLink></div>
               ) : null}
             </article>
 
             <article className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Perguntas frequentes</p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">D\u00favidas comuns antes de registrar um caso.</h2>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Dúvidas comuns antes de registrar um caso.</h2>
               <div className="mt-8 grid gap-4">
                 {faq.map((item) => (
                   <article key={item.question} className="rounded-[28px] border border-slate-200 bg-slate-50 p-5">
@@ -757,8 +780,8 @@ export default function EthicsChannelLanding({
       <footer className="bg-[#030712] text-white">
         <div className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-10 lg:flex-row lg:items-center lg:justify-between lg:px-10">
           <div className="max-w-3xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/55">Encaminhamento \u00e9tico</p>
-            <p className="mt-4 text-2xl font-semibold tracking-tight text-white lg:text-[2.15rem]">Se algo n\u00e3o parece correto, registre. O sil\u00eancio n\u00e3o protege a integridade.</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/55">Encaminhamento ético</p>
+            <p className="mt-4 text-2xl font-semibold tracking-tight text-white lg:text-[2.15rem]">Se algo não parece correto, registre. O silêncio não protege a integridade.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <a href={reportHref} target={reportHref.startsWith("http") ? "_blank" : undefined} rel={reportHref.startsWith("http") ? "noreferrer" : undefined} className="inline-flex items-center justify-center rounded-full px-7 py-4 text-base font-semibold text-white shadow-[0_18px_40px_-24px_rgba(153,164,26,0.95)] transition hover:brightness-105" style={{ backgroundColor: "var(--ethics-accent)" }}>Registrar agora</a>
