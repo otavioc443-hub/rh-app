@@ -409,7 +409,7 @@ export default function EthicsChannelLanding({
         </div>
       </header>
 
-      {activeTab === "home" ? <HomeHero config={config} content={content} /> : <InnerHero activeTab={activeTab} content={content} />}
+      {activeTab === "home" ? <HomeHero config={config} content={content} /> : null}
 
       <section className="mx-auto max-w-7xl px-6 pb-16 lg:px-10">
         {companyTabs.length > 1 ? (
@@ -505,9 +505,8 @@ export default function EthicsChannelLanding({
                 <h2 className="text-5xl font-semibold tracking-tight text-slate-950">Realizar relato</h2>
                 <div className="mt-10 space-y-8 text-[1.05rem] leading-9 text-slate-800">
                   <p>
-                    As informações aqui registradas serão recebidas por uma empresa independente e especializada, a Aliant,
-                    assegurando sigilo absoluto e o tratamento adequado de cada situação pela alta administração da Sólida,
-                    sem conflitos de interesses.
+                    As informações aqui registradas serão recebidas e tratadas pelo comitê interno responsável da Sólida,
+                    assegurando sigilo, análise adequada de cada situação e tratamento sem conflitos de interesses.
                   </p>
                   <p>
                     A veracidade das informações providas é uma responsabilidade do relator. Todas as informações serão
@@ -518,8 +517,8 @@ export default function EthicsChannelLanding({
                     <h3 className="text-2xl font-semibold tracking-tight text-slate-950">Proteção de Dados</h3>
                     <div className="mt-6 space-y-8">
                       <p>
-                        Todas as informações aqui registradas serão tratadas de forma confidencial por sua organização e pela
-                        Aliant, uma empresa independente e especializada na captação e tratamento de denúncias.
+                        Todas as informações aqui registradas serão tratadas de forma confidencial pela própria Sólida,
+                        por meio do comitê interno responsável pela recepção, análise e apuração dos relatos.
                       </p>
                       <p>
                         A captação dessas informações tem por finalidade a apuração de possíveis condutas consideradas
@@ -533,8 +532,8 @@ export default function EthicsChannelLanding({
                       </p>
                       <p>
                         Eventuais dados pessoais informados serão tratados conforme as normativas estabelecidas pela
-                        legislação vigente no que diz respeito à proteção de dados pessoais, observadas pela Aliant no
-                        processo de captação e pela Sólida no processo de apuração dos relatos aqui registrados.
+                        legislação vigente no que diz respeito à proteção de dados pessoais, observadas pela Sólida
+                        no processo de recepção e apuração dos relatos aqui registrados.
                       </p>
                       <p>
                         Ao clicar em &quot;Concordo&quot; você indica ciência e concordância com o fornecimento de informações
@@ -726,7 +725,7 @@ export default function EthicsChannelLanding({
 
         {activeTab === "data" ? (
           <div className="grid gap-6 xl:grid-cols-[0.95fr,1.05fr]">
-            <article className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
+            <article className="hidden rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
               <div className="flex items-center gap-3">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl text-white" style={{ backgroundColor: "var(--ethics-soft)" }}><ShieldCheck size={22} /></div>
                 <div>
