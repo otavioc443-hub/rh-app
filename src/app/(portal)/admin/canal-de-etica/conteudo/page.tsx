@@ -8,7 +8,7 @@ export default async function AdminEthicsContentPage() {
   if (!access.ok) redirect("/unauthorized");
 
   const ethicsCompanies = await getEthicsChannelCompanies();
-  const editableCompanies = ethicsCompanies.map((company) => ({ id: company.id, name: company.name }));
+  const editableCompanies = ethicsCompanies.map((company) => ({ id: company.id, name: company.name, slug: company.slug }));
   const initialEditorCompanyId = access.companyId ?? editableCompanies[0]?.id ?? null;
   const initialEditorData = initialEditorCompanyId ? await getEthicsManagedContentForCompanyId(initialEditorCompanyId) : null;
 

@@ -6,6 +6,7 @@ import {
   getDefaultEthicsChannelConfig,
   type EthicsChannelConfig,
 } from "@/lib/ethicsChannel";
+import { parseStorageRef } from "@/lib/lms/utils";
 import {
   getDefaultEthicsManagedContent,
   mergeEthicsManagedContent,
@@ -205,6 +206,29 @@ function mergeConfigWithContent(config: EthicsChannelConfig, content: EthicsMana
   };
 }
 
+async function resolveSignedEthicsUrl(value: string | null | undefined) {
+  const parsed = parseStorageRef(value);
+  if (!parsed) return value ?? null;
+  const { data, error } = await supabaseAdmin.storage.from(parsed.bucket).createSignedUrl(parsed.path, 60 * 60 * 6);
+  if (error || !data?.signedUrl) return null;
+  return data.signedUrl;
+}
+
+async function resolvePublicManagedContent(content: EthicsManagedContent): Promise<EthicsManagedContent> {
+  const [heroImageUrl, codeOfEthicsUrl, dataProtectionUrl] = await Promise.all([
+    resolveSignedEthicsUrl(content.heroImageUrl),
+    resolveSignedEthicsUrl(content.codeOfEthicsUrl),
+    resolveSignedEthicsUrl(content.dataProtectionUrl),
+  ]);
+
+  return {
+    ...content,
+    heroImageUrl: heroImageUrl ?? content.heroImageUrl,
+    codeOfEthicsUrl: codeOfEthicsUrl ?? content.codeOfEthicsUrl,
+    dataProtectionUrl: dataProtectionUrl ?? content.dataProtectionUrl,
+  };
+}
+
 export async function getEthicsChannelCompanies() {
   const [{ data: companiesData }, { data: contentsData }] = await Promise.all([
     supabaseAdmin.from("companies").select("id,name,logo_url,primary_color,cidade,estado").order("name", { ascending: true }),
@@ -264,7 +288,7 @@ export async function getEthicsChannelPageData(companyKey?: string | null) {
   const companyName = selectedCompany?.name ?? baseConfig.companyName;
   const defaultContent = getDefaultEthicsManagedContent(companyName, baseConfig.key);
   const dbContent = selectedCompany ? mapContentRow(contents.find((item) => item.company_id === selectedCompany.id)) : null;
-  const content = mergeEthicsManagedContent(defaultContent, dbContent);
+  const content = await resolvePublicManagedContent(mergeEthicsManagedContent(defaultContent, dbContent));
 
   const config = mergeConfigWithContent(
     {

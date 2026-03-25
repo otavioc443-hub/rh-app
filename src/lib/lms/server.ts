@@ -49,17 +49,24 @@ type ProfileMini = {
 type DepartmentMini = { id: string; name: string; company_id: string | null };
 type CompanyMini = { id: string; name: string | null };
 
+function normalizeEmailHandle(value: string) {
+  return value.trim().toLowerCase().replace(/[._\-\s]+/g, "");
+}
+
 function buildUserDisplayName(profile: { full_name?: string | null; email?: string | null }, collaboratorName?: string | null) {
   const byCollaborator = (collaboratorName ?? "").trim();
   if (byCollaborator) return byCollaborator;
 
   const byProfile = (profile.full_name ?? "").trim();
-  if (byProfile && !byProfile.includes("@")) return byProfile;
-
   const byEmail = (profile.email ?? "").trim();
+  const emailLocal = byEmail ? byEmail.split("@")[0] ?? "" : "";
+  const profileLooksLikeEmailHandle =
+    !!byProfile && !!emailLocal && normalizeEmailHandle(byProfile) === normalizeEmailHandle(emailLocal);
+
+  if (byProfile && !byProfile.includes("@") && !profileLooksLikeEmailHandle) return byProfile;
+
   if (byEmail) {
-    const local = byEmail.split("@")[0] ?? "";
-    return local
+    return emailLocal
       .split(/[._-]+/)
       .filter(Boolean)
       .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -391,9 +398,7 @@ export async function buildAssignmentSupportData(companyId: string | null): Prom
     companyId
       ? supabaseAdmin.from("profiles").select("id,full_name,email,company_id").eq("company_id", companyId).eq("active", true).order("full_name", { ascending: true })
       : supabaseAdmin.from("profiles").select("id,full_name,email,company_id").eq("active", true).order("full_name", { ascending: true }),
-    companyId
-      ? supabaseAdmin.from("colaboradores").select("user_id,nome").eq("company_id", companyId)
-      : supabaseAdmin.from("colaboradores").select("user_id,nome"),
+    supabaseAdmin.from("colaboradores").select("user_id,nome,email"),
     companyId
       ? supabaseAdmin.from("departments").select("id,name").eq("company_id", companyId).order("name", { ascending: true })
       : supabaseAdmin.from("departments").select("id,name").order("name", { ascending: true }),
@@ -404,15 +409,20 @@ export async function buildAssignmentSupportData(companyId: string | null): Prom
     getLmsLearningPathsAdminData(companyId),
   ]);
 
-  const collaboratorNames = new Map<string, string>();
-  for (const row of (collaboratorsRes.data ?? []) as Array<{ user_id: string | null; nome: string | null }>) {
-    if (row.user_id && row.nome) collaboratorNames.set(row.user_id, row.nome);
+  const collaboratorNamesByUserId = new Map<string, string>();
+  const collaboratorNamesByEmail = new Map<string, string>();
+  for (const row of (collaboratorsRes.data ?? []) as Array<{ user_id: string | null; nome: string | null; email?: string | null }>) {
+    if (row.user_id && row.nome) collaboratorNamesByUserId.set(row.user_id, row.nome);
+    if (row.email && row.nome) collaboratorNamesByEmail.set(row.email.trim().toLowerCase(), row.nome);
   }
 
   return {
     users: ((profilesRes.data ?? []) as Array<{ id: string; full_name: string | null; email: string | null }>).map((row) => ({
       id: row.id,
-      label: buildUserDisplayName(row, collaboratorNames.get(row.id)),
+      label: buildUserDisplayName(
+        row,
+        collaboratorNamesByUserId.get(row.id) ?? (row.email ? collaboratorNamesByEmail.get(row.email.trim().toLowerCase()) : undefined),
+      ),
     })),
     departments: ((departments.data ?? []) as Array<{ id: string; name: string }>).map((row) => ({ id: row.id, label: row.name })),
     companies: ((companies.data ?? []) as Array<{ id: string; name: string | null }>).map((row) => ({ id: row.id, label: row.name ?? row.id })),
