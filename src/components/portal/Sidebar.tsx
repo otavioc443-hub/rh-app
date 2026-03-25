@@ -32,6 +32,7 @@ import {
   Trash2,
   ChevronLeft,
   FileCheck2,
+  GraduationCap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { forceClientLogout } from "@/lib/supabaseClient";
@@ -183,6 +184,22 @@ export default function Sidebar({
         href: "/metas",
         exact: true,
         roles: ["colaborador", "coordenador", "gestor", "rh", "financeiro", "pd", "admin", "compliance"],
+      },
+
+      {
+        label: "Treinamentos",
+        icon: GraduationCap,
+        roles: ["colaborador", "coordenador", "gestor", "diretoria", "rh", "admin", "compliance"],
+        children: [
+          { label: "Visão geral", icon: LayoutDashboard, href: "/lms", exact: true },
+          { label: "Meus treinamentos", icon: GraduationCap, href: "/lms/meus-treinamentos" },
+          { label: "Gestão LMS", icon: Layers, href: "/rh/lms", roles: ["rh", "admin"] },
+          { label: "Cursos", icon: FolderOpen, href: "/rh/lms/cursos", roles: ["rh", "admin"] },
+          { label: "Trilhas", icon: Layers, href: "/rh/lms/trilhas", roles: ["rh", "admin"] },
+          { label: "Atribuições", icon: ClipboardList, href: "/rh/lms/atribuicoes", roles: ["rh", "admin"] },
+          { label: "Relatórios", icon: LineChart, href: "/rh/lms/relatorios", roles: ["rh", "admin"] },
+          { label: "Equipe", icon: Users, href: "/gestor/lms/equipe", roles: ["gestor", "admin"] },
+        ],
       },
 
       {

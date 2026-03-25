@@ -2,14 +2,17 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import {
   buildEthicsChannelSlug,
   findEthicsChannelConfig,
+  getEthicsChannelConfigs,
   getDefaultEthicsChannelConfig,
   type EthicsChannelConfig,
 } from "@/lib/ethicsChannel";
 import {
   getDefaultEthicsManagedContent,
   mergeEthicsManagedContent,
+  type EthicsFaqItem,
   type EthicsFoundationPillar,
   type EthicsManagedContent,
+  type EthicsManagedPageTexts,
 } from "@/lib/ethicsChannelDefaults";
 import { normalizeDisplayText } from "@/lib/textEncoding";
 
@@ -43,7 +46,47 @@ type EthicsContentRow = {
   foundation_pillars: unknown;
   steer_title: string | null;
   steer_body: string | null;
+  faq_items: unknown;
+  page_texts: unknown;
 };
+
+const ETHICS_CONTENT_SELECT = "*";
+
+function normalizeKey(value: string | null | undefined) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function normalizeLoose(value: string | null | undefined) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function resolveEnvConfigForCompany(company: CompanyRow) {
+  const directMatch = findEthicsChannelConfig(company.name) ?? findEthicsChannelConfig(company.id);
+  if (directMatch) return directMatch;
+
+  const companyName = normalizeLoose(company.name);
+  const availableConfigs = getEthicsChannelConfigs();
+
+  return (
+    availableConfigs.find((config) => {
+      const configName = normalizeLoose(config.companyName);
+      return Boolean(configName) && Boolean(companyName) && (companyName.includes(configName) || configName.includes(companyName));
+    }) ?? null
+  );
+}
 
 function clean(value: string | null | undefined) {
   return normalizeDisplayText(value);
@@ -68,6 +111,60 @@ function coercePillars(value: unknown): EthicsFoundationPillar[] {
     .filter(Boolean) as EthicsFoundationPillar[];
 }
 
+function coerceFaqItems(value: unknown): EthicsFaqItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const row = item as Record<string, unknown>;
+      const question = normalizeDisplayText(String(row.question ?? "")) ?? "";
+      const answer = normalizeDisplayText(String(row.answer ?? "")) ?? "";
+      if (!question || !answer) return null;
+      return { question, answer };
+    })
+    .filter(Boolean) as EthicsFaqItem[];
+}
+
+function coercePageTexts(value: unknown): EthicsManagedPageTexts | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const row = value as Record<string, unknown>;
+  const stringValue = (key: keyof EthicsManagedPageTexts) => clean(String(row[key] ?? ""));
+  const stringArrayValue = (key: keyof EthicsManagedPageTexts) =>
+    Array.isArray(row[key])
+      ? (row[key] as unknown[])
+          .map((item) => clean(String(item ?? "")))
+          .filter((item): item is string => Boolean(item))
+      : undefined;
+
+  return {
+    homeGuidanceTitle: stringValue("homeGuidanceTitle"),
+    homeGuidanceParagraphs: stringArrayValue("homeGuidanceParagraphs") ?? [],
+    reportHeroTitle: stringValue("reportHeroTitle"),
+    reportHeroBody: stringValue("reportHeroBody"),
+    reportHeroAsideTitle: stringValue("reportHeroAsideTitle"),
+    reportHeroAsideBody: stringValue("reportHeroAsideBody"),
+    reportIntroTitle: stringValue("reportIntroTitle"),
+    reportIntroParagraphs: stringArrayValue("reportIntroParagraphs") ?? [],
+    reportConsentLabel: stringValue("reportConsentLabel"),
+    reportIdentityTitle: stringValue("reportIdentityTitle"),
+    reportIdentityParagraphs: stringArrayValue("reportIdentityParagraphs") ?? [],
+    reportIdentityQuestion: stringValue("reportIdentityQuestion"),
+    reportIncidentTitle: stringValue("reportIncidentTitle"),
+    reportIncidentParagraphs: stringArrayValue("reportIncidentParagraphs") ?? [],
+    followUpHeroTitle: stringValue("followUpHeroTitle"),
+    followUpHeroBody: stringValue("followUpHeroBody"),
+    followUpHeroAsideTitle: stringValue("followUpHeroAsideTitle"),
+    followUpHeroAsideBody: stringValue("followUpHeroAsideBody"),
+    followUpTitle: stringValue("followUpTitle"),
+    followUpDescription: stringValue("followUpDescription"),
+    followUpPlaceholder: stringValue("followUpPlaceholder"),
+    dataFaqTitle: stringValue("dataFaqTitle"),
+    dataFaqSubtitle: stringValue("dataFaqSubtitle"),
+    codeHeroTitle: stringValue("codeHeroTitle"),
+    codeHeroBody: stringValue("codeHeroBody"),
+  };
+}
+
 function mapContentRow(row: EthicsContentRow | null | undefined): Partial<EthicsManagedContent> | null {
   if (!row) return null;
   return {
@@ -90,6 +187,8 @@ function mapContentRow(row: EthicsContentRow | null | undefined): Partial<Ethics
     foundationPillars: coercePillars(row.foundation_pillars),
     steerTitle: clean(row.steer_title),
     steerBody: clean(row.steer_body),
+    faqItems: coerceFaqItems(row.faq_items),
+    pageTexts: coercePageTexts(row.page_texts),
   };
 }
 
@@ -113,7 +212,7 @@ export async function getEthicsChannelCompanies() {
   ]);
 
   const companies = ((companiesData ?? []) as CompanyRow[]).map((company) => {
-    const envConfig = findEthicsChannelConfig(company.name) ?? findEthicsChannelConfig(company.id);
+    const envConfig = resolveEnvConfigForCompany(company);
     const hasContent = (contentsData ?? []).some((item) => item.company_id === company.id);
     return {
       ...company,
@@ -130,24 +229,35 @@ export async function getEthicsChannelPageData(companyKey?: string | null) {
     supabaseAdmin.from("companies").select("id,name,logo_url,primary_color,cidade,estado").order("name", { ascending: true }),
     supabaseAdmin
       .from("ethics_channel_content")
-      .select(
-        "company_id,hero_title,hero_subtitle,heading,intro,hero_image_url,report_url,follow_up_url,contact_email,contact_phone,code_of_ethics_url,data_protection_url,code_summary,data_protection_summary,principles,foundation_title,foundation_subtitle,foundation_pillars,steer_title,steer_body",
-      ),
+      .select(ETHICS_CONTENT_SELECT),
   ]);
 
   const companies = (companiesData ?? []) as CompanyRow[];
   const contents = (contentsData ?? []) as EthicsContentRow[];
   const wanted = buildEthicsChannelSlug(companyKey);
 
-  const selectedCompany =
+  let selectedCompany =
     companies.find((company) => {
-      const envConfig = findEthicsChannelConfig(company.name) ?? findEthicsChannelConfig(company.id);
+      const envConfig = resolveEnvConfigForCompany(company);
       const slug = buildEthicsChannelSlug(envConfig?.key ?? company.name);
       return slug === wanted || buildEthicsChannelSlug(company.id) === wanted || buildEthicsChannelSlug(company.name) === wanted;
     }) ?? null;
 
+  if (!selectedCompany && wanted) {
+    const envMatch = findEthicsChannelConfig(wanted);
+    if (envMatch) {
+      const envName = normalizeLoose(envMatch.companyName);
+      selectedCompany =
+        companies.find((company) => {
+          const companyName = normalizeLoose(company.name);
+          return Boolean(envName) && Boolean(companyName) && (companyName.includes(envName) || envName.includes(companyName));
+        }) ??
+        (companies.length === 1 ? companies[0] : null);
+    }
+  }
+
   const baseConfig =
-    (selectedCompany && (findEthicsChannelConfig(selectedCompany.name) ?? findEthicsChannelConfig(selectedCompany.id))) ??
+    (selectedCompany && resolveEnvConfigForCompany(selectedCompany)) ??
     (companyKey ? findEthicsChannelConfig(companyKey) : null) ??
     getDefaultEthicsChannelConfig();
 
@@ -168,7 +278,7 @@ export async function getEthicsChannelPageData(companyKey?: string | null) {
 
   const companyTabs = companies
     .map((company) => {
-      const envConfig = findEthicsChannelConfig(company.name) ?? findEthicsChannelConfig(company.id);
+      const envConfig = resolveEnvConfigForCompany(company);
       return {
         key: buildEthicsChannelSlug(envConfig?.key ?? company.name),
         companyId: company.id,
@@ -198,5 +308,35 @@ export async function getEthicsChannelCompanyByKey(companyKey?: string | null) {
     companyId: config.companyId,
     key: config.key,
     companyName: config.companyName,
+  };
+}
+
+export async function getEthicsManagedContentForCompanyId(companyId: string) {
+  const [{ data: companyRow }, { data: contentRow }] = await Promise.all([
+    supabaseAdmin
+      .from("companies")
+      .select("id,name,logo_url,primary_color,cidade,estado")
+      .eq("id", companyId)
+      .maybeSingle<CompanyRow>(),
+    supabaseAdmin
+      .from("ethics_channel_content")
+      .select(ETHICS_CONTENT_SELECT)
+      .eq("company_id", companyId)
+      .maybeSingle<EthicsContentRow>(),
+  ]);
+
+  if (!companyRow) return null;
+
+  const envConfig = resolveEnvConfigForCompany(companyRow);
+  const defaultContent = getDefaultEthicsManagedContent(companyRow.name, envConfig?.key ?? companyRow.name);
+  const mergedContent = mergeEthicsManagedContent(defaultContent, mapContentRow(contentRow));
+
+  return {
+    company: {
+      id: companyRow.id,
+      name: companyRow.name,
+      slug: buildEthicsChannelSlug(envConfig?.key ?? companyRow.name),
+    },
+    content: mergedContent,
   };
 }

@@ -26,6 +26,9 @@ function needsRH(pathname: string) {
 function needsOrganograma(pathname: string) {
   return pathname === "/institucional/organograma" || pathname.startsWith("/institucional/organograma/");
 }
+function needsGestorLms(pathname: string) {
+  return pathname === "/gestor/lms/equipe" || pathname.startsWith("/gestor/lms/equipe/");
+}
 
 function shouldSkipFeatureVisibility(pathname: string) {
   return pathname === "/unauthorized" || pathname === "/admin/funcionalidades";
@@ -73,7 +76,7 @@ export async function proxy(req: NextRequest) {
   }
 
   // ✅ checa role apenas quando necessário
-  if (needsRH(pathname) || needsAdmin(pathname) || needsDiretoria(pathname) || needsOrganograma(pathname)) {
+  if (needsRH(pathname) || needsAdmin(pathname) || needsDiretoria(pathname) || needsOrganograma(pathname) || needsGestorLms(pathname)) {
     const { data: prof, error } = await supabase
       .from("profiles")
       .select("role, active")
@@ -115,6 +118,12 @@ export async function proxy(req: NextRequest) {
     }
 
     if (needsOrganograma(pathname) && !(role === "gestor" || role === "financeiro" || role === "admin")) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/unauthorized";
+      return NextResponse.redirect(url);
+    }
+
+    if (needsGestorLms(pathname) && !(role === "gestor" || role === "admin")) {
       const url = req.nextUrl.clone();
       url.pathname = "/unauthorized";
       return NextResponse.redirect(url);

@@ -22,6 +22,8 @@ create table if not exists public.ethics_channel_content (
   foundation_pillars jsonb not null default '[]'::jsonb,
   steer_title text null,
   steer_body text null,
+  faq_items jsonb not null default '[]'::jsonb,
+  page_texts jsonb not null default '{}'::jsonb,
   updated_by uuid null references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

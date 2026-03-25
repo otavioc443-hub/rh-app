@@ -6,7 +6,6 @@ import {
   ArrowRight,
   Building2,
   ChevronDown,
-  FileWarning,
   SearchCheck,
   ShieldCheck,
 } from "lucide-react";
@@ -43,19 +42,22 @@ function formatDateTime(value: string) {
 function innerHeroContent(activeTab: Exclude<TabKey, "home">, content: EthicsManagedContent) {
   if (activeTab === "report") {
     return {
-      title: "Registre um relato com clareza e seguran\u00e7a.",
+      title: content.pageTexts.reportHeroTitle ?? "Registre um relato com clareza e segurança.",
       body:
-        "Use este espa\u00e7o para comunicar situa\u00e7\u00f5es que contrariem a \u00e9tica, a integridade, as pol\u00edticas internas ou a legisla\u00e7\u00e3o aplic\u00e1vel.",
-      asideTitle: "Diretriz principal",
-      asideBody: "Descreva o fato com objetividade, contexto e evid\u00eancias sempre que poss\u00edvel.",
+        content.pageTexts.reportHeroBody ??
+        "Use este espaço para comunicar situações que contrariem a ética, a integridade, as políticas internas ou a legislação aplicável.",
+      asideTitle: content.pageTexts.reportHeroAsideTitle ?? "Diretriz principal",
+      asideBody: content.pageTexts.reportHeroAsideBody ?? "Descreva o fato com objetividade, contexto e evidências sempre que possível.",
     };
   }
   if (activeTab === "follow-up") {
     return {
-      title: "Acompanhe um relato j\u00e1 registrado.",
-      body: "Consulte o andamento de um caso aberto utilizando o fluxo de acompanhamento disponibilizado pela empresa.",
-      asideTitle: "Diretriz principal",
-      asideBody: "Use o acompanhamento apenas para consultas relacionadas a um protocolo existente.",
+      title: content.pageTexts.followUpHeroTitle ?? "Acompanhe um relato já registrado.",
+      body:
+        content.pageTexts.followUpHeroBody ??
+        "Consulte o andamento de um caso aberto utilizando o fluxo de acompanhamento disponibilizado pela empresa.",
+      asideTitle: content.pageTexts.followUpHeroAsideTitle ?? "Diretriz principal",
+      asideBody: content.pageTexts.followUpHeroAsideBody ?? "Use o acompanhamento apenas para consultas relacionadas a um protocolo existente.",
     };
   }
   if (activeTab === "data") {
@@ -83,59 +85,6 @@ const guarantees = [
   "Triagem com crit\u00e9rio, registro formal e restri\u00e7\u00e3o de acesso.",
   "N\u00e3o toler\u00e2ncia \u00e0 retalia\u00e7\u00e3o contra relatos feitos de boa-f\u00e9.",
   "Encaminhamento para apura\u00e7\u00e3o com rastreabilidade e imparcialidade.",
-];
-
-const faq = [
-  {
-    question: "Quem pode utilizar o canal?",
-    answer:
-      "Colaboradores, lideran\u00e7as, parceiros, fornecedores, prestadores e qualquer pessoa que precise comunicar uma situa\u00e7\u00e3o contr\u00e1ria \u00e0 \u00e9tica ou \u00e0 conformidade.",
-  },
-  {
-    question: "Posso relatar de forma reservada?",
-    answer:
-      "A p\u00e1gina foi preparada para trabalhar com canais que preservem a identidade quando essa op\u00e7\u00e3o estiver dispon\u00edvel no fluxo configurado pela empresa.",
-  },
-  {
-    question: "Que informa\u00e7\u00f5es ajudam na an\u00e1lise?",
-    answer:
-      "Descri\u00e7\u00e3o objetiva do fato, data aproximada, local, \u00e1rea envolvida, nomes, prints, documentos e qualquer evid\u00eancia que ajude na apura\u00e7\u00e3o.",
-  },
-  {
-    question: "Como acompanho o meu caso?",
-    answer:
-      "Quando houver fluxo de acompanhamento por protocolo, utilize o acesso espec\u00edfico desta p\u00e1gina para consultar andamento e retorno.",
-  },
-  {
-    question: "Qual \u00e9 o compromisso da S\u00f3lida com a prote\u00e7\u00e3o de dados pessoais?",
-    answer:
-      "A S\u00f3lida trata os dados informados no canal de \u00e9tica com sigilo, necessidade de conhecimento e finalidade espec\u00edfica de apura\u00e7\u00e3o, protegendo as pessoas envolvidas, a integridade do processo e a conformidade com a legisla\u00e7\u00e3o aplic\u00e1vel.",
-  },
-  {
-    question: "Quais informa\u00e7\u00f5es devo registrar em meu relato?",
-    answer:
-      "Registre apenas as informa\u00e7\u00f5es necess\u00e1rias para compreender o fato: contexto, data aproximada, local, \u00e1rea envolvida, pessoas relacionadas e evid\u00eancias dispon\u00edveis. Evite excesso de dados pessoais sem rela\u00e7\u00e3o com a apura\u00e7\u00e3o.",
-  },
-  {
-    question: "Quem ter\u00e1 acesso ao meu relato e aos meus dados?",
-    answer:
-      "O acesso deve ser restrito \u00e0s pessoas e estruturas autorizadas para triagem, investiga\u00e7\u00e3o, delibera\u00e7\u00e3o e tratamento do caso, al\u00e9m da empresa parceira respons\u00e1vel pela recep\u00e7\u00e3o do relato quando o fluxo assim exigir.",
-  },
-  {
-    question: "O que ser\u00e1 feito com meu relato e por quanto tempo ele poder\u00e1 ser armazenado?",
-    answer:
-      "O relato ser\u00e1 registrado, analisado e tratado conforme a gravidade, a necessidade de investiga\u00e7\u00e3o e as exig\u00eancias legais aplic\u00e1veis. As informa\u00e7\u00f5es podem ser mantidas pelo tempo necess\u00e1rio \u00e0 apura\u00e7\u00e3o, \u00e0 ado\u00e7\u00e3o de medidas cab\u00edveis e ao atendimento de obriga\u00e7\u00f5es legais e regulat\u00f3rias.",
-  },
-  {
-    question: "Quais s\u00e3o os meus direitos em rela\u00e7\u00e3o aos dados informados?",
-    answer:
-      "Os titulares podem exercer os direitos previstos na legisla\u00e7\u00e3o de prote\u00e7\u00e3o de dados, observados os limites legais e a necessidade de preserva\u00e7\u00e3o da investiga\u00e7\u00e3o, da confidencialidade e da integridade do canal.",
-  },
-  {
-    question: "D\u00favidas? Mais informa\u00e7\u00f5es?",
-    answer:
-      "Em caso de d\u00favidas sobre privacidade, tratamento de dados ou funcionamento do canal, utilize os contatos oficiais da S\u00f3lida indicados nesta p\u00e1gina para receber a orienta\u00e7\u00e3o adequada ao seu caso.",
-  },
 ];
 
 function ActionLink({ href, children, primary = false }: { href: string; children: ReactNode; primary?: boolean }) {
@@ -371,7 +320,7 @@ export default function EthicsChannelLanding({
   const [reportStep, setReportStep] = useState<"intro" | "identity" | "incident">("intro");
   const [reportIdentityChoice, setReportIdentityChoice] = useState<"identified" | "anonymous" | null>(null);
   const [followUpProtocol, setFollowUpProtocol] = useState("");
-  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [incidentFiles, setIncidentFiles] = useState<File[]>([]);
   const [reporterName, setReporterName] = useState("");
   const [reporterRole, setReporterRole] = useState("");
@@ -576,27 +525,11 @@ export default function EthicsChannelLanding({
             ) : null}
             <section className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Orientações do canal</p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Canal exclusivo para comunicação segura e tratamento responsável de relatos.</h2>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{content.pageTexts.homeGuidanceTitle}</h2>
               <div className="mt-5 space-y-4 text-base leading-8 text-slate-600">
-                <p>
-                  Este é um canal exclusivo da {config.companyName} para comunicação segura e, quando aplicável ao fluxo adotado,
-                  também reservada, de condutas consideradas antiéticas ou que contrariem princípios éticos, padrões de conduta
-                  e a legislação vigente.
-                </p>
-                <p>
-                  As informações registradas neste espaço devem receber tratamento adequado, com sigilo, critério e rastreabilidade,
-                  evitando conflitos de interesse e preservando a seriedade de cada situação reportada.
-                </p>
-                {config.contactPhone ? (
-                  <p>
-                    Se preferir, seu relato também pode ser feito pelo telefone {config.contactPhone}, conforme a disponibilidade e
-                    o fluxo de atendimento configurado pela empresa.
-                  </p>
-                ) : null}
-                <p>
-                  Atenção: se a sua demanda estiver relacionada a atendimento ao cliente, suporte operacional, produtos ou serviços,
-                  utilize o canal oficial de atendimento da empresa para que a solicitação siga para o fluxo correto.
-                </p>
+                {content.pageTexts.homeGuidanceParagraphs.map((paragraph) => (
+                  <p key={paragraph}>{paragraph}</p>
+                ))}
               </div>
             </section>
           </div>
@@ -606,45 +539,17 @@ export default function EthicsChannelLanding({
           <div className="space-y-6">
             {reportStep === "intro" ? (
               <article className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
-                <h2 className="text-4xl font-semibold tracking-tight text-slate-950">Realizar relato</h2>
+                <h2 className="text-4xl font-semibold tracking-tight text-slate-950">{content.pageTexts.reportIntroTitle}</h2>
                 <div className="mt-7 space-y-5 text-[0.98rem] leading-7 text-slate-800 [text-align:justify]">
-                  <p>
-                    As informações aqui registradas serão recebidas e tratadas pelo comitê interno responsável da Sólida,
-                    assegurando sigilo, análise adequada de cada situação e tratamento sem conflitos de interesses.
-                  </p>
-                  <p>
-                    A veracidade das informações providas é uma responsabilidade do relator. Todas as informações serão
-                    verificadas durante o processo de averiguação, e as ações decorrentes serão tomadas a critério exclusivo
-                    da Sólida.
-                  </p>
-                  <div>
-                    <h3 className="text-2xl font-semibold tracking-tight text-slate-950">Proteção de Dados</h3>
-                    <div className="mt-4 space-y-5">
-                      <p>
-                        Todas as informações aqui registradas serão tratadas de forma confidencial pela própria Sólida,
-                        por meio do comitê interno responsável pela recepção, análise e apuração dos relatos.
-                      </p>
-                      <p>
-                        A captação dessas informações tem por finalidade a apuração de possíveis condutas consideradas
-                        antiéticas ou que violem os princípios éticos e padrões de conduta e/ou a legislação vigente.
-                      </p>
-                      <p>
-                        Todos os relatos serão armazenados pelo tempo necessário para realização do processo de apuração e
-                        deliberação sobre o caso, observando-se as exigências legais específicas. Além disso, informações
-                        consolidadas poderão ser utilizadas para geração de estatísticas da operação, sem exposição de nomes
-                        envolvidos ou dados pessoais.
-                      </p>
-                      <p>
-                        Eventuais dados pessoais informados serão tratados conforme as normativas estabelecidas pela
-                        legislação vigente no que diz respeito à proteção de dados pessoais, observadas pela Sólida
-                        no processo de recepção e apuração dos relatos aqui registrados.
-                      </p>
-                      <p>
-                        Ao clicar em &quot;Concordo&quot; você indica ciência e concordância com o fornecimento de informações
-                        que serão única e exclusivamente utilizadas para esta finalidade.
-                      </p>
-                    </div>
-                  </div>
+                  {content.pageTexts.reportIntroParagraphs.map((paragraph, index) =>
+                    paragraph.toLowerCase() === "proteção de dados" ? (
+                      <h3 key={`${paragraph}-${index}`} className="text-2xl font-semibold tracking-tight text-slate-950">
+                        {paragraph}
+                      </h3>
+                    ) : (
+                      <p key={`${paragraph}-${index}`}>{paragraph}</p>
+                    ),
+                  )}
                 </div>
                 <label className="mt-7 flex items-start gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4">
                   <input
@@ -654,7 +559,7 @@ export default function EthicsChannelLanding({
                     className="mt-1 h-5 w-5 rounded border-slate-300"
                   />
                   <span className="text-base font-semibold text-slate-950">
-                    Declaro que li e compreendi as informações acima, e desejo prosseguir com a manifestação.
+                    {content.pageTexts.reportConsentLabel}
                   </span>
                 </label>
                 <div className="mt-5 flex flex-wrap gap-3">
@@ -678,16 +583,12 @@ export default function EthicsChannelLanding({
             ) : null}
             {reportStep === "identity" ? (
               <div className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
-                <h2 className="text-4xl font-semibold tracking-tight text-slate-950">Realizar relato</h2>
+                <h2 className="text-4xl font-semibold tracking-tight text-slate-950">{content.pageTexts.reportIdentityTitle}</h2>
                 <div className="mt-7 space-y-5 text-[0.98rem] leading-7 text-slate-900 [text-align:justify]">
-                  <p>Você pode escolher fazer um relato anônimo ou pode identificar-se.</p>
-                  <p>
-                    A opção identificada é voltada para os casos em que o relator se disponibiliza a ser contatado para esclarecimento de possíveis dúvidas sobre o relato fornecido.
-                  </p>
-                  <p>
-                    Relatos com identificação são muito importantes, pois podem fazer com que a apuração seja mais efetiva. Lembramos que este é um canal seguro e confiável.
-                  </p>
-                  <p className="font-semibold">Você quer se identificar?</p>
+                  {content.pageTexts.reportIdentityParagraphs.map((paragraph) => (
+                    <p key={paragraph}>{paragraph}</p>
+                  ))}
+                  <p className="font-semibold">{content.pageTexts.reportIdentityQuestion}</p>
                 </div>
 
                 <div className="mt-5 flex flex-wrap gap-4">
@@ -828,25 +729,17 @@ export default function EthicsChannelLanding({
             ) : null}
             {reportStep === "incident" ? (
               <article className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
-                <h2 className="text-4xl font-semibold tracking-tight text-slate-950">Realizar relato</h2>
+                <h2 className="text-4xl font-semibold tracking-tight text-slate-950">{content.pageTexts.reportIncidentTitle}</h2>
                 <div className="mt-7 space-y-4 text-[0.98rem] leading-7 text-slate-800 [text-align:justify]">
-                  <p>
-                    Por favor, descreva a situação que o motiva a procurar este canal. É importante que seu relato seja completo e detalhado.
-                    Não se esqueça de incluir na descrição:
-                  </p>
+                  <p>{content.pageTexts.reportIncidentParagraphs[0]}</p>
                   <ul className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-sm leading-6 text-slate-700">
-                    <li>O quê (descrição da situação);</li>
-                    <li>Quem (nome das pessoas envolvidas, inclusive testemunhas);</li>
-                    <li>Quando (data em que aconteceu, acontece ou acontecerá a situação);</li>
-                    <li>Onde (local do ocorrido);</li>
-                    <li>Por que (a causa ou motivo);</li>
-                    <li>Quanto (se for possível medir);</li>
-                    <li>Provas (se elas existem e onde podem ser encontradas).</li>
+                    {content.pageTexts.reportIncidentParagraphs.slice(1, 8).map((paragraph) => (
+                      <li key={paragraph}>{paragraph}</li>
+                    ))}
                   </ul>
-                  <p>
-                    Para acompanhar o andamento de seu relato, você receberá um número de protocolo que lhe será fornecido após o registro do relato.
-                  </p>
-                  <p>Agradecemos sua iniciativa e confiança.</p>
+                  {content.pageTexts.reportIncidentParagraphs.slice(8).map((paragraph) => (
+                    <p key={paragraph}>{paragraph}</p>
+                  ))}
                 </div>
 
                 <div className="mt-8 space-y-5">
@@ -933,10 +826,9 @@ export default function EthicsChannelLanding({
 
         {activeTab === "follow-up" ? (
           <section className="rounded-[34px] border border-slate-200 bg-white p-8 shadow-sm">
-            <h2 className="text-5xl font-semibold tracking-tight text-slate-950">Acompanhar relato</h2>
+            <h2 className="text-5xl font-semibold tracking-tight text-slate-950">{content.pageTexts.followUpTitle}</h2>
             <p className="mt-10 max-w-5xl text-[1.05rem] leading-8 text-slate-800">
-              Para acompanhar o andamento do seu relato, por favor digite o número do seu protocolo no campo abaixo e clique no botão
-              &quot;Consultar protocolo&quot;.
+              {content.pageTexts.followUpDescription}
             </p>
 
             <div className="mt-10 max-w-md">
@@ -947,6 +839,7 @@ export default function EthicsChannelLanding({
                   setFollowUpError(null);
                   setFollowUpResult(null);
                 }}
+                placeholder={content.pageTexts.followUpPlaceholder ?? undefined}
                 className="h-12 w-full rounded-md border border-slate-300 px-4 text-base text-slate-900 outline-none"
                 style={{ borderColor: followUpProtocol ? "var(--ethics-accent)" : undefined }}
               />
@@ -1036,19 +929,16 @@ export default function EthicsChannelLanding({
             </article>
 
             <article className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Perguntas frequentes</p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Dúvidas comuns antes de registrar um caso.</h2>
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">{content.pageTexts.dataFaqSubtitle}</p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">{content.pageTexts.dataFaqTitle}</h2>
               <div className="mt-8 grid gap-4">
-                {faq.map((item, index) => (
+                {content.faqItems.map((item, index) => (
                   <article key={item.question} className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50">
                     <button
                       type="button"
                       onClick={() => setOpenFaqIndex((current) => (current === index ? null : index))}
                       className="flex w-full items-center gap-4 px-5 py-5 text-left"
                     >
-                      <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white" style={{ backgroundColor: "var(--ethics-soft)" }}>
-                        <FileWarning size={18} />
-                      </div>
                       <div className="min-w-0 flex-1">
                         <h3 className="text-base font-semibold text-slate-950">{item.question}</h3>
                       </div>
@@ -1059,7 +949,7 @@ export default function EthicsChannelLanding({
                     </button>
                     {openFaqIndex === index ? (
                       <div className="border-t border-slate-200 px-5 pb-5 pt-4">
-                        <p className="pl-14 text-sm leading-7 text-slate-600">{item.answer}</p>
+                        <p className="text-sm leading-7 text-slate-600">{item.answer}</p>
                       </div>
                     ) : null}
                   </article>
@@ -1071,7 +961,11 @@ export default function EthicsChannelLanding({
 
         {activeTab === "code" ? (
           <div className="space-y-8">
-            <SectionTitle kicker="C\u00f3digo de \u00c9tica" title="Princ\u00edpios que orientam decis\u00f5es, relacionamentos e condutas." body={content.codeSummary ?? ""} />
+            <SectionTitle
+              kicker="C\u00f3digo de \u00c9tica"
+              title={content.pageTexts.codeHeroTitle ?? "Princípios que orientam decisões, relacionamentos e condutas."}
+              body={content.pageTexts.codeHeroBody ?? content.codeSummary ?? ""}
+            />
             <div className="grid gap-4 lg:grid-cols-[1.05fr,0.95fr]">
               <article className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
                 <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Compromissos do canal</p>
