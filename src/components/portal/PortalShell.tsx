@@ -724,12 +724,14 @@ export default function PortalShell({ children }: { children: React.ReactNode })
     };
   }, [pathname]);
 
-  if (loading || !hiddenRoutesLoaded) {
+  const hasStableShell = !!role && hiddenRoutesLoaded;
+
+  if (!hasStableShell && (loading || !hiddenRoutesLoaded)) {
     return <PortalLoadingScreen />;
   }
 
   if (fatalError) {
-    if (isRecoverableBootstrapError) {
+    if (isRecoverableBootstrapError && !hasStableShell) {
       return <PortalLoadingScreen />;
     }
 
@@ -768,7 +770,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
     );
   }
 
-  if (!role) {
+  if (!role && !hasStableShell) {
     return <PortalLoadingScreen />;
   }
 

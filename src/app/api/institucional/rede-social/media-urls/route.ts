@@ -100,18 +100,22 @@ export async function POST(req: Request) {
 
     const visiblePostIds = new Set(((visiblePostsRes.data ?? []) as Array<{ id: string }>).map((item) => item.id));
     const visibleMessageIds = new Set(((visibleMessagesRes.data ?? []) as Array<{ id: string }>).map((item) => item.id));
-    const results: Array<{ kind: "post" | "message"; ownerId: string; path: string; signedUrl: string }> = [];
+    const allowedItems = items.filter((item) => {
+      if (item.kind === "post") return visiblePostIds.has(item.ownerId);
+      return visibleMessageIds.has(item.ownerId);
+    });
 
-    for (const item of items) {
-      if (item.kind === "post" && !visiblePostIds.has(item.ownerId)) continue;
-      if (item.kind === "message" && !visibleMessageIds.has(item.ownerId)) continue;
-      const signed = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(item.path, 60 * 60);
-      if (!signed.error && signed.data?.signedUrl) {
-        results.push({ kind: item.kind, ownerId: item.ownerId, path: item.path, signedUrl: signed.data.signedUrl });
-      }
-    }
+    const signedEntries = await Promise.all(
+      allowedItems.map(async (item) => {
+        const signed = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(item.path, 60 * 60 * 12);
+        if (signed.error || !signed.data?.signedUrl) return null;
+        return { kind: item.kind, ownerId: item.ownerId, path: item.path, signedUrl: signed.data.signedUrl };
+      }),
+    );
 
-    return NextResponse.json({ ok: true, items: results });
+    const response = NextResponse.json({ ok: true, items: signedEntries.filter(Boolean) });
+    response.headers.set("Cache-Control", "private, max-age=300, stale-while-revalidate=3600");
+    return response;
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro inesperado";
     return NextResponse.json({ error: message }, { status: 500 });

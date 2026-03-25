@@ -101,11 +101,11 @@ export async function POST(req: Request) {
     const up = await supabaseAdmin.storage.from(BUCKET).upload(path, file, {
       upsert: true,
       contentType: file.type,
-      cacheControl: "3600",
+      cacheControl: "31536000",
     });
     if (up.error) return NextResponse.json({ error: up.error.message }, { status: 400 });
 
-    const signed = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(path, 60 * 60);
+    const signed = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(path, 60 * 60 * 12);
     if (signed.error || !signed.data?.signedUrl) {
       return NextResponse.json({ error: signed.error?.message || "Nao foi possivel assinar a URL da midia." }, { status: 400 });
     }

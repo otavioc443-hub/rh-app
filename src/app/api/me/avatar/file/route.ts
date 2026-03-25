@@ -38,12 +38,14 @@ export async function GET(req: Request) {
     const path = url.searchParams.get("path")?.trim() ?? "";
     if (!path) return NextResponse.json({ error: "path e obrigatorio" }, { status: 400 });
 
-    const signed = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(path, 60 * 10);
+    const signed = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(path, 60 * 60 * 12);
     if (signed.error || !signed.data?.signedUrl) {
       return NextResponse.json({ error: signed.error?.message ?? "Falha ao assinar avatar" }, { status: 400 });
     }
 
-    return NextResponse.redirect(signed.data.signedUrl, 307);
+    const response = NextResponse.redirect(signed.data.signedUrl, 307);
+    response.headers.set("Cache-Control", "private, max-age=1800, stale-while-revalidate=86400");
+    return response;
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro inesperado";
     return NextResponse.json({ error: message }, { status: 500 });
