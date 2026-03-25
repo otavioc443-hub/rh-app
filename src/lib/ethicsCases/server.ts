@@ -9,6 +9,7 @@ import type {
 
 type EthicsCaseRow = {
   id: string;
+  company_id: string;
   protocol: string;
   subject: string;
   description: string | null;
@@ -64,14 +65,16 @@ function buildSummary(cases: EthicsCaseRecord[]): EthicsSummary {
   return { total: cases.length, byStatus };
 }
 
-export async function getEthicsDashboardData(): Promise<EthicsDashboardData> {
+export async function getEthicsDashboardData(companyId?: string | null): Promise<EthicsDashboardData> {
   try {
-    const { data: casesRows, error: casesError } = await supabaseAdmin
+    let query = supabaseAdmin
       .from("ethics_cases")
       .select(
-        "id,protocol,subject,description,category,risk_level,status,is_anonymous,reporter_name,reporter_email,assigned_to,created_at,updated_at,closed_at",
+        "id,company_id,protocol,subject,description,category,risk_level,status,is_anonymous,reporter_name,reporter_email,assigned_to,created_at,updated_at,closed_at",
       )
       .order("created_at", { ascending: false });
+    if (companyId) query = query.eq("company_id", companyId);
+    const { data: casesRows, error: casesError } = await query;
 
     if (casesError) {
       if (isMissingRelationError(casesError.message)) return getMockEthicsDashboardData();
@@ -90,9 +93,16 @@ export async function getEthicsDashboardData(): Promise<EthicsDashboardData> {
             .in("case_id", caseIds)
             .order("created_at", { ascending: false })
         : Promise.resolve({ data: [], error: null }),
-      assigneeIds.length
-        ? supabaseAdmin.from("profiles").select("id,full_name").in("id", assigneeIds)
-        : Promise.resolve({ data: [], error: null }),
+      companyId
+        ? supabaseAdmin
+            .from("profiles")
+            .select("id,full_name")
+            .eq("company_id", companyId)
+            .in("role", ["admin", "rh", "compliance"])
+            .eq("active", true)
+        : assigneeIds.length
+          ? supabaseAdmin.from("profiles").select("id,full_name").in("id", assigneeIds)
+          : Promise.resolve({ data: [], error: null }),
     ]);
 
     if (historyRes.error) {
@@ -136,6 +146,7 @@ export async function getEthicsDashboardData(): Promise<EthicsDashboardData> {
       const history = historyByCase.get(item.id) ?? [];
       return {
         id: item.id,
+        company_id: item.company_id,
         protocol: item.protocol,
         subject: item.subject,
         description: item.description ?? "",

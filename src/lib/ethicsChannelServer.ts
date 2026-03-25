@@ -159,6 +159,7 @@ export async function getEthicsChannelPageData(companyKey?: string | null) {
   const config = mergeConfigWithContent(
     {
       ...baseConfig,
+      companyId: selectedCompany?.id ?? baseConfig.companyId ?? null,
       companyName,
       key: selectedCompany ? buildEthicsChannelSlug(baseConfig.key || selectedCompany.name) : baseConfig.key,
     },
@@ -170,6 +171,7 @@ export async function getEthicsChannelPageData(companyKey?: string | null) {
       const envConfig = findEthicsChannelConfig(company.name) ?? findEthicsChannelConfig(company.id);
       return {
         key: buildEthicsChannelSlug(envConfig?.key ?? company.name),
+        companyId: company.id,
         companyName: company.name,
         reportUrl: envConfig?.reportUrl ?? null,
         followUpUrl: envConfig?.followUpUrl ?? null,
@@ -186,5 +188,15 @@ export async function getEthicsChannelPageData(companyKey?: string | null) {
     config,
     content,
     companies: companyTabs.length ? companyTabs : [config],
+  };
+}
+
+export async function getEthicsChannelCompanyByKey(companyKey?: string | null) {
+  const { config } = await getEthicsChannelPageData(companyKey);
+  if (!config.companyId) return null;
+  return {
+    companyId: config.companyId,
+    key: config.key,
+    companyName: config.companyName,
   };
 }

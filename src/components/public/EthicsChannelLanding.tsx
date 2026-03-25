@@ -13,6 +13,7 @@ import {
 import { useState, type CSSProperties, type ReactNode } from "react";
 import type { EthicsChannelConfig } from "@/lib/ethicsChannel";
 import type { EthicsManagedContent } from "@/lib/ethicsChannelDefaults";
+import type { PublicEthicsCaseFollowUpResult } from "@/lib/ethicsCases/types";
 
 type TabKey = "home" | "report" | "follow-up" | "data" | "code";
 
@@ -30,6 +31,13 @@ function tabLabel(tab: TabKey) {
   if (tab === "follow-up") return "Acompanhar relato";
   if (tab === "data") return "Prote\u00e7\u00e3o de Dados";
   return "C\u00f3digo de \u00c9tica";
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
 
 function innerHeroContent(activeTab: Exclude<TabKey, "home">, content: EthicsManagedContent) {
@@ -365,6 +373,22 @@ export default function EthicsChannelLanding({
   const [followUpProtocol, setFollowUpProtocol] = useState("");
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(0);
   const [incidentFiles, setIncidentFiles] = useState<File[]>([]);
+  const [reporterName, setReporterName] = useState("");
+  const [reporterRole, setReporterRole] = useState("");
+  const [reporterEmail, setReporterEmail] = useState("");
+  const [reporterPhone, setReporterPhone] = useState("");
+  const [reporterMobile, setReporterMobile] = useState("");
+  const [previouslyReported, setPreviouslyReported] = useState("");
+  const [incidentCategory, setIncidentCategory] = useState("");
+  const [incidentLocation, setIncidentLocation] = useState("");
+  const [incidentDescription, setIncidentDescription] = useState("");
+  const [reportSubmitError, setReportSubmitError] = useState<string | null>(null);
+  const [reportSubmitLoading, setReportSubmitLoading] = useState(false);
+  const [submittedProtocol, setSubmittedProtocol] = useState<string | null>(null);
+  const [reportReceiptOpen, setReportReceiptOpen] = useState(false);
+  const [followUpLoading, setFollowUpLoading] = useState(false);
+  const [followUpError, setFollowUpError] = useState<string | null>(null);
+  const [followUpResult, setFollowUpResult] = useState<PublicEthicsCaseFollowUpResult | null>(null);
   const isSolida = config.companyName
     .toLowerCase()
     .normalize("NFD")
@@ -372,11 +396,90 @@ export default function EthicsChannelLanding({
     .includes("solida");
   const accent = isSolida ? "#99A41A" : "#1E3A8A";
   const accentSoft = isSolida ? "#2E3647" : "#0F172A";
-  const reportHref = config.reportUrl || (config.contactEmail ? `mailto:${config.contactEmail}?subject=Canal%20de%20\u00c9tica` : "#");
-  const followUpHref = config.followUpUrl || "#";
   const codeTabHref = config.codeOfEthicsUrl;
   const steerCards = buildSteerCards(content.steerBody);
   const companyTabs = companies.map((item) => ({ ...item, href: `/canal-de-etica/${item.key}` }));
+
+  async function handleSubmitReport() {
+    if (!config.companyId) {
+      setReportSubmitError("Empresa do canal nao identificada.");
+      return;
+    }
+
+    if (!incidentCategory || !incidentLocation.trim() || !incidentDescription.trim()) {
+      setReportSubmitError("Preencha tipo do relato, local do ocorrido e descricao.");
+      return;
+    }
+
+    if (reportIdentityChoice === "identified" && (!reporterName.trim() || !reporterRole.trim() || !reporterEmail.trim())) {
+      setReportSubmitError("Preencha nome, funcao/relacao com a empresa e e-mail para o relato identificado.");
+      return;
+    }
+
+    setReportSubmitError(null);
+    setReportSubmitLoading(true);
+
+    try {
+      const response = await fetch("/api/public/ethics/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyId: config.companyId,
+          isAnonymous: reportIdentityChoice !== "identified",
+          reporterName,
+          reporterEmail,
+          reporterRole,
+          reporterPhone,
+          reporterMobile,
+          previouslyReported,
+          category: incidentCategory,
+          location: incidentLocation,
+          description: incidentDescription,
+        }),
+      });
+
+      const payload = (await response.json()) as { item?: { protocol: string }; error?: string };
+      if (!response.ok || !payload.item) {
+        throw new Error(payload.error ?? "Falha ao registrar o relato.");
+      }
+
+      setSubmittedProtocol(payload.item.protocol);
+      setFollowUpProtocol(payload.item.protocol);
+      setReportReceiptOpen(true);
+    } catch (error) {
+      setReportSubmitError(error instanceof Error ? error.message : "Falha ao registrar o relato.");
+    } finally {
+      setReportSubmitLoading(false);
+    }
+  }
+
+  async function handleFollowUpSearch() {
+    if (!config.companyId || !followUpProtocol.trim()) {
+      setFollowUpError("Informe o protocolo para continuar.");
+      setFollowUpResult(null);
+      return;
+    }
+
+    setFollowUpLoading(true);
+    setFollowUpError(null);
+
+    try {
+      const response = await fetch(
+        `/api/public/ethics/follow-up?companyId=${encodeURIComponent(config.companyId)}&protocol=${encodeURIComponent(followUpProtocol.trim())}`,
+      );
+      const payload = (await response.json()) as { item?: PublicEthicsCaseFollowUpResult; error?: string };
+      if (!response.ok || !payload.item) {
+        throw new Error(payload.error ?? "Falha ao consultar o protocolo.");
+      }
+
+      setFollowUpResult(payload.item);
+    } catch (error) {
+      setFollowUpResult(null);
+      setFollowUpError(error instanceof Error ? error.message : "Falha ao consultar o protocolo.");
+    } finally {
+      setFollowUpLoading(false);
+    }
+  }
 
   return (
     <main
@@ -590,7 +693,10 @@ export default function EthicsChannelLanding({
                 <div className="mt-5 flex flex-wrap gap-4">
                   <button
                     type="button"
-                    onClick={() => setReportIdentityChoice("identified")}
+                    onClick={() => {
+                      setReportIdentityChoice("identified");
+                      setReportSubmitError(null);
+                    }}
                     className={`min-w-28 rounded-2xl px-8 py-4 text-base font-semibold transition ${
                       reportIdentityChoice === "identified"
                         ? "text-white shadow-[0_12px_30px_-18px_rgba(15,23,42,0.35)]"
@@ -602,7 +708,10 @@ export default function EthicsChannelLanding({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setReportIdentityChoice("anonymous")}
+                    onClick={() => {
+                      setReportIdentityChoice("anonymous");
+                      setReportSubmitError(null);
+                    }}
                     className={`min-w-28 rounded-2xl px-8 py-4 text-base font-semibold transition ${
                       reportIdentityChoice === "anonymous"
                         ? "text-white shadow-[0_12px_30px_-18px_rgba(15,23,42,0.35)]"
@@ -628,11 +737,19 @@ export default function EthicsChannelLanding({
                   <div className="mt-6 space-y-4">
                     <label className="block">
                       <span className="mb-2 block text-sm font-semibold text-slate-900">* Nome</span>
-                      <input className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none" />
+                      <input
+                        value={reporterName}
+                        onChange={(event) => setReporterName(event.target.value)}
+                        className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none"
+                      />
                     </label>
                     <label className="block">
                       <span className="mb-2 block text-sm font-semibold text-slate-900">* Função ou sua relação com a empresa</span>
-                      <input className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none" />
+                      <input
+                        value={reporterRole}
+                        onChange={(event) => setReporterRole(event.target.value)}
+                        className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none"
+                      />
                     </label>
                     <p className="text-sm font-medium text-orange-600">É necessário preencher pelo menos um dos campos abaixo:</p>
                     <label className="block">
@@ -640,20 +757,34 @@ export default function EthicsChannelLanding({
                       <input
                         type="email"
                         placeholder="nome@exemplo.com"
+                        value={reporterEmail}
+                        onChange={(event) => setReporterEmail(event.target.value)}
                         className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none"
                       />
                     </label>
                     <label className="block">
                       <span className="mb-2 block text-sm font-semibold text-slate-900">* Telefone</span>
-                      <input className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none" />
+                      <input
+                        value={reporterPhone}
+                        onChange={(event) => setReporterPhone(event.target.value)}
+                        className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none"
+                      />
                     </label>
                     <label className="block">
                       <span className="mb-2 block text-sm font-semibold text-slate-900">* Celular</span>
-                      <input className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none" />
+                      <input
+                        value={reporterMobile}
+                        onChange={(event) => setReporterMobile(event.target.value)}
+                        className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none"
+                      />
                     </label>
                     <label className="block">
                       <span className="mb-2 block text-sm font-semibold text-slate-900">* Você já denunciou esta situação anteriormente?</span>
-                      <input className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none" />
+                      <input
+                        value={previouslyReported}
+                        onChange={(event) => setPreviouslyReported(event.target.value)}
+                        className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none"
+                      />
                     </label>
                     <div className="pt-2">
                       <button
@@ -673,6 +804,8 @@ export default function EthicsChannelLanding({
                       <span className="mb-2 block text-sm font-semibold text-slate-900">E-mail anônimo opcional</span>
                       <input
                         type="email"
+                        value={reporterEmail}
+                        onChange={(event) => setReporterEmail(event.target.value)}
                         className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none"
                       />
                     </label>
@@ -720,7 +853,11 @@ export default function EthicsChannelLanding({
                   <h3 className="text-2xl font-semibold tracking-tight text-slate-950">Dados do incidente</h3>
                   <label className="block">
                     <span className="mb-2 block text-sm font-semibold text-slate-900">* Tipo do relato</span>
-                    <select className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none">
+                    <select
+                      value={incidentCategory}
+                      onChange={(event) => setIncidentCategory(event.target.value)}
+                      className="h-12 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none"
+                    >
                       <option value="">Selecione</option>
                       <option value="assedio">Assédio</option>
                       <option value="fraude">Fraude</option>
@@ -731,12 +868,18 @@ export default function EthicsChannelLanding({
                   </label>
                   <label className="block">
                     <span className="mb-2 block text-sm font-semibold text-slate-900">* Local do ocorrido</span>
-                    <input className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none" />
+                    <input
+                      value={incidentLocation}
+                      onChange={(event) => setIncidentLocation(event.target.value)}
+                      className="h-12 w-full rounded-xl border border-slate-200 px-4 text-sm text-slate-900 outline-none"
+                    />
                   </label>
                   <label className="block">
                     <span className="mb-2 block text-sm font-semibold text-slate-900">* Descrição</span>
                     <textarea
                       rows={8}
+                      value={incidentDescription}
+                      onChange={(event) => setIncidentDescription(event.target.value)}
                       className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none"
                     />
                   </label>
@@ -765,19 +908,16 @@ export default function EthicsChannelLanding({
                   </div>
                 </div>
 
+                {reportSubmitError ? <p className="mt-6 text-sm font-medium text-rose-600">{reportSubmitError}</p> : null}
                 <div className="mt-8 flex flex-wrap gap-3">
-                  {reportHref !== "#" ? (
-                    <ActionLink href={reportHref} primary>
-                      Gravar
-                    </ActionLink>
-                  ) : (
-                    <button
-                      type="button"
-                      className="inline-flex items-center justify-center rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
-                    >
-                      Gravar
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => void handleSubmitReport()}
+                    disabled={reportSubmitLoading}
+                    className="inline-flex items-center justify-center rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    {reportSubmitLoading ? "Gravando..." : "Gravar"}
+                  </button>
                   <button
                     type="button"
                     onClick={() => setReportStep("identity")}
@@ -802,20 +942,26 @@ export default function EthicsChannelLanding({
             <div className="mt-10 max-w-md">
               <input
                 value={followUpProtocol}
-                onChange={(event) => setFollowUpProtocol(event.target.value)}
+                onChange={(event) => {
+                  setFollowUpProtocol(event.target.value);
+                  setFollowUpError(null);
+                  setFollowUpResult(null);
+                }}
                 className="h-12 w-full rounded-md border border-slate-300 px-4 text-base text-slate-900 outline-none"
                 style={{ borderColor: followUpProtocol ? "var(--ethics-accent)" : undefined }}
               />
             </div>
 
             <div className="mt-10 flex flex-wrap gap-6">
-              <a
-                href={followUpHref !== "#" ? `${followUpHref}${followUpHref.includes("?") ? "&" : "?"}protocolo=${encodeURIComponent(followUpProtocol)}` : "#"}
-                className="inline-flex min-w-64 items-center justify-center rounded-3xl px-8 py-4 text-lg font-semibold text-white shadow-[0_12px_30px_-18px_rgba(15,23,42,0.35)] transition hover:brightness-105"
+              <button
+                type="button"
+                onClick={() => void handleFollowUpSearch()}
+                disabled={followUpLoading}
+                className="inline-flex min-w-64 items-center justify-center rounded-3xl px-8 py-4 text-lg font-semibold text-white shadow-[0_12px_30px_-18px_rgba(15,23,42,0.35)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
                 style={{ backgroundColor: "var(--ethics-accent)" }}
               >
-                Consultar protocolo
-              </a>
+                {followUpLoading ? "Consultando..." : "Consultar protocolo"}
+              </button>
               <Link
                 href={tabHref(config.key, "home")}
                 className="inline-flex min-w-40 items-center justify-center rounded-3xl px-8 py-4 text-lg font-semibold text-white shadow-[0_12px_30px_-18px_rgba(15,23,42,0.35)] transition hover:brightness-105"
@@ -824,6 +970,47 @@ export default function EthicsChannelLanding({
                 Cancelar
               </Link>
             </div>
+
+            {followUpError ? <p className="mt-6 text-sm font-medium text-rose-600">{followUpError}</p> : null}
+            {followUpResult ? (
+              <div className="mt-8 rounded-[28px] border border-slate-200 bg-slate-50 p-6">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Protocolo</p>
+                    <p className="mt-2 text-sm font-semibold text-slate-950">{followUpResult.protocol}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Status</p>
+                    <p className="mt-2 text-sm font-semibold text-slate-950">{followUpResult.status}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Tipo</p>
+                    <p className="mt-2 text-sm font-semibold text-slate-950">{followUpResult.category}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Abertura</p>
+                    <p className="mt-2 text-sm font-semibold text-slate-950">{formatDateTime(followUpResult.createdAt)}</p>
+                  </div>
+                </div>
+
+                <div className="mt-6">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Assunto</p>
+                  <p className="mt-2 text-sm text-slate-700">{followUpResult.subject}</p>
+                </div>
+
+                <div className="mt-6">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Historico</p>
+                  <div className="mt-3 space-y-3">
+                    {followUpResult.history.map((entry) => (
+                      <div key={entry.id} className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                        <span className="text-sm font-medium text-slate-900">{entry.status}</span>
+                        <span className="text-xs text-slate-500">{formatDateTime(entry.createdAt)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </section>
         ) : null}
 
@@ -908,11 +1095,75 @@ export default function EthicsChannelLanding({
             <p className="mt-4 text-2xl font-semibold tracking-tight text-white lg:text-[2.15rem]">Se algo não parece correto, registre. O silêncio não protege a integridade.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
-            <a href={reportHref} target={reportHref.startsWith("http") ? "_blank" : undefined} rel={reportHref.startsWith("http") ? "noreferrer" : undefined} className="inline-flex items-center justify-center rounded-full px-7 py-4 text-base font-semibold text-white shadow-[0_18px_40px_-24px_rgba(153,164,26,0.95)] transition hover:brightness-105" style={{ backgroundColor: "var(--ethics-accent)" }}>Registrar agora</a>
+            <Link href={tabHref(config.key, "report")} className="inline-flex items-center justify-center rounded-full px-7 py-4 text-base font-semibold text-white shadow-[0_18px_40px_-24px_rgba(153,164,26,0.95)] transition hover:brightness-105" style={{ backgroundColor: "var(--ethics-accent)" }} scroll>Registrar agora</Link>
             <Link href="/canal-de-etica" className="inline-flex items-center justify-center rounded-full border border-white/15 bg-transparent px-7 py-4 text-base font-semibold text-white transition hover:border-white/25 hover:bg-white/5" scroll>Trocar empresa</Link>
           </div>
         </div>
       </footer>
+
+      {reportReceiptOpen && submittedProtocol ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-8">
+          <div className="w-full max-w-2xl rounded-[32px] border border-slate-200 bg-white p-7 shadow-[0_40px_120px_-48px_rgba(15,23,42,0.9)]">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Relato encaminhado</p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950">Seu relato foi enviado com sucesso.</h2>
+            <p className="mt-4 text-base leading-7 text-slate-600">
+              O comite responsavel recebeu a manifestacao e o acompanhamento pode ser feito com o protocolo abaixo.
+            </p>
+
+            <div className="mt-6 rounded-3xl border border-emerald-200 bg-emerald-50 px-5 py-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">Protocolo</p>
+              <p className="mt-2 text-2xl font-semibold text-emerald-950">{submittedProtocol}</p>
+            </div>
+
+            <div className="mt-6 grid gap-4 rounded-3xl border border-slate-200 bg-slate-50 px-5 py-5 md:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Tipo do relato</p>
+                <p className="mt-2 text-sm font-medium text-slate-900">{incidentCategory || "Nao informado"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Local</p>
+                <p className="mt-2 text-sm font-medium text-slate-900">{incidentLocation || "Nao informado"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Origem</p>
+                <p className="mt-2 text-sm font-medium text-slate-900">
+                  {reportIdentityChoice === "identified" ? "Relato identificado" : "Relato anonimo"}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Contato informado</p>
+                <p className="mt-2 text-sm font-medium text-slate-900">{reporterEmail || "Nao informado"}</p>
+              </div>
+              <div className="md:col-span-2">
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Resumo enviado</p>
+                <p className="mt-2 text-sm leading-7 text-slate-700">{incidentDescription}</p>
+              </div>
+            </div>
+
+            <div className="mt-7 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setReportReceiptOpen(false);
+                  setReportStep("incident");
+                }}
+                className="inline-flex items-center justify-center rounded-full border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+              >
+                Fechar
+              </button>
+              <Link
+                href={tabHref(config.key, "follow-up")}
+                onClick={() => setReportReceiptOpen(false)}
+                className="inline-flex items-center justify-center rounded-full px-6 py-3 text-sm font-semibold text-white transition hover:brightness-105"
+                style={{ backgroundColor: "var(--ethics-accent)" }}
+                scroll
+              >
+                Acompanhar protocolo
+              </Link>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

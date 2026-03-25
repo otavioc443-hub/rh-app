@@ -88,6 +88,7 @@ const mockHistory: Record<string, EthicsCaseHistoryEntry[]> = {
 const mockCases: EthicsCaseRecord[] = [
   {
     id: "case-1",
+    company_id: "mock-company-solida",
     protocol: "ET-2026-0001",
     subject: "Suposto conflito de interesses em contratação de fornecedor",
     description:
@@ -115,6 +116,7 @@ const mockCases: EthicsCaseRecord[] = [
   },
   {
     id: "case-2",
+    company_id: "mock-company-solida",
     protocol: "ET-2026-0002",
     subject: "Conduta inadequada de liderança",
     description:
@@ -136,6 +138,7 @@ const mockCases: EthicsCaseRecord[] = [
   },
   {
     id: "case-3",
+    company_id: "mock-company-solida",
     protocol: "ET-2026-0003",
     subject: "Indício de fraude documental",
     description:
@@ -160,6 +163,7 @@ const mockCases: EthicsCaseRecord[] = [
   },
   {
     id: "case-4",
+    company_id: "mock-company-solida",
     protocol: "ET-2026-0004",
     subject: "Uso indevido de recursos corporativos",
     description:

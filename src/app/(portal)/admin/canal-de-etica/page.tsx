@@ -7,7 +7,7 @@ export default async function AdminEthicsCasesPage() {
   const access = await requireRoles(["admin", "rh", "compliance"]);
   if (!access.ok) redirect("/unauthorized");
 
-  const initialData = await getEthicsDashboardData();
+  const initialData = await getEthicsDashboardData(access.companyId);
 
   return <EthicsCasesAdminClient initialData={initialData} canManage={access.role === "admin" || access.role === "rh" || access.role === "compliance"} />;
 }

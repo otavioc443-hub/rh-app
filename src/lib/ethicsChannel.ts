@@ -2,6 +2,7 @@ import { normalizeDisplayText } from "@/lib/textEncoding";
 
 export type EthicsChannelConfig = {
   key: string;
+  companyId?: string | null;
   companyName: string;
   reportUrl: string | null;
   followUpUrl: string | null;
@@ -14,6 +15,7 @@ export type EthicsChannelConfig = {
 
 type RawEthicsChannelConfig = Partial<EthicsChannelConfig> & {
   key?: string;
+  companyId?: string;
   companyName?: string;
   reportUrl?: string;
   followUpUrl?: string;
@@ -49,6 +51,7 @@ function coerceConfig(input: RawEthicsChannelConfig, fallbackKey: string): Ethic
 
   return {
     key,
+    companyId: clean(input.companyId),
     companyName,
     reportUrl: clean(input.reportUrl),
     followUpUrl: clean(input.followUpUrl),

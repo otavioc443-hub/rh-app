@@ -35,6 +35,7 @@ export type EthicsCaseHistoryEntry = {
 
 export type EthicsCaseRecord = {
   id: string;
+  company_id: string;
   protocol: string;
   subject: string;
   description: string;
@@ -65,6 +66,42 @@ export type EthicsDashboardData = {
   summary: EthicsSummary;
   assignees: Array<{ id: string; name: string }>;
   warning: string | null;
+};
+
+export type PublicEthicsCaseCreatePayload = {
+  companyId: string;
+  isAnonymous: boolean;
+  reporterName?: string | null;
+  reporterEmail?: string | null;
+  reporterRole?: string | null;
+  reporterPhone?: string | null;
+  reporterMobile?: string | null;
+  previouslyReported?: string | null;
+  category: string;
+  location: string;
+  description: string;
+};
+
+export type PublicEthicsCaseCreateResult = {
+  protocol: string;
+  status: EthicsCaseStatus;
+  createdAt: string;
+};
+
+export type PublicEthicsCaseFollowUpResult = {
+  protocol: string;
+  subject: string;
+  category: string;
+  status: EthicsCaseStatus;
+  isAnonymous: boolean;
+  createdAt: string;
+  updatedAt: string;
+  closedAt: string | null;
+  history: Array<{
+    id: string;
+    status: EthicsCaseStatus;
+    createdAt: string;
+  }>;
 };
 
 export type EthicsCaseFiltersState = {
