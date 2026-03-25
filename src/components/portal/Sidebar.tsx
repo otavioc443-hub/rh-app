@@ -267,6 +267,7 @@ export default function Sidebar({
           { label: "Painel Admin", icon: LayoutDashboard, href: "/admin", exact: true, roles: ["admin"] },
           { label: "Cadastro de empresas", icon: Building2, href: "/admin/empresas", roles: ["admin"] },
           { label: "Canal de ética", icon: FileCheck2, href: "/admin/canal-de-etica", roles: ["admin", "rh", "compliance"] },
+          { label: "Conteúdo canal de ética", icon: FileCheck2, href: "/admin/canal-de-etica/conteudo", roles: ["admin"] },
           { label: "Configuração SLA", icon: CalendarClock, href: "/admin/sla", roles: ["admin"] },
           { label: "Notificações", icon: MessageSquareText, href: "/admin/notificacoes", roles: ["admin"] },
           { label: "Visibilidade", icon: Layers, href: "/admin/funcionalidades", roles: ["admin"] },
