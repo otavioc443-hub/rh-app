@@ -38,6 +38,7 @@ type Access = Extract<GuardResult, { ok: true }>;
 type ProfileMini = {
   id: string;
   full_name: string | null;
+  email?: string | null;
   role: string | null;
   company_id: string | null;
   department_id: string | null;
@@ -47,6 +48,26 @@ type ProfileMini = {
 
 type DepartmentMini = { id: string; name: string; company_id: string | null };
 type CompanyMini = { id: string; name: string | null };
+
+function buildUserDisplayName(profile: { full_name?: string | null; email?: string | null }, collaboratorName?: string | null) {
+  const byCollaborator = (collaboratorName ?? "").trim();
+  if (byCollaborator) return byCollaborator;
+
+  const byProfile = (profile.full_name ?? "").trim();
+  if (byProfile && !byProfile.includes("@")) return byProfile;
+
+  const byEmail = (profile.email ?? "").trim();
+  if (byEmail) {
+    const local = byEmail.split("@")[0] ?? "";
+    return local
+      .split(/[._-]+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ");
+  }
+
+  return byProfile || "Colaborador";
+}
 
 function formatDateTime(value: string | null) {
   if (!value) return null;
@@ -366,24 +387,32 @@ function mapExpandedAssignment(
 }
 
 export async function buildAssignmentSupportData(companyId: string | null): Promise<LmsAssignmentSupportData> {
-  const [profilesRes, departments, companies, courses, paths] = await Promise.all([
+  const [profilesRes, collaboratorsRes, departments, companies, courses, paths] = await Promise.all([
     companyId
-      ? supabaseAdmin.from("profiles").select("id,full_name,company_id").eq("company_id", companyId).eq("active", true).order("full_name", { ascending: true })
-      : supabaseAdmin.from("profiles").select("id,full_name,company_id").eq("active", true).order("full_name", { ascending: true }),
+      ? supabaseAdmin.from("profiles").select("id,full_name,email,company_id").eq("company_id", companyId).eq("active", true).order("full_name", { ascending: true })
+      : supabaseAdmin.from("profiles").select("id,full_name,email,company_id").eq("active", true).order("full_name", { ascending: true }),
+    companyId
+      ? supabaseAdmin.from("colaboradores").select("user_id,nome").eq("company_id", companyId)
+      : supabaseAdmin.from("colaboradores").select("user_id,nome"),
     companyId
       ? supabaseAdmin.from("departments").select("id,name").eq("company_id", companyId).order("name", { ascending: true })
       : supabaseAdmin.from("departments").select("id,name").order("name", { ascending: true }),
     companyId
-      ? supabaseAdmin.from("company").select("id,name").eq("id", companyId)
-      : supabaseAdmin.from("company").select("id,name"),
+      ? supabaseAdmin.from("companies").select("id,name").eq("id", companyId)
+      : supabaseAdmin.from("companies").select("id,name"),
     fetchPublishedCourses(companyId),
     getLmsLearningPathsAdminData(companyId),
   ]);
 
+  const collaboratorNames = new Map<string, string>();
+  for (const row of (collaboratorsRes.data ?? []) as Array<{ user_id: string | null; nome: string | null }>) {
+    if (row.user_id && row.nome) collaboratorNames.set(row.user_id, row.nome);
+  }
+
   return {
-    users: ((profilesRes.data ?? []) as Array<{ id: string; full_name: string | null }>).map((row) => ({
+    users: ((profilesRes.data ?? []) as Array<{ id: string; full_name: string | null; email: string | null }>).map((row) => ({
       id: row.id,
-      label: row.full_name ?? row.id,
+      label: buildUserDisplayName(row, collaboratorNames.get(row.id)),
     })),
     departments: ((departments.data ?? []) as Array<{ id: string; name: string }>).map((row) => ({ id: row.id, label: row.name })),
     companies: ((companies.data ?? []) as Array<{ id: string; name: string | null }>).map((row) => ({ id: row.id, label: row.name ?? row.id })),
