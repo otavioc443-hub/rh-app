@@ -19,6 +19,7 @@ import type {
   LmsCourseDetail,
   LmsCourseModule,
   LmsCourseWithCounts,
+  LmsLessonDiscussion,
   LmsLearningPath,
   LmsLearningPathCourse,
   LmsLesson,
@@ -459,6 +460,98 @@ export async function getLessonPlayerData(access: Access, courseId: string, less
     completedLessonIds,
     nextLesson: getNextLesson(detail.modules, lessonId),
   };
+}
+
+export async function getLessonDiscussions(access: Access, courseId: string, lessonId: string) {
+  const detail = await getCourseDetailForLearner(access, courseId);
+  if (!detail) throw new Error("Curso nao encontrado.");
+
+  const { data, error } = await supabaseAdmin
+    .from("lms_lesson_discussions")
+    .select("id,company_id,course_id,lesson_id,user_id,message,created_at")
+    .eq("course_id", courseId)
+    .eq("lesson_id", lessonId)
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    if (isMissingRelation(error)) return [] as LmsLessonDiscussion[];
+    throw error;
+  }
+
+  const rows = (data ?? []) as LmsLessonDiscussion[];
+  if (!rows.length) return rows;
+
+  const userIds = Array.from(new Set(rows.map((row) => row.user_id)));
+  const { data: profiles } = await supabaseAdmin.from("profiles").select("id,full_name,role,email").in("id", userIds);
+  const profileById = new Map(
+    ((profiles ?? []) as Array<{ id: string; full_name: string | null; role: string | null; email?: string | null }>).map((row) => [row.id, row]),
+  );
+
+  return rows.map((row) => ({
+    ...row,
+    author_name: buildUserDisplayName(profileById.get(row.user_id) ?? {}),
+    author_role: profileById.get(row.user_id)?.role ?? null,
+  }));
+}
+
+export async function createLessonDiscussion(access: Access, courseId: string, lessonId: string, message: string) {
+  const detail = await getCourseDetailForLearner(access, courseId);
+  if (!detail) throw new Error("Curso nao encontrado.");
+  const lessonExists = detail.modules.some((module) => module.lessons.some((lesson) => lesson.id === lessonId));
+  if (!lessonExists) throw new Error("Aula nao encontrada.");
+
+  const content = message.trim();
+  if (!content) throw new Error("Escreva sua duvida antes de enviar.");
+
+  const { data, error } = await supabaseAdmin
+    .from("lms_lesson_discussions")
+    .insert({
+      company_id: access.companyId,
+      course_id: courseId,
+      lesson_id: lessonId,
+      user_id: access.userId,
+      message: content,
+    })
+    .select("id,company_id,course_id,lesson_id,user_id,message,created_at")
+    .maybeSingle<LmsLessonDiscussion>();
+
+  if (error) throw error;
+
+  const notificationAudience = new Set<string>();
+  if (detail.course.created_by) notificationAudience.add(detail.course.created_by);
+
+  const { data: privilegedProfiles } = await supabaseAdmin
+    .from("profiles")
+    .select("id")
+    .eq("active", true)
+    .in("role", ["admin", "rh"])
+    .or(access.companyId ? `company_id.eq.${access.companyId},company_id.is.null` : "company_id.is.null");
+
+  for (const row of (privilegedProfiles ?? []) as Array<{ id: string }>) {
+    if (row.id !== access.userId) notificationAudience.add(row.id);
+  }
+
+  if (notificationAudience.size) {
+    await supabaseAdmin.from("notifications").insert(
+      Array.from(notificationAudience).map((userId) => ({
+        to_user_id: userId,
+        type: "lms_lesson_question",
+        title: "Nova duvida em aula",
+        body: `${detail.course.title}: ${content.slice(0, 120)}`,
+        data: {
+          courseId,
+          lessonId,
+          questionBy: access.userId,
+        },
+      })),
+    );
+  }
+
+  return {
+    ...data!,
+    author_name: buildUserDisplayName({ full_name: null, email: access.email ?? null }),
+    author_role: access.role,
+  } satisfies LmsLessonDiscussion;
 }
 
 async function getLearnerStats(access: Access) {

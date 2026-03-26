@@ -215,6 +215,18 @@ export type LmsCourseAccessLog = {
   created_at: string;
 };
 
+export type LmsLessonDiscussion = {
+  id: string;
+  company_id: string | null;
+  course_id: string;
+  lesson_id: string;
+  user_id: string;
+  message: string;
+  created_at: string;
+  author_name?: string | null;
+  author_role?: string | null;
+};
+
 export type LmsCourseFormValues = {
   title: string;
   slug: string;

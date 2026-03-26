@@ -2,11 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { LessonPlayer } from "@/components/lms/LessonPlayer";
+import { LessonDiscussionPanel } from "@/components/lms/LessonDiscussionPanel";
 import { ModuleAccordion } from "@/components/lms/ModuleAccordion";
 import { QuizForm } from "@/components/lms/QuizForm";
 import { useUserProgress } from "@/hooks/lms/useUserProgress";
 import { getRequiredLessonsSummary, isLessonLocked } from "@/lib/lms/utils";
-import type { LmsQuizPayload } from "@/lib/lms/types";
+import type { LmsLessonDiscussion, LmsQuizPayload } from "@/lib/lms/types";
 
 export function LessonLearningClient({
   courseId,
@@ -15,6 +16,7 @@ export function LessonLearningClient({
   completedLessonIds,
   nextLesson,
   quizPayload,
+  discussions,
 }: {
   courseId: string;
   detail: Parameters<typeof ModuleAccordion>[0]["detail"];
@@ -22,6 +24,7 @@ export function LessonLearningClient({
   completedLessonIds: Set<string>;
   nextLesson: { id: string } | null;
   quizPayload: LmsQuizPayload | null;
+  discussions: LmsLessonDiscussion[];
 }) {
   const router = useRouter();
   const { progressPercent, loading, completeLesson } = useUserProgress(detail.progress?.progress_percent ?? 0);
@@ -43,6 +46,7 @@ export function LessonLearningClient({
           nextLessonHref={nextLesson ? `/lms/aprender/${courseId}/${nextLesson.id}` : null}
         />
         {quizPayload ? <QuizForm payload={quizPayload} /> : null}
+        <LessonDiscussionPanel courseId={courseId} lessonId={currentLesson.id} initialItems={discussions} />
       </div>
       <div className="space-y-4">
         <div className="rounded-3xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">

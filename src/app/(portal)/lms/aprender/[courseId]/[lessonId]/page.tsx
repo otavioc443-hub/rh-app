@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { LessonLearningClient } from "@/components/lms/LessonLearningClient";
-import { getLessonPlayerData, getQuizPayload } from "@/lib/lms/server";
+import { getLessonDiscussions, getLessonPlayerData, getQuizPayload } from "@/lib/lms/server";
 import { requireRoles } from "@/lib/server/feedbackGuard";
 
 export default async function LmsLessonPage({ params }: { params: Promise<{ courseId: string; lessonId: string }> }) {
@@ -11,7 +11,10 @@ export default async function LmsLessonPage({ params }: { params: Promise<{ cour
   const data = await getLessonPlayerData(access, courseId, lessonId);
   if (!data) notFound();
 
-  const quizPayload = data.currentLesson.lesson_type === "avaliacao" && data.quiz ? await getQuizPayload(data.quiz.id) : null;
+  const [quizPayload, discussions] = await Promise.all([
+    data.currentLesson.lesson_type === "avaliacao" && data.quiz ? getQuizPayload(data.quiz.id) : Promise.resolve(null),
+    getLessonDiscussions(access, courseId, lessonId),
+  ]);
 
   return (
     <LessonLearningClient
@@ -21,6 +24,7 @@ export default async function LmsLessonPage({ params }: { params: Promise<{ cour
       completedLessonIds={data.completedLessonIds}
       nextLesson={data.nextLesson}
       quizPayload={quizPayload}
+      discussions={discussions}
     />
   );
 }
