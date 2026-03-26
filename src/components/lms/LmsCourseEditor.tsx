@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, GraduationCap, ImagePlus, Plus, Trash2 } from "lucide-react";
 import { CourseHeader } from "@/components/lms/CourseHeader";
 import { FileUploader } from "@/components/lms/FileUploader";
+import { LessonPlayer } from "@/components/lms/LessonPlayer";
 import { ModuleAccordion } from "@/components/lms/ModuleAccordion";
 import { PageHeader } from "@/components/ui/PageShell";
 import { coursesService } from "@/lib/lms/coursesService";
@@ -70,9 +71,12 @@ export function LmsCourseEditor({
   const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [draftState, setDraftState] = useState<"idle" | "saved" | "restored">("idle");
   const [selectedModuleIndex, setSelectedModuleIndex] = useState(0);
   const [selectedLessonIndex, setSelectedLessonIndex] = useState(0);
   const [previewExpandedModuleId, setPreviewExpandedModuleId] = useState<string | null>("preview-module-0");
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hydratedRef = useRef(false);
   const [form, setForm] = useState<LmsCourseEditorPayload>({
     ...buildCourseDefaults(),
     ...(initialData?.course ?? {}),
@@ -104,9 +108,26 @@ export function LmsCourseEditor({
 
   const selectedModule = form.modules[selectedModuleIndex] ?? form.modules[0];
   const selectedLesson = selectedModule?.lessons[selectedLessonIndex] ?? selectedModule?.lessons[0];
+  const draftStorageKey = useMemo(() => `lms-course-editor:${courseId ?? "new"}`, [courseId]);
   const totalLessons = useMemo(
     () => form.modules.reduce((sum, module) => sum + module.lessons.length, 0),
     [form.modules],
+  );
+  const publicationChecklist = useMemo(
+    () => [
+      { label: "Titulo do curso preenchido", done: Boolean(form.title.trim()) },
+      { label: "Resumo curto informado", done: Boolean(form.short_description.trim()) },
+      { label: "Descricao completa cadastrada", done: Boolean(form.full_description.trim()) },
+      { label: "Pelo menos um modulo criado", done: form.modules.length > 0 },
+      { label: "Pelo menos uma aula configurada", done: totalLessons > 0 },
+      {
+        label: "Conteudo principal nas aulas",
+        done: form.modules.every((module) =>
+          module.lessons.every((lesson) => lesson.lesson_type === "avaliacao" || Boolean(lesson.content_url.trim() || lesson.content_text.trim())),
+        ),
+      },
+    ],
+    [form.full_description, form.modules, form.short_description, form.title, totalLessons],
   );
   const previewDetail = useMemo<LmsCourseDetail>(
     () => ({
@@ -205,6 +226,7 @@ export function LmsCourseEditor({
     setMessage("");
     try {
       await coursesService.save(courseId, form);
+      if (typeof window !== "undefined") window.localStorage.removeItem(draftStorageKey);
       router.push("/rh/lms/cursos");
       router.refresh();
     } catch (error) {
@@ -214,6 +236,43 @@ export function LmsCourseEditor({
     }
   }
 
+  useEffect(() => {
+    if (typeof window === "undefined" || hydratedRef.current) return;
+    hydratedRef.current = true;
+    const stored = window.localStorage.getItem(draftStorageKey);
+    if (!stored) return;
+
+    try {
+      const parsed = JSON.parse(stored) as { form?: LmsCourseEditorPayload };
+      if (parsed.form) {
+        setForm(parsed.form);
+        setDraftState("restored");
+      }
+    } catch {
+      window.localStorage.removeItem(draftStorageKey);
+    }
+  }, [draftStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !hydratedRef.current) return;
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+
+    autosaveTimerRef.current = setTimeout(() => {
+      window.localStorage.setItem(
+        draftStorageKey,
+        JSON.stringify({
+          savedAt: new Date().toISOString(),
+          form,
+        }),
+      );
+      setDraftState("saved");
+    }, 700);
+
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+  }, [draftStorageKey, form]);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -221,6 +280,13 @@ export function LmsCourseEditor({
         title={mode === "create" ? "Criar treinamento" : "Editar treinamento"}
         subtitle="Monte um curso com capa, banner, modulos, aulas multimidia e regras de publicacao."
       />
+      <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600 shadow-sm">
+        {draftState === "restored"
+          ? "Rascunho recuperado automaticamente neste navegador."
+          : draftState === "saved"
+            ? "Rascunho salvo automaticamente neste navegador."
+            : "Edite livremente. O rascunho desta tela sera salvo automaticamente enquanto voce trabalha."}
+      </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
         <div className="space-y-6">
@@ -445,6 +511,17 @@ export function LmsCourseEditor({
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Objetivo desta aula</div>
+                      <div className="mt-2 text-sm text-slate-600">Deixe claro o que o colaborador deve aprender ou conseguir fazer ao final desta etapa.</div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Formato ideal</div>
+                      <div className="mt-2 text-sm text-slate-600">Video para demonstracao, PDF para norma, texto para instrucoes e avaliacao para validacao final.</div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
                     <FieldGroup label="Modulo da aula" hint="Agrupamento em que esta aula vai aparecer.">
                       <input value={selectedModule.title} onChange={(event) => patchModule(selectedModuleIndex, (module) => ({ ...module, title: event.target.value }))} placeholder="Ex.: Boas-vindas e cultura" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900" />
                     </FieldGroup>
@@ -501,6 +578,21 @@ export function LmsCourseEditor({
         </div>
 
         <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
+          <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-950">Antes de publicar</h2>
+            <p className="mt-1 text-sm text-slate-500">Checklist rapido para garantir que o treinamento esta claro, completo e pronto para atribuicao.</p>
+            <div className="mt-4 space-y-3">
+              {publicationChecklist.map((item) => (
+                <div key={item.label} className="flex items-start gap-3 rounded-2xl border border-slate-200 px-4 py-3">
+                  <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${item.done ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                    {item.done ? "✓" : "!"}
+                  </span>
+                  <div className="text-sm text-slate-700">{item.label}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+
           <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
             <div className="h-44 bg-slate-100">
               {form.banner_url ? (
@@ -550,6 +642,12 @@ export function LmsCourseEditor({
                 onToggle={setPreviewExpandedModuleId}
               />
             </div>
+            {selectedLesson ? (
+              <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-4 text-sm font-semibold text-slate-900">Preview da aula selecionada</div>
+                <LessonPlayer lesson={{ ...previewDetail.modules[selectedModuleIndex].lessons[selectedLessonIndex] }} />
+              </div>
+            ) : null}
           </section>
         </div>
       </div>

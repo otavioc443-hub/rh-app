@@ -53,12 +53,44 @@ export function formatPercent(value: number | null | undefined) {
 }
 
 export function getNextLesson(modules: Array<{ lessons: LmsLesson[] }>, currentLessonId?: string | null) {
-  const flatLessons = modules.flatMap((module) => [...module.lessons].sort((a, b) => a.sort_order - b.sort_order));
+  const flatLessons = getOrderedLessons(modules);
   if (!flatLessons.length) return null;
   if (!currentLessonId) return flatLessons[0];
   const currentIndex = flatLessons.findIndex((lesson) => lesson.id === currentLessonId);
   if (currentIndex < 0) return flatLessons[0];
   return flatLessons[currentIndex + 1] ?? null;
+}
+
+export function getOrderedLessons(modules: Array<{ lessons: LmsLesson[] }>) {
+  return modules.flatMap((module) => [...module.lessons].sort((a, b) => a.sort_order - b.sort_order));
+}
+
+export function getResumeLesson(
+  modules: Array<{ lessons: LmsLesson[] }>,
+  currentLessonId?: string | null,
+  completedLessonIds?: Set<string>,
+) {
+  const lessons = getOrderedLessons(modules);
+  if (!lessons.length) return null;
+  if (currentLessonId) {
+    const currentLesson = lessons.find((lesson) => lesson.id === currentLessonId);
+    if (currentLesson) return currentLesson;
+  }
+  if (completedLessonIds?.size) {
+    const nextPending = lessons.find((lesson) => !completedLessonIds.has(lesson.id));
+    if (nextPending) return nextPending;
+  }
+  return lessons[0];
+}
+
+export function getRequiredLessonsSummary(modules: Array<{ lessons: LmsLesson[] }>) {
+  const lessons = getOrderedLessons(modules);
+  const requiredLessons = lessons.filter((lesson) => lesson.is_required);
+  return {
+    totalLessons: lessons.length,
+    requiredLessons: requiredLessons.length,
+    totalMinutes: lessons.reduce((sum, lesson) => sum + (lesson.duration_minutes ?? 0), 0),
+  };
 }
 
 export function buildStorageRef(bucket: string, path: string) {
@@ -84,7 +116,7 @@ export function isLessonLocked(
   completedLessonIds: Set<string>,
 ) {
   if (!sequenceRequired) return false;
-  const flatLessons = moduleGroups.flatMap((module) => [...module.lessons].sort((a, b) => a.sort_order - b.sort_order));
+  const flatLessons = getOrderedLessons(moduleGroups);
   const index = flatLessons.findIndex((lesson) => lesson.id === lessonId);
   if (index <= 0) return false;
   for (let cursor = 0; cursor < index; cursor += 1) {

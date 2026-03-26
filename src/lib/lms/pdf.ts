@@ -5,6 +5,7 @@ type CertificatePdfInput = {
   workloadHours: number | null;
   completedAt: string;
   companyName: string;
+  validationUrl?: string | null;
 };
 
 function escapePdfText(value: string) {
@@ -24,7 +25,8 @@ export function buildCertificatePdf(input: CertificatePdfInput) {
     toPdfLine(`Carga horaria: ${input.workloadHours ?? 0} hora(s).`, 640, 14),
     toPdfLine(`Data de conclusao: ${input.completedAt}.`, 616, 14),
     toPdfLine(`Codigo de validacao: ${input.validationCode}.`, 592, 12),
-    toPdfLine("Documento emitido eletronicamente pelo modulo LMS.", 568, 12),
+    toPdfLine(input.validationUrl ? `Validacao publica: ${input.validationUrl}.` : "Documento emitido eletronicamente pelo modulo LMS.", 568, 10),
+    toPdfLine("Documento emitido eletronicamente pelo modulo LMS.", 548, 12),
   ].join("\n");
 
   const contentStream = `${lines}\n`;

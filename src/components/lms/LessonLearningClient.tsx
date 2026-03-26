@@ -5,7 +5,7 @@ import { LessonPlayer } from "@/components/lms/LessonPlayer";
 import { ModuleAccordion } from "@/components/lms/ModuleAccordion";
 import { QuizForm } from "@/components/lms/QuizForm";
 import { useUserProgress } from "@/hooks/lms/useUserProgress";
-import { isLessonLocked } from "@/lib/lms/utils";
+import { getRequiredLessonsSummary, isLessonLocked } from "@/lib/lms/utils";
 import type { LmsQuizPayload } from "@/lib/lms/types";
 
 export function LessonLearningClient({
@@ -25,6 +25,8 @@ export function LessonLearningClient({
 }) {
   const router = useRouter();
   const { progressPercent, loading, completeLesson } = useUserProgress(detail.progress?.progress_percent ?? 0);
+  const summary = getRequiredLessonsSummary(detail.modules);
+  const currentModule = detail.modules.find((module) => module.lessons.some((lesson) => lesson.id === currentLesson.id)) ?? detail.modules[0] ?? null;
 
   async function handleComplete() {
     await completeLesson(courseId, currentLesson.id, true);
@@ -44,14 +46,22 @@ export function LessonLearningClient({
       </div>
       <div className="space-y-4">
         <div className="rounded-3xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
-          Progresso do curso: <span className="font-semibold text-slate-900">{Math.round(progressPercent)}%</span>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Resumo da jornada</div>
+          <div className="mt-2 text-lg font-semibold text-slate-900">{Math.round(progressPercent)}% do curso concluido</div>
+          <div className="mt-2 space-y-1 text-sm text-slate-600">
+            <div>Fase atual: {currentModule?.title ?? "Etapa do treinamento"}</div>
+            <div>Aulas obrigatorias: {summary.requiredLessons}</div>
+            <div>Carga estimada: {summary.totalMinutes} min</div>
+          </div>
         </div>
         <ModuleAccordion
           detail={detail}
-          expandedModuleId={detail.modules.find((module) => module.lessons.some((lesson) => lesson.id === currentLesson.id))?.id ?? detail.modules[0]?.id ?? null}
+          expandedModuleId={currentModule?.id ?? null}
           onToggle={() => undefined}
           completedLessonIds={completedLessonIds}
           isLessonLocked={(lessonId) => isLessonLocked(detail.course.sequence_required, detail.modules, lessonId, completedLessonIds)}
+          currentLessonId={currentLesson.id}
+          lessonHrefBuilder={(lessonId) => `/lms/aprender/${courseId}/${lessonId}`}
         />
       </div>
     </div>

@@ -1238,6 +1238,8 @@ export async function ensureCertificateForUser(access: Access, course: LmsCourse
   if (!progress || progress.status !== "completed") throw new Error("Curso ainda nao elegivel para certificado.");
 
   const validationCode = `LMS-${course.id.slice(0, 4).toUpperCase()}-${randomUUID().slice(0, 8).toUpperCase()}`;
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "http://localhost:3000";
+  const validationUrl = `${siteUrl.replace(/\/$/, "")}/certificados/${validationCode}`;
   const pdf = buildCertificatePdf({
     validationCode,
     learnerName: profile?.full_name ?? access.email ?? "Colaborador",
@@ -1245,6 +1247,7 @@ export async function ensureCertificateForUser(access: Access, course: LmsCourse
     workloadHours: course.workload_hours,
     completedAt: formatDateTime(progress.completed_at) ?? formatDateTime(new Date().toISOString()) ?? "",
     companyName: companyMeta.company?.name ?? "Portal RH",
+    validationUrl,
   });
 
   const bucket = "lms-certificates";
@@ -1294,6 +1297,39 @@ export async function getCertificateDownload(access: Access, courseId: string) {
   };
 }
 
+export async function getPublicCertificateValidation(validationCode: string) {
+  const { data: certificate, error: certificateError } = await supabaseAdmin
+    .from("lms_certificates")
+    .select("id,user_id,course_id,validation_code,issued_at")
+    .eq("validation_code", validationCode)
+    .maybeSingle<{ id: string; user_id: string; course_id: string; validation_code: string; issued_at: string }>();
+
+  if (certificateError || !certificate) return null;
+
+  const [profileRes, courseRes, progressRes] = await Promise.all([
+    supabaseAdmin.from("profiles").select("full_name,company_id").eq("id", certificate.user_id).maybeSingle<{ full_name: string | null; company_id: string | null }>(),
+    supabaseAdmin.from("lms_courses").select("title,workload_hours").eq("id", certificate.course_id).maybeSingle<{ title: string; workload_hours: number | null }>(),
+    supabaseAdmin.from("lms_user_progress").select("completed_at").eq("user_id", certificate.user_id).eq("course_id", certificate.course_id).maybeSingle<{ completed_at: string | null }>(),
+  ]);
+
+  const companyId = profileRes.data?.company_id ?? null;
+  let companyName = "Portal RH";
+  if (companyId) {
+    const { data: company } = await supabaseAdmin.from("companies").select("name").eq("id", companyId).maybeSingle<{ name: string | null }>();
+    companyName = company?.name?.trim() || companyName;
+  }
+
+  return {
+    validationCode: certificate.validation_code,
+    learnerName: profileRes.data?.full_name?.trim() || "Colaborador",
+    courseTitle: courseRes.data?.title ?? "Treinamento",
+    workloadHours: courseRes.data?.workload_hours ?? null,
+    issuedAt: certificate.issued_at,
+    completedAt: progressRes.data?.completed_at ?? certificate.issued_at,
+    companyName,
+  };
+}
+
 export async function getLmsReportCsv(companyId: string | null, filters?: Partial<LmsReportsFilters>) {
   const rows = await getLmsReportsData(companyId, filters);
   const header = ["colaborador", "departamento", "empresa", "curso", "categoria", "status", "progresso", "conclusao", "nota"];
@@ -1319,7 +1355,61 @@ export async function getLmsReportCsv(companyId: string | null, filters?: Partia
         })
         .join(","),
     )
-    .join("\n");
+      .join("\n");
+}
+
+function validatePublishableCoursePayload(payload: {
+  title: string;
+  slug: string;
+  short_description: string;
+  full_description: string;
+  modules: Array<{
+    title: string;
+    lessons: Array<{
+      title: string;
+      lesson_type: string;
+      content_url: string;
+      content_text: string;
+    }>;
+  }>;
+  quiz?: {
+    title: string;
+    questions: Array<{
+      statement: string;
+      options: Array<{ text: string; is_correct: boolean }>;
+    }>;
+  } | null;
+}) {
+  if (!payload.title.trim()) throw new Error("Informe o titulo do treinamento antes de publicar.");
+  if (!payload.slug.trim()) throw new Error("Informe o endereco do curso antes de publicar.");
+  if (!payload.short_description.trim()) throw new Error("Informe o resumo curto antes de publicar.");
+  if (!payload.full_description.trim()) throw new Error("Informe a descricao completa antes de publicar.");
+  if (!payload.modules.length) throw new Error("Crie pelo menos um modulo antes de publicar.");
+
+  for (const [moduleIndex, module] of payload.modules.entries()) {
+    if (!module.title.trim()) throw new Error(`Preencha o titulo do modulo ${moduleIndex + 1} antes de publicar.`);
+    if (!module.lessons.length) throw new Error(`O modulo ${moduleIndex + 1} precisa ter pelo menos uma aula.`);
+    for (const [lessonIndex, lesson] of module.lessons.entries()) {
+      if (!lesson.title.trim()) {
+        throw new Error(`Preencha o titulo da aula ${lessonIndex + 1} do modulo ${moduleIndex + 1}.`);
+      }
+      if (lesson.lesson_type !== "avaliacao" && !lesson.content_url.trim() && !lesson.content_text.trim()) {
+        throw new Error(`Adicione conteudo principal na aula "${lesson.title}" antes de publicar.`);
+      }
+    }
+  }
+
+  if (payload.quiz) {
+    if (!payload.quiz.title.trim()) throw new Error("Defina o titulo da avaliacao antes de publicar.");
+    for (const [questionIndex, question] of payload.quiz.questions.entries()) {
+      if (!question.statement.trim()) throw new Error(`Preencha o enunciado da pergunta ${questionIndex + 1}.`);
+      const validOptions = question.options.filter((option) => option.text.trim());
+      if (validOptions.length < 2) throw new Error(`A pergunta ${questionIndex + 1} precisa de pelo menos duas alternativas.`);
+      if (!validOptions.some((option) => option.is_correct)) {
+        throw new Error(`Marque ao menos uma resposta correta na pergunta ${questionIndex + 1}.`);
+      }
+    }
+  }
 }
 
 export async function upsertCourseWithStructure(
@@ -1376,9 +1466,11 @@ export async function upsertCourseWithStructure(
       }>;
     } | null;
   },
-) {
-  const coursePayload = {
-    company_id: access.companyId,
+  ) {
+    if (payload.status === "published") validatePublishableCoursePayload(payload);
+
+    const coursePayload = {
+      company_id: access.companyId,
     title: payload.title,
     slug: payload.slug,
     short_description: payload.short_description || null,
