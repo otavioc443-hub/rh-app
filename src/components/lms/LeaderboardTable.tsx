@@ -13,7 +13,7 @@ function rankTone(rank: number) {
 export function LeaderboardTable({
   rows,
   title = "Ranking de aprendizagem",
-  subtitle = "Quem mais acumulou XP e constância nesta temporada.",
+  subtitle = "Quem mais acumulou XP e constancia nesta temporada.",
   compact = false,
 }: {
   rows: LmsLeaderboardRow[];
@@ -34,7 +34,9 @@ export function LeaderboardTable({
           rows.map((row) => (
             <div
               key={row.user_id}
-              className={`grid gap-3 rounded-[24px] border px-4 py-4 ${rankTone(row.rank)} ${compact ? "md:grid-cols-[auto,1fr,auto]" : "md:grid-cols-[auto,1.2fr,0.8fr,auto]"}`}
+              className={`grid gap-3 rounded-[24px] border px-4 py-4 ${rankTone(row.rank)} ${
+                compact ? "md:grid-cols-[auto,1fr,auto]" : "md:grid-cols-[auto,1.2fr,0.8fr,auto]"
+              }`}
             >
               <div className="flex items-center gap-3">
                 <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-sm font-bold text-white">
@@ -59,7 +61,7 @@ export function LeaderboardTable({
                     <div className="mt-1 text-sm font-semibold text-slate-950">{row.xp}</div>
                   </div>
                   <div className="rounded-2xl bg-white/80 px-3 py-2">
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Nível</div>
+                    <div className="text-[11px] uppercase tracking-[0.18em] text-slate-500">Nivel</div>
                     <div className="mt-1 text-sm font-semibold text-slate-950">{row.level}</div>
                   </div>
                   <div className="rounded-2xl bg-white/80 px-3 py-2">
@@ -77,7 +79,7 @@ export function LeaderboardTable({
           ))
         ) : (
           <div className="rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
-            O ranking será preenchido assim que a gamificação começar a registrar XP.
+            O ranking sera preenchido assim que a gamificacao comecar a registrar XP.
           </div>
         )}
       </div>

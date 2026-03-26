@@ -8,6 +8,8 @@ import type {
   LmsGamificationOverview,
   LmsLeaderboardRow,
   LmsRewardRule,
+  LmsSeasonCampaign,
+  LmsSeasonGoal,
   LmsUserBadge,
   LmsUserStreak,
   LmsUserXp,
@@ -65,6 +67,87 @@ function seasonKeyFor(date = new Date()) {
 
 function xpNeededForLevel(level: number) {
   return 200 + Math.max(0, level - 1) * 150;
+}
+
+function clampPercent(current: number, target: number) {
+  if (target <= 0) return 0;
+  return Math.max(0, Math.min(100, Math.round((current / target) * 100)));
+}
+
+function buildGoal(id: string, title: string, current: number, target: number, unit: string): LmsSeasonGoal {
+  return {
+    id,
+    title,
+    current,
+    target,
+    unit,
+    completionPercent: clampPercent(current, target),
+  };
+}
+
+function buildLearnerSeasonCampaign(params: {
+  seasonLabel: string;
+  xp: number;
+  streak: number;
+  badgeCount: number;
+  activeBattleCount: number;
+  challenges: Array<LmsChallenge & { participant: LmsChallengeParticipant | null }>;
+}): LmsSeasonCampaign {
+  const seasonalMission =
+    params.challenges.find((item) => item.challenge_type === "seasonal") ??
+    params.challenges.find((item) => item.challenge_type === "weekly") ??
+    params.challenges[0] ??
+    null;
+
+  const completedChallenges = params.challenges.filter((item) => item.participant?.completed).length;
+  const goals: LmsSeasonGoal[] = [
+    buildGoal("xp", "Acumular XP na temporada", params.xp, 1000, "XP"),
+    buildGoal("streak", "Manter ritmo de estudo", params.streak, 7, "dias"),
+    buildGoal("badges", "Desbloquear conquistas", params.badgeCount, 3, "badges"),
+    buildGoal("desafios", "Concluir desafios ativos", completedChallenges, Math.max(1, params.challenges.length), "desafios"),
+  ];
+
+  return {
+    seasonLabel: params.seasonLabel,
+    missionTitle: seasonalMission?.title ?? "Missao de aprendizagem da temporada",
+    missionDescription:
+      seasonalMission?.description ??
+      "Feche aulas, avance no quiz e mantenha sua constancia para subir no ranking mensal.",
+    totalChallenges: params.challenges.length,
+    completedChallenges,
+    activeBattleCount: params.activeBattleCount,
+    totalXp: params.xp,
+    streakDays: params.streak,
+    goals,
+  };
+}
+
+function buildAdminSeasonCampaign(params: {
+  seasonLabel: string;
+  totalXpDistributed: number;
+  activeLearners: number;
+  activeChallenges: number;
+  averageStreak: number;
+}): LmsSeasonCampaign {
+  const goals: LmsSeasonGoal[] = [
+    buildGoal("xp", "XP distribuido no mes", params.totalXpDistributed, 5000, "XP"),
+    buildGoal("learners", "Learners ativos", params.activeLearners, 25, "pessoas"),
+    buildGoal("challenges", "Desafios rodando", params.activeChallenges, 4, "desafios"),
+    buildGoal("streak", "Streak medio da empresa", Math.round(params.averageStreak), 5, "dias"),
+  ];
+
+  return {
+    seasonLabel: params.seasonLabel,
+    missionTitle: "Campanha mensal de aprendizagem",
+    missionDescription:
+      "Estimule conclusao, ritmo recorrente e participacao em desafios para manter o LMS vivo na rotina da empresa.",
+    totalChallenges: params.activeChallenges,
+    completedChallenges: 0,
+    activeBattleCount: 0,
+    totalXp: params.totalXpDistributed,
+    streakDays: Math.round(params.averageStreak),
+    goals,
+  };
 }
 
 function computeLevel(totalXp: number) {
@@ -398,23 +481,34 @@ export async function getLearnerGamificationOverview(context: LmsAccessContext):
       badge: Array.isArray(row.badge) ? row.badge[0] ?? null : row.badge,
     }));
     const nextLevelXp = computeLevel(xp.total_xp).nextLevelXp;
+    const activeChallenges = ((challengesRes.data ?? []) as LmsChallenge[]).map((challenge) => ({
+      ...challenge,
+      participant: participantByChallenge.get(challenge.id) ?? null,
+    }));
+    const battles = (sessionsRes.data ?? []) as LmsGameSession[];
+    const seasonCampaign = buildLearnerSeasonCampaign({
+      seasonLabel: seasonLabelFor(),
+      xp: xp.total_xp,
+      streak: streak.current_streak,
+      badgeCount: badges.length,
+      activeBattleCount: battles.length,
+      challenges: activeChallenges,
+    });
 
     return {
       xp,
       streak,
       badges,
-      activeChallenges: ((challengesRes.data ?? []) as LmsChallenge[]).map((challenge) => ({
-        ...challenge,
-        participant: participantByChallenge.get(challenge.id) ?? null,
-      })),
+      activeChallenges,
       leaderboard: leaderboard.map((row) => ({
         ...row,
         department_name: row.department_name ? departmentNames.get(row.department_name) ?? row.department_name : row.department_name,
         full_name: profilesMap.get(row.user_id)?.full_name ?? row.full_name,
       })),
-      battles: (sessionsRes.data ?? []) as LmsGameSession[],
+      battles,
       seasonLabel: seasonLabelFor(),
       nextLevelXp,
+      seasonCampaign,
     };
   } catch (error) {
     if (!isMissingRelation(error)) throw error;
@@ -427,6 +521,14 @@ export async function getLearnerGamificationOverview(context: LmsAccessContext):
       battles: [],
       seasonLabel: seasonLabelFor(),
       nextLevelXp: xpNeededForLevel(1),
+      seasonCampaign: buildLearnerSeasonCampaign({
+        seasonLabel: seasonLabelFor(),
+        xp: 0,
+        streak: 0,
+        badgeCount: 0,
+        activeBattleCount: 0,
+        challenges: [],
+      }),
     };
   }
 }
@@ -526,6 +628,14 @@ export async function getAdminGamificationDashboard(companyId: string | null): P
     const activeLearners = new Set(xpRows.filter((row) => row.total_xp > 0).map((row) => row.user_id)).size;
     const totalXpDistributed = xpRows.reduce((sum, row) => sum + row.total_xp, 0);
     const averageStreak = streakRows.length ? Math.round((streakRows.reduce((sum, row) => sum + row.current_streak, 0) / streakRows.length) * 10) / 10 : 0;
+    const seasonLabel = seasonLabelFor();
+    const seasonCampaign = buildAdminSeasonCampaign({
+      seasonLabel,
+      totalXpDistributed,
+      activeLearners,
+      activeChallenges: (challengesRes.data ?? []).length,
+      averageStreak,
+    });
 
     return {
       totalXpDistributed,
@@ -537,11 +647,12 @@ export async function getAdminGamificationDashboard(companyId: string | null): P
         .map(([title, total]) => ({ title, total }))
         .sort((left, right) => right.total - left.total)
         .slice(0, 5),
-      seasonLabel: seasonLabelFor(),
+      seasonLabel,
       leaderboard: leaderboard.map((row) => ({
         ...row,
         full_name: profilesMap.get(row.user_id)?.full_name ?? row.full_name,
       })),
+      seasonCampaign,
     };
   } catch (error) {
     if (!isMissingRelation(error)) throw error;
@@ -554,6 +665,13 @@ export async function getAdminGamificationDashboard(companyId: string | null): P
       topBadges: [],
       seasonLabel: seasonLabelFor(),
       leaderboard: [],
+      seasonCampaign: buildAdminSeasonCampaign({
+        seasonLabel: seasonLabelFor(),
+        totalXpDistributed: 0,
+        activeLearners: 0,
+        activeChallenges: 0,
+        averageStreak: 0,
+      }),
     };
   }
 }

@@ -311,7 +311,7 @@ async function ensureLmsDeadlineNotifications(access: Access, cards: LmsMyTraini
     }))
     .filter((item) => item.urgency === "overdue" || item.urgency === "due_soon");
 
-  if (!alerts.length) return;
+  if (!alerts.length) return 0;
 
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
@@ -331,7 +331,7 @@ async function ensureLmsDeadlineNotifications(access: Access, cards: LmsMyTraini
       text.includes("schema cache") ||
       text.includes("column");
     if (!ignorable) throw existingRes.error;
-    return;
+    return 0;
   }
 
   const existingKeys = new Set(
@@ -361,7 +361,7 @@ async function ensureLmsDeadlineNotifications(access: Access, cards: LmsMyTraini
     .filter((item) => !existingKeys.has(item.key))
     .map((item) => item.record);
 
-  if (!payload.length) return;
+  if (!payload.length) return 0;
 
   const insertRes = await supabaseAdmin.from("notifications").insert(payload);
   if (insertRes.error) {
@@ -373,6 +373,7 @@ async function ensureLmsDeadlineNotifications(access: Access, cards: LmsMyTraini
       text.includes("column");
     if (!ignorable) throw insertRes.error;
   }
+  return payload.length;
 }
 
 async function fetchCourseModules(courseId: string) {
@@ -819,19 +820,30 @@ export async function getSafeLmsAdminDashboardData(companyId: string | null) {
       recentAssignments: [],
       recentCourses: [],
       attentionItems: [],
-      gamification: {
-        totalXpDistributed: 0,
-        activeLearners: 0,
-        activeChallenges: 0,
-        averageStreak: 0,
-        topDepartments: [],
-        topBadges: [],
-        seasonLabel: "",
-        leaderboard: [],
-      },
-    } satisfies LmsAdminDashboardData;
+        gamification: {
+          totalXpDistributed: 0,
+          activeLearners: 0,
+          activeChallenges: 0,
+          averageStreak: 0,
+          topDepartments: [],
+          topBadges: [],
+          seasonLabel: "",
+          leaderboard: [],
+          seasonCampaign: {
+            seasonLabel: "",
+            missionTitle: "Campanha mensal de aprendizagem",
+            missionDescription: "Acompanhe metas, desafios e ritmo de estudo da empresa em um unico painel.",
+            totalChallenges: 0,
+            completedChallenges: 0,
+            activeBattleCount: 0,
+            totalXp: 0,
+            streakDays: 0,
+            goals: [],
+          },
+        },
+      } satisfies LmsAdminDashboardData;
+    }
   }
-}
 
 export async function getLmsCoursesAdminData(companyId: string | null) {
   const [{ data: coursesData, error: coursesError }, modulesRes, lessonsRes, assignmentsRes, progressRes] = await Promise.all([
@@ -1603,4 +1615,210 @@ export async function archiveCourse(access: Access, courseId: string) {
     .maybeSingle<LmsCourse>();
   if (error || !data) throw error ?? new Error("Nao foi possivel arquivar o curso.");
   return data;
+}
+
+export async function duplicateCourse(access: Access, courseId: string) {
+  const [courseRes, modulesRes, lessonsRes, quiz] = await Promise.all([
+    supabaseAdmin.from("lms_courses").select("*").eq("id", courseId).maybeSingle<LmsCourse>(),
+    supabaseAdmin.from("lms_course_modules").select("*").eq("course_id", courseId).order("sort_order", { ascending: true }),
+    supabaseAdmin.from("lms_lessons").select("*").eq("course_id", courseId).order("sort_order", { ascending: true }),
+    getQuizPayloadForCourse(courseId),
+  ]);
+  if (courseRes.error || !courseRes.data) throw courseRes.error ?? new Error("Curso nao encontrado.");
+  if (access.companyId && courseRes.data.company_id && courseRes.data.company_id !== access.companyId) {
+    throw new Error("Curso fora da sua empresa.");
+  }
+
+  const course = courseRes.data;
+  const modules = (modulesRes.data ?? []) as LmsCourseModule[];
+  const lessons = (lessonsRes.data ?? []) as LmsLesson[];
+
+  const suffix = randomUUID().slice(0, 6).toLowerCase();
+  const duplicated = await upsertCourseWithStructure(access, null, {
+    title: `Copia - ${course.title}`,
+    slug: `${course.slug}-copia-${suffix}`,
+    short_description: course.short_description ?? "",
+    full_description: course.full_description ?? "",
+    category: course.category ?? "",
+    thumbnail_url: course.thumbnail_url ?? "",
+    banner_url: course.banner_url ?? "",
+    workload_hours: course.workload_hours,
+    required: course.required,
+    certificate_enabled: course.certificate_enabled,
+    passing_score: course.passing_score,
+    status: "draft",
+    visibility: course.visibility,
+    sequence_required: course.sequence_required,
+    onboarding_recommended: course.onboarding_recommended,
+    modules: modules.map((module, moduleIndex) => ({
+      title: module.title,
+      description: module.description ?? "",
+      sort_order: moduleIndex + 1,
+      lessons: lessons.filter((lesson) => lesson.module_id === module.id).map((lesson, lessonIndex) => ({
+        title: lesson.title,
+        description: lesson.description ?? "",
+        lesson_type: lesson.lesson_type,
+        content_url: lesson.content_url ?? "",
+        content_text: lesson.content_text ?? "",
+        duration_minutes: lesson.duration_minutes,
+        sort_order: lessonIndex + 1,
+        is_required: lesson.is_required,
+        allow_preview: lesson.allow_preview,
+        storage_bucket: lesson.storage_bucket ?? null,
+        storage_path: lesson.storage_path ?? null,
+      })),
+    })),
+    quiz: quiz
+      ? {
+          title: `${quiz.quiz.title} - copia`,
+          passing_score: quiz.quiz.passing_score,
+          max_attempts: quiz.quiz.max_attempts,
+          randomize_questions: quiz.quiz.randomize_questions,
+          questions: quiz.questions.map((question, index) => ({
+            statement: question.statement,
+            question_type: question.question_type,
+            sort_order: index + 1,
+            options: question.options.map((option) => ({
+              text: option.text,
+              is_correct: option.is_correct,
+            })),
+          })),
+        }
+      : null,
+  });
+
+  return duplicated;
+}
+
+export async function duplicateLearningPath(access: Access, pathId: string) {
+  const paths = await getLmsLearningPathsAdminData(access.companyId);
+  const source = paths.find((item) => item.id === pathId);
+  if (!source) throw new Error("Trilha nao encontrada.");
+
+  const duplicated = await upsertLearningPath(access, {
+    title: `Copia - ${source.title}`,
+    description: source.description ?? "",
+    status: "draft",
+    onboarding_required: source.onboarding_required,
+    courseIds: ((source.courses ?? []) as Array<{ course_id: string }>).map((course) => course.course_id),
+  });
+
+  return duplicated;
+}
+
+export async function sendLmsReminder(
+  access: Access,
+  payload: {
+    userId: string;
+    courseId: string;
+    courseTitle?: string | null;
+    dueDate?: string | null;
+    source: "gestor" | "rh";
+  },
+) {
+  const { data: profileData, error: profileError } = await supabaseAdmin
+    .from("profiles")
+    .select("id,company_id,manager_id,full_name")
+    .eq("id", payload.userId)
+    .maybeSingle<ProfileMini>();
+  if (profileError || !profileData) throw profileError ?? new Error("Colaborador nao encontrado.");
+
+  if (access.companyId && profileData.company_id && profileData.company_id !== access.companyId) {
+    throw new Error("Colaborador fora da sua empresa.");
+  }
+  if (access.role === "gestor" && profileData.manager_id !== access.userId) {
+    throw new Error("Voce so pode lembrar colaboradores da sua equipe.");
+  }
+
+  const title = `Lembrete de treinamento: ${payload.courseTitle ?? "Curso atribuido"}`;
+  const body = payload.dueDate
+    ? `Este treinamento continua pendente e possui prazo em ${payload.dueDate}. Retome o quanto antes.`
+    : "Este treinamento continua pendente. Retome o quanto antes no portal.";
+  const link = `/lms/cursos/${payload.courseId}`;
+
+  const notificationRes = await supabaseAdmin.from("notifications").insert({
+    to_user_id: payload.userId,
+    title,
+    body,
+    link,
+    type: "lms_manual_reminder",
+  });
+
+  if (notificationRes.error) {
+    const text = notificationRes.error.message.toLowerCase();
+    const ignorable =
+      text.includes("does not exist") ||
+      text.includes("relation") ||
+      text.includes("schema cache") ||
+      text.includes("column");
+    if (!ignorable) throw notificationRes.error;
+  }
+
+  return { success: true };
+}
+
+export async function dispatchLmsDeadlineSweep(access: Access) {
+  const [profilesRes, coursesRes, progressRes] = await Promise.all([
+    access.companyId
+      ? supabaseAdmin.from("profiles").select("id,company_id,department_id,role,active").eq("company_id", access.companyId).eq("active", true)
+      : supabaseAdmin.from("profiles").select("id,company_id,department_id,role,active").eq("active", true),
+    access.companyId
+      ? supabaseAdmin.from("lms_courses").select("*").or(`company_id.eq.${access.companyId},company_id.is.null`)
+      : supabaseAdmin.from("lms_courses").select("*"),
+    supabaseAdmin.from("lms_user_progress").select("*"),
+  ]);
+  if (profilesRes.error) throw profilesRes.error;
+  if (coursesRes.error) throw coursesRes.error;
+  if (progressRes.error) throw progressRes.error;
+
+  const courseById = new Map(((coursesRes.data ?? []) as LmsCourse[]).map((course) => [course.id, course]));
+  const profiles = (profilesRes.data ?? []) as ProfileMini[];
+  const progressMap = new Map(
+    ((progressRes.data ?? []) as LmsUserProgress[]).map((row) => [`${row.user_id}:${row.course_id}`, row]),
+  );
+  const graph = await fetchActiveAssignmentGraph();
+  let sent = 0;
+
+  for (const profile of profiles) {
+    const visibility = buildVisibilityForProfile(profile, graph);
+    const cards: LmsMyTrainingCard[] = visibility.map((item) => ({
+      course: courseById.get(item.course_id) ?? {
+        id: item.course_id,
+        company_id: profile.company_id,
+        title: "Curso",
+        slug: item.course_id,
+        short_description: null,
+        full_description: null,
+        category: null,
+        thumbnail_url: null,
+        banner_url: null,
+        workload_hours: null,
+        required: item.mandatory,
+        certificate_enabled: true,
+        passing_score: null,
+        status: "published",
+        visibility: "publico_interno",
+        sequence_required: false,
+        onboarding_recommended: false,
+        created_by: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      progress: progressMap.get(`${profile.id}:${item.course_id}`) ?? null,
+      assignment: item,
+      status: progressMap.get(`${profile.id}:${item.course_id}`)?.status ?? "not_started",
+    }));
+    sent += await ensureLmsDeadlineNotifications(
+      {
+        ...access,
+        userId: profile.id,
+        companyId: profile.company_id,
+        departmentId: profile.department_id,
+        role: profile.role ?? "colaborador",
+      } as Access,
+      cards,
+    );
+  }
+
+  return { success: true, dispatched: sent };
 }

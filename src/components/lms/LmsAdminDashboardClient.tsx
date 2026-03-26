@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { BookOpenCheck, ClockAlert, GraduationCap, Layers3, Trophy, Users2, Zap } from "lucide-react";
+import { LmsActionButton } from "@/components/lms/LmsActionButton";
 import { LeaderboardTable } from "@/components/lms/LeaderboardTable";
-import { PageHeader, TableShell, TableWrap } from "@/components/ui/PageShell";
 import { LMSStatsCards } from "@/components/lms/LMSStatsCards";
+import { SeasonCampaignPanel } from "@/components/lms/SeasonCampaignPanel";
+import { PageHeader, TableShell, TableWrap } from "@/components/ui/PageShell";
 import { useLmsDashboard } from "@/hooks/lms/useLmsDashboard";
 import type { LmsAdminDashboardData } from "@/lib/lms/types";
 
@@ -24,12 +26,14 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
           ...cards,
           { label: "Vencimentos proximos", value: data.dueSoon },
           { label: "Acesso recente", value: data.mostAccessedCourses[0]?.accessCount ?? 0, helper: data.mostAccessedCourses[0]?.title ?? "Sem dados" },
-          { label: "XP distribuído", value: data.gamification.totalXpDistributed },
+          { label: "XP distribuido", value: data.gamification.totalXpDistributed },
           { label: "Desafios ativos", value: data.gamification.activeChallenges },
           { label: "Learners gamificados", value: data.gamification.activeLearners },
-          { label: "Streak médio", value: data.gamification.averageStreak },
+          { label: "Streak medio", value: data.gamification.averageStreak },
         ]}
       />
+
+      <SeasonCampaignPanel campaign={data.gamification.seasonCampaign} audience="admin" />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-3xl border border-slate-200 bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_100%)] p-6 text-white shadow-sm">
@@ -43,7 +47,7 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
             </span>
           </div>
           <p className="mt-4 text-sm leading-7 text-slate-300">
-            A camada gamificada já monitora XP, streak, badges, desafios e ranking para transformar conclusão em engajamento mensurável.
+            A camada gamificada monitora XP, streak, badges, desafios e ranking para transformar conclusao em engajamento mensuravel.
           </p>
         </div>
 
@@ -65,7 +69,7 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
               ))
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                Os badges aparecerão aqui conforme o uso da gamificação.
+                Os badges aparecerao aqui conforme o uso da gamificacao.
               </div>
             )}
           </div>
@@ -87,12 +91,12 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
                     <span>{department.departmentName}</span>
                     <span>{department.xp} XP</span>
                   </div>
-                  <div className="mt-1 text-xs text-slate-500">Média por learner: {department.completionRate}</div>
+                  <div className="mt-1 text-xs text-slate-500">Media por learner: {department.completionRate}</div>
                 </div>
               ))
             ) : (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
-                Assim que houver pontuação, o ranking por área será mostrado aqui.
+                Assim que houver pontuacao, o ranking por area sera mostrado aqui.
               </div>
             )}
           </div>
@@ -107,9 +111,17 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
                 <h2 className="text-lg font-semibold text-slate-900">Pessoas que exigem atencao</h2>
                 <p className="text-sm text-slate-500">Treinamentos vencidos ou que vencem em ate 7 dias.</p>
               </div>
-              <Link href="/rh/lms/atribuicoes" className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800">
-                Ver atribuicoes
-              </Link>
+              <div className="flex flex-wrap gap-2">
+                <LmsActionButton
+                  endpoint="/api/lms/admin/reminders/run"
+                  label="Disparar lembretes"
+                  pendingLabel="Disparando..."
+                  className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60"
+                />
+                <Link href="/rh/lms/atribuicoes" className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800">
+                  Ver atribuicoes
+                </Link>
+              </div>
             </div>
             <div className="space-y-3 p-6">
               {data.attentionItems.length ? (
@@ -181,7 +193,15 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
                     <div className="mt-2 text-3xl font-bold text-slate-900">{row.total}</div>
                   </div>
                   <div className="rounded-2xl bg-slate-900 p-3 text-white">
-                    {row.status === "completed" ? <BookOpenCheck size={18} /> : row.status === "overdue" ? <ClockAlert size={18} /> : row.status === "in_progress" ? <Layers3 size={18} /> : <Users2 size={18} />}
+                    {row.status === "completed" ? (
+                      <BookOpenCheck size={18} />
+                    ) : row.status === "overdue" ? (
+                      <ClockAlert size={18} />
+                    ) : row.status === "in_progress" ? (
+                      <Layers3 size={18} />
+                    ) : (
+                      <Users2 size={18} />
+                    )}
                   </div>
                 </div>
               </div>
@@ -194,7 +214,7 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
             rows={data.gamification.leaderboard}
             compact
             title="Top learners da temporada"
-            subtitle="Visão rápida dos colaboradores mais consistentes em XP e streak."
+            subtitle="Visao rapida dos colaboradores mais consistentes em XP e streak."
           />
 
           <TableShell>

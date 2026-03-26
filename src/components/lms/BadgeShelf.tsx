@@ -1,6 +1,6 @@
 "use client";
 
-import { Award, Sparkles, ShieldCheck, Target } from "lucide-react";
+import { Award, ShieldCheck, Sparkles, Target } from "lucide-react";
 import type { LmsUserBadge } from "@/lib/lms/types";
 
 function iconForBadge(slug: string | undefined) {
@@ -14,7 +14,7 @@ function iconForBadge(slug: string | undefined) {
 export function BadgeShelf({
   items,
   title = "Conquistas desbloqueadas",
-  subtitle = "Badges reconhecem consistência, domínio e impacto no aprendizado.",
+  subtitle = "Badges reconhecem consistencia, dominio e impacto no aprendizado.",
 }: {
   items: LmsUserBadge[];
   title?: string;
@@ -52,7 +52,7 @@ export function BadgeShelf({
           })
         ) : (
           <div className="md:col-span-2 xl:col-span-3 rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
-            Ainda não há badges conquistados. Concluir aulas, quizzes e desafios começará a preencher esta vitrine.
+            Ainda nao ha badges conquistados. Concluir aulas, quizzes e desafios comecara a preencher esta vitrine.
           </div>
         )}
       </div>

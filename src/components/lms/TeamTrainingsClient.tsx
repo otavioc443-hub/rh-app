@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2, Clock3, Users2 } from "lucide-react";
+import { LmsActionButton } from "@/components/lms/LmsActionButton";
 import { PageHeader, TableShell, TableWrap } from "@/components/ui/PageShell";
 import { CourseStatusBadge } from "@/components/lms/CourseStatusBadge";
 import { EmptyState } from "@/components/lms/EmptyState";
@@ -76,6 +77,15 @@ export function TeamTrainingsClient({ data }: { data: LmsTeamTrainingsData }) {
                 <div className="mt-2 text-xs text-slate-500">
                   {row.department_name ?? "Sem departamento"} · Prazo {row.due_date ?? "-"} · {Math.round(row.progress_percent)}%
                 </div>
+                <div className="mt-3">
+                  <LmsActionButton
+                    endpoint="/api/lms/reminders/send"
+                    body={{ userId: row.user_id, courseId: row.course_id, courseTitle: row.course_title, dueDate: row.due_date }}
+                    label="Enviar lembrete"
+                    pendingLabel="Enviando..."
+                    className="rounded-2xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 disabled:opacity-60"
+                  />
+                </div>
               </div>
             ))}
           </div>
@@ -107,6 +117,7 @@ export function TeamTrainingsClient({ data }: { data: LmsTeamTrainingsData }) {
                   <th className="px-6 py-3">Status</th>
                   <th className="px-6 py-3">Progresso</th>
                   <th className="px-6 py-3">Prazo</th>
+                  <th className="px-6 py-3">Acao</th>
                 </tr>
               </thead>
               <tbody>
@@ -132,6 +143,15 @@ export function TeamTrainingsClient({ data }: { data: LmsTeamTrainingsData }) {
                       ) : (
                         "-"
                       )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <LmsActionButton
+                        endpoint="/api/lms/reminders/send"
+                        body={{ userId: row.user_id, courseId: row.course_id, courseTitle: row.course_title, dueDate: row.due_date }}
+                        label="Lembrar"
+                        pendingLabel="Enviando..."
+                        className="rounded-2xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 disabled:opacity-60"
+                      />
                     </td>
                   </tr>
                 ))}

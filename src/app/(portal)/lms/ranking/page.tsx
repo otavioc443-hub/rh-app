@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import { PageHeader } from "@/components/ui/PageShell";
 import { LeaderboardTable } from "@/components/lms/LeaderboardTable";
+import { PageHeader } from "@/components/ui/PageShell";
 import { getLeaderboardForCompany } from "@/lib/lms/gamification";
 import { requireRoles } from "@/lib/server/feedbackGuard";
 
@@ -15,9 +15,9 @@ export default async function LmsRankingPage() {
       <PageHeader
         icon={<span className="text-xl font-bold">XP</span>}
         title="Ranking de aprendizagem"
-        subtitle="Compare evolução, XP, streak e badges entre colaboradores da temporada."
+        subtitle="Compare evolucao, XP, streak e badges entre colaboradores da temporada."
       />
-      <LeaderboardTable rows={leaderboard} title="Ranking geral da empresa" subtitle="A posição é recalculada a partir de XP, nível, badges e consistência." />
+      <LeaderboardTable rows={leaderboard} title="Ranking geral da empresa" subtitle="A posicao e recalculada a partir de XP, nivel, badges e consistencia." />
     </div>
   );
 }

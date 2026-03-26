@@ -3,10 +3,12 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, GraduationCap, ImagePlus, Plus, Trash2 } from "lucide-react";
+import { CourseHeader } from "@/components/lms/CourseHeader";
 import { FileUploader } from "@/components/lms/FileUploader";
+import { ModuleAccordion } from "@/components/lms/ModuleAccordion";
 import { PageHeader } from "@/components/ui/PageShell";
 import { coursesService } from "@/lib/lms/coursesService";
-import type { LmsCourseEditorPayload, LmsQuizPayload } from "@/lib/lms/types";
+import type { LmsCourseDetail, LmsCourseEditorPayload, LmsQuizPayload } from "@/lib/lms/types";
 import { buildCourseDefaults, slugifyCourseTitle } from "@/lib/lms/utils";
 
 type EditorData = {
@@ -70,6 +72,7 @@ export function LmsCourseEditor({
   const [message, setMessage] = useState("");
   const [selectedModuleIndex, setSelectedModuleIndex] = useState(0);
   const [selectedLessonIndex, setSelectedLessonIndex] = useState(0);
+  const [previewExpandedModuleId, setPreviewExpandedModuleId] = useState<string | null>("preview-module-0");
   const [form, setForm] = useState<LmsCourseEditorPayload>({
     ...buildCourseDefaults(),
     ...(initialData?.course ?? {}),
@@ -104,6 +107,74 @@ export function LmsCourseEditor({
   const totalLessons = useMemo(
     () => form.modules.reduce((sum, module) => sum + module.lessons.length, 0),
     [form.modules],
+  );
+  const previewDetail = useMemo<LmsCourseDetail>(
+    () => ({
+      course: {
+        id: courseId ?? "preview-course",
+        company_id: null,
+        title: form.title || "Preview do curso",
+        slug: form.slug || "preview-do-curso",
+        short_description: form.short_description || null,
+        full_description: form.full_description || null,
+        category: form.category || null,
+        thumbnail_url: form.thumbnail_url || null,
+        banner_url: form.banner_url || null,
+        workload_hours: form.workload_hours,
+        required: form.required,
+        certificate_enabled: form.certificate_enabled,
+        passing_score: form.passing_score,
+        status: form.status,
+        visibility: form.visibility,
+        sequence_required: form.sequence_required,
+        onboarding_recommended: form.onboarding_recommended,
+        created_by: null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      modules: form.modules.map((module, moduleIndex) => ({
+        id: `preview-module-${moduleIndex}`,
+        course_id: courseId ?? "preview-course",
+        title: module.title,
+        description: module.description || null,
+        sort_order: module.sort_order,
+        created_at: new Date().toISOString(),
+        lessons: module.lessons.map((lesson, lessonIndex) => ({
+          id: `preview-lesson-${moduleIndex}-${lessonIndex}`,
+          course_id: courseId ?? "preview-course",
+          module_id: `preview-module-${moduleIndex}`,
+          title: lesson.title,
+          description: lesson.description || null,
+          lesson_type: lesson.lesson_type,
+          content_url: lesson.content_url || null,
+          content_text: lesson.content_text || null,
+          duration_minutes: lesson.duration_minutes,
+          sort_order: lesson.sort_order,
+          is_required: lesson.is_required,
+          allow_preview: lesson.allow_preview,
+          storage_bucket: lesson.storage_bucket ?? null,
+          storage_path: lesson.storage_path ?? null,
+          created_at: new Date().toISOString(),
+        })),
+      })),
+      quiz: null,
+      progress: {
+        id: "preview-progress",
+        user_id: "preview-user",
+        course_id: courseId ?? "preview-course",
+        status: "in_progress",
+        progress_percent: 42,
+        completed_lessons: Math.max(1, Math.floor(totalLessons / 2)),
+        required_lessons: totalLessons,
+        passed_quiz: false,
+        started_at: new Date().toISOString(),
+        completed_at: null,
+        last_lesson_id: null,
+        updated_at: new Date().toISOString(),
+      },
+      certificate: null,
+    }),
+    [courseId, form, totalLessons],
   );
 
   function patchModule(
@@ -459,6 +530,25 @@ export function LmsCourseEditor({
                 <div className="rounded-[22px] bg-slate-50 px-4 py-4"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Estrutura</div><div className="mt-2 text-lg font-semibold text-slate-950">{form.modules.length} modulos</div><div className="text-sm text-slate-500">{totalLessons} aulas planejadas</div></div>
                 <div className="rounded-[22px] bg-slate-50 px-4 py-4"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Status</div><div className="mt-2 text-lg font-semibold capitalize text-slate-950">{form.status}</div><div className="text-sm text-slate-500">{form.visibility === "publico_interno" ? "Publico interno" : "Restrito"}</div></div>
               </div>
+            </div>
+          </section>
+
+          <section className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950">Pre-visualizacao do colaborador</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Esta area simula a pagina do treinamento como ela aparecera para quem for estudar.
+              </p>
+            </div>
+            <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50">
+              <CourseHeader detail={previewDetail} />
+            </div>
+            <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 p-4">
+              <ModuleAccordion
+                detail={previewDetail}
+                expandedModuleId={previewExpandedModuleId}
+                onToggle={setPreviewExpandedModuleId}
+              />
             </div>
           </section>
         </div>

@@ -17,7 +17,7 @@ export default async function LmsAchievementsPage() {
         title="Conquistas"
         subtitle="Sua estante de badges, reconhecimentos e marcos da jornada de treinamento."
       />
-      <BadgeShelf items={gamification.badges} title="Badges conquistados" subtitle="Conquistas obtidas por constância, desempenho e domínio de conteúdo." />
+      <BadgeShelf items={gamification.badges} title="Badges conquistados" subtitle="Conquistas obtidas por consistencia, desempenho e dominio de conteudo." />
     </div>
   );
 }

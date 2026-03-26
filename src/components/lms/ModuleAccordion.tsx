@@ -28,7 +28,9 @@ export function ModuleAccordion({
           <div key={module.id} className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
             <button type="button" className="flex w-full items-center justify-between px-5 py-4 text-left" onClick={() => onToggle(module.id)}>
               <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Fase {module.sort_order}</div>
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Fase {module.sort_order}
+                </div>
                 <h3 className="mt-1 text-lg font-semibold text-slate-900">{module.title}</h3>
                 {module.description ? <p className="mt-1 text-sm text-slate-500">{module.description}</p> : null}
               </div>
@@ -43,10 +45,16 @@ export function ModuleAccordion({
                       <div key={lesson.id} className="flex items-center justify-between rounded-2xl border border-slate-100 px-4 py-3">
                         <div>
                           <div className="text-sm font-semibold text-slate-900">{lesson.title}</div>
-                          <div className="text-xs text-slate-500">{lesson.lesson_type} · {lesson.duration_minutes ?? 0} min</div>
+                          <div className="text-xs capitalize text-slate-500">
+                            {lesson.lesson_type} · {lesson.duration_minutes ?? 0} min
+                          </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          {completedLessonIds?.has(lesson.id) ? <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Concluida</span> : null}
+                          {completedLessonIds?.has(lesson.id) ? (
+                            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                              Concluida
+                            </span>
+                          ) : null}
                           {locked ? <Lock size={16} className="text-slate-400" /> : null}
                         </div>
                       </div>

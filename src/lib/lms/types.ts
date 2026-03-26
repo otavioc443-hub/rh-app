@@ -544,6 +544,7 @@ export type LmsGamificationOverview = {
   battles: LmsGameSession[];
   seasonLabel: string;
   nextLevelXp: number;
+  seasonCampaign: LmsSeasonCampaign;
 };
 
 export type LmsGamificationAdminData = {
@@ -555,4 +556,26 @@ export type LmsGamificationAdminData = {
   topBadges: Array<{ title: string; total: number }>;
   seasonLabel: string;
   leaderboard: LmsLeaderboardRow[];
+  seasonCampaign: LmsSeasonCampaign;
+};
+
+export type LmsSeasonGoal = {
+  id: string;
+  title: string;
+  current: number;
+  target: number;
+  unit: string;
+  completionPercent: number;
+};
+
+export type LmsSeasonCampaign = {
+  seasonLabel: string;
+  missionTitle: string;
+  missionDescription: string;
+  totalChallenges: number;
+  completedChallenges: number;
+  activeBattleCount: number;
+  totalXp: number;
+  streakDays: number;
+  goals: LmsSeasonGoal[];
 };

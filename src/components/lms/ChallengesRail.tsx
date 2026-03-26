@@ -8,7 +8,7 @@ type ChallengeWithParticipant = LmsChallenge & { participant: LmsChallengePartic
 export function ChallengesRail({
   items,
   title = "Desafios ativos",
-  subtitle = "Missões diárias e semanais para aprender jogando.",
+  subtitle = "Missoes diarias e semanais para aprender jogando.",
 }: {
   items: ChallengeWithParticipant[];
   title?: string;
@@ -36,7 +36,7 @@ export function ChallengesRail({
                   </span>
                   <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">
                     <CalendarClock size={14} />
-                    até {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(new Date(item.ends_at))}
+                    ate {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short" }).format(new Date(item.ends_at))}
                   </span>
                 </div>
                 <h3 className="mt-4 text-lg font-semibold text-slate-950">{item.title}</h3>
@@ -62,7 +62,7 @@ export function ChallengesRail({
           })
         ) : (
           <div className="lg:col-span-2 rounded-[24px] border border-dashed border-slate-200 bg-slate-50 px-5 py-10 text-center text-sm text-slate-500">
-            Nenhum desafio ativo no momento. O RH pode abrir novas temporadas e missões diretamente no módulo.
+            Nenhum desafio ativo no momento. O RH pode abrir novas temporadas e missoes diretamente no modulo.
           </div>
         )}
       </div>

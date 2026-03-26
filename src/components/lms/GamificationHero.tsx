@@ -9,7 +9,7 @@ export function GamificationHero({ data }: { data: LmsGamificationOverview }) {
   const level = data.xp?.level ?? 1;
   const streak = data.streak?.current_streak ?? 0;
   const nextLevelXp = data.nextLevelXp;
-  const levelProgress = nextLevelXp > 0 ? Math.min(100, Math.round((xp / nextLevelXp) * 100)) : 0;
+  const levelProgress = nextLevelXp > 0 ? Math.min(100, Math.round(((xp % nextLevelXp) / nextLevelXp) * 100)) : 0;
 
   return (
     <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,#dbeafe_0%,#eff6ff_28%,#ffffff_65%),linear-gradient(135deg,#0f172a_0%,#1e293b_100%)] p-6 shadow-sm lg:p-7">
@@ -17,10 +17,10 @@ export function GamificationHero({ data }: { data: LmsGamificationOverview }) {
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Aprender jogando</p>
           <h2 className="mt-3 max-w-3xl text-3xl font-semibold tracking-tight text-slate-950">
-            Evolua com XP, streaks, conquistas e desafios conectados ao seu aprendizado.
+            Evolua com XP, streak, conquistas e desafios conectados ao seu aprendizado.
           </h2>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-600">
-            A cada aula concluída, quiz aprovado e trilha vencida, sua jornada acumula pontuação, destrava badges e sobe no ranking da temporada.
+            Cada aula concluida, quiz aprovado e curso finalizado fortalece sua posicao na temporada e ajuda a manter sua rotina de evolucao.
           </p>
 
           <div className="mt-6 flex flex-wrap gap-3">
@@ -52,13 +52,13 @@ export function GamificationHero({ data }: { data: LmsGamificationOverview }) {
             </div>
             <div className="mt-3 flex items-center justify-between text-sm text-white/80">
               <span>{xp} XP acumulado</span>
-              <span>Próximo nível em {nextLevelXp} XP</span>
+              <span>Proximo nivel em {nextLevelXp} XP</span>
             </div>
           </div>
 
           <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold text-slate-600">Nível atual</span>
+              <span className="text-sm font-semibold text-slate-600">Nivel atual</span>
               <Medal size={18} className="text-amber-500" />
             </div>
             <div className="mt-3 text-3xl font-semibold text-slate-950">{level}</div>
