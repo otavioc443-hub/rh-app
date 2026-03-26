@@ -227,6 +227,11 @@ export type LmsLessonDiscussion = {
   author_role?: string | null;
 };
 
+export type LmsLessonDiscussionAdminRow = LmsLessonDiscussion & {
+  course_title: string;
+  lesson_title: string;
+};
+
 export type LmsCourseFormValues = {
   title: string;
   slug: string;

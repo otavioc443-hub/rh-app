@@ -204,6 +204,7 @@ export default function Sidebar({
           { label: "Cursos", icon: FolderOpen, href: "/rh/lms/cursos", roles: ["rh", "admin"] },
           { label: "Trilhas", icon: Layers, href: "/rh/lms/trilhas", roles: ["rh", "admin"] },
           { label: "Atribuições", icon: ClipboardList, href: "/rh/lms/atribuicoes", roles: ["rh", "admin"] },
+          { label: "Duvidas das aulas", icon: MessageSquareText, href: "/rh/lms/interacoes", roles: ["rh", "admin"] },
           { label: "Relatórios", icon: LineChart, href: "/rh/lms/relatorios", roles: ["rh", "admin"] },
           { label: "Equipe", icon: Users, href: "/gestor/lms/equipe", roles: ["gestor", "admin"] },
         ],

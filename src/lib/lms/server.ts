@@ -20,6 +20,7 @@ import type {
   LmsCourseModule,
   LmsCourseWithCounts,
   LmsLessonDiscussion,
+  LmsLessonDiscussionAdminRow,
   LmsLearningPath,
   LmsLearningPathCourse,
   LmsLesson,
@@ -552,6 +553,54 @@ export async function createLessonDiscussion(access: Access, courseId: string, l
     author_name: buildUserDisplayName({ full_name: null, email: access.email ?? null }),
     author_role: access.role,
   } satisfies LmsLessonDiscussion;
+}
+
+export async function getLmsLessonDiscussionsAdminData(companyId: string | null) {
+  const { data, error } = await supabaseAdmin
+    .from("lms_lesson_discussions")
+    .select("id,company_id,course_id,lesson_id,user_id,message,created_at")
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  if (error) {
+    if (isMissingRelation(error)) return [] as LmsLessonDiscussionAdminRow[];
+    throw error;
+  }
+
+  const discussionRows = (data ?? []) as LmsLessonDiscussion[];
+  if (!discussionRows.length) return [];
+
+  const courseIds = Array.from(new Set(discussionRows.map((row) => row.course_id)));
+  const lessonIds = Array.from(new Set(discussionRows.map((row) => row.lesson_id)));
+  const userIds = Array.from(new Set(discussionRows.map((row) => row.user_id)));
+
+  const [coursesRes, lessonsRes, profilesRes] = await Promise.all([
+    supabaseAdmin.from("lms_courses").select("id,title,company_id").in("id", courseIds),
+    supabaseAdmin.from("lms_lessons").select("id,title").in("id", lessonIds),
+    supabaseAdmin.from("profiles").select("id,full_name,email,role,company_id").in("id", userIds),
+  ]);
+
+  const coursesById = new Map(
+    ((coursesRes.data ?? []) as Array<{ id: string; title: string; company_id: string | null }>).map((row) => [row.id, row]),
+  );
+  const lessonsById = new Map(((lessonsRes.data ?? []) as Array<{ id: string; title: string }>).map((row) => [row.id, row]));
+  const profilesById = new Map(
+    ((profilesRes.data ?? []) as Array<{ id: string; full_name: string | null; email: string | null; role: string | null; company_id: string | null }>).map((row) => [row.id, row]),
+  );
+
+  return discussionRows
+    .filter((row) => {
+      if (!companyId) return true;
+      const course = coursesById.get(row.course_id);
+      return !course?.company_id || course.company_id === companyId;
+    })
+    .map((row) => ({
+      ...row,
+      course_title: coursesById.get(row.course_id)?.title ?? "Treinamento",
+      lesson_title: lessonsById.get(row.lesson_id)?.title ?? "Aula",
+      author_name: buildUserDisplayName(profilesById.get(row.user_id) ?? {}),
+      author_role: profilesById.get(row.user_id)?.role ?? null,
+    }));
 }
 
 async function getLearnerStats(access: Access) {

@@ -585,7 +585,7 @@ export function LmsCourseEditor({
               {publicationChecklist.map((item) => (
                 <div key={item.label} className="flex items-start gap-3 rounded-2xl border border-slate-200 px-4 py-3">
                   <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${item.done ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                    {item.done ? "✓" : "!"}
+                    {item.done ? "OK" : "!"}
                   </span>
                   <div className="text-sm text-slate-700">{item.label}</div>
                 </div>
@@ -654,3 +654,4 @@ export function LmsCourseEditor({
     </div>
   );
 }
+
