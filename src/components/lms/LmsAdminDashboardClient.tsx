@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { BookOpenCheck, ClockAlert, GraduationCap, Layers3, Users2 } from "lucide-react";
+import { BookOpenCheck, ClockAlert, GraduationCap, Layers3, Trophy, Users2, Zap } from "lucide-react";
+import { LeaderboardTable } from "@/components/lms/LeaderboardTable";
 import { PageHeader, TableShell, TableWrap } from "@/components/ui/PageShell";
 import { LMSStatsCards } from "@/components/lms/LMSStatsCards";
 import { useLmsDashboard } from "@/hooks/lms/useLmsDashboard";
@@ -23,8 +24,80 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
           ...cards,
           { label: "Vencimentos proximos", value: data.dueSoon },
           { label: "Acesso recente", value: data.mostAccessedCourses[0]?.accessCount ?? 0, helper: data.mostAccessedCourses[0]?.title ?? "Sem dados" },
+          { label: "XP distribuído", value: data.gamification.totalXpDistributed },
+          { label: "Desafios ativos", value: data.gamification.activeChallenges },
+          { label: "Learners gamificados", value: data.gamification.activeLearners },
+          { label: "Streak médio", value: data.gamification.averageStreak },
         ]}
       />
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="rounded-3xl border border-slate-200 bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_100%)] p-6 text-white shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/60">Temporada</p>
+              <h2 className="mt-2 text-2xl font-semibold">{data.gamification.seasonLabel}</h2>
+            </div>
+            <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
+              <Trophy size={20} />
+            </span>
+          </div>
+          <p className="mt-4 text-sm leading-7 text-slate-300">
+            A camada gamificada já monitora XP, streak, badges, desafios e ranking para transformar conclusão em engajamento mensurável.
+          </p>
+        </div>
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Badges mais emitidos</p>
+              <h2 className="mt-2 text-xl font-semibold text-slate-950">Reconhecimentos em alta</h2>
+            </div>
+            <Zap size={18} className="text-sky-500" />
+          </div>
+          <div className="mt-5 space-y-3">
+            {data.gamification.topBadges.length ? (
+              data.gamification.topBadges.map((badge) => (
+                <div key={badge.title} className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                  <span className="text-sm font-medium text-slate-900">{badge.title}</span>
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">{badge.total}</span>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                Os badges aparecerão aqui conforme o uso da gamificação.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Equipes mais engajadas</p>
+              <h2 className="mt-2 text-xl font-semibold text-slate-950">Top departamentos por XP</h2>
+            </div>
+            <Users2 size={18} className="text-emerald-500" />
+          </div>
+          <div className="mt-5 space-y-3">
+            {data.gamification.topDepartments.length ? (
+              data.gamification.topDepartments.map((department) => (
+                <div key={department.departmentName} className="rounded-2xl bg-slate-50 px-4 py-3">
+                  <div className="flex items-center justify-between gap-3 text-sm font-medium text-slate-900">
+                    <span>{department.departmentName}</span>
+                    <span>{department.xp} XP</span>
+                  </div>
+                  <div className="mt-1 text-xs text-slate-500">Média por learner: {department.completionRate}</div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                Assim que houver pontuação, o ranking por área será mostrado aqui.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
         <div className="space-y-6">
@@ -81,6 +154,13 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
         </div>
 
         <div className="space-y-6">
+          <LeaderboardTable
+            rows={data.gamification.leaderboard}
+            compact
+            title="Top learners da temporada"
+            subtitle="Visão rápida dos colaboradores mais consistentes em XP e streak."
+          />
+
           <TableShell>
             <div className="border-b border-slate-200 px-6 py-4">
               <h2 className="text-lg font-semibold text-slate-900">Ranking por departamento</h2>

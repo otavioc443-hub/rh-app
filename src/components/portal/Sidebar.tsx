@@ -33,6 +33,9 @@ import {
   ChevronLeft,
   FileCheck2,
   GraduationCap,
+  Medal,
+  Swords,
+  Trophy,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { forceClientLogout } from "@/lib/supabaseClient";
@@ -193,6 +196,10 @@ export default function Sidebar({
         children: [
           { label: "Visão geral", icon: LayoutDashboard, href: "/lms", exact: true },
           { label: "Meus treinamentos", icon: GraduationCap, href: "/lms/meus-treinamentos" },
+          { label: "Ranking", icon: Trophy, href: "/lms/ranking" },
+          { label: "Desafios", icon: Target, href: "/lms/desafios" },
+          { label: "Conquistas", icon: Medal, href: "/lms/conquistas" },
+          { label: "Batalhas", icon: Swords, href: "/lms/batalhas" },
           { label: "Gestão LMS", icon: Layers, href: "/rh/lms", exact: true, roles: ["rh", "admin"] },
           { label: "Cursos", icon: FolderOpen, href: "/rh/lms/cursos", roles: ["rh", "admin"] },
           { label: "Trilhas", icon: Layers, href: "/rh/lms/trilhas", roles: ["rh", "admin"] },

@@ -1,5 +1,12 @@
 import { randomUUID } from "crypto";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import {
+  awardGamificationXp,
+  getAdminGamificationDashboard,
+  getLearnerGamificationOverview,
+  refreshGamificationState,
+  registerStudyActivity,
+} from "@/lib/lms/gamification";
 import { buildCertificatePdf } from "@/lib/lms/pdf";
 import type {
   LmsAdminDashboardData,
@@ -109,7 +116,7 @@ async function mapCourseAssets(course: LmsCourse) {
 async function fetchCompanyAndDepartments(companyId: string | null) {
   const [companyRes, departmentsRes] = await Promise.all([
     companyId
-      ? supabaseAdmin.from("company").select("id,name").eq("id", companyId).maybeSingle<CompanyMini>()
+      ? supabaseAdmin.from("companies").select("id,name").eq("id", companyId).maybeSingle<CompanyMini>()
       : Promise.resolve({ data: null, error: null }),
     companyId
       ? supabaseAdmin.from("departments").select("id,name,company_id").eq("company_id", companyId).order("name", { ascending: true })
@@ -328,9 +335,18 @@ async function getLearnerStats(access: Access) {
 }
 
 export async function getLmsLandingData(access: Access) {
-  const [myTrainings, dashboard] = await Promise.all([getMyTrainingsData(access), getLearnerStats(access)]);
+  const [myTrainings, dashboard, gamification] = await Promise.all([
+    getMyTrainingsData(access),
+    getLearnerStats(access),
+    getLearnerGamificationOverview(access),
+  ]);
   const recommended = myTrainings.filter((row) => row.course.onboarding_recommended || row.course.required).slice(0, 3);
-  return { myTrainings, recommended, dashboard };
+  const deadlines = myTrainings
+    .filter((row) => row.assignment?.due_date)
+    .sort((left, right) => String(left.assignment?.due_date ?? "").localeCompare(String(right.assignment?.due_date ?? "")))
+    .slice(0, 4);
+  const keepLearning = myTrainings.filter((row) => row.status === "in_progress").slice(0, 4);
+  return { myTrainings, recommended, dashboard, gamification, deadlines, keepLearning };
 }
 
 export async function getTeamTrainingsData(access: Access) {
@@ -439,13 +455,14 @@ export async function buildAssignmentSupportData(companyId: string | null): Prom
 }
 
 export async function getLmsAdminDashboardData(companyId: string | null): Promise<LmsAdminDashboardData> {
-  const [coursesRes, progressRes, accessLogsRes, assignmentsRes, departments, profilesRes] = await Promise.all([
+  const [coursesRes, progressRes, accessLogsRes, assignmentsRes, departments, profilesRes, gamification] = await Promise.all([
     fetchPublishedCourses(companyId),
     supabaseAdmin.from("lms_user_progress").select("*"),
     supabaseAdmin.from("lms_course_access_logs").select("*"),
     supabaseAdmin.from("lms_assignments").select("*").order("assigned_at", { ascending: false }).limit(8),
     fetchCompanyAndDepartments(companyId),
     supabaseAdmin.from("profiles").select("id,full_name,company_id,department_id").eq("active", true),
+    getAdminGamificationDashboard(companyId),
   ]);
 
   const courses = coursesRes;
@@ -552,6 +569,7 @@ export async function getLmsAdminDashboardData(companyId: string | null): Promis
     completionByStatus,
     recentAssignments,
     recentCourses,
+    gamification,
   };
 }
 
@@ -574,6 +592,16 @@ export async function getSafeLmsAdminDashboardData(companyId: string | null) {
       completionByStatus: [],
       recentAssignments: [],
       recentCourses: [],
+      gamification: {
+        totalXpDistributed: 0,
+        activeLearners: 0,
+        activeChallenges: 0,
+        averageStreak: 0,
+        topDepartments: [],
+        topBadges: [],
+        seasonLabel: "",
+        leaderboard: [],
+      },
     } satisfies LmsAdminDashboardData;
   }
 }
@@ -695,7 +723,7 @@ export async function getLmsReportsData(companyId: string | null, filters?: Part
       ? supabaseAdmin.from("lms_courses").select("id,title,category,company_id").or(`company_id.eq.${companyId},company_id.is.null`)
       : supabaseAdmin.from("lms_courses").select("id,title,category,company_id"),
     supabaseAdmin.from("departments").select("id,name"),
-    supabaseAdmin.from("company").select("id,name"),
+    supabaseAdmin.from("companies").select("id,name"),
     supabaseAdmin.from("lms_quiz_attempts").select("user_id,course_id,score,submitted_at"),
   ]);
 
@@ -762,6 +790,14 @@ export async function markLessonCompleted(access: Access, courseId: string, less
   const lesson = detail.modules.flatMap((module) => module.lessons).find((item) => item.id === lessonId);
   if (!lesson) throw new Error("Aula nao encontrada.");
 
+  const { data: currentLessonProgress } = await supabaseAdmin
+    .from("lms_lesson_progress")
+    .select("completed")
+    .eq("user_id", access.userId)
+    .eq("lesson_id", lessonId)
+    .maybeSingle<{ completed: boolean }>();
+  const wasCompleted = Boolean(currentLessonProgress?.completed);
+
   const payload = {
     user_id: access.userId,
     lesson_id: lessonId,
@@ -781,6 +817,14 @@ export async function markLessonCompleted(access: Access, courseId: string, less
     lesson_id: lessonId,
     action: completed ? "lesson_completed" : "lesson_opened",
   });
+
+  if (completed) {
+    await registerStudyActivity(access);
+    if (!wasCompleted) {
+      await awardGamificationXp(access, "lesson_completed");
+      await refreshGamificationState(access);
+    }
+  }
 
   return recomputeUserCourseProgress(access, courseId);
 }
@@ -804,6 +848,7 @@ export async function recomputeUserCourseProgress(access: Access, courseId: stri
   const latestAttempt = await getLatestQuizAttempt(access.userId, courseId);
   const passedQuiz = detail.quiz ? Boolean(latestAttempt?.passed) : true;
   const isCompleted = progressPercent >= 100 && passedQuiz;
+  const wasCompleted = detail.progress?.status === "completed";
   const status: LmsProgressStatus = isCompleted ? "completed" : progressPercent > 0 ? "in_progress" : "not_started";
 
   const upsertPayload = {
@@ -836,6 +881,11 @@ export async function recomputeUserCourseProgress(access: Access, courseId: stri
 
   if (isCompleted && detail.course.certificate_enabled) {
     await ensureCertificateForUser(access, detail.course);
+  }
+
+  if (isCompleted && !wasCompleted) {
+    await awardGamificationXp(access, "course_completed");
+    await refreshGamificationState(access);
   }
 
   return progressUpserted;
@@ -921,6 +971,13 @@ export async function submitQuizAttempt(access: Access, quizId: string, answers:
     await recomputeUserCourseProgress(access, payload.quiz.course_id);
   }
 
+  await registerStudyActivity(access);
+  if (passed) {
+    await awardGamificationXp(access, "quiz_passed");
+    if (score >= 100) await awardGamificationXp(access, "quiz_perfect");
+    await refreshGamificationState(access);
+  }
+
   return { attempt: attemptData, score, passed };
 }
 
@@ -974,6 +1031,9 @@ export async function ensureCertificateForUser(access: Access, course: LmsCourse
     lesson_id: null,
     action: "certificate_issued",
   });
+
+  await awardGamificationXp(access, "certificate_issued");
+  await refreshGamificationState(access);
 
   return certificateData;
 }

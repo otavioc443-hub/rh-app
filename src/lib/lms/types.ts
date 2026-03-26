@@ -258,6 +258,7 @@ export type LmsAdminDashboardData = LmsDashboardData & {
   completionByStatus: Array<{ status: LmsProgressStatus; total: number }>;
   recentAssignments: LmsAssignmentExpanded[];
   recentCourses: LmsCourseWithCounts[];
+  gamification: LmsGamificationAdminData;
 };
 
 export type LmsMyTrainingCard = {
@@ -379,4 +380,148 @@ export type LmsAssignmentSupportData = {
   roles: LmsAssignmentTargetOption[];
   courses: LmsAssignmentTargetOption[];
   learningPaths: LmsAssignmentTargetOption[];
+};
+
+export const LMS_CHALLENGE_TYPES = ["daily", "weekly", "seasonal", "battle"] as const;
+export const LMS_CHALLENGE_STATUSES = ["draft", "active", "completed", "archived"] as const;
+export const LMS_GAME_SESSION_TYPES = ["quiz_rush", "battle", "challenge", "season"] as const;
+export const LMS_GAME_SESSION_STATUSES = ["scheduled", "live", "finished", "cancelled"] as const;
+
+export type LmsChallengeType = (typeof LMS_CHALLENGE_TYPES)[number];
+export type LmsChallengeStatus = (typeof LMS_CHALLENGE_STATUSES)[number];
+export type LmsGameSessionType = (typeof LMS_GAME_SESSION_TYPES)[number];
+export type LmsGameSessionStatus = (typeof LMS_GAME_SESSION_STATUSES)[number];
+
+export type LmsUserXp = {
+  id: string;
+  user_id: string;
+  company_id: string | null;
+  department_id: string | null;
+  total_xp: number;
+  level: number;
+  season_xp: number;
+  updated_at: string;
+  created_at: string;
+};
+
+export type LmsBadge = {
+  id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  icon_name: string | null;
+  accent_color: string | null;
+  points_reward: number;
+  criteria_key: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type LmsUserBadge = {
+  id: string;
+  user_id: string;
+  badge_id: string;
+  awarded_at: string;
+  season_key: string | null;
+  badge?: LmsBadge | null;
+};
+
+export type LmsChallenge = {
+  id: string;
+  company_id: string | null;
+  title: string;
+  description: string | null;
+  challenge_type: LmsChallengeType;
+  status: LmsChallengeStatus;
+  target_metric: string | null;
+  target_value: number | null;
+  xp_reward: number;
+  reward_label: string | null;
+  starts_at: string;
+  ends_at: string;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type LmsChallengeParticipant = {
+  id: string;
+  challenge_id: string;
+  user_id: string;
+  progress_value: number;
+  completed: boolean;
+  completed_at: string | null;
+  rank_position: number | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LmsGameSession = {
+  id: string;
+  company_id: string | null;
+  session_type: LmsGameSessionType;
+  status: LmsGameSessionStatus;
+  title: string;
+  description: string | null;
+  course_id: string | null;
+  quiz_id: string | null;
+  created_by: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  max_participants: number | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type LmsLeaderboardRow = {
+  user_id: string;
+  full_name: string;
+  department_name: string | null;
+  rank: number;
+  xp: number;
+  level: number;
+  badges: number;
+  streak: number;
+};
+
+export type LmsUserStreak = {
+  id: string;
+  user_id: string;
+  current_streak: number;
+  best_streak: number;
+  last_activity_on: string | null;
+  updated_at: string;
+};
+
+export type LmsRewardRule = {
+  id: string;
+  company_id: string | null;
+  title: string;
+  action_key: string;
+  xp_reward: number;
+  is_active: boolean;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LmsGamificationOverview = {
+  xp: LmsUserXp | null;
+  streak: LmsUserStreak | null;
+  badges: LmsUserBadge[];
+  activeChallenges: Array<LmsChallenge & { participant: LmsChallengeParticipant | null }>;
+  leaderboard: LmsLeaderboardRow[];
+  battles: LmsGameSession[];
+  seasonLabel: string;
+  nextLevelXp: number;
+};
+
+export type LmsGamificationAdminData = {
+  totalXpDistributed: number;
+  activeLearners: number;
+  activeChallenges: number;
+  averageStreak: number;
+  topDepartments: Array<{ departmentName: string; xp: number; completionRate: number }>;
+  topBadges: Array<{ title: string; total: number }>;
+  seasonLabel: string;
+  leaderboard: LmsLeaderboardRow[];
 };
