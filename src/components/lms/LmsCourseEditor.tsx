@@ -3,11 +3,11 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, GraduationCap, ImagePlus, Plus, Trash2 } from "lucide-react";
-import { PageHeader } from "@/components/ui/PageShell";
 import { FileUploader } from "@/components/lms/FileUploader";
+import { PageHeader } from "@/components/ui/PageShell";
 import { coursesService } from "@/lib/lms/coursesService";
-import { buildCourseDefaults, slugifyCourseTitle } from "@/lib/lms/utils";
 import type { LmsCourseEditorPayload, LmsQuizPayload } from "@/lib/lms/types";
+import { buildCourseDefaults, slugifyCourseTitle } from "@/lib/lms/utils";
 
 type EditorData = {
   course?: Record<string, unknown>;
@@ -21,7 +21,7 @@ function createLesson(sortOrder: number): LmsCourseEditorPayload["modules"][numb
     description: "",
     lesson_type: "texto",
     content_url: "",
-    content_text: "<p>Descreva aqui a experiência da aula.</p>",
+    content_text: "<p>Descreva aqui a experiencia da aula.</p>",
     duration_minutes: 15,
     sort_order: sortOrder,
     is_required: true,
@@ -30,7 +30,30 @@ function createLesson(sortOrder: number): LmsCourseEditorPayload["modules"][numb
 }
 
 function createModule(sortOrder: number): LmsCourseEditorPayload["modules"][number] {
-  return { title: `Módulo ${sortOrder}`, description: "", sort_order: sortOrder, lessons: [createLesson(1)] };
+  return {
+    title: `Modulo ${sortOrder}`,
+    description: "",
+    sort_order: sortOrder,
+    lessons: [createLesson(1)],
+  };
+}
+
+function FieldGroup({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="grid gap-2">
+      <span className="text-sm font-semibold text-slate-800">{label}</span>
+      {hint ? <span className="-mt-1 text-xs text-slate-500">{hint}</span> : null}
+      {children}
+    </label>
+  );
 }
 
 export function LmsCourseEditor({
@@ -66,7 +89,11 @@ export function LmsCourseEditor({
             statement: question.statement,
             question_type: question.question_type,
             sort_order: question.sort_order,
-            options: question.options.map((option) => ({ id: option.id, text: option.text, is_correct: option.is_correct })),
+            options: question.options.map((option) => ({
+              id: option.id,
+              text: option.text,
+              is_correct: option.is_correct,
+            })),
           })),
         }
       : null,
@@ -74,14 +101,32 @@ export function LmsCourseEditor({
 
   const selectedModule = form.modules[selectedModuleIndex] ?? form.modules[0];
   const selectedLesson = selectedModule?.lessons[selectedLessonIndex] ?? selectedModule?.lessons[0];
-  const totalLessons = useMemo(() => form.modules.reduce((sum, module) => sum + module.lessons.length, 0), [form.modules]);
+  const totalLessons = useMemo(
+    () => form.modules.reduce((sum, module) => sum + module.lessons.length, 0),
+    [form.modules],
+  );
 
-  function patchModule(index: number, updater: (value: LmsCourseEditorPayload["modules"][number]) => LmsCourseEditorPayload["modules"][number]) {
-    setForm((current) => ({ ...current, modules: current.modules.map((module, moduleIndex) => (moduleIndex === index ? updater(module) : module)) }));
+  function patchModule(
+    index: number,
+    updater: (value: LmsCourseEditorPayload["modules"][number]) => LmsCourseEditorPayload["modules"][number],
+  ) {
+    setForm((current) => ({
+      ...current,
+      modules: current.modules.map((module, moduleIndex) => (moduleIndex === index ? updater(module) : module)),
+    }));
   }
 
-  function patchLesson(moduleIndex: number, lessonIndex: number, updater: (value: LmsCourseEditorPayload["modules"][number]["lessons"][number]) => LmsCourseEditorPayload["modules"][number]["lessons"][number]) {
-    patchModule(moduleIndex, (module) => ({ ...module, lessons: module.lessons.map((lesson, index) => (index === lessonIndex ? updater(lesson) : lesson)) }));
+  function patchLesson(
+    moduleIndex: number,
+    lessonIndex: number,
+    updater: (
+      value: LmsCourseEditorPayload["modules"][number]["lessons"][number],
+    ) => LmsCourseEditorPayload["modules"][number]["lessons"][number],
+  ) {
+    patchModule(moduleIndex, (module) => ({
+      ...module,
+      lessons: module.lessons.map((lesson, index) => (index === lessonIndex ? updater(lesson) : lesson)),
+    }));
   }
 
   async function handleSave() {
@@ -100,58 +145,191 @@ export function LmsCourseEditor({
 
   return (
     <div className="space-y-6">
-      <PageHeader icon={<GraduationCap size={24} />} title={mode === "create" ? "Criar treinamento" : "Editar treinamento"} subtitle="Monte um curso com capa, banner, módulos, aulas multimídia e regras de publicação." />
+      <PageHeader
+        icon={<GraduationCap size={24} />}
+        title={mode === "create" ? "Criar treinamento" : "Editar treinamento"}
+        subtitle="Monte um curso com capa, banner, modulos, aulas multimidia e regras de publicacao."
+      />
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr,0.8fr]">
         <div className="space-y-6">
           <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-slate-950">Identidade do curso</h2>
-            <p className="mt-1 text-sm text-slate-500">Crie um treinamento com cara de produto: promessa clara, imagens fortes e resumo orientado a benefício.</p>
+            <p className="mt-1 text-sm text-slate-500">
+              Defina as informacoes principais que vao aparecer no catalogo e na pagina do treinamento.
+            </p>
+
             <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <input value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value, slug: !current.slug || current.slug === slugifyCourseTitle(current.title) ? slugifyCourseTitle(event.target.value) : current.slug }))} placeholder="Título do treinamento" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900" />
-              <input value={form.slug} onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))} placeholder="slug-do-curso" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900" />
-              <input value={form.category} onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))} placeholder="Categoria" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900" />
-              <input type="number" value={form.workload_hours ?? ""} onChange={(event) => setForm((current) => ({ ...current, workload_hours: Number(event.target.value) || null }))} placeholder="Carga horária" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900" />
+              <FieldGroup
+                label="Titulo do treinamento"
+                hint="Nome principal exibido para RH, gestores e colaboradores."
+              >
+                <input
+                  value={form.title}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      title: event.target.value,
+                      slug:
+                        !current.slug || current.slug === slugifyCourseTitle(current.title)
+                          ? slugifyCourseTitle(event.target.value)
+                          : current.slug,
+                    }))
+                  }
+                  placeholder="Ex.: Onboarding institucional"
+                  className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900"
+                />
+              </FieldGroup>
+
+              <FieldGroup
+                label="Endereco do curso"
+                hint="Identificador usado na URL. Normalmente fica em minusculas e com hifens."
+              >
+                <input
+                  value={form.slug}
+                  onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
+                  placeholder="Ex.: onboarding-portal-rh"
+                  className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900"
+                />
+              </FieldGroup>
+
+              <FieldGroup
+                label="Categoria"
+                hint="Agrupa cursos parecidos no catalogo."
+              >
+                <input
+                  value={form.category}
+                  onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
+                  placeholder="Ex.: Onboarding, Compliance, Lideranca"
+                  className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900"
+                />
+              </FieldGroup>
+
+              <FieldGroup
+                label="Carga horaria"
+                hint="Quantidade total de horas previstas para concluir o treinamento."
+              >
+                <input
+                  type="number"
+                  value={form.workload_hours ?? ""}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, workload_hours: Number(event.target.value) || null }))
+                  }
+                  placeholder="Ex.: 4"
+                  className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900"
+                />
+              </FieldGroup>
             </div>
+
             <div className="mt-4 grid gap-4">
-              <textarea value={form.short_description} onChange={(event) => setForm((current) => ({ ...current, short_description: event.target.value }))} placeholder="Resumo curto do treinamento" className="min-h-[100px] rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900" />
-              <textarea value={form.full_description} onChange={(event) => setForm((current) => ({ ...current, full_description: event.target.value }))} placeholder="Descrição completa, objetivos e resultados esperados" className="min-h-[180px] rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900" />
+              <FieldGroup
+                label="Resumo curto"
+                hint="Texto breve para o card e para a apresentacao inicial do curso."
+              >
+                <textarea
+                  value={form.short_description}
+                  onChange={(event) => setForm((current) => ({ ...current, short_description: event.target.value }))}
+                  placeholder="Explique rapidamente o objetivo e o ganho esperado."
+                  className="min-h-[100px] rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900"
+                />
+              </FieldGroup>
+
+              <FieldGroup
+                label="Descricao completa"
+                hint="Detalhe objetivos, publico, resultados esperados e qualquer contexto importante."
+              >
+                <textarea
+                  value={form.full_description}
+                  onChange={(event) => setForm((current) => ({ ...current, full_description: event.target.value }))}
+                  placeholder="Descreva em mais detalhes o treinamento, suas etapas e os resultados esperados."
+                  className="min-h-[180px] rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900"
+                />
+              </FieldGroup>
             </div>
           </section>
 
           <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-slate-950">Publicação e mídia</h2>
+            <h2 className="text-lg font-semibold text-slate-950">Publicacao e midia</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Defina como o treinamento sera exibido, quem pode acessa-lo e quais imagens vao representa-lo.
+            </p>
+
             <div className="mt-5 grid gap-4 md:grid-cols-3">
-              <select value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as typeof current.status }))} className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900">
-                <option value="draft">Rascunho</option>
-                <option value="published">Publicado</option>
-                <option value="archived">Arquivado</option>
-              </select>
-              <select value={form.visibility} onChange={(event) => setForm((current) => ({ ...current, visibility: event.target.value as typeof current.visibility }))} className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900">
-                <option value="publico_interno">Público interno</option>
-                <option value="restrito">Restrito</option>
-              </select>
-              <input type="number" value={form.passing_score ?? ""} onChange={(event) => setForm((current) => ({ ...current, passing_score: Number(event.target.value) || null }))} placeholder="Nota mínima" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900" />
+              <FieldGroup label="Status do curso" hint="Rascunho nao aparece para o colaborador. Publicado pode ser atribuido.">
+                <select
+                  value={form.status}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, status: event.target.value as typeof current.status }))
+                  }
+                  className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900"
+                >
+                  <option value="draft">Rascunho</option>
+                  <option value="published">Publicado</option>
+                  <option value="archived">Arquivado</option>
+                </select>
+              </FieldGroup>
+
+              <FieldGroup label="Quem pode ver" hint="Controle se o curso fica visivel no catalogo interno ou apenas em contextos restritos.">
+                <select
+                  value={form.visibility}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      visibility: event.target.value as typeof current.visibility,
+                    }))
+                  }
+                  className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900"
+                >
+                  <option value="publico_interno">Publico interno</option>
+                  <option value="restrito">Restrito</option>
+                </select>
+              </FieldGroup>
+
+              <FieldGroup label="Nota minima para aprovacao" hint="Percentual minimo para o colaborador ser aprovado nas avaliacoes do curso.">
+                <input
+                  type="number"
+                  value={form.passing_score ?? ""}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, passing_score: Number(event.target.value) || null }))
+                  }
+                  placeholder="Ex.: 70"
+                  className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900"
+                />
+              </FieldGroup>
             </div>
+
             <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={form.required} onChange={(event) => setForm((current) => ({ ...current, required: event.target.checked }))} /> Obrigatório</label>
-              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={form.certificate_enabled} onChange={(event) => setForm((current) => ({ ...current, certificate_enabled: event.target.checked }))} /> Certificado</label>
-              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={form.sequence_required} onChange={(event) => setForm((current) => ({ ...current, sequence_required: event.target.checked }))} /> Sequência obrigatória</label>
-              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={form.onboarding_recommended} onChange={(event) => setForm((current) => ({ ...current, onboarding_recommended: event.target.checked }))} /> Destaque onboarding</label>
+              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={form.required} onChange={(event) => setForm((current) => ({ ...current, required: event.target.checked }))} /> Curso obrigatorio</label>
+              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={form.certificate_enabled} onChange={(event) => setForm((current) => ({ ...current, certificate_enabled: event.target.checked }))} /> Emitir certificado</label>
+              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={form.sequence_required} onChange={(event) => setForm((current) => ({ ...current, sequence_required: event.target.checked }))} /> Exigir ordem das aulas</label>
+              <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={form.onboarding_recommended} onChange={(event) => setForm((current) => ({ ...current, onboarding_recommended: event.target.checked }))} /> Destacar no onboarding</label>
             </div>
+
             <div className="mt-5 grid gap-4 lg:grid-cols-2">
-              <FileUploader bucket="lms-thumbnails" label="Thumbnail do curso" accept="image/*" onUploaded={(value) => setForm((current) => ({ ...current, thumbnail_url: value }))} />
-              <FileUploader bucket="lms-banners" label="Banner do curso" accept="image/*" onUploaded={(value) => setForm((current) => ({ ...current, banner_url: value }))} />
+              <FileUploader
+                bucket="lms-thumbnails"
+                label="Imagem do card do curso"
+                description="Usada no card do catalogo e nas listagens de treinamentos."
+                accept="image/*"
+                onUploaded={(value) => setForm((current) => ({ ...current, thumbnail_url: value }))}
+              />
+              <FileUploader
+                bucket="lms-banners"
+                label="Banner do curso"
+                description="Imagem ampla para o topo da pagina do treinamento."
+                accept="image/*"
+                onUploaded={(value) => setForm((current) => ({ ...current, banner_url: value }))}
+              />
             </div>
           </section>
 
           <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <h2 className="text-lg font-semibold text-slate-950">Currículo em fases</h2>
-                <p className="mt-1 text-sm text-slate-500">{form.modules.length} módulos · {totalLessons} aulas. Organize a trilha em etapas curtas e claras.</p>
+                <h2 className="text-lg font-semibold text-slate-950">Curriculo em fases</h2>
+                <p className="mt-1 text-sm text-slate-500">{form.modules.length} modulos - {totalLessons} aulas. Organize a trilha em etapas curtas e claras.</p>
               </div>
-              <button type="button" onClick={() => { setForm((current) => ({ ...current, modules: [...current.modules, createModule(current.modules.length + 1)] })); setSelectedModuleIndex(form.modules.length); setSelectedLessonIndex(0); }} className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"><Plus size={16} /> Novo módulo</button>
+              <button type="button" onClick={() => { setForm((current) => ({ ...current, modules: [...current.modules, createModule(current.modules.length + 1)] })); setSelectedModuleIndex(form.modules.length); setSelectedLessonIndex(0); }} className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"><Plus size={16} /> Novo modulo</button>
             </div>
 
             <div className="mt-5 grid gap-5 xl:grid-cols-[0.42fr,0.58fr]">
@@ -171,7 +349,7 @@ export function LmsCourseEditor({
                           <button key={`${lesson.title}-${lessonIndex}`} type="button" onClick={() => setSelectedLessonIndex(lessonIndex)} className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left ${lessonIndex === selectedLessonIndex ? "bg-slate-900 text-white" : "bg-slate-50 text-slate-700"}`}>
                             <div>
                               <div className="text-sm font-semibold">{lesson.title}</div>
-                              <div className={`text-xs ${lessonIndex === selectedLessonIndex ? "text-white/70" : "text-slate-500"}`}>{lesson.lesson_type}</div>
+                              <div className={`text-xs capitalize ${lessonIndex === selectedLessonIndex ? "text-white/70" : "text-slate-500"}`}>{lesson.lesson_type}</div>
                             </div>
                             <span className={`text-xs font-semibold ${lessonIndex === selectedLessonIndex ? "text-white/70" : "text-slate-500"}`}>{lesson.duration_minutes ?? 0} min</span>
                           </button>
@@ -189,29 +367,54 @@ export function LmsCourseEditor({
                     <div><div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Editando aula</div><div className="mt-1 text-lg font-semibold text-slate-950">{selectedLesson.title || "Nova aula"}</div></div>
                     <button type="button" onClick={() => { patchModule(selectedModuleIndex, (current) => { const lessons = current.lessons.filter((_, index) => index !== selectedLessonIndex).map((lesson, index) => ({ ...lesson, sort_order: index + 1 })); return { ...current, lessons: lessons.length ? lessons : [createLesson(1)] }; }); setSelectedLessonIndex(0); }} className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">Remover aula</button>
                   </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    <div className="font-semibold text-slate-900">Como preencher esta area</div>
+                    <div className="mt-1">Informe em qual modulo a aula fica, o tipo de conteudo, o tempo estimado e os materiais que o colaborador vai consumir.</div>
+                  </div>
+
                   <div className="grid gap-4 md:grid-cols-2">
-                    <input value={selectedModule.title} onChange={(event) => patchModule(selectedModuleIndex, (module) => ({ ...module, title: event.target.value }))} placeholder="Título do módulo" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900" />
-                    <input value={selectedLesson.title} onChange={(event) => patchLesson(selectedModuleIndex, selectedLessonIndex, (lesson) => ({ ...lesson, title: event.target.value }))} placeholder="Título da aula" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900" />
+                    <FieldGroup label="Modulo da aula" hint="Agrupamento em que esta aula vai aparecer.">
+                      <input value={selectedModule.title} onChange={(event) => patchModule(selectedModuleIndex, (module) => ({ ...module, title: event.target.value }))} placeholder="Ex.: Boas-vindas e cultura" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900" />
+                    </FieldGroup>
+                    <FieldGroup label="Titulo da aula" hint="Nome que o colaborador vai enxergar na trilha.">
+                      <input value={selectedLesson.title} onChange={(event) => patchLesson(selectedModuleIndex, selectedLessonIndex, (lesson) => ({ ...lesson, title: event.target.value }))} placeholder="Ex.: Conhecendo o portal" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900" />
+                    </FieldGroup>
                   </div>
+
                   <div className="grid gap-4 md:grid-cols-3">
-                    <select value={selectedLesson.lesson_type} onChange={(event) => patchLesson(selectedModuleIndex, selectedLessonIndex, (lesson) => ({ ...lesson, lesson_type: event.target.value as typeof lesson.lesson_type }))} className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900">
-                      <option value="texto">Texto</option>
-                      <option value="video">Vídeo</option>
-                      <option value="pdf">PDF</option>
-                      <option value="arquivo">Arquivo</option>
-                      <option value="link">Link</option>
-                      <option value="avaliacao">Avaliação</option>
-                    </select>
-                    <input type="number" value={selectedLesson.duration_minutes ?? ""} onChange={(event) => patchLesson(selectedModuleIndex, selectedLessonIndex, (lesson) => ({ ...lesson, duration_minutes: Number(event.target.value) || null }))} placeholder="Duração" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900" />
-                    <input value={selectedLesson.content_url} onChange={(event) => patchLesson(selectedModuleIndex, selectedLessonIndex, (lesson) => ({ ...lesson, content_url: event.target.value }))} placeholder="URL do conteúdo" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900" />
+                    <FieldGroup label="Tipo de conteudo" hint="Escolha como o colaborador vai consumir a aula.">
+                      <select value={selectedLesson.lesson_type} onChange={(event) => patchLesson(selectedModuleIndex, selectedLessonIndex, (lesson) => ({ ...lesson, lesson_type: event.target.value as typeof lesson.lesson_type }))} className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900">
+                        <option value="texto">Texto</option>
+                        <option value="video">Video</option>
+                        <option value="pdf">PDF</option>
+                        <option value="arquivo">Arquivo</option>
+                        <option value="link">Link</option>
+                        <option value="avaliacao">Avaliacao</option>
+                      </select>
+                    </FieldGroup>
+                    <FieldGroup label="Duracao estimada" hint="Tempo medio, em minutos, para concluir a aula.">
+                      <input type="number" value={selectedLesson.duration_minutes ?? ""} onChange={(event) => patchLesson(selectedModuleIndex, selectedLessonIndex, (lesson) => ({ ...lesson, duration_minutes: Number(event.target.value) || null }))} placeholder="Ex.: 15" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900" />
+                    </FieldGroup>
+                    <FieldGroup label="Link do conteudo" hint="Use para video externo, pagina, link do PDF ou material hospedado fora do portal.">
+                      <input value={selectedLesson.content_url} onChange={(event) => patchLesson(selectedModuleIndex, selectedLessonIndex, (lesson) => ({ ...lesson, content_url: event.target.value }))} placeholder="Cole aqui a URL do conteudo" className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900" />
+                    </FieldGroup>
                   </div>
-                  <textarea value={selectedLesson.description} onChange={(event) => patchLesson(selectedModuleIndex, selectedLessonIndex, (lesson) => ({ ...lesson, description: event.target.value }))} placeholder="Descrição da aula" className="min-h-[80px] rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900" />
-                  <textarea value={selectedLesson.content_text} onChange={(event) => patchLesson(selectedModuleIndex, selectedLessonIndex, (lesson) => ({ ...lesson, content_text: event.target.value }))} placeholder="Conteúdo textual / roteiro / instruções" className="min-h-[180px] rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900" />
+
+                  <div className="grid gap-4">
+                    <FieldGroup label="Descricao da aula" hint="Explique rapidamente o que sera visto nesta etapa.">
+                      <textarea value={selectedLesson.description} onChange={(event) => patchLesson(selectedModuleIndex, selectedLessonIndex, (lesson) => ({ ...lesson, description: event.target.value }))} placeholder="Resumo da aula, objetivo e orientacoes principais." className="min-h-[96px] rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900" />
+                    </FieldGroup>
+                    <FieldGroup label="Conteudo textual ou roteiro" hint="Use para aulas em texto, instrucoes detalhadas, observacoes ou apoio ao video.">
+                      <textarea value={selectedLesson.content_text} onChange={(event) => patchLesson(selectedModuleIndex, selectedLessonIndex, (lesson) => ({ ...lesson, content_text: event.target.value }))} placeholder="Escreva aqui o conteudo da aula, o roteiro do video ou as instrucoes de apoio." className="min-h-[180px] rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900" />
+                    </FieldGroup>
+                  </div>
+
                   <div className="grid gap-4 xl:grid-cols-[1fr,0.8fr]">
-                    <FileUploader bucket={selectedLesson.lesson_type === "video" ? "lms-videos" : "lms-materials"} label={`Upload da aula (${selectedLesson.lesson_type})`} accept={selectedLesson.lesson_type === "video" ? "video/*" : ".pdf,.doc,.docx,.ppt,.pptx,image/*"} onUploaded={(value) => patchLesson(selectedModuleIndex, selectedLessonIndex, (lesson) => ({ ...lesson, content_url: value }))} />
+                    <FileUploader bucket={selectedLesson.lesson_type === "video" ? "lms-videos" : "lms-materials"} label="Arquivo principal da aula" description={selectedLesson.lesson_type === "video" ? "Envie o video quando o conteudo estiver hospedado no portal." : "Envie PDF, imagem, documento ou material complementar para esta aula."} accept={selectedLesson.lesson_type === "video" ? "video/*" : ".pdf,.doc,.docx,.ppt,.pptx,image/*"} onUploaded={(value) => patchLesson(selectedModuleIndex, selectedLessonIndex, (lesson) => ({ ...lesson, content_url: value }))} />
                     <div className="space-y-3 rounded-[24px] border border-slate-200 bg-slate-50 p-4">
-                      <div className="flex items-center gap-3"><span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white"><Eye size={18} /></span><div><div className="text-sm font-semibold text-slate-900">Regras da aula</div><div className="text-xs text-slate-500">Controle acesso e sequência.</div></div></div>
-                      <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={selectedLesson.is_required} onChange={(event) => patchLesson(selectedModuleIndex, selectedLessonIndex, (lesson) => ({ ...lesson, is_required: event.target.checked }))} /> Aula obrigatória</label>
+                      <div className="flex items-center gap-3"><span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white"><Eye size={18} /></span><div><div className="text-sm font-semibold text-slate-900">Regras da aula</div><div className="text-xs text-slate-500">Defina se ela e obrigatoria e se pode aparecer como previa.</div></div></div>
+                      <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={selectedLesson.is_required} onChange={(event) => patchLesson(selectedModuleIndex, selectedLessonIndex, (lesson) => ({ ...lesson, is_required: event.target.checked }))} /> Aula obrigatoria</label>
                       <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={selectedLesson.allow_preview} onChange={(event) => patchLesson(selectedModuleIndex, selectedLessonIndex, (lesson) => ({ ...lesson, allow_preview: event.target.checked }))} /> Liberar preview</label>
                     </div>
                   </div>
@@ -233,7 +436,7 @@ export function LmsCourseEditor({
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={form.banner_url} alt={form.title || "Banner"} className="h-full w-full object-cover" />
               ) : (
-                <div className="flex h-full items-center justify-center text-sm font-semibold text-slate-400">O banner aparecerá aqui</div>
+                <div className="flex h-full items-center justify-center text-sm font-semibold text-slate-400">O banner aparecera aqui</div>
               )}
             </div>
             <div className="p-5">
@@ -241,7 +444,7 @@ export function LmsCourseEditor({
                 <div className="h-20 w-20 overflow-hidden rounded-[22px] bg-slate-100">
                   {form.thumbnail_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={form.thumbnail_url} alt={form.title || "Thumbnail"} className="h-full w-full object-cover" />
+                    <img src={form.thumbnail_url} alt={form.title || "Imagem do card"} className="h-full w-full object-cover" />
                   ) : (
                     <div className="flex h-full items-center justify-center text-xs font-semibold text-slate-400"><ImagePlus size={16} /></div>
                   )}
@@ -249,12 +452,12 @@ export function LmsCourseEditor({
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">{form.category || "Treinamento"}</p>
                   <h3 className="mt-1 text-xl font-semibold text-slate-950">{form.title || "Preview do curso"}</h3>
-                  <p className="mt-2 line-clamp-4 text-sm leading-6 text-slate-600">{form.short_description || "O curso ganhará uma apresentação mais editorial e amigável no catálogo do colaborador."}</p>
+                  <p className="mt-2 line-clamp-4 text-sm leading-6 text-slate-600">{form.short_description || "O curso ganhara uma apresentacao mais clara e amigavel no catalogo do colaborador."}</p>
                 </div>
               </div>
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-[22px] bg-slate-50 px-4 py-4"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Estrutura</div><div className="mt-2 text-lg font-semibold text-slate-950">{form.modules.length} módulos</div><div className="text-sm text-slate-500">{totalLessons} aulas planejadas</div></div>
-                <div className="rounded-[22px] bg-slate-50 px-4 py-4"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Status</div><div className="mt-2 text-lg font-semibold text-slate-950">{form.status}</div><div className="text-sm text-slate-500">{form.visibility}</div></div>
+                <div className="rounded-[22px] bg-slate-50 px-4 py-4"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Estrutura</div><div className="mt-2 text-lg font-semibold text-slate-950">{form.modules.length} modulos</div><div className="text-sm text-slate-500">{totalLessons} aulas planejadas</div></div>
+                <div className="rounded-[22px] bg-slate-50 px-4 py-4"><div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Status</div><div className="mt-2 text-lg font-semibold capitalize text-slate-950">{form.status}</div><div className="text-sm text-slate-500">{form.visibility === "publico_interno" ? "Publico interno" : "Restrito"}</div></div>
               </div>
             </div>
           </section>
