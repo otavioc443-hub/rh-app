@@ -80,13 +80,6 @@ function innerHeroContent(activeTab: Exclude<TabKey, "home">, content: EthicsMan
   };
 }
 
-const guarantees = [
-  "Tratamento confidencial do relato e das evid\u00eancias.",
-  "Triagem com crit\u00e9rio, registro formal e restri\u00e7\u00e3o de acesso.",
-  "N\u00e3o toler\u00e2ncia \u00e0 retalia\u00e7\u00e3o contra relatos feitos de boa-f\u00e9.",
-  "Encaminhamento para apura\u00e7\u00e3o com rastreabilidade e imparcialidade.",
-];
-
 function ActionLink({ href, children, primary = false }: { href: string; children: ReactNode; primary?: boolean }) {
   const className = primary
     ? "inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-slate-900/20 transition hover:translate-y-[-1px]"
@@ -126,32 +119,6 @@ function TabButton({ active, children }: { active: boolean; children: ReactNode 
   );
 }
 
-function SectionTitle({
-  kicker,
-  title,
-  body,
-  dark = false,
-}: {
-  kicker: string;
-  title: string;
-  body: string;
-  dark?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-[34px] border p-7 shadow-sm ${
-        dark ? "border-slate-800 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-950"
-      }`}
-    >
-      <p className={`text-xs font-semibold uppercase tracking-[0.28em] ${dark ? "text-white/60" : "text-slate-500"}`}>
-        {kicker}
-      </p>
-      <h2 className="mt-3 text-3xl font-semibold tracking-tight">{title}</h2>
-      <p className={`mt-4 max-w-3xl text-base leading-8 ${dark ? "text-slate-300" : "text-slate-600"}`}>{body}</p>
-    </div>
-  );
-}
-
 function buildSteerCards(body: string | null) {
   const text = String(body ?? "").trim();
   if (!text) return [];
@@ -180,6 +147,39 @@ function buildSteerCards(body: string | null) {
   }
 
   return cards;
+}
+
+const guarantees = [
+  "Tratamento confidencial do relato e das evidências.",
+  "Triagem com critério, registro formal e restrição de acesso.",
+  "Não tolerância à retaliação contra relatos feitos de boa-fé.",
+  "Encaminhamento para apuração com rastreabilidade e imparcialidade.",
+];
+
+function SectionTitle({
+  kicker,
+  title,
+  body,
+  dark = false,
+}: {
+  kicker: string;
+  title: string;
+  body: string;
+  dark?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-[34px] border p-7 shadow-sm ${
+        dark ? "border-slate-800 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-950"
+      }`}
+    >
+      <p className={`text-xs font-semibold uppercase tracking-[0.28em] ${dark ? "text-white/60" : "text-slate-500"}`}>
+        {kicker}
+      </p>
+      <h2 className="mt-3 text-3xl font-semibold tracking-tight">{title}</h2>
+      <p className={`mt-4 max-w-3xl text-base leading-8 ${dark ? "text-slate-300" : "text-slate-600"}`}>{body}</p>
+    </div>
+  );
 }
 
 function normalizeSteerText(value: string) {
@@ -559,7 +559,7 @@ export default function EthicsChannelLanding({
                     className="mt-1 h-5 w-5 rounded border-slate-300"
                   />
                   <span className="text-base font-semibold text-slate-950">
-                    {content.pageTexts.reportConsentLabel}
+                    {content.pageTexts.reportConsentLabel || "Declaro que li e compreendi as informações acima, e desejo prosseguir com a manifestação."}
                   </span>
                 </label>
                 <div className="mt-5 flex flex-wrap gap-3">
@@ -959,7 +959,7 @@ export default function EthicsChannelLanding({
           </div>
         ) : null}
 
-        {activeTab === "code" ? (
+        {false && activeTab === "code" ? (
           <div className="space-y-8">
             <SectionTitle
               kicker="C\u00f3digo de \u00c9tica"
@@ -975,7 +975,7 @@ export default function EthicsChannelLanding({
                 <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/60">Documento oficial</p>
                 <h2 className="mt-3 text-3xl font-semibold tracking-tight">Consulte o c\u00f3digo completo da empresa.</h2>
                 <p className="mt-4 text-base leading-8 text-slate-300">O canal de \u00e9tica complementa, mas n\u00e3o substitui, as regras formais de conduta, integridade, preven\u00e7\u00e3o de conflitos, respeito \u00e0s pessoas e prote\u00e7\u00e3o das informa\u00e7\u00f5es.</p>
-                {config.codeOfEthicsUrl ? (<div className="mt-6"><ActionLink href={config.codeOfEthicsUrl} primary>Abrir c\u00f3digo de \u00e9tica<ArrowRight size={16} /></ActionLink></div>) : null}
+                {config.codeOfEthicsUrl ? (<div className="mt-6"><ActionLink href={config.codeOfEthicsUrl ?? "#"} primary>Abrir c\u00f3digo de \u00e9tica<ArrowRight size={16} /></ActionLink></div>) : null}
               </article>
             </div>
           </div>
