@@ -104,6 +104,42 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
           <TableShell>
             <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
               <div>
+                <h2 className="text-lg font-semibold text-slate-900">Pessoas que exigem atencao</h2>
+                <p className="text-sm text-slate-500">Treinamentos vencidos ou que vencem em ate 7 dias.</p>
+              </div>
+              <Link href="/rh/lms/atribuicoes" className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800">
+                Ver atribuicoes
+              </Link>
+            </div>
+            <div className="space-y-3 p-6">
+              {data.attentionItems.length ? (
+                data.attentionItems.map((item) => (
+                  <div key={`${item.user_id}-${item.course_id}`} className="rounded-2xl border border-slate-100 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-900">{item.full_name}</div>
+                        <div className="text-sm text-slate-600">{item.course_title}</div>
+                      </div>
+                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${item.urgency === "overdue" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}>
+                        {item.urgency === "overdue" ? "Atrasado" : "Vence em breve"}
+                      </span>
+                    </div>
+                    <div className="mt-2 text-xs text-slate-500">
+                      {item.department_name ?? "Sem departamento"} · Prazo {item.due_date ?? "-"} · {Math.round(item.progress_percent)}%
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                  Nenhum treinamento com risco imediato neste momento.
+                </div>
+              )}
+            </div>
+          </TableShell>
+
+          <TableShell>
+            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+              <div>
                 <h2 className="text-lg font-semibold text-slate-900">Cursos com maior acesso</h2>
                 <p className="text-sm text-slate-500">Monitore o catalogo mais consumido e a taxa de abandono.</p>
               </div>

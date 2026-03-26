@@ -6,6 +6,6 @@ import { requireRoles } from "@/lib/server/feedbackGuard";
 export default async function GestorTeamLmsPage() {
   const access = await requireRoles(["gestor", "admin"]);
   if (!access.ok) redirect("/unauthorized");
-  const rows = await getTeamTrainingsData(access);
-  return <TeamTrainingsClient rows={rows} />;
+  const data = await getTeamTrainingsData(access);
+  return <TeamTrainingsClient data={data} />;
 }

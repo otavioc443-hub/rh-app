@@ -258,6 +258,7 @@ export type LmsAdminDashboardData = LmsDashboardData & {
   completionByStatus: Array<{ status: LmsProgressStatus; total: number }>;
   recentAssignments: LmsAssignmentExpanded[];
   recentCourses: LmsCourseWithCounts[];
+  attentionItems: LmsTrainingAttentionItem[];
   gamification: LmsGamificationAdminData;
 };
 
@@ -277,6 +278,36 @@ export type LmsTeamTrainingRow = {
   status: LmsProgressStatus;
   progress_percent: number;
   due_date: string | null;
+  mandatory: boolean;
+  assignment_type: LmsAssignmentTargetType;
+  days_until_due: number | null;
+  urgency: "overdue" | "due_soon" | "on_track" | "none";
+};
+
+export type LmsTrainingAttentionItem = {
+  user_id: string;
+  full_name: string;
+  department_name: string | null;
+  course_id: string;
+  course_title: string;
+  due_date: string | null;
+  days_until_due: number | null;
+  status: LmsProgressStatus;
+  progress_percent: number;
+  urgency: "overdue" | "due_soon";
+};
+
+export type LmsTeamTrainingsData = {
+  rows: LmsTeamTrainingRow[];
+  summary: {
+    totalMembers: number;
+    totalAssignments: number;
+    overdue: number;
+    dueSoon: number;
+    completed: number;
+    averageCompletion: number;
+  };
+  urgentRows: LmsTeamTrainingRow[];
 };
 
 export type LmsReportRow = {

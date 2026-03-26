@@ -34,6 +34,8 @@ import type {
   LmsReportRow,
   LmsReportsFilters,
   LmsTeamTrainingRow,
+  LmsTeamTrainingsData,
+  LmsTrainingAttentionItem,
   LmsUserCourseVisibility,
   LmsUserProgress,
 } from "@/lib/lms/types";
@@ -137,7 +139,24 @@ async function fetchPublishedCourses(companyId: string | null) {
   return Promise.all(((data ?? []) as LmsCourse[]).map((course) => mapCourseAssets(course)));
 }
 
-export async function resolveVisibleCoursesForUser(access: Access) {
+function calculateDaysUntilDue(dueDate: string | null) {
+  if (!dueDate) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const due = new Date(`${dueDate}T00:00:00`);
+  return Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function resolveUrgency(dueDate: string | null, status: LmsProgressStatus): "overdue" | "due_soon" | "on_track" | "none" {
+  if (!dueDate || status === "completed") return "none";
+  const daysUntilDue = calculateDaysUntilDue(dueDate);
+  if (daysUntilDue === null) return "none";
+  if (daysUntilDue < 0) return "overdue";
+  if (daysUntilDue <= 7) return "due_soon";
+  return "on_track";
+}
+
+async function fetchActiveAssignmentGraph() {
   const { data: assignmentsData, error: assignmentsError } = await supabaseAdmin
     .from("lms_assignments")
     .select("*")
@@ -145,33 +164,60 @@ export async function resolveVisibleCoursesForUser(access: Access) {
   if (assignmentsError) throw assignmentsError;
 
   const assignments = (assignmentsData ?? []) as LmsAssignment[];
-  const matched = assignments.filter((assignment) => {
-    if (assignment.assignment_type === "user") return assignment.target_id === access.userId;
-    if (assignment.assignment_type === "department") return !!access.departmentId && assignment.target_id === access.departmentId;
-    if (assignment.assignment_type === "company") return !!access.companyId && assignment.target_id === access.companyId;
-    if (assignment.assignment_type === "role") return assignment.target_id === access.role;
-    return false;
-  });
+  const pathIds = assignments.map((item) => item.learning_path_id).filter(Boolean) as string[];
+  const { data: pathCoursesData, error: pathCoursesError } = pathIds.length
+    ? await supabaseAdmin.from("lms_learning_path_courses").select("*").in("learning_path_id", pathIds)
+    : { data: [] as LmsLearningPathCourse[], error: null };
+  if (pathCoursesError) throw pathCoursesError;
 
-  const courseIds = new Set<string>();
-  const visibility: LmsUserCourseVisibility[] = [];
-  const pathIds = matched.map((item) => item.learning_path_id).filter(Boolean) as string[];
+  return {
+    assignments,
+    pathCourses: (pathCoursesData ?? []) as LmsLearningPathCourse[],
+  };
+}
 
-  let pathCourseRows: LmsLearningPathCourse[] = [];
-  if (pathIds.length) {
-    const { data: pathCoursesData, error: pathCoursesError } = await supabaseAdmin
-      .from("lms_learning_path_courses")
-      .select("*")
-      .in("learning_path_id", pathIds);
-    if (pathCoursesError) throw pathCoursesError;
-    pathCourseRows = (pathCoursesData ?? []) as LmsLearningPathCourse[];
+function assignmentMatchesProfile(profile: Pick<ProfileMini, "id" | "department_id" | "company_id" | "role">, assignment: LmsAssignment) {
+  if (assignment.assignment_type === "user") return assignment.target_id === profile.id;
+  if (assignment.assignment_type === "department") return !!profile.department_id && assignment.target_id === profile.department_id;
+  if (assignment.assignment_type === "company") return !!profile.company_id && assignment.target_id === profile.company_id;
+  if (assignment.assignment_type === "role") return assignment.target_id === profile.role;
+  return false;
+}
+
+function dedupeVisibilityRows(rows: LmsUserCourseVisibility[]) {
+  const visibilityMap = new Map<string, LmsUserCourseVisibility>();
+  for (const row of rows) {
+    const current = visibilityMap.get(row.course_id);
+    if (!current) {
+      visibilityMap.set(row.course_id, row);
+      continue;
+    }
+
+    const currentDue = current.due_date ? new Date(current.due_date).getTime() : Number.POSITIVE_INFINITY;
+    const nextDue = row.due_date ? new Date(row.due_date).getTime() : Number.POSITIVE_INFINITY;
+    if (row.mandatory && !current.mandatory) {
+      visibilityMap.set(row.course_id, row);
+      continue;
+    }
+    if (nextDue < currentDue) {
+      visibilityMap.set(row.course_id, row);
+    }
   }
+
+  return Array.from(visibilityMap.values());
+}
+
+function buildVisibilityForProfile(
+  profile: Pick<ProfileMini, "id" | "department_id" | "company_id" | "role">,
+  graph: { assignments: LmsAssignment[]; pathCourses: LmsLearningPathCourse[] },
+) {
+  const matched = graph.assignments.filter((assignment) => assignmentMatchesProfile(profile, assignment));
+  const rows: LmsUserCourseVisibility[] = [];
 
   for (const assignment of matched) {
     if (assignment.course_id) {
-      courseIds.add(assignment.course_id);
-      visibility.push({
-        user_id: access.userId,
+      rows.push({
+        user_id: profile.id,
         course_id: assignment.course_id,
         assignment_id: assignment.id,
         assignment_type: assignment.assignment_type,
@@ -184,10 +230,9 @@ export async function resolveVisibleCoursesForUser(access: Access) {
     }
 
     if (assignment.learning_path_id) {
-      for (const pathCourse of pathCourseRows.filter((row) => row.learning_path_id === assignment.learning_path_id)) {
-        courseIds.add(pathCourse.course_id);
-        visibility.push({
-          user_id: access.userId,
+      for (const pathCourse of graph.pathCourses.filter((row) => row.learning_path_id === assignment.learning_path_id)) {
+        rows.push({
+          user_id: profile.id,
           course_id: pathCourse.course_id,
           assignment_id: assignment.id,
           assignment_type: assignment.assignment_type,
@@ -200,6 +245,22 @@ export async function resolveVisibleCoursesForUser(access: Access) {
       }
     }
   }
+
+  return dedupeVisibilityRows(rows);
+}
+
+export async function resolveVisibleCoursesForUser(access: Access) {
+  const graph = await fetchActiveAssignmentGraph();
+  const visibility = buildVisibilityForProfile(
+    {
+      id: access.userId,
+      department_id: access.departmentId,
+      company_id: access.companyId,
+      role: access.role,
+    },
+    graph,
+  );
+  const courseIds = new Set<string>(visibility.map((item) => item.course_id));
 
   if (!courseIds.size) return [] as LmsUserCourseVisibility[];
 
@@ -236,7 +297,82 @@ export async function getMyTrainingsData(access: Access) {
       return { course, progress, assignment, status };
     });
 
+  await ensureLmsDeadlineNotifications(access, cards);
+
   return cards.sort((left, right) => (left.assignment?.due_date ?? "").localeCompare(right.assignment?.due_date ?? ""));
+}
+
+async function ensureLmsDeadlineNotifications(access: Access, cards: LmsMyTrainingCard[]) {
+  const alerts = cards
+    .map((card) => ({
+      card,
+      urgency: resolveUrgency(card.assignment?.due_date ?? null, card.status),
+      daysUntilDue: calculateDaysUntilDue(card.assignment?.due_date ?? null),
+    }))
+    .filter((item) => item.urgency === "overdue" || item.urgency === "due_soon");
+
+  if (!alerts.length) return;
+
+  const startOfDay = new Date();
+  startOfDay.setHours(0, 0, 0, 0);
+
+  const existingRes = await supabaseAdmin
+    .from("notifications")
+    .select("id,title,type,link,created_at")
+    .eq("to_user_id", access.userId)
+    .in("type", ["lms_due_soon", "lms_overdue"])
+    .gte("created_at", startOfDay.toISOString());
+
+  if (existingRes.error) {
+    const text = existingRes.error.message.toLowerCase();
+    const ignorable =
+      text.includes("does not exist") ||
+      text.includes("relation") ||
+      text.includes("schema cache") ||
+      text.includes("column");
+    if (!ignorable) throw existingRes.error;
+    return;
+  }
+
+  const existingKeys = new Set(
+    ((existingRes.data ?? []) as Array<{ title: string; type: string; link: string | null }>).map((row) => `${row.type}|${row.link ?? ""}|${row.title}`),
+  );
+
+  const payload = alerts
+    .map(({ card, urgency, daysUntilDue }) => {
+      const type = urgency === "overdue" ? "lms_overdue" : "lms_due_soon";
+      const title = urgency === "overdue" ? `Treinamento em atraso: ${card.course.title}` : `Treinamento vencendo: ${card.course.title}`;
+      const body =
+        urgency === "overdue"
+          ? `Seu prazo terminou em ${card.assignment?.due_date}. Retome o treinamento o quanto antes.`
+          : `Seu treinamento vence em ${card.assignment?.due_date}. Restam ${daysUntilDue ?? 0} dia(s) para concluir.`;
+      const link = `/lms/cursos/${card.course.id}`;
+      return {
+        key: `${type}|${link}|${title}`,
+        record: {
+          to_user_id: access.userId,
+          title,
+          body,
+          link,
+          type,
+        },
+      };
+    })
+    .filter((item) => !existingKeys.has(item.key))
+    .map((item) => item.record);
+
+  if (!payload.length) return;
+
+  const insertRes = await supabaseAdmin.from("notifications").insert(payload);
+  if (insertRes.error) {
+    const text = insertRes.error.message.toLowerCase();
+    const ignorable =
+      text.includes("does not exist") ||
+      text.includes("relation") ||
+      text.includes("schema cache") ||
+      text.includes("column");
+    if (!ignorable) throw insertRes.error;
+  }
 }
 
 async function fetchCourseModules(courseId: string) {
@@ -349,7 +485,7 @@ export async function getLmsLandingData(access: Access) {
   return { myTrainings, recommended, dashboard, gamification, deadlines, keepLearning };
 }
 
-export async function getTeamTrainingsData(access: Access) {
+export async function getTeamTrainingsData(access: Access): Promise<LmsTeamTrainingsData> {
   const { data: teamProfilesData, error: teamError } = await supabaseAdmin
     .from("profiles")
     .select("id,full_name,role,company_id,department_id,manager_id")
@@ -358,32 +494,88 @@ export async function getTeamTrainingsData(access: Access) {
 
   if (teamError) throw teamError;
   const teamProfiles = (teamProfilesData ?? []) as ProfileMini[];
-  if (!teamProfiles.length) return [] as LmsTeamTrainingRow[];
+  if (!teamProfiles.length) {
+    return {
+      rows: [],
+      summary: {
+        totalMembers: 0,
+        totalAssignments: 0,
+        overdue: 0,
+        dueSoon: 0,
+        completed: 0,
+        averageCompletion: 0,
+      },
+      urgentRows: [],
+    };
+  }
 
   const userIds = teamProfiles.map((profile) => profile.id);
-  const [progressRes, courseRes, departmentsRes] = await Promise.all([
+  const [progressRes, courseRes, departmentsRes, graph] = await Promise.all([
     supabaseAdmin.from("lms_user_progress").select("*").in("user_id", userIds),
-    supabaseAdmin.from("lms_courses").select("id,title"),
+    access.companyId
+      ? supabaseAdmin.from("lms_courses").select("id,title,status,company_id").or(`company_id.eq.${access.companyId},company_id.is.null`)
+      : supabaseAdmin.from("lms_courses").select("id,title,status,company_id"),
     supabaseAdmin.from("departments").select("id,name").in("id", teamProfiles.map((row) => row.department_id).filter(Boolean) as string[]),
+    fetchActiveAssignmentGraph(),
   ]);
 
   const progressRows = (progressRes.data ?? []) as LmsUserProgress[];
-  const coursesById = new Map<string, { id: string; title: string }>(((courseRes.data ?? []) as Array<{ id: string; title: string }>).map((row) => [row.id, row]));
+  const progressMap = new Map(progressRows.map((row) => [`${row.user_id}:${row.course_id}`, row]));
+  const coursesById = new Map<string, { id: string; title: string; status?: string | null }>(
+    ((courseRes.data ?? []) as Array<{ id: string; title: string; status?: string | null }>).map((row) => [row.id, row]),
+  );
   const departmentsById = new Map<string, string>(((departmentsRes.data ?? []) as Array<{ id: string; name: string }>).map((row) => [row.id, row.name]));
+  const rows: LmsTeamTrainingRow[] = [];
 
-  return progressRows.map((progress) => {
-    const profile = teamProfiles.find((row) => row.id === progress.user_id);
-    return {
-      user_id: progress.user_id,
-      full_name: profile?.full_name ?? "Colaborador",
-      department_name: profile?.department_id ? departmentsById.get(profile.department_id) ?? null : null,
-      course_id: progress.course_id,
-      course_title: coursesById.get(progress.course_id)?.title ?? "Curso",
-      status: progress.status,
-      progress_percent: progress.progress_percent,
-      due_date: null,
-    };
+  for (const profile of teamProfiles) {
+    const visibility = buildVisibilityForProfile(profile, graph).filter((item) => coursesById.has(item.course_id));
+    for (const assignment of visibility) {
+      const progress = progressMap.get(`${profile.id}:${assignment.course_id}`) ?? null;
+      const baseStatus = progress?.status ?? "not_started";
+      const urgency = resolveUrgency(assignment.due_date, baseStatus);
+      rows.push({
+        user_id: profile.id,
+        full_name: profile.full_name ?? "Colaborador",
+        department_name: profile.department_id ? departmentsById.get(profile.department_id) ?? null : null,
+        course_id: assignment.course_id,
+        course_title: coursesById.get(assignment.course_id)?.title ?? "Curso",
+        status: urgency === "overdue" ? "overdue" : baseStatus,
+        progress_percent: progress?.progress_percent ?? 0,
+        due_date: assignment.due_date,
+        mandatory: assignment.mandatory,
+        assignment_type: assignment.assignment_type,
+        days_until_due: calculateDaysUntilDue(assignment.due_date),
+        urgency,
+      });
+    }
+  }
+
+  rows.sort((left, right) => {
+    const urgencyWeight = { overdue: 0, due_soon: 1, on_track: 2, none: 3 };
+    const byUrgency = urgencyWeight[left.urgency] - urgencyWeight[right.urgency];
+    if (byUrgency !== 0) return byUrgency;
+    return `${left.full_name}${left.course_title}`.localeCompare(`${right.full_name}${right.course_title}`);
   });
+
+  const completed = rows.filter((row) => row.status === "completed").length;
+  const overdue = rows.filter((row) => row.urgency === "overdue").length;
+  const dueSoon = rows.filter((row) => row.urgency === "due_soon").length;
+  const averageCompletion = rows.length
+    ? Math.round(rows.reduce((sum, row) => sum + row.progress_percent, 0) / rows.length)
+    : 0;
+
+  return {
+    rows,
+    summary: {
+      totalMembers: teamProfiles.length,
+      totalAssignments: rows.length,
+      overdue,
+      dueSoon,
+      completed,
+      averageCompletion,
+    },
+    urgentRows: rows.filter((row) => row.urgency === "overdue" || row.urgency === "due_soon").slice(0, 8),
+  };
 }
 
 function mapExpandedAssignment(
@@ -455,7 +647,7 @@ export async function buildAssignmentSupportData(companyId: string | null): Prom
 }
 
 export async function getLmsAdminDashboardData(companyId: string | null): Promise<LmsAdminDashboardData> {
-  const [coursesRes, progressRes, accessLogsRes, assignmentsRes, departments, profilesRes, gamification] = await Promise.all([
+  const [coursesRes, progressRes, accessLogsRes, assignmentsRes, departments, profilesRes, gamification, graph] = await Promise.all([
     fetchPublishedCourses(companyId),
     supabaseAdmin.from("lms_user_progress").select("*"),
     supabaseAdmin.from("lms_course_access_logs").select("*"),
@@ -463,17 +655,21 @@ export async function getLmsAdminDashboardData(companyId: string | null): Promis
     fetchCompanyAndDepartments(companyId),
     supabaseAdmin.from("profiles").select("id,full_name,company_id,department_id").eq("active", true),
     getAdminGamificationDashboard(companyId),
+    fetchActiveAssignmentGraph(),
   ]);
 
   const courses = coursesRes;
+  const profiles = ((profilesRes.data ?? []) as ProfileMini[]).filter((profile) => !companyId || profile.company_id === companyId);
   const progressRows = ((progressRes.data ?? []) as LmsUserProgress[]).filter((row) => {
     if (!companyId) return true;
-    const profile = ((profilesRes.data ?? []) as ProfileMini[]).find((item) => item.id === row.user_id);
+    const profile = profiles.find((item) => item.id === row.user_id);
     return profile?.company_id === companyId;
   });
 
   const accessLogs = (accessLogsRes.data ?? []) as LmsCourseAccessLog[];
   const courseById = new Map(courses.map((course) => [course.id, course]));
+  const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+  const progressMap = new Map(progressRows.map((row) => [`${row.user_id}:${row.course_id}`, row]));
   const assignmentRows = (assignmentsRes.data ?? []) as LmsAssignment[];
   const assignmentSupport = await buildAssignmentSupportData(companyId);
   const recentAssignments = assignmentRows.map((assignment) => mapExpandedAssignment(assignment, assignmentSupport, new Map(), courseById, new Map())).slice(0, 8);
@@ -515,10 +711,39 @@ export async function getLmsAdminDashboardData(companyId: string | null): Promis
   const now = new Date();
   const overdueTrainings = assignmentRows.filter((item) => item.due_date && new Date(item.due_date) < now).length;
   const delayedUsers = new Set(progressRows.filter((row) => row.status === "overdue").map((row) => row.user_id)).size;
+  const attentionItems: LmsTrainingAttentionItem[] = [];
+
+  for (const profile of profiles) {
+    const visibility = buildVisibilityForProfile(profile, graph).filter((item) => courseById.has(item.course_id));
+    for (const assignment of visibility) {
+      const progress = progressMap.get(`${profile.id}:${assignment.course_id}`) ?? null;
+      const baseStatus = progress?.status ?? "not_started";
+      const urgency = resolveUrgency(assignment.due_date, baseStatus);
+      if (urgency !== "overdue" && urgency !== "due_soon") continue;
+      attentionItems.push({
+        user_id: profile.id,
+        full_name: profile.full_name ?? "Colaborador",
+        department_name: profile.department_id ? departments.departments.find((item) => item.id === profile.department_id)?.name ?? null : null,
+        course_id: assignment.course_id,
+        course_title: courseById.get(assignment.course_id)?.title ?? "Curso",
+        due_date: assignment.due_date,
+        days_until_due: calculateDaysUntilDue(assignment.due_date),
+        status: urgency === "overdue" ? "overdue" : baseStatus,
+        progress_percent: progress?.progress_percent ?? 0,
+        urgency,
+      });
+    }
+  }
+
+  attentionItems.sort((left, right) => {
+    const urgencyWeight = { overdue: 0, due_soon: 1 };
+    const byUrgency = urgencyWeight[left.urgency] - urgencyWeight[right.urgency];
+    if (byUrgency !== 0) return byUrgency;
+    return (left.days_until_due ?? Number.MAX_SAFE_INTEGER) - (right.days_until_due ?? Number.MAX_SAFE_INTEGER);
+  });
 
   const departmentMap = new Map<string, { name: string; total: number; complete: number }>();
-  for (const profile of (profilesRes.data ?? []) as ProfileMini[]) {
-    if (companyId && profile.company_id !== companyId) continue;
+  for (const profile of profiles) {
     const key = profile.department_id ?? "sem-departamento";
     if (!departmentMap.has(key)) {
       departmentMap.set(key, {
@@ -569,6 +794,7 @@ export async function getLmsAdminDashboardData(companyId: string | null): Promis
     completionByStatus,
     recentAssignments,
     recentCourses,
+    attentionItems: attentionItems.slice(0, 8),
     gamification,
   };
 }
@@ -592,6 +818,7 @@ export async function getSafeLmsAdminDashboardData(companyId: string | null) {
       completionByStatus: [],
       recentAssignments: [],
       recentCourses: [],
+      attentionItems: [],
       gamification: {
         totalXpDistributed: 0,
         activeLearners: 0,
@@ -1288,6 +1515,51 @@ export async function upsertLearningPath(
   return pathRes.data;
 }
 
+async function notifyAssignmentAudience(
+  access: Access,
+  assignment: LmsAssignment,
+  supportData: LmsAssignmentSupportData,
+) {
+  const titleSource =
+    assignment.course_id
+      ? supportData.courses.find((item) => item.id === assignment.course_id)?.label ?? "treinamento"
+      : supportData.learningPaths.find((item) => item.id === assignment.learning_path_id)?.label ?? "trilha";
+
+  let profilesQuery = supabaseAdmin
+    .from("profiles")
+    .select("id,company_id,department_id,role,active")
+    .eq("active", true);
+
+  if (access.companyId) profilesQuery = profilesQuery.eq("company_id", access.companyId);
+  const { data: profilesData, error: profilesError } = await profilesQuery;
+  if (profilesError) throw profilesError;
+
+  const profiles = (profilesData ?? []) as ProfileMini[];
+  const recipients = profiles.filter((profile) => assignmentMatchesProfile(profile, assignment)).map((profile) => profile.id);
+  if (!recipients.length) return;
+
+  const dueText = assignment.due_date ? ` Prazo: ${assignment.due_date}.` : "";
+  const link = assignment.course_id ? `/lms/cursos/${assignment.course_id}` : "/lms/meus-treinamentos";
+  const payload = recipients.map((userId) => ({
+    to_user_id: userId,
+    title: `Novo treinamento atribuido: ${titleSource}`,
+    body: `Voce recebeu ${assignment.learning_path_id ? "uma trilha" : "um treinamento"} no LMS.${dueText}`,
+    link,
+    type: "lms_assignment",
+  }));
+
+  const notifyRes = await supabaseAdmin.from("notifications").insert(payload);
+  if (notifyRes.error) {
+    const text = notifyRes.error.message.toLowerCase();
+    const ignorable =
+      text.includes("does not exist") ||
+      text.includes("relation") ||
+      text.includes("schema cache") ||
+      text.includes("column");
+    if (!ignorable) throw notifyRes.error;
+  }
+}
+
 export async function createAssignment(
   access: Access,
   payload: {
@@ -1316,6 +1588,8 @@ export async function createAssignment(
     .select("*")
     .maybeSingle<LmsAssignment>();
   if (error || !data) throw error ?? new Error("Falha ao salvar atribuicao.");
+  const supportData = await buildAssignmentSupportData(access.companyId);
+  await notifyAssignmentAudience(access, data, supportData);
   return data;
 }
 
