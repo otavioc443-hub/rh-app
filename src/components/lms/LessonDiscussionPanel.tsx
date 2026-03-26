@@ -65,6 +65,22 @@ export function LessonDiscussionPanel({
               </div>
               {item.author_role ? <div className="mt-1 text-xs uppercase tracking-[0.14em] text-slate-400">{item.author_role}</div> : null}
               <p className="mt-3 text-sm leading-6 text-slate-700">{item.message}</p>
+              {item.admin_response ? (
+                <div className="mt-4 rounded-2xl border border-sky-100 bg-white px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">
+                      {item.status === "resolved" ? "Resposta final" : "Resposta do time"}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      {item.responder_name ?? "Time responsável"}
+                      {item.responded_at
+                        ? ` · ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.responded_at))}`
+                        : ""}
+                    </div>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-700">{item.admin_response}</p>
+                </div>
+              ) : null}
             </article>
           ))
         ) : (

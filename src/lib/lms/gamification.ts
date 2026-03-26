@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { publishLmsPulseHubHighlight } from "@/lib/lms/social";
 import type {
   LmsBadge,
   LmsChallenge,
@@ -291,6 +292,13 @@ async function grantBadgeIfEligible(context: LmsAccessContext, slug: string) {
     const xp = await ensureUserXp(context);
     await updateXpRow(xp, badge.points_reward);
   }
+
+  await publishLmsPulseHubHighlight({
+    userId: context.userId,
+    companyId: context.companyId,
+    title: "Nova conquista desbloqueada",
+    body: `Badge recebido: ${badge.title}. Continue acumulando XP e avancando no ranking do LMS.`,
+  });
 
   return data;
 }

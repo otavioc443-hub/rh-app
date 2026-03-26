@@ -54,6 +54,41 @@ export function TeamTrainingsClient({ data }: { data: LmsTeamTrainingsData }) {
         </div>
       </div>
 
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Resumo semanal da equipe</h2>
+            <p className="text-sm text-slate-600">Recorte atual: {data.weeklyDigest.periodLabel}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <LmsActionButton
+              endpoint="/api/lms/weekly-summary/send"
+              label="Receber resumo"
+              pendingLabel="Enviando..."
+              className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60"
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl bg-slate-50 px-4 py-3">
+              <div className="text-xs uppercase tracking-[0.14em] text-slate-500">Concluidos</div>
+              <div className="mt-2 text-2xl font-bold text-emerald-600">{data.weeklyDigest.completedThisWeek}</div>
+            </div>
+            <div className="rounded-2xl bg-slate-50 px-4 py-3">
+              <div className="text-xs uppercase tracking-[0.14em] text-slate-500">Vencendo</div>
+              <div className="mt-2 text-2xl font-bold text-amber-600">{data.weeklyDigest.dueSoon}</div>
+            </div>
+            <div className="rounded-2xl bg-slate-50 px-4 py-3">
+              <div className="text-xs uppercase tracking-[0.14em] text-slate-500">Em atraso</div>
+              <div className="mt-2 text-2xl font-bold text-rose-600">{data.weeklyDigest.overdue}</div>
+            </div>
+            <div className="rounded-2xl bg-slate-50 px-4 py-3">
+              <div className="text-xs uppercase tracking-[0.14em] text-slate-500">Nao iniciados</div>
+              <div className="mt-2 text-2xl font-bold text-slate-900">{data.weeklyDigest.notStarted}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {data.urgentRows.length ? (
         <div className="rounded-3xl border border-amber-200 bg-amber-50/70 p-5 shadow-sm">
           <div className="flex items-center justify-between gap-4">
@@ -75,13 +110,13 @@ export function TeamTrainingsClient({ data }: { data: LmsTeamTrainingsData }) {
                   </span>
                 </div>
                 <div className="mt-2 text-xs text-slate-500">
-                  {row.department_name ?? "Sem departamento"} · Prazo {row.due_date ?? "-"} · {Math.round(row.progress_percent)}%
+                  {row.department_name ?? "Sem departamento"} - Prazo {row.due_date ?? "-"} - {Math.round(row.progress_percent)}%
                 </div>
                 <div className="mt-3">
                   <LmsActionButton
                     endpoint="/api/lms/reminders/send"
                     body={{ userId: row.user_id, courseId: row.course_id, courseTitle: row.course_title, dueDate: row.due_date }}
-                    label="Enviar lembrete"
+                    label="Cobrar agora"
                     pendingLabel="Enviando..."
                     className="rounded-2xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 disabled:opacity-60"
                   />
@@ -148,7 +183,7 @@ export function TeamTrainingsClient({ data }: { data: LmsTeamTrainingsData }) {
                       <LmsActionButton
                         endpoint="/api/lms/reminders/send"
                         body={{ userId: row.user_id, courseId: row.course_id, courseTitle: row.course_title, dueDate: row.due_date }}
-                        label="Lembrar"
+                        label="Cobrar"
                         pendingLabel="Enviando..."
                         className="rounded-2xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-800 disabled:opacity-60"
                       />
@@ -165,3 +200,4 @@ export function TeamTrainingsClient({ data }: { data: LmsTeamTrainingsData }) {
     </div>
   );
 }
+

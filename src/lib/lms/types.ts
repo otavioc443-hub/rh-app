@@ -5,6 +5,7 @@ export const LMS_ASSIGNMENT_TARGET_TYPES = ["user", "department", "company", "ro
 export const LMS_ASSIGNMENT_STATUSES = ["active", "paused", "expired", "cancelled"] as const;
 export const LMS_PROGRESS_STATUSES = ["not_started", "in_progress", "completed", "overdue"] as const;
 export const LMS_QUIZ_QUESTION_TYPES = ["single_choice", "multiple_choice", "true_false"] as const;
+export const LMS_DISCUSSION_STATUSES = ["pending", "answered", "resolved"] as const;
 
 export type LmsCourseStatus = (typeof LMS_COURSE_STATUSES)[number];
 export type LmsCourseVisibility = (typeof LMS_VISIBILITY)[number];
@@ -13,6 +14,7 @@ export type LmsAssignmentTargetType = (typeof LMS_ASSIGNMENT_TARGET_TYPES)[numbe
 export type LmsAssignmentStatus = (typeof LMS_ASSIGNMENT_STATUSES)[number];
 export type LmsProgressStatus = (typeof LMS_PROGRESS_STATUSES)[number];
 export type LmsQuizQuestionType = (typeof LMS_QUIZ_QUESTION_TYPES)[number];
+export type LmsDiscussionStatus = (typeof LMS_DISCUSSION_STATUSES)[number];
 
 export type LmsCourse = {
   id: string;
@@ -223,13 +225,27 @@ export type LmsLessonDiscussion = {
   user_id: string;
   message: string;
   created_at: string;
+  status?: LmsDiscussionStatus;
+  admin_response?: string | null;
+  responded_at?: string | null;
+  resolved_at?: string | null;
+  resolved_by?: string | null;
   author_name?: string | null;
   author_role?: string | null;
+  responder_name?: string | null;
 };
 
 export type LmsLessonDiscussionAdminRow = LmsLessonDiscussion & {
   course_title: string;
   lesson_title: string;
+};
+
+export type LmsWeeklyDigest = {
+  periodLabel: string;
+  completedThisWeek: number;
+  dueSoon: number;
+  overdue: number;
+  notStarted: number;
 };
 
 export type LmsCourseFormValues = {
@@ -277,6 +293,7 @@ export type LmsAdminDashboardData = LmsDashboardData & {
   recentCourses: LmsCourseWithCounts[];
   attentionItems: LmsTrainingAttentionItem[];
   gamification: LmsGamificationAdminData;
+  weeklyDigest: LmsWeeklyDigest;
 };
 
 export type LmsMyTrainingCard = {
@@ -325,6 +342,7 @@ export type LmsTeamTrainingsData = {
     averageCompletion: number;
   };
   urgentRows: LmsTeamTrainingRow[];
+  weeklyDigest: LmsWeeklyDigest;
 };
 
 export type LmsReportRow = {

@@ -35,6 +35,47 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
 
       <SeasonCampaignPanel campaign={data.gamification.seasonCampaign} audience="admin" />
 
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Resumo semanal do LMS</h2>
+            <p className="text-sm text-slate-600">Janela atual: {data.weeklyDigest.periodLabel}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <LmsActionButton
+              endpoint="/api/lms/weekly-summary/send"
+              label="Receber resumo"
+              pendingLabel="Enviando..."
+              className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60"
+            />
+            <LmsActionButton
+              endpoint="/api/lms/admin/weekly-summary/run"
+              label="Disparar semana"
+              pendingLabel="Disparando..."
+              className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 disabled:opacity-60"
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl bg-slate-50 px-4 py-3">
+              <div className="text-xs uppercase tracking-[0.14em] text-slate-500">Concluidos</div>
+              <div className="mt-2 text-2xl font-bold text-emerald-600">{data.weeklyDigest.completedThisWeek}</div>
+            </div>
+            <div className="rounded-2xl bg-slate-50 px-4 py-3">
+              <div className="text-xs uppercase tracking-[0.14em] text-slate-500">Vencendo</div>
+              <div className="mt-2 text-2xl font-bold text-amber-600">{data.weeklyDigest.dueSoon}</div>
+            </div>
+            <div className="rounded-2xl bg-slate-50 px-4 py-3">
+              <div className="text-xs uppercase tracking-[0.14em] text-slate-500">Em atraso</div>
+              <div className="mt-2 text-2xl font-bold text-rose-600">{data.weeklyDigest.overdue}</div>
+            </div>
+            <div className="rounded-2xl bg-slate-50 px-4 py-3">
+              <div className="text-xs uppercase tracking-[0.14em] text-slate-500">Nao iniciados</div>
+              <div className="mt-2 text-2xl font-bold text-slate-900">{data.weeklyDigest.notStarted}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-3xl border border-slate-200 bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_100%)] p-6 text-white shadow-sm">
           <div className="flex items-center justify-between">
@@ -112,6 +153,9 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
                 <p className="text-sm text-slate-500">Treinamentos vencidos ou que vencem em ate 7 dias.</p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Link href="/rh/lms/interacoes" className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800">
+                  Ver duvidas
+                </Link>
                 <LmsActionButton
                   endpoint="/api/lms/admin/reminders/run"
                   label="Disparar lembretes"
@@ -137,7 +181,7 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
                       </span>
                     </div>
                     <div className="mt-2 text-xs text-slate-500">
-                      {item.department_name ?? "Sem departamento"} · Prazo {item.due_date ?? "-"} · {Math.round(item.progress_percent)}%
+                      {item.department_name ?? "Sem departamento"} - Prazo {item.due_date ?? "-"} - {Math.round(item.progress_percent)}%
                     </div>
                   </div>
                 ))
@@ -244,7 +288,7 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
               {data.recentAssignments.map((row) => (
                 <div key={row.id} className="rounded-2xl border border-slate-100 p-4">
                   <div className="text-sm font-semibold text-slate-900">{row.course_title ?? row.learning_path_title ?? "Atribuicao"}</div>
-                  <div className="mt-1 text-xs text-slate-500">{row.target_label ?? row.target_id} · {row.assigned_at.slice(0, 10)}</div>
+                  <div className="mt-1 text-xs text-slate-500">{row.target_label ?? row.target_id} - {row.assigned_at.slice(0, 10)}</div>
                 </div>
               ))}
             </div>
@@ -254,3 +298,4 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
     </div>
   );
 }
+

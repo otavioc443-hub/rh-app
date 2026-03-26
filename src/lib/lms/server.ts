@@ -8,6 +8,8 @@ import {
   registerStudyActivity,
 } from "@/lib/lms/gamification";
 import { buildCertificatePdf } from "@/lib/lms/pdf";
+import { publishLmsPulseHubHighlight } from "@/lib/lms/social";
+import { sendPortalEmail } from "@/lib/server/mailer";
 import type {
   LmsAdminDashboardData,
   LmsAssignment,
@@ -19,6 +21,7 @@ import type {
   LmsCourseDetail,
   LmsCourseModule,
   LmsCourseWithCounts,
+  LmsDiscussionStatus,
   LmsLessonDiscussion,
   LmsLessonDiscussionAdminRow,
   LmsLearningPath,
@@ -40,6 +43,7 @@ import type {
   LmsTrainingAttentionItem,
   LmsUserCourseVisibility,
   LmsUserProgress,
+  LmsWeeklyDigest,
 } from "@/lib/lms/types";
 import { buildStorageRef, getNextLesson, parseStorageRef } from "@/lib/lms/utils";
 import type { GuardResult } from "@/lib/server/feedbackGuard";
@@ -94,6 +98,116 @@ function formatDateTime(value: string | null) {
   } catch {
     return value;
   }
+}
+
+function startOfCurrentWeek() {
+  const now = new Date();
+  const day = now.getDay();
+  const diff = day === 0 ? 6 : day - 1;
+  const start = new Date(now);
+  start.setDate(now.getDate() - diff);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function getCurrentWeekLabel() {
+  const start = startOfCurrentWeek();
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  const formatter = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" });
+  return `${formatter.format(start)} a ${formatter.format(end)}`;
+}
+
+function buildWeeklyDigest(rows: LmsTeamTrainingRow[], progressRows: LmsUserProgress[]): LmsWeeklyDigest {
+  const weekStart = startOfCurrentWeek().toISOString();
+  return {
+    periodLabel: getCurrentWeekLabel(),
+    completedThisWeek: progressRows.filter((row) => row.completed_at && row.completed_at >= weekStart).length,
+    dueSoon: rows.filter((row) => row.urgency === "due_soon").length,
+    overdue: rows.filter((row) => row.urgency === "overdue").length,
+    notStarted: rows.filter((row) => row.status === "not_started").length,
+  };
+}
+
+function buildAdminWeeklyDigest(
+  progressRows: LmsUserProgress[],
+  rows: Array<Pick<LmsTeamTrainingRow, "urgency">>,
+): LmsWeeklyDigest {
+  const weekStart = startOfCurrentWeek().toISOString();
+  return {
+    periodLabel: getCurrentWeekLabel(),
+    completedThisWeek: progressRows.filter((row) => row.completed_at && row.completed_at >= weekStart).length,
+    dueSoon: rows.filter((row) => row.urgency === "due_soon").length,
+    overdue: rows.filter((row) => row.urgency === "overdue").length,
+    notStarted: progressRows.filter((row) => row.status === "not_started").length,
+  };
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+async function sendLmsReminderEmail(input: {
+  email: string | null | undefined;
+  fullName: string | null | undefined;
+  courseTitle: string;
+  dueDate?: string | null;
+}) {
+  const email = (input.email ?? "").trim();
+  if (!email) return { sent: false, skipped: true as const };
+
+  const dueLine = input.dueDate ? `<p><strong>Prazo:</strong> ${escapeHtml(input.dueDate)}</p>` : "";
+  return sendPortalEmail({
+    to: email,
+    subject: `Lembrete de treinamento: ${input.courseTitle}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
+        <h2 style="margin:0 0 12px">Seu treinamento precisa de atencao</h2>
+        <p>Ola, ${escapeHtml((input.fullName ?? "colaborador").trim() || "colaborador")}.</p>
+        <p>O treinamento <strong>${escapeHtml(input.courseTitle)}</strong> continua pendente no portal LMS.</p>
+        ${dueLine}
+        <p>Acesse o portal para retomar o conteudo e evitar atraso.</p>
+      </div>
+    `,
+  });
+}
+
+async function sendWeeklySummaryEmail(input: {
+  email: string | null | undefined;
+  recipientName: string | null | undefined;
+  title: string;
+  periodLabel: string;
+  completed: number;
+  dueSoon: number;
+  overdue: number;
+  notStarted: number;
+}) {
+  const email = (input.email ?? "").trim();
+  if (!email) return { sent: false, skipped: true as const };
+
+  return sendPortalEmail({
+    to: email,
+    subject: input.title,
+    html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
+        <h2 style="margin:0 0 12px">${escapeHtml(input.title)}</h2>
+        <p>Ola, ${escapeHtml((input.recipientName ?? "time").trim() || "time")}.</p>
+        <p>Resumo do periodo <strong>${escapeHtml(input.periodLabel)}</strong>:</p>
+        <ul>
+          <li>Concluidos na semana: <strong>${input.completed}</strong></li>
+          <li>Vencendo em breve: <strong>${input.dueSoon}</strong></li>
+          <li>Em atraso: <strong>${input.overdue}</strong></li>
+          <li>Nao iniciados: <strong>${input.notStarted}</strong></li>
+        </ul>
+        <p>Entre no portal para acompanhar os detalhes e agir sobre os treinamentos prioritarios.</p>
+      </div>
+    `,
+  });
 }
 
 function isMissingRelation(error: unknown) {
@@ -469,7 +583,7 @@ export async function getLessonDiscussions(access: Access, courseId: string, les
 
   const { data, error } = await supabaseAdmin
     .from("lms_lesson_discussions")
-    .select("id,company_id,course_id,lesson_id,user_id,message,created_at")
+    .select("*")
     .eq("course_id", courseId)
     .eq("lesson_id", lessonId)
     .order("created_at", { ascending: true });
@@ -482,7 +596,7 @@ export async function getLessonDiscussions(access: Access, courseId: string, les
   const rows = (data ?? []) as LmsLessonDiscussion[];
   if (!rows.length) return rows;
 
-  const userIds = Array.from(new Set(rows.map((row) => row.user_id)));
+  const userIds = Array.from(new Set(rows.flatMap((row) => [row.user_id, row.resolved_by]).filter(Boolean) as string[]));
   const { data: profiles } = await supabaseAdmin.from("profiles").select("id,full_name,role,email").in("id", userIds);
   const profileById = new Map(
     ((profiles ?? []) as Array<{ id: string; full_name: string | null; role: string | null; email?: string | null }>).map((row) => [row.id, row]),
@@ -490,8 +604,10 @@ export async function getLessonDiscussions(access: Access, courseId: string, les
 
   return rows.map((row) => ({
     ...row,
+    status: row.status ?? "pending",
     author_name: buildUserDisplayName(profileById.get(row.user_id) ?? {}),
     author_role: profileById.get(row.user_id)?.role ?? null,
+    responder_name: row.resolved_by ? buildUserDisplayName(profileById.get(row.resolved_by) ?? {}) : null,
   }));
 }
 
@@ -513,7 +629,7 @@ export async function createLessonDiscussion(access: Access, courseId: string, l
       user_id: access.userId,
       message: content,
     })
-    .select("id,company_id,course_id,lesson_id,user_id,message,created_at")
+    .select("*")
     .maybeSingle<LmsLessonDiscussion>();
 
   if (error) throw error;
@@ -550,6 +666,7 @@ export async function createLessonDiscussion(access: Access, courseId: string, l
 
   return {
     ...data!,
+    status: data?.status ?? "pending",
     author_name: buildUserDisplayName({ full_name: null, email: access.email ?? null }),
     author_role: access.role,
   } satisfies LmsLessonDiscussion;
@@ -558,7 +675,7 @@ export async function createLessonDiscussion(access: Access, courseId: string, l
 export async function getLmsLessonDiscussionsAdminData(companyId: string | null) {
   const { data, error } = await supabaseAdmin
     .from("lms_lesson_discussions")
-    .select("id,company_id,course_id,lesson_id,user_id,message,created_at")
+    .select("*")
     .order("created_at", { ascending: false })
     .limit(200);
 
@@ -572,7 +689,7 @@ export async function getLmsLessonDiscussionsAdminData(companyId: string | null)
 
   const courseIds = Array.from(new Set(discussionRows.map((row) => row.course_id)));
   const lessonIds = Array.from(new Set(discussionRows.map((row) => row.lesson_id)));
-  const userIds = Array.from(new Set(discussionRows.map((row) => row.user_id)));
+  const userIds = Array.from(new Set(discussionRows.flatMap((row) => [row.user_id, row.resolved_by]).filter(Boolean) as string[]));
 
   const [coursesRes, lessonsRes, profilesRes] = await Promise.all([
     supabaseAdmin.from("lms_courses").select("id,title,company_id").in("id", courseIds),
@@ -596,11 +713,95 @@ export async function getLmsLessonDiscussionsAdminData(companyId: string | null)
     })
     .map((row) => ({
       ...row,
+      status: row.status ?? "pending",
       course_title: coursesById.get(row.course_id)?.title ?? "Treinamento",
       lesson_title: lessonsById.get(row.lesson_id)?.title ?? "Aula",
       author_name: buildUserDisplayName(profilesById.get(row.user_id) ?? {}),
       author_role: profilesById.get(row.user_id)?.role ?? null,
+      responder_name: row.resolved_by ? buildUserDisplayName(profilesById.get(row.resolved_by) ?? {}) : null,
     }));
+}
+
+export async function updateLessonDiscussion(
+  access: Access,
+  discussionId: string,
+  payload: { status?: LmsDiscussionStatus; adminResponse?: string | null },
+) {
+  const { data: current, error: currentError } = await supabaseAdmin
+    .from("lms_lesson_discussions")
+    .select("*")
+    .eq("id", discussionId)
+    .maybeSingle<LmsLessonDiscussion>();
+
+  if (currentError || !current) throw currentError ?? new Error("Interacao nao encontrada.");
+  if (access.companyId && current.company_id && current.company_id !== access.companyId) {
+    throw new Error("Interacao fora da sua empresa.");
+  }
+
+  const nextStatus = payload.status ?? current.status ?? "pending";
+  const responseText = payload.adminResponse?.trim() ? payload.adminResponse.trim() : null;
+  const updatePayload: Record<string, unknown> = {
+    status: nextStatus,
+    resolved_by: access.userId,
+  };
+
+  if (responseText) {
+    updatePayload.admin_response = responseText;
+    updatePayload.responded_at = new Date().toISOString();
+    if (nextStatus === "pending") updatePayload.status = "answered";
+  }
+
+  if (nextStatus === "resolved") {
+    updatePayload.resolved_at = new Date().toISOString();
+  } else {
+    updatePayload.resolved_at = null;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("lms_lesson_discussions")
+    .update(updatePayload)
+    .eq("id", discussionId)
+    .select("*")
+    .maybeSingle<LmsLessonDiscussion>();
+
+  if (error || !data) throw error ?? new Error("Nao foi possivel atualizar a interacao.");
+
+  if (responseText || nextStatus === "resolved") {
+    const { data: lessonData } = await supabaseAdmin.from("lms_lessons").select("id,title").eq("id", data.lesson_id).maybeSingle<{ id: string; title: string }>();
+    const notifyTitle = responseText ? "Sua duvida recebeu resposta" : "Sua duvida foi marcada como resolvida";
+    const notifyBody = responseText
+      ? `${lessonData?.title ?? "Aula"}: ${responseText.slice(0, 120)}`
+      : `A interacao na aula ${lessonData?.title ?? ""} foi finalizada pelo time responsavel.`;
+    await supabaseAdmin.from("notifications").insert({
+      to_user_id: data.user_id,
+      title: notifyTitle,
+      body: notifyBody,
+      link: `/lms/cursos/${data.course_id}`,
+      type: "lms_lesson_answer",
+    });
+  }
+
+  const [courseRes, lessonRes, profilesRes] = await Promise.all([
+    supabaseAdmin.from("lms_courses").select("id,title").eq("id", data.course_id).maybeSingle<{ id: string; title: string }>(),
+    supabaseAdmin.from("lms_lessons").select("id,title").eq("id", data.lesson_id).maybeSingle<{ id: string; title: string }>(),
+    supabaseAdmin
+      .from("profiles")
+      .select("id,full_name,email,role")
+      .in("id", Array.from(new Set([data.user_id, data.resolved_by].filter(Boolean) as string[]))),
+  ]);
+
+  const profilesById = new Map(
+    ((profilesRes.data ?? []) as Array<{ id: string; full_name: string | null; email: string | null; role: string | null }>).map((row) => [row.id, row]),
+  );
+
+  return {
+    ...data,
+    course_title: courseRes.data?.title ?? "Treinamento",
+    lesson_title: lessonRes.data?.title ?? "Aula",
+    author_name: buildUserDisplayName(profilesById.get(data.user_id) ?? {}),
+    author_role: profilesById.get(data.user_id)?.role ?? null,
+    responder_name: data.resolved_by ? buildUserDisplayName(profilesById.get(data.resolved_by) ?? {}) : null,
+  } satisfies LmsLessonDiscussionAdminRow;
 }
 
 async function getLearnerStats(access: Access) {
@@ -649,6 +850,13 @@ export async function getTeamTrainingsData(access: Access): Promise<LmsTeamTrain
         averageCompletion: 0,
       },
       urgentRows: [],
+      weeklyDigest: {
+        periodLabel: getCurrentWeekLabel(),
+        completedThisWeek: 0,
+        dueSoon: 0,
+        overdue: 0,
+        notStarted: 0,
+      },
     };
   }
 
@@ -718,6 +926,7 @@ export async function getTeamTrainingsData(access: Access): Promise<LmsTeamTrain
       averageCompletion,
     },
     urgentRows: rows.filter((row) => row.urgency === "overdue" || row.urgency === "due_soon").slice(0, 8),
+    weeklyDigest: buildWeeklyDigest(rows, progressRows),
   };
 }
 
@@ -939,6 +1148,7 @@ export async function getLmsAdminDashboardData(companyId: string | null): Promis
     recentCourses,
     attentionItems: attentionItems.slice(0, 8),
     gamification,
+    weeklyDigest: buildAdminWeeklyDigest(progressRows, attentionItems),
   };
 }
 
@@ -962,27 +1172,34 @@ export async function getSafeLmsAdminDashboardData(companyId: string | null) {
       recentAssignments: [],
       recentCourses: [],
       attentionItems: [],
-        gamification: {
-          totalXpDistributed: 0,
-          activeLearners: 0,
-          activeChallenges: 0,
-          averageStreak: 0,
-          topDepartments: [],
-          topBadges: [],
+      gamification: {
+        totalXpDistributed: 0,
+        activeLearners: 0,
+        activeChallenges: 0,
+        averageStreak: 0,
+        topDepartments: [],
+        topBadges: [],
+        seasonLabel: "",
+        leaderboard: [],
+        seasonCampaign: {
           seasonLabel: "",
-          leaderboard: [],
-          seasonCampaign: {
-            seasonLabel: "",
-            missionTitle: "Campanha mensal de aprendizagem",
-            missionDescription: "Acompanhe metas, desafios e ritmo de estudo da empresa em um unico painel.",
-            totalChallenges: 0,
-            completedChallenges: 0,
-            activeBattleCount: 0,
-            totalXp: 0,
-            streakDays: 0,
-            goals: [],
-          },
+          missionTitle: "Campanha mensal de aprendizagem",
+          missionDescription: "Acompanhe metas, desafios e ritmo de estudo da empresa em um unico painel.",
+          totalChallenges: 0,
+          completedChallenges: 0,
+          activeBattleCount: 0,
+          totalXp: 0,
+          streakDays: 0,
+          goals: [],
         },
+      },
+      weeklyDigest: {
+        periodLabel: getCurrentWeekLabel(),
+        completedThisWeek: 0,
+        dueSoon: 0,
+        overdue: 0,
+        notStarted: 0,
+      },
       } satisfies LmsAdminDashboardData;
     }
   }
@@ -1267,6 +1484,12 @@ export async function recomputeUserCourseProgress(access: Access, courseId: stri
   if (isCompleted && !wasCompleted) {
     await awardGamificationXp(access, "course_completed");
     await refreshGamificationState(access);
+    await publishLmsPulseHubHighlight({
+      userId: access.userId,
+      companyId: access.companyId,
+      title: "Curso concluido no LMS",
+      body: `Concluiu o treinamento "${detail.course.title}" e avancou mais uma etapa na jornada de aprendizagem.`,
+    });
   }
 
   return progressUpserted;
@@ -1418,6 +1641,12 @@ export async function ensureCertificateForUser(access: Access, course: LmsCourse
 
   await awardGamificationXp(access, "certificate_issued");
   await refreshGamificationState(access);
+  await publishLmsPulseHubHighlight({
+    userId: access.userId,
+    companyId: access.companyId,
+    title: "Certificado emitido",
+    body: `Acaba de conquistar o certificado do treinamento "${course.title}".`,
+  });
 
   return certificateData;
 }
@@ -1952,7 +2181,7 @@ export async function sendLmsReminder(
 ) {
   const { data: profileData, error: profileError } = await supabaseAdmin
     .from("profiles")
-    .select("id,company_id,manager_id,full_name")
+    .select("id,company_id,manager_id,full_name,email")
     .eq("id", payload.userId)
     .maybeSingle<ProfileMini>();
   if (profileError || !profileData) throw profileError ?? new Error("Colaborador nao encontrado.");
@@ -1987,6 +2216,13 @@ export async function sendLmsReminder(
       text.includes("column");
     if (!ignorable) throw notificationRes.error;
   }
+
+  await sendLmsReminderEmail({
+    email: profileData.email ?? null,
+    fullName: profileData.full_name ?? null,
+    courseTitle: payload.courseTitle ?? "Curso atribuido",
+    dueDate: payload.dueDate ?? null,
+  });
 
   return { success: true };
 }
@@ -2055,4 +2291,123 @@ export async function dispatchLmsDeadlineSweep(access: Access) {
   }
 
   return { success: true, dispatched: sent };
+}
+
+export async function dispatchLmsWeeklySummary(access: Access) {
+  const recipientsRes = await supabaseAdmin
+    .from("profiles")
+    .select("id,full_name,email,role,company_id,department_id,manager_id,active")
+    .eq("active", true)
+    .in("role", ["gestor", "rh", "admin"]);
+
+  if (recipientsRes.error) throw recipientsRes.error;
+
+  const recipients = (recipientsRes.data ?? []) as ProfileMini[];
+  let dispatched = 0;
+
+  for (const recipient of recipients) {
+    if (access.companyId && recipient.company_id && recipient.company_id !== access.companyId) continue;
+
+    if (recipient.role === "gestor") {
+      const teamData = await getTeamTrainingsData({
+        ...access,
+        userId: recipient.id,
+        companyId: recipient.company_id,
+        departmentId: recipient.department_id ?? null,
+        role: "gestor",
+        email: recipient.email ?? null,
+      } as Access);
+      if (!teamData.summary.totalAssignments) continue;
+
+      const title = `Resumo semanal da sua equipe no LMS`;
+      await supabaseAdmin.from("notifications").insert({
+        to_user_id: recipient.id,
+        title,
+        body: `Concluidos: ${teamData.weeklyDigest.completedThisWeek} · Vencendo: ${teamData.weeklyDigest.dueSoon} · Atrasados: ${teamData.weeklyDigest.overdue}.`,
+        link: "/gestor/lms/equipe",
+        type: "lms_weekly_summary",
+      });
+      await sendWeeklySummaryEmail({
+        email: recipient.email ?? null,
+        recipientName: recipient.full_name ?? null,
+        title,
+        periodLabel: teamData.weeklyDigest.periodLabel,
+        completed: teamData.weeklyDigest.completedThisWeek,
+        dueSoon: teamData.weeklyDigest.dueSoon,
+        overdue: teamData.weeklyDigest.overdue,
+        notStarted: teamData.weeklyDigest.notStarted,
+      });
+      dispatched += 1;
+      continue;
+    }
+
+    const dashboard = await getLmsAdminDashboardData(recipient.company_id ?? access.companyId ?? null);
+    const title = "Resumo semanal do LMS";
+    await supabaseAdmin.from("notifications").insert({
+      to_user_id: recipient.id,
+      title,
+      body: `Concluidos: ${dashboard.weeklyDigest.completedThisWeek} · Vencendo: ${dashboard.weeklyDigest.dueSoon} · Atrasados: ${dashboard.weeklyDigest.overdue}.`,
+      link: "/rh/lms",
+      type: "lms_weekly_summary",
+    });
+    await sendWeeklySummaryEmail({
+      email: recipient.email ?? null,
+      recipientName: recipient.full_name ?? null,
+      title,
+      periodLabel: dashboard.weeklyDigest.periodLabel,
+      completed: dashboard.weeklyDigest.completedThisWeek,
+      dueSoon: dashboard.weeklyDigest.dueSoon,
+      overdue: dashboard.weeklyDigest.overdue,
+      notStarted: dashboard.weeklyDigest.notStarted,
+    });
+    dispatched += 1;
+  }
+
+  return { success: true, dispatched };
+}
+
+export async function sendMyLmsWeeklySummary(access: Access) {
+  if (access.role === "gestor") {
+    const teamData = await getTeamTrainingsData(access);
+    const title = "Resumo semanal da sua equipe no LMS";
+    await supabaseAdmin.from("notifications").insert({
+      to_user_id: access.userId,
+      title,
+      body: `Concluidos: ${teamData.weeklyDigest.completedThisWeek} · Vencendo: ${teamData.weeklyDigest.dueSoon} · Atrasados: ${teamData.weeklyDigest.overdue}.`,
+      link: "/gestor/lms/equipe",
+      type: "lms_weekly_summary",
+    });
+    await sendWeeklySummaryEmail({
+      email: access.email ?? null,
+      recipientName: null,
+      title,
+      periodLabel: teamData.weeklyDigest.periodLabel,
+      completed: teamData.weeklyDigest.completedThisWeek,
+      dueSoon: teamData.weeklyDigest.dueSoon,
+      overdue: teamData.weeklyDigest.overdue,
+      notStarted: teamData.weeklyDigest.notStarted,
+    });
+    return { success: true, target: "gestor" as const };
+  }
+
+  const dashboard = await getLmsAdminDashboardData(access.companyId);
+  const title = "Resumo semanal do LMS";
+  await supabaseAdmin.from("notifications").insert({
+    to_user_id: access.userId,
+    title,
+    body: `Concluidos: ${dashboard.weeklyDigest.completedThisWeek} · Vencendo: ${dashboard.weeklyDigest.dueSoon} · Atrasados: ${dashboard.weeklyDigest.overdue}.`,
+    link: "/rh/lms",
+    type: "lms_weekly_summary",
+  });
+  await sendWeeklySummaryEmail({
+    email: access.email ?? null,
+    recipientName: null,
+    title,
+    periodLabel: dashboard.weeklyDigest.periodLabel,
+    completed: dashboard.weeklyDigest.completedThisWeek,
+    dueSoon: dashboard.weeklyDigest.dueSoon,
+    overdue: dashboard.weeklyDigest.overdue,
+    notStarted: dashboard.weeklyDigest.notStarted,
+  });
+  return { success: true, target: "admin" as const };
 }
