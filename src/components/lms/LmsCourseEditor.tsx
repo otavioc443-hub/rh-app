@@ -2004,34 +2004,6 @@ export function LmsCourseEditor({
               ))}
             </div>
           </section>
-
-          <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
-            <div className="h-40 bg-slate-100">
-              {form.banner_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={form.banner_url} alt={form.title || "Banner"} className="h-full w-full object-cover" />
-              ) : (
-                <div className="flex h-full items-center justify-center text-sm font-semibold text-slate-400">Preview rapido do banner</div>
-              )}
-            </div>
-            <div className="p-5">
-              <div className="flex gap-4">
-                <div className="h-20 w-20 overflow-hidden rounded-[22px] bg-slate-100">
-                  {form.thumbnail_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={form.thumbnail_url} alt={form.title || "Imagem"} className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-slate-400"><ImagePlus size={16} /></div>
-                  )}
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{form.category || "Treinamento"}</div>
-                  <div className="mt-1 text-lg font-semibold text-slate-950">{form.title || "Curso sem titulo"}</div>
-                  <div className="mt-2 text-sm text-slate-600">{form.short_description || "O resumo do curso aparecera aqui."}</div>
-                </div>
-              </div>
-            </div>
-          </section>
         </div>
 
         <div className="space-y-6">
