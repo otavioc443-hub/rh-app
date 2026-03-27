@@ -34,6 +34,8 @@ import type {
   LmsQuizAnswer,
   LmsQuizAttempt,
   LmsQuizPayload,
+  LmsQuestionBankItem,
+  LmsQuestionBankOption,
   LmsQuizQuestion,
   LmsQuizQuestionWithOptions,
   LmsQuizReviewRow,
@@ -152,6 +154,30 @@ function escapeHtml(value: string) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+async function writeLmsAuditLog(input: {
+  userId: string;
+  courseId?: string | null;
+  lessonId?: string | null;
+  action: string;
+}) {
+  const { error } = await supabaseAdmin.from("lms_course_access_logs").insert({
+    user_id: input.userId,
+    course_id: input.courseId ?? "00000000-0000-0000-0000-000000000000",
+    lesson_id: input.lessonId ?? null,
+    action: input.action,
+  });
+  if (error) {
+    const text = error.message.toLowerCase();
+    const ignorable =
+      text.includes("does not exist") ||
+      text.includes("relation") ||
+      text.includes("schema cache") ||
+      text.includes("column") ||
+      text.includes("violates foreign key");
+    if (!ignorable) throw error;
+  }
 }
 
 async function sendLmsReminderEmail(input: {
@@ -1345,6 +1371,117 @@ export async function getLmsAssignmentsAdminData(companyId: string | null) {
     ),
     supportData,
   };
+}
+
+export async function getLmsQuestionBankData(companyId: string | null) {
+  let query = supabaseAdmin
+    .from("lms_question_bank")
+    .select("*")
+    .order("updated_at", { ascending: false });
+  if (companyId) query = query.eq("company_id", companyId);
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const items = (data ?? []) as Array<
+    Omit<LmsQuestionBankItem, "options" | "author_name" | "usage_count"> & { usage_count?: number }
+  >;
+  const ids = items.map((item) => item.id);
+  const authorIds = items.map((item) => item.created_by).filter(Boolean) as string[];
+
+  const [optionsRes, authorsRes] = await Promise.all([
+    ids.length
+      ? supabaseAdmin.from("lms_question_bank_options").select("*").in("question_id", ids).order("id", { ascending: true })
+      : Promise.resolve({ data: [] as LmsQuestionBankOption[], error: null }),
+    authorIds.length
+      ? supabaseAdmin.from("profiles").select("id,full_name,email").in("id", authorIds)
+      : Promise.resolve({ data: [] as Array<{ id: string; full_name: string | null; email: string | null }>, error: null }),
+  ]);
+
+  if (optionsRes.error) throw optionsRes.error;
+  if (authorsRes.error) throw authorsRes.error;
+
+  const options = (optionsRes.data ?? []) as LmsQuestionBankOption[];
+  const authorById = new Map(
+    ((authorsRes.data ?? []) as Array<{ id: string; full_name: string | null; email: string | null }>).map((row) => [
+      row.id,
+      buildUserDisplayName(row),
+    ]),
+  );
+
+  return items.map((item) => ({
+    ...item,
+    author_name: item.created_by ? authorById.get(item.created_by) ?? null : null,
+    usage_count: item.usage_count ?? 0,
+    options: options.filter((option) => option.question_id === item.id),
+  }));
+}
+
+export async function createQuestionBankItem(
+  access: Access,
+  payload: {
+    title: string;
+    statement: string;
+    help_text?: string | null;
+    question_type: string;
+    image_url?: string | null;
+    accepted_answers?: string[];
+    requires_manual_review?: boolean;
+    options: Array<{ text: string; is_correct: boolean; image_url?: string | null }>;
+  },
+) {
+  const { data, error } = await supabaseAdmin
+    .from("lms_question_bank")
+    .insert({
+      company_id: access.companyId,
+      created_by: access.userId,
+      title: payload.title,
+      statement: payload.statement,
+      help_text: payload.help_text || null,
+      question_type: payload.question_type,
+      image_url: payload.image_url || null,
+      accepted_answers: payload.accepted_answers?.filter((answer) => answer.trim()) ?? [],
+      requires_manual_review: payload.requires_manual_review ?? payload.question_type === "essay",
+    })
+    .select("*")
+    .maybeSingle<Omit<LmsQuestionBankItem, "options" | "author_name" | "usage_count">>();
+  if (error || !data) throw error ?? new Error("Falha ao salvar pergunta no banco.");
+
+  const validOptions = payload.options.filter((option) => option.text.trim() || option.image_url);
+  if (validOptions.length) {
+    const { error: optionError } = await supabaseAdmin.from("lms_question_bank_options").insert(
+      validOptions.map((option) => ({
+        question_id: data.id,
+        text: option.text,
+        is_correct: option.is_correct,
+        image_url: option.image_url || null,
+      })),
+    );
+    if (optionError) throw optionError;
+  }
+
+  await writeLmsAuditLog({
+    userId: access.userId,
+    action: "question_bank_created",
+  });
+
+  const [created] = await getLmsQuestionBankData(access.companyId).then((items) => items.filter((item) => item.id === data.id));
+  return created;
+}
+
+export async function deleteQuestionBankItem(access: Access, questionId: string) {
+  const query = supabaseAdmin.from("lms_question_bank").delete().eq("id", questionId);
+  if (access.companyId) {
+    const { error } = await query.eq("company_id", access.companyId);
+    if (error) throw error;
+  } else {
+    const { error } = await query;
+    if (error) throw error;
+  }
+  await writeLmsAuditLog({
+    userId: access.userId,
+    action: "question_bank_deleted",
+  });
+  return { success: true };
 }
 
 export async function getLmsReportsData(companyId: string | null, filters?: Partial<LmsReportsFilters>) {
@@ -2558,6 +2695,89 @@ export async function runRecurringAssignments(access: Access) {
     await notifyAssignmentAudience(access, inserted, supportData);
     created += 1;
   }
+
+  return { created };
+}
+
+export async function runOnboardingAssignments(access: Access) {
+  let profilesQuery = supabaseAdmin
+    .from("profiles")
+    .select("id,company_id,department_id,role,active")
+    .eq("active", true);
+  if (access.companyId) profilesQuery = profilesQuery.eq("company_id", access.companyId);
+
+  const [profilesRes, coursesRes, pathsRes] = await Promise.all([
+    profilesQuery,
+    access.companyId
+      ? supabaseAdmin.from("lms_courses").select("*").eq("status", "published").eq("onboarding_recommended", true).or(`company_id.eq.${access.companyId},company_id.is.null`)
+      : supabaseAdmin.from("lms_courses").select("*").eq("status", "published").eq("onboarding_recommended", true),
+    access.companyId
+      ? supabaseAdmin.from("lms_learning_paths").select("*").eq("status", "published").eq("onboarding_required", true).or(`company_id.eq.${access.companyId},company_id.is.null`)
+      : supabaseAdmin.from("lms_learning_paths").select("*").eq("status", "published").eq("onboarding_required", true),
+  ]);
+  if (profilesRes.error) throw profilesRes.error;
+  if (coursesRes.error) throw coursesRes.error;
+  if (pathsRes.error) throw pathsRes.error;
+
+  const graph = await fetchActiveAssignmentGraph();
+  const profiles = (profilesRes.data ?? []) as ProfileMini[];
+  const courses = (coursesRes.data ?? []) as LmsCourse[];
+  const paths = (pathsRes.data ?? []) as LmsLearningPath[];
+  const supportData = await buildAssignmentSupportData(access.companyId);
+
+  let created = 0;
+  for (const profile of profiles) {
+    const visible = buildVisibilityForProfile(profile, graph);
+    const visibleCourseIds = new Set(visible.map((item) => item.course_id));
+    const visiblePathIds = new Set(visible.map((item) => item.learning_path_id).filter(Boolean));
+
+    for (const path of paths) {
+      if (visiblePathIds.has(path.id)) continue;
+      const { data: inserted, error } = await supabaseAdmin
+        .from("lms_assignments")
+        .insert({
+          assignment_type: "user",
+          target_id: profile.id,
+          course_id: null,
+          learning_path_id: path.id,
+          assigned_by: access.userId,
+          mandatory: true,
+          status: "active",
+          assignment_group: randomUUID(),
+        })
+        .select("*")
+        .maybeSingle<LmsAssignment>();
+      if (error || !inserted) throw error ?? new Error("Falha ao atribuir trilha de onboarding.");
+      await notifyAssignmentAudience(access, inserted, supportData);
+      created += 1;
+    }
+
+    for (const course of courses) {
+      if (visibleCourseIds.has(course.id)) continue;
+      const { data: inserted, error } = await supabaseAdmin
+        .from("lms_assignments")
+        .insert({
+          assignment_type: "user",
+          target_id: profile.id,
+          course_id: course.id,
+          learning_path_id: null,
+          assigned_by: access.userId,
+          mandatory: course.required,
+          status: "active",
+          assignment_group: randomUUID(),
+        })
+        .select("*")
+        .maybeSingle<LmsAssignment>();
+      if (error || !inserted) throw error ?? new Error("Falha ao atribuir curso de onboarding.");
+      await notifyAssignmentAudience(access, inserted, supportData);
+      created += 1;
+    }
+  }
+
+  await writeLmsAuditLog({
+    userId: access.userId,
+    action: "onboarding_assignments_generated",
+  });
 
   return { created };
 }

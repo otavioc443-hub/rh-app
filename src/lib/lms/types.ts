@@ -241,6 +241,32 @@ export type LmsQuizReviewRow = {
   >;
 };
 
+export type LmsQuestionBankOption = {
+  id: string;
+  question_id: string;
+  text: string;
+  is_correct: boolean;
+  image_url?: string | null;
+};
+
+export type LmsQuestionBankItem = {
+  id: string;
+  company_id: string | null;
+  created_by: string | null;
+  title: string;
+  statement: string;
+  help_text?: string | null;
+  question_type: LmsQuizQuestionType;
+  image_url?: string | null;
+  accepted_answers?: string[] | null;
+  requires_manual_review?: boolean;
+  created_at: string;
+  updated_at: string;
+  author_name?: string | null;
+  usage_count?: number;
+  options: LmsQuestionBankOption[];
+};
+
 export type LmsCertificate = {
   id: string;
   user_id: string;

@@ -11,7 +11,7 @@ import { ModuleAccordion } from "@/components/lms/ModuleAccordion";
 import { QuizPreviewCard } from "@/components/lms/QuizPreviewCard";
 import { PageHeader } from "@/components/ui/PageShell";
 import { coursesService } from "@/lib/lms/coursesService";
-import type { LmsCourseDetail, LmsCourseEditorPayload, LmsQuizPayload, LmsQuizQuestionType } from "@/lib/lms/types";
+import type { LmsCourseDetail, LmsCourseEditorPayload, LmsQuestionBankItem, LmsQuizPayload, LmsQuizQuestionType } from "@/lib/lms/types";
 import { buildCourseDefaults, slugifyCourseTitle } from "@/lib/lms/utils";
 
 type EditorData = {
@@ -468,6 +468,8 @@ export function LmsCourseEditor({
   const [message, setMessage] = useState("");
   const [draftState, setDraftState] = useState<"idle" | "saved" | "restored">("idle");
   const [currentStep, setCurrentStep] = useState<EditorStep>("identity");
+  const [questionBank, setQuestionBank] = useState<LmsQuestionBankItem[]>([]);
+  const [questionBankLoading, setQuestionBankLoading] = useState(false);
   const [selectedModuleIndex, setSelectedModuleIndex] = useState(0);
   const [selectedLessonIndex, setSelectedLessonIndex] = useState(0);
   const [previewExpandedModuleId, setPreviewExpandedModuleId] = useState<string | null>("preview-module-0");
@@ -770,16 +772,157 @@ export function LmsCourseEditor({
     };
   }, [draftStorageKey, form]);
 
+  useEffect(() => {
+    void loadQuestionBank();
+  }, []);
+
   const currentStepIndex = steps.findIndex((step) => step.id === currentStep);
 
+  function validateQuestion(question: NonNullable<NonNullable<LmsCourseEditorPayload["modules"][number]["lessons"][number]["quiz"]>["questions"]>[number]) {
+    if (!question.statement.trim()) return false;
+    if (question.question_type === "essay") return true;
+    if (question.question_type === "short_text") {
+      return Boolean(question.requires_manual_review || question.accepted_answers?.some((answer) => answer.trim()));
+    }
+    return question.options.filter((option) => option.text.trim() || option.image_url).length >= 2;
+  }
+
+  function validateStep(step: EditorStep) {
+    if (step === "identity") {
+      if (!form.title.trim()) return "Preencha o titulo do treinamento para continuar.";
+      if (!form.slug.trim()) return "Defina o endereco do curso para continuar.";
+      if (!form.category.trim()) return "Informe a categoria do curso antes de avancar.";
+      if (!form.short_description.trim()) return "Escreva um resumo curto para o card do curso.";
+      return null;
+    }
+
+    if (step === "structure") {
+      if (!form.modules.length) return "Crie pelo menos uma fase no curso.";
+      for (const module of form.modules) {
+        if (!module.title.trim()) return "Todas as fases precisam ter um nome.";
+        if (!module.lessons.length) return "Cada fase precisa ter pelo menos uma aula.";
+        for (const lesson of module.lessons) {
+          if (!lesson.title.trim()) return "Todas as aulas precisam ter titulo.";
+          if (lesson.lesson_type === "avaliacao") {
+            if (!lesson.quiz?.questions.length) return `A aula "${lesson.title || "Avaliacao"}" precisa ter pelo menos uma pergunta.`;
+            if (!lesson.quiz.questions.every(validateQuestion)) {
+              return `Revise as perguntas da aula "${lesson.title || "Avaliacao"}" antes de avancar.`;
+            }
+          }
+          if (lesson.lesson_type === "link" && !lesson.content_url.trim()) {
+            return `A aula "${lesson.title || "Link"}" precisa do link principal.`;
+          }
+          if ((lesson.lesson_type === "video" || lesson.lesson_type === "pdf" || lesson.lesson_type === "arquivo") && !lesson.content_url.trim() && !lesson.storage_path) {
+            return `A aula "${lesson.title || "Conteudo"}" precisa de um arquivo ou link principal.`;
+          }
+          if (lesson.lesson_type === "texto" && !lesson.content_text.trim()) {
+            return `A aula "${lesson.title || "Texto"}" precisa do conteudo textual.`;
+          }
+        }
+      }
+      return null;
+    }
+
+    if (step === "publication") {
+      if (!form.status) return "Defina o status do curso.";
+      if (!form.visibility) return "Defina quem pode ver o curso.";
+      if (form.passing_score === null) return "Informe a nota minima para aprovacao.";
+      return null;
+    }
+
+    return null;
+  }
+
+  async function loadQuestionBank() {
+    setQuestionBankLoading(true);
+    try {
+      const response = await fetch("/api/lms/admin/question-bank");
+      const data = (await response.json()) as { items?: LmsQuestionBankItem[]; error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Falha ao carregar banco de perguntas.");
+      setQuestionBank(data.items ?? []);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Falha ao carregar banco de perguntas.");
+    } finally {
+      setQuestionBankLoading(false);
+    }
+  }
+
+  function importQuestionFromBank(item: LmsQuestionBankItem) {
+    patchLessonQuiz(selectedModuleIndex, selectedLessonIndex, (current) => ({
+      ...current,
+      questions: [
+        ...current.questions,
+        {
+          statement: item.statement,
+          help_text: item.help_text ?? "",
+          question_type: item.question_type,
+          sort_order: current.questions.length + 1,
+          image_url: item.image_url ?? "",
+          accepted_answers: item.accepted_answers?.length ? item.accepted_answers : [""],
+          requires_manual_review: item.requires_manual_review ?? item.question_type === "essay",
+          options: item.options.map((option) => ({
+            text: option.text,
+            is_correct: option.is_correct,
+            image_url: option.image_url ?? "",
+          })),
+        },
+      ],
+    }));
+    setMessage(`Pergunta "${item.title}" adicionada a esta avaliacao.`);
+  }
+
+  async function saveQuestionToBank(questionIndex: number) {
+    if (!selectedLesson?.quiz) return;
+    const question = selectedLesson.quiz.questions[questionIndex];
+    if (!validateQuestion(question)) {
+      setMessage("Revise a pergunta antes de salva-la no banco reutilizavel.");
+      return;
+    }
+    try {
+      const response = await fetch("/api/lms/admin/question-bank", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: question.statement.slice(0, 80),
+          statement: question.statement,
+          help_text: question.help_text,
+          question_type: question.question_type,
+          image_url: question.image_url,
+          accepted_answers: question.accepted_answers,
+          requires_manual_review: question.requires_manual_review,
+          options: question.options,
+        }),
+      });
+      const data = (await response.json()) as { item?: LmsQuestionBankItem; error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Falha ao salvar pergunta no banco.");
+      if (data.item) {
+        setQuestionBank((current) => [data.item!, ...current.filter((item) => item.id !== data.item!.id)]);
+      }
+      setMessage("Pergunta salva no banco reutilizavel.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Falha ao salvar pergunta no banco.");
+    }
+  }
+
   function goToNextStep() {
+    const validationError = validateStep(currentStep);
+    if (validationError) {
+      setMessage(validationError);
+      return;
+    }
     const next = steps[currentStepIndex + 1];
-    if (next) setCurrentStep(next.id);
+    if (next) {
+      setMessage("");
+      setCurrentStep(next.id);
+    }
   }
 
   function goToPreviousStep() {
     const previous = steps[currentStepIndex - 1];
-    if (previous) setCurrentStep(previous.id);
+    if (previous) {
+      setMessage("");
+      setCurrentStep(previous.id);
+    }
   }
 
   function renderQuestionBuilder() {
@@ -870,6 +1013,45 @@ export function LmsCourseEditor({
         </FieldGroup>
 
         <div className="space-y-4">
+          <div className="rounded-[24px] border border-slate-200 bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-slate-900">Banco reutilizavel de perguntas</div>
+                <div className="mt-1 text-xs text-slate-500">Importe perguntas prontas para acelerar a construcao desta avaliacao.</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => void loadQuestionBank()}
+                className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
+              >
+                {questionBankLoading ? "Atualizando..." : "Atualizar banco"}
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {questionBank.slice(0, 6).map((item) => (
+                <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="text-sm font-semibold text-slate-900">{item.title}</div>
+                  <div className="mt-1 line-clamp-3 text-sm text-slate-600">{item.statement}</div>
+                  <div className="mt-2 text-xs text-slate-500">
+                    {questionTypeLabels[item.question_type]}
+                    {item.usage_count ? ` • ${item.usage_count} uso(s)` : ""}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => importQuestionFromBank(item)}
+                    className="mt-3 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+                  >
+                    Adicionar a esta avaliacao
+                  </button>
+                </div>
+              ))}
+              {!questionBank.length ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 px-4 py-8 text-center text-sm text-slate-500 md:col-span-2">
+                  Nenhuma pergunta reutilizavel cadastrada ainda.
+                </div>
+              ) : null}
+            </div>
+          </div>
           {quiz.questions.map((question, questionIndex) => (
             <div key={`${question.statement}-${questionIndex}`} className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between gap-3">
@@ -982,6 +1164,13 @@ export function LmsCourseEditor({
                         ? "Resposta curta. Informe uma ou mais respostas aceitas para permitir correcao automatica."
                         : "Pergunta objetiva. Marque qual alternativa esta correta para calcular a nota no envio."}
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => void saveQuestionToBank(questionIndex)}
+                    className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700"
+                  >
+                    Salvar no banco de perguntas
+                  </button>
                 </div>
               </div>
 
@@ -1999,7 +2188,20 @@ export function LmsCourseEditor({
                   index={index}
                   title={step.title}
                   subtitle={step.subtitle}
-                  onClick={() => setCurrentStep(step.id)}
+                  onClick={() => {
+                    if (index <= currentStepIndex) {
+                      setMessage("");
+                      setCurrentStep(step.id);
+                      return;
+                    }
+                    const validationError = validateStep(currentStep);
+                    if (validationError) {
+                      setMessage(validationError);
+                      return;
+                    }
+                    setMessage("");
+                    setCurrentStep(step.id);
+                  }}
                 />
               ))}
             </div>

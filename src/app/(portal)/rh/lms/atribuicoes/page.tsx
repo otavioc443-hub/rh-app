@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AssignmentDialog } from "@/components/lms/AssignmentDialog";
+import { OnboardingAssignmentsButton } from "@/components/lms/OnboardingAssignmentsButton";
 import { RecurringAssignmentsButton } from "@/components/lms/RecurringAssignmentsButton";
 import { PageHeader, TableShell, TableWrap } from "@/components/ui/PageShell";
 import { getLmsAssignmentsAdminData } from "@/lib/lms/server";
@@ -18,7 +19,10 @@ export default async function RhLmsAssignmentsPage() {
         subtitle="Distribua cursos e trilhas por usuario, area, empresa ou perfil."
       />
       <AssignmentDialog supportData={supportData} />
-      <RecurringAssignmentsButton />
+      <div className="flex flex-wrap gap-3">
+        <RecurringAssignmentsButton />
+        <OnboardingAssignmentsButton />
+      </div>
       <TableShell>
         <TableWrap>
           <table className="min-w-full text-left text-sm">
