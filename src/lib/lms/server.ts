@@ -31,10 +31,12 @@ import type {
   LmsMyTrainingCard,
   LmsProgressStatus,
   LmsQuiz,
+  LmsQuizAnswer,
   LmsQuizAttempt,
   LmsQuizPayload,
   LmsQuizQuestion,
   LmsQuizQuestionWithOptions,
+  LmsQuizReviewRow,
   LmsQuizOption,
   LmsReportRow,
   LmsReportsFilters,
@@ -519,27 +521,38 @@ async function fetchCourseModules(courseId: string) {
   );
 }
 
-async function fetchCourseQuiz(courseId: string) {
+async function fetchCourseQuizzes(courseId: string) {
   const { data: quizData, error: quizError } = await supabaseAdmin
     .from("lms_quizzes")
     .select("*")
     .eq("course_id", courseId)
     .order("created_at", { ascending: true });
 
-  if (quizError) return null;
-  return ((quizData ?? []) as LmsQuiz[])[0] ?? null;
+  if (quizError) return [] as LmsQuiz[];
+  return (quizData ?? []) as LmsQuiz[];
+}
+
+export async function getQuizPayloadByLessonId(lessonId: string): Promise<LmsQuizPayload | null> {
+  const { data: quizData, error: quizError } = await supabaseAdmin
+    .from("lms_quizzes")
+    .select("*")
+    .eq("lesson_id", lessonId)
+    .maybeSingle<LmsQuiz>();
+
+  if (quizError || !quizData) return null;
+  return getQuizPayload(quizData.id);
 }
 
 export async function getCourseDetailForLearner(access: Access, courseId: string): Promise<LmsCourseDetail | null> {
   const visible = await resolveVisibleCoursesForUser(access);
   if (!visible.some((row) => row.course_id === courseId)) return null;
 
-  const [courseRes, modules, progressRes, certificateRes, quiz] = await Promise.all([
+  const [courseRes, modules, progressRes, certificateRes, quizzes] = await Promise.all([
     supabaseAdmin.from("lms_courses").select("*").eq("id", courseId).maybeSingle<LmsCourse>(),
     fetchCourseModules(courseId),
     supabaseAdmin.from("lms_user_progress").select("*").eq("user_id", access.userId).eq("course_id", courseId).maybeSingle<LmsUserProgress>(),
     supabaseAdmin.from("lms_certificates").select("*").eq("user_id", access.userId).eq("course_id", courseId).maybeSingle<LmsCertificate>(),
-    fetchCourseQuiz(courseId),
+    fetchCourseQuizzes(courseId),
   ]);
 
   if (courseRes.error || !courseRes.data) return null;
@@ -547,7 +560,7 @@ export async function getCourseDetailForLearner(access: Access, courseId: string
   return {
     course: await mapCourseAssets(courseRes.data),
     modules,
-    quiz,
+    quiz: quizzes[0] ?? null,
     progress: progressRes.data ?? null,
     certificate: certificateRes.data ?? null,
   };
@@ -1235,8 +1248,15 @@ export async function getLmsCoursesAdminData(companyId: string | null) {
 }
 
 async function getQuizPayloadForCourse(courseId: string): Promise<LmsQuizPayload | null> {
-  const { data: quizData, error: quizError } = await supabaseAdmin.from("lms_quizzes").select("*").eq("course_id", courseId).maybeSingle<LmsQuiz>();
-  if (quizError || !quizData) return null;
+  const { data: quizRows, error: quizError } = await supabaseAdmin
+    .from("lms_quizzes")
+    .select("*")
+    .eq("course_id", courseId)
+    .is("lesson_id", null)
+    .order("created_at", { ascending: true });
+  if (quizError) return null;
+  const quizData = ((quizRows ?? []) as LmsQuiz[])[0] ?? null;
+  if (!quizData) return null;
 
   const { data: questionsData } = await supabaseAdmin.from("lms_quiz_questions").select("*").eq("quiz_id", quizData.id).order("sort_order", { ascending: true });
   const questionIds = ((questionsData ?? []) as LmsQuizQuestion[]).map((row) => row.id);
@@ -1253,6 +1273,20 @@ async function getQuizPayloadForCourse(courseId: string): Promise<LmsQuizPayload
   };
 }
 
+async function attachLessonQuizPayloads(modules: Awaited<ReturnType<typeof fetchCourseModules>>) {
+  return Promise.all(
+    modules.map(async (module) => ({
+      ...module,
+      lessons: await Promise.all(
+        module.lessons.map(async (lesson) => ({
+          ...lesson,
+          quiz: lesson.lesson_type === "avaliacao" ? await getQuizPayloadByLessonId(lesson.id) : null,
+        })),
+      ),
+    })),
+  );
+}
+
 async function getCourseEditorDetail(courseId: string, companyId: string | null) {
   const { data: courseData, error: courseError } = await supabaseAdmin.from("lms_courses").select("*").eq("id", courseId).maybeSingle<LmsCourse>();
   if (courseError || !courseData) return null;
@@ -1261,7 +1295,7 @@ async function getCourseEditorDetail(courseId: string, companyId: string | null)
   const [modules, quizPayload] = await Promise.all([fetchCourseModules(courseId), getQuizPayloadForCourse(courseId)]);
   return {
     course: await mapCourseAssets(courseData),
-    modules,
+    modules: await attachLessonQuizPayloads(modules),
     quiz: quizPayload,
   };
 }
@@ -1381,6 +1415,17 @@ async function getLatestQuizAttempt(userId: string, courseId: string) {
   return ((attemptsData ?? []) as LmsQuizAttempt[])[0] ?? null;
 }
 
+async function getLatestQuizAttemptByQuiz(userId: string, quizId: string) {
+  const { data: attemptsData } = await supabaseAdmin
+    .from("lms_quiz_attempts")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("quiz_id", quizId)
+    .order("attempt_number", { ascending: false })
+    .limit(1);
+  return ((attemptsData ?? []) as LmsQuizAttempt[])[0] ?? null;
+}
+
 export async function markLessonCompleted(access: Access, courseId: string, lessonId: string, completed = true) {
   const detail = await getCourseDetailForLearner(access, courseId);
   if (!detail) throw new Error("Curso nao disponivel para este usuario.");
@@ -1443,8 +1488,9 @@ export async function recomputeUserCourseProgress(access: Access, courseId: stri
   const completedRequired = requiredLessonIds.filter((lessonId) => lessonProgress.some((item) => item.lesson_id === lessonId && item.completed)).length;
   const progressPercent = requiredLessonIds.length ? Math.round((completedRequired / requiredLessonIds.length) * 100) : 100;
 
-  const latestAttempt = await getLatestQuizAttempt(access.userId, courseId);
-  const passedQuiz = detail.quiz ? Boolean(latestAttempt?.passed) : true;
+  const quizzes = await fetchCourseQuizzes(courseId);
+  const quizAttempts = await Promise.all(quizzes.map((quiz) => getLatestQuizAttemptByQuiz(access.userId, quiz.id)));
+  const passedQuiz = quizzes.length ? quizzes.every((quiz, index) => Boolean(quizAttempts[index]?.passed)) : true;
   const isCompleted = progressPercent >= 100 && passedQuiz;
   const wasCompleted = detail.progress?.status === "completed";
   const status: LmsProgressStatus = isCompleted ? "completed" : progressPercent > 0 ? "in_progress" : "not_started";
@@ -1513,6 +1559,191 @@ export async function getQuizPayload(quizId: string): Promise<LmsQuizPayload | n
   return { quiz: quizData, questions: payloadQuestions };
 }
 
+function toEditorQuizPayload(payload: LmsQuizPayload) {
+  return {
+    title: payload.quiz.title,
+    instructions: payload.quiz.instructions ?? "",
+    passing_score: payload.quiz.passing_score,
+    max_attempts: payload.quiz.max_attempts,
+    randomize_questions: payload.quiz.randomize_questions,
+    show_score_on_submit: payload.quiz.show_score_on_submit ?? true,
+    show_correct_answers: payload.quiz.show_correct_answers ?? false,
+    questions: payload.questions.map((question, index) => ({
+      statement: question.statement,
+      help_text: question.help_text ?? "",
+      question_type: question.question_type,
+      sort_order: question.sort_order || index + 1,
+      image_url: question.image_url ?? "",
+      accepted_answers: question.accepted_answers?.length ? question.accepted_answers : [""],
+      requires_manual_review: question.requires_manual_review ?? question.question_type === "essay",
+      options: question.options.map((option) => ({
+        text: option.text,
+        is_correct: option.is_correct,
+        image_url: option.image_url ?? "",
+      })),
+    })),
+  };
+}
+
+export async function getLmsQuizReviewsAdminData(companyId: string | null) {
+  const { data: attemptsData, error: attemptsError } = await supabaseAdmin
+    .from("lms_quiz_attempts")
+    .select("*")
+    .in("review_status", ["pending_review", "reviewed"])
+    .order("submitted_at", { ascending: false })
+    .limit(100);
+
+  if (attemptsError) {
+    if (isMissingRelation(attemptsError)) return [] as LmsQuizReviewRow[];
+    throw attemptsError;
+  }
+
+  const attempts = (attemptsData ?? []) as LmsQuizAttempt[];
+  if (!attempts.length) return [];
+
+  const quizIds = Array.from(new Set(attempts.map((item) => item.quiz_id)));
+  const userIds = Array.from(new Set(attempts.flatMap((item) => [item.user_id, item.reviewed_by]).filter(Boolean) as string[]));
+
+  const [quizzesRes, profilesRes] = await Promise.all([
+    supabaseAdmin.from("lms_quizzes").select("*").in("id", quizIds),
+    supabaseAdmin.from("profiles").select("id,full_name,email,role,company_id").in("id", userIds),
+  ]);
+
+  const quizzes = (quizzesRes.data ?? []) as LmsQuiz[];
+  const profiles = (profilesRes.data ?? []) as Array<{ id: string; full_name: string | null; email: string | null; role: string | null; company_id: string | null }>;
+  const quizById = new Map(quizzes.map((row) => [row.id, row]));
+  const profileById = new Map(profiles.map((row) => [row.id, row]));
+
+  const relevantAttempts = attempts.filter((attempt) => {
+    const author = profileById.get(attempt.user_id);
+    if (!companyId) return true;
+    return !author?.company_id || author.company_id === companyId;
+  });
+  if (!relevantAttempts.length) return [];
+
+  const courseIds = Array.from(new Set(relevantAttempts.map((item) => item.course_id).filter(Boolean) as string[]));
+  const lessonIds = Array.from(new Set(quizzes.map((item) => item.lesson_id).filter(Boolean) as string[]));
+  const questionQuizIds = Array.from(new Set(relevantAttempts.map((item) => item.quiz_id)));
+
+  const [coursesRes, lessonsRes, questionsRes, answersRes] = await Promise.all([
+    supabaseAdmin.from("lms_courses").select("id,title,company_id").in("id", courseIds),
+    lessonIds.length ? supabaseAdmin.from("lms_lessons").select("id,title").in("id", lessonIds) : Promise.resolve({ data: [] }),
+    supabaseAdmin.from("lms_quiz_questions").select("*").in("quiz_id", questionQuizIds).order("sort_order", { ascending: true }),
+    supabaseAdmin.from("lms_quiz_answers").select("*").in("attempt_id", relevantAttempts.map((item) => item.id)),
+  ]);
+
+  const questions = (questionsRes.data ?? []) as LmsQuizQuestion[];
+  const questionIds = questions.map((row) => row.id);
+  const { data: optionsData } = questionIds.length
+    ? await supabaseAdmin.from("lms_quiz_options").select("*").in("question_id", questionIds)
+    : { data: [] as LmsQuizOption[] };
+
+  const courseById = new Map(((coursesRes.data ?? []) as Array<{ id: string; title: string; company_id: string | null }>).map((row) => [row.id, row]));
+  const lessonById = new Map(((lessonsRes.data ?? []) as Array<{ id: string; title: string }>).map((row) => [row.id, row.title]));
+  const answersByAttempt = new Map<string, LmsQuizAnswer[]>();
+  for (const answer of (answersRes.data ?? []) as LmsQuizAnswer[]) {
+    const current = answersByAttempt.get(answer.attempt_id) ?? [];
+    current.push(answer);
+    answersByAttempt.set(answer.attempt_id, current);
+  }
+
+  return relevantAttempts.map((attempt) => {
+    const quiz = quizById.get(attempt.quiz_id)!;
+    const payloadQuestions = questions
+      .filter((question) => question.quiz_id === attempt.quiz_id)
+      .map((question) => ({
+        ...question,
+        options: ((optionsData ?? []) as LmsQuizOption[]).filter((option) => option.question_id === question.id),
+        submitted_answers: (answersByAttempt.get(attempt.id) ?? [])
+          .filter((answer) => answer.question_id === question.id)
+          .map((answer) => ({
+            option_id: answer.option_id,
+            answer_text: answer.answer_text,
+            is_correct: answer.is_correct,
+          })),
+      }));
+
+    return {
+      attempt,
+      quiz,
+      course_title: attempt.course_id ? courseById.get(attempt.course_id)?.title ?? "Treinamento" : "Treinamento",
+      lesson_title: quiz.lesson_id ? lessonById.get(quiz.lesson_id) ?? "Avaliacao" : null,
+      user_name: buildUserDisplayName(profileById.get(attempt.user_id) ?? {}),
+      user_role: profileById.get(attempt.user_id)?.role ?? null,
+      reviewer_name: attempt.reviewed_by ? buildUserDisplayName(profileById.get(attempt.reviewed_by) ?? {}) : null,
+      questions: payloadQuestions,
+    } satisfies LmsQuizReviewRow;
+  });
+}
+
+export async function reviewQuizAttempt(
+  access: Access,
+  attemptId: string,
+  payload: { score: number; reviewerComment: string; passed?: boolean | null },
+) {
+  const { data: attemptData, error: attemptError } = await supabaseAdmin
+    .from("lms_quiz_attempts")
+    .select("*")
+    .eq("id", attemptId)
+    .maybeSingle<LmsQuizAttempt>();
+  if (attemptError || !attemptData) throw attemptError ?? new Error("Tentativa nao encontrada.");
+
+  const quizPayload = await getQuizPayload(attemptData.quiz_id);
+  if (!quizPayload) throw new Error("Avaliacao nao encontrada.");
+
+  if (access.companyId && attemptData.course_id) {
+    const { data: courseData } = await supabaseAdmin.from("lms_courses").select("company_id").eq("id", attemptData.course_id).maybeSingle<{ company_id: string | null }>();
+    if (courseData?.company_id && courseData.company_id !== access.companyId) throw new Error("Avaliacao fora da sua empresa.");
+  }
+
+  const finalScore = Math.max(0, Math.min(100, Math.round(payload.score)));
+  const passed = payload.passed ?? finalScore >= quizPayload.quiz.passing_score;
+  const reviewerComment = payload.reviewerComment.trim();
+
+  const { data: updatedAttempt, error: updateError } = await supabaseAdmin
+    .from("lms_quiz_attempts")
+    .update({
+      score: finalScore,
+      passed,
+      review_status: "reviewed",
+      reviewed_score: finalScore,
+      reviewer_comment: reviewerComment || null,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: access.userId,
+    })
+    .eq("id", attemptId)
+    .select("*")
+    .maybeSingle<LmsQuizAttempt>();
+  if (updateError || !updatedAttempt) throw updateError ?? new Error("Falha ao registrar a revisao.");
+
+  const learnerProfile = profileByIdFromSingle(await supabaseAdmin.from("profiles").select("id,full_name,email").eq("id", updatedAttempt.user_id).maybeSingle<{ id: string; full_name: string | null; email: string | null }>());
+  await supabaseAdmin.from("notifications").insert({
+    to_user_id: updatedAttempt.user_id,
+    type: "lms_quiz_reviewed",
+    title: "Sua avaliacao foi corrigida",
+    body: reviewerComment
+      ? `Sua avaliacao foi revisada. Comentario: ${reviewerComment.slice(0, 120)}`
+      : `Sua avaliacao foi revisada. Resultado final: ${finalScore}%.`,
+    link: updatedAttempt.course_id ? `/lms/cursos/${updatedAttempt.course_id}` : "/lms/meus-treinamentos",
+  });
+
+  const reviewAccess = {
+    ...access,
+    userId: updatedAttempt.user_id,
+    email: learnerProfile?.email ?? access.email,
+  };
+
+  if (updatedAttempt.course_id) {
+    await recomputeUserCourseProgress(reviewAccess, updatedAttempt.course_id);
+  }
+
+  return updatedAttempt;
+}
+
+function profileByIdFromSingle<T>(response: { data: T | null } | null | undefined) {
+  return response?.data ?? null;
+}
+
 export async function submitQuizAttempt(access: Access, quizId: string, answers: Record<string, string[]>) {
   const payload = await getQuizPayload(quizId);
   if (!payload) throw new Error("Quiz nao encontrado.");
@@ -1523,16 +1754,34 @@ export async function submitQuizAttempt(access: Access, quizId: string, answers:
   }
 
   let correctAnswers = 0;
+  let autoGradedQuestions = 0;
+  let requiresManualReview = false;
   for (const question of payload.questions) {
+    const selectedAnswers = [...(answers[question.id] ?? [])];
+    if (question.question_type === "essay" || question.requires_manual_review) {
+      requiresManualReview = true;
+      continue;
+    }
+
+    autoGradedQuestions += 1;
+    if (question.question_type === "short_text") {
+      const expectedAnswers = (question.accepted_answers ?? [])
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean);
+      const typedAnswer = (selectedAnswers[0] ?? "").trim().toLowerCase();
+      if (typedAnswer && expectedAnswers.includes(typedAnswer)) correctAnswers += 1;
+      continue;
+    }
+
     const expected = question.options.filter((option) => option.is_correct).map((option) => option.id).sort();
-    const given = [...(answers[question.id] ?? [])].sort();
+    const given = selectedAnswers.sort();
     if (expected.length === given.length && expected.every((value, index) => value === given[index])) {
       correctAnswers += 1;
     }
   }
 
-  const score = payload.questions.length ? Math.round((correctAnswers / payload.questions.length) * 100) : 0;
-  const passed = score >= payload.quiz.passing_score;
+  const score = autoGradedQuestions ? Math.round((correctAnswers / autoGradedQuestions) * 100) : 0;
+  const passed = !requiresManualReview && score >= payload.quiz.passing_score;
   const attemptNumber = (latestAttempt?.attempt_number ?? 0) + 1;
 
   const { data: attemptData, error: attemptError } = await supabaseAdmin
@@ -1543,22 +1792,51 @@ export async function submitQuizAttempt(access: Access, quizId: string, answers:
       course_id: payload.quiz.course_id,
       score,
       passed,
+      review_status: requiresManualReview ? "pending_review" : "auto_graded",
+      reviewed_score: requiresManualReview ? null : score,
       attempt_number: attemptNumber,
     })
     .select("*")
     .maybeSingle<LmsQuizAttempt>();
   if (attemptError || !attemptData) throw attemptError ?? new Error("Falha ao registrar tentativa.");
 
-  const answerRows = payload.questions.flatMap((question) => {
+  const answerRows: Array<{
+    attempt_id: string;
+    question_id: string;
+    option_id: string | null;
+    answer_text: string | null;
+    is_correct: boolean;
+  }> = [];
+
+  for (const question of payload.questions) {
     const selected = answers[question.id] ?? [];
-    return (selected.length ? selected : [null]).map((optionId) => ({
-      attempt_id: attemptData.id,
-      question_id: question.id,
-      option_id: optionId,
-      answer_text: null,
-      is_correct: optionId ? question.options.some((option) => option.id === optionId && option.is_correct) : false,
-    }));
-  });
+    if (question.question_type === "short_text" || question.question_type === "essay") {
+      const typedAnswer = selected[0] ?? null;
+      answerRows.push({
+        attempt_id: attemptData.id,
+        question_id: question.id,
+        option_id: null,
+        answer_text: typedAnswer,
+        is_correct:
+          question.question_type === "short_text"
+            ? (question.accepted_answers ?? [])
+                .map((item) => item.trim().toLowerCase())
+                .includes((typedAnswer ?? "").trim().toLowerCase())
+            : false,
+      });
+      continue;
+    }
+
+    for (const optionId of selected.length ? selected : [null]) {
+      answerRows.push({
+        attempt_id: attemptData.id,
+        question_id: question.id,
+        option_id: optionId,
+        answer_text: null,
+        is_correct: optionId ? question.options.some((option) => option.id === optionId && option.is_correct) : false,
+      });
+    }
+  }
 
   if (answerRows.length) {
     await supabaseAdmin.from("lms_quiz_answers").insert(answerRows);
@@ -1568,7 +1846,7 @@ export async function submitQuizAttempt(access: Access, quizId: string, answers:
     user_id: access.userId,
     course_id: payload.quiz.course_id,
     lesson_id: payload.quiz.lesson_id,
-    action: passed ? "quiz_passed" : "quiz_failed",
+    action: requiresManualReview ? "quiz_pending_review" : passed ? "quiz_passed" : "quiz_failed",
   });
 
   if (payload.quiz.course_id) {
@@ -1582,7 +1860,35 @@ export async function submitQuizAttempt(access: Access, quizId: string, answers:
     await refreshGamificationState(access);
   }
 
-  return { attempt: attemptData, score, passed };
+  if (requiresManualReview && payload.quiz.course_id) {
+    const { data: adminProfiles } = await supabaseAdmin
+      .from("profiles")
+      .select("id")
+      .eq("active", true)
+      .in("role", ["admin", "rh"])
+      .or(access.companyId ? `company_id.eq.${access.companyId},company_id.is.null` : "company_id.is.null");
+
+    if ((adminProfiles ?? []).length) {
+      await supabaseAdmin.from("notifications").insert(
+        ((adminProfiles ?? []) as Array<{ id: string }>).map((row) => ({
+          to_user_id: row.id,
+          type: "lms_quiz_review",
+          title: "Avaliacao aguardando revisao",
+          body: `${access.email ?? "Colaborador"} concluiu uma avaliacao discursiva em ${payload.quiz.title}.`,
+          link: "/rh/lms/avaliacoes",
+        })),
+      );
+    }
+  }
+
+  return {
+    attempt: attemptData,
+    score,
+    passed,
+    requiresManualReview,
+    showScoreOnSubmit: payload.quiz.show_score_on_submit ?? !requiresManualReview,
+    showCorrectAnswers: payload.quiz.show_correct_answers ?? false,
+  };
 }
 
 export async function ensureCertificateForUser(access: Access, course: LmsCourse) {
@@ -1741,6 +2047,16 @@ function validatePublishableCoursePayload(payload: {
       lesson_type: string;
       content_url: string;
       content_text: string;
+      quiz?: {
+        title: string;
+        questions: Array<{
+          statement: string;
+          question_type?: string;
+          accepted_answers?: string[];
+          requires_manual_review?: boolean;
+          options: Array<{ text: string; is_correct: boolean }>;
+        }>;
+      } | null;
     }>;
   }>;
   quiz?: {
@@ -1766,6 +2082,34 @@ function validatePublishableCoursePayload(payload: {
       }
       if (lesson.lesson_type !== "avaliacao" && !lesson.content_url.trim() && !lesson.content_text.trim()) {
         throw new Error(`Adicione conteudo principal na aula "${lesson.title}" antes de publicar.`);
+      }
+      if (lesson.lesson_type === "avaliacao") {
+        if (!lesson.quiz?.title.trim()) {
+          throw new Error(`Defina o titulo da avaliacao da aula "${lesson.title}".`);
+        }
+        if (!lesson.quiz.questions.length) {
+          throw new Error(`Adicione pelo menos uma pergunta na avaliacao da aula "${lesson.title}".`);
+        }
+        for (const [questionIndex, question] of lesson.quiz.questions.entries()) {
+          if (!question.statement.trim()) {
+            throw new Error(`Preencha o enunciado da pergunta ${questionIndex + 1} da aula "${lesson.title}".`);
+          }
+          if (question.question_type === "essay") continue;
+          if (question.question_type === "short_text") {
+            const validAnswers = (question.accepted_answers ?? []).filter((answer) => answer.trim());
+            if (!question.requires_manual_review && !validAnswers.length) {
+              throw new Error(`Informe ao menos uma resposta aceita na pergunta ${questionIndex + 1} da aula "${lesson.title}".`);
+            }
+            continue;
+          }
+          const validOptions = question.options.filter((option) => option.text.trim());
+          if (validOptions.length < 2) {
+            throw new Error(`A pergunta ${questionIndex + 1} da aula "${lesson.title}" precisa de pelo menos duas alternativas.`);
+          }
+          if (!validOptions.some((option) => option.is_correct)) {
+            throw new Error(`Marque ao menos uma resposta correta na pergunta ${questionIndex + 1} da aula "${lesson.title}".`);
+          }
+        }
       }
     }
   }
@@ -1820,6 +2164,27 @@ export async function upsertCourseWithStructure(
         allow_preview: boolean;
         storage_bucket?: string | null;
         storage_path?: string | null;
+        quiz?: {
+          id?: string;
+          title: string;
+          instructions: string;
+          passing_score: number;
+          max_attempts: number | null;
+          randomize_questions: boolean;
+          show_score_on_submit: boolean;
+          show_correct_answers: boolean;
+          questions: Array<{
+            id?: string;
+            statement: string;
+            help_text: string;
+            question_type: string;
+            sort_order: number;
+            image_url?: string | null;
+            accepted_answers?: string[];
+            requires_manual_review?: boolean;
+            options: Array<{ id?: string; text: string; is_correct: boolean; image_url?: string | null }>;
+          }>;
+        } | null;
       }>;
     }>;
     quiz?: {
@@ -1870,6 +2235,8 @@ export async function upsertCourseWithStructure(
   await supabaseAdmin.from("lms_course_modules").delete().eq("course_id", savedCourseId);
   await supabaseAdmin.from("lms_lessons").delete().eq("course_id", savedCourseId);
 
+  await supabaseAdmin.from("lms_quizzes").delete().eq("course_id", savedCourseId);
+
   for (const module of payload.modules) {
     const { data: moduleData, error: moduleError } = await supabaseAdmin
       .from("lms_course_modules")
@@ -1888,7 +2255,7 @@ export async function upsertCourseWithStructure(
         lesson.storage_bucket && lesson.storage_path
           ? buildStorageRef(lesson.storage_bucket, lesson.storage_path)
           : lesson.content_url || null;
-      const { error: lessonError } = await supabaseAdmin.from("lms_lessons").insert({
+      const { data: lessonData, error: lessonError } = await supabaseAdmin.from("lms_lessons").insert({
         course_id: savedCourseId,
         module_id: moduleData.id,
         title: lesson.title,
@@ -1902,12 +2269,61 @@ export async function upsertCourseWithStructure(
         allow_preview: lesson.allow_preview,
         storage_bucket: lesson.storage_bucket ?? null,
         storage_path: lesson.storage_path ?? null,
-      });
-      if (lessonError) throw lessonError;
+      }).select("*").maybeSingle<LmsLesson>();
+      if (lessonError || !lessonData) throw lessonError ?? new Error("Falha ao salvar aula.");
+
+      if (lesson.lesson_type === "avaliacao" && lesson.quiz) {
+        const { data: quizData, error: quizError } = await supabaseAdmin
+          .from("lms_quizzes")
+          .insert({
+            course_id: savedCourseId,
+            lesson_id: lessonData.id,
+            title: lesson.quiz.title,
+            instructions: lesson.quiz.instructions || null,
+            passing_score: lesson.quiz.passing_score,
+            max_attempts: lesson.quiz.max_attempts,
+            randomize_questions: lesson.quiz.randomize_questions,
+            show_score_on_submit: lesson.quiz.show_score_on_submit,
+            show_correct_answers: lesson.quiz.show_correct_answers,
+          })
+          .select("*")
+          .maybeSingle<LmsQuiz>();
+        if (quizError || !quizData) throw quizError ?? new Error("Falha ao salvar avaliacao.");
+
+        for (const question of lesson.quiz.questions) {
+          const { data: questionData, error: questionError } = await supabaseAdmin
+            .from("lms_quiz_questions")
+            .insert({
+              quiz_id: quizData.id,
+              statement: question.statement,
+              question_type: question.question_type,
+              help_text: question.help_text || null,
+              image_url: question.image_url || null,
+              accepted_answers: question.accepted_answers?.filter((answer) => answer.trim()) ?? [],
+              requires_manual_review: question.requires_manual_review ?? question.question_type === "essay",
+              sort_order: question.sort_order,
+            })
+            .select("*")
+            .maybeSingle<LmsQuizQuestion>();
+          if (questionError || !questionData) throw questionError ?? new Error("Falha ao salvar pergunta.");
+
+          const validOptions = question.options.filter((option) => option.text.trim() || option.image_url);
+          if (validOptions.length) {
+            const { error: optionError } = await supabaseAdmin.from("lms_quiz_options").insert(
+              validOptions.map((option) => ({
+                question_id: questionData.id,
+                text: option.text,
+                is_correct: option.is_correct,
+                image_url: option.image_url || null,
+              })),
+            );
+            if (optionError) throw optionError;
+          }
+        }
+      }
     }
   }
 
-  await supabaseAdmin.from("lms_quizzes").delete().eq("course_id", savedCourseId);
   if (payload.quiz) {
     const { data: quizData, error: quizError } = await supabaseAdmin
       .from("lms_quizzes")
@@ -2045,8 +2461,11 @@ export async function createAssignment(
     due_date?: string | null;
     mandatory?: boolean;
     expires_at?: string | null;
+    recurring_every_days?: number | null;
+    auto_reassign_on_expiry?: boolean;
   },
 ) {
+  const assignmentGroup = randomUUID();
   const { data, error } = await supabaseAdmin
     .from("lms_assignments")
     .insert({
@@ -2059,6 +2478,9 @@ export async function createAssignment(
       mandatory: Boolean(payload.mandatory),
       status: "active",
       expires_at: payload.expires_at || null,
+      recurring_every_days: payload.recurring_every_days ?? null,
+      auto_reassign_on_expiry: Boolean(payload.auto_reassign_on_expiry),
+      assignment_group: assignmentGroup,
     })
     .select("*")
     .maybeSingle<LmsAssignment>();
@@ -2066,6 +2488,78 @@ export async function createAssignment(
   const supportData = await buildAssignmentSupportData(access.companyId);
   await notifyAssignmentAudience(access, data, supportData);
   return data;
+}
+
+function addDays(base: string | null | undefined, days: number) {
+  if (!base) return null;
+  const date = new Date(`${base}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+export async function runRecurringAssignments(access: Access) {
+  const { data, error } = await supabaseAdmin
+    .from("lms_assignments")
+    .select("*")
+    .eq("status", "active")
+    .eq("auto_reassign_on_expiry", true)
+    .not("recurring_every_days", "is", null);
+  if (error) throw error;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const candidates = ((data ?? []) as LmsAssignment[]).filter(
+    (assignment) =>
+      !!assignment.recurring_every_days &&
+      !!assignment.expires_at &&
+      assignment.expires_at <= today,
+  );
+
+  let created = 0;
+  for (const assignment of candidates) {
+    const nextDueDate = addDays(assignment.due_date, assignment.recurring_every_days ?? 0);
+    const nextExpiresAt = addDays(assignment.expires_at, assignment.recurring_every_days ?? 0);
+    const { data: existing } = await supabaseAdmin
+      .from("lms_assignments")
+      .select("id")
+      .eq("assignment_group", assignment.assignment_group ?? assignment.id)
+      .eq("status", "active")
+      .eq("target_id", assignment.target_id)
+      .eq("assignment_type", assignment.assignment_type)
+      .eq("course_id", assignment.course_id)
+      .eq("learning_path_id", assignment.learning_path_id)
+      .eq("due_date", nextDueDate)
+      .eq("expires_at", nextExpiresAt)
+      .limit(1);
+
+    if ((existing ?? []).length) continue;
+
+    const { data: inserted, error: insertError } = await supabaseAdmin
+      .from("lms_assignments")
+      .insert({
+        assignment_type: assignment.assignment_type,
+        target_id: assignment.target_id,
+        course_id: assignment.course_id,
+        learning_path_id: assignment.learning_path_id,
+        assigned_by: access.userId,
+        due_date: nextDueDate,
+        mandatory: assignment.mandatory,
+        status: "active",
+        expires_at: nextExpiresAt,
+        recurring_every_days: assignment.recurring_every_days ?? null,
+        auto_reassign_on_expiry: true,
+        assignment_group: assignment.assignment_group ?? assignment.id,
+      })
+      .select("*")
+      .maybeSingle<LmsAssignment>();
+
+    if (insertError || !inserted) throw insertError ?? new Error("Falha ao gerar atribuicao recorrente.");
+    const supportData = await buildAssignmentSupportData(access.companyId);
+    await notifyAssignmentAudience(access, inserted, supportData);
+    created += 1;
+  }
+
+  return { created };
 }
 
 export async function archiveCourse(access: Access, courseId: string) {
@@ -2081,11 +2575,12 @@ export async function archiveCourse(access: Access, courseId: string) {
 }
 
 export async function duplicateCourse(access: Access, courseId: string) {
-  const [courseRes, modulesRes, lessonsRes, quiz] = await Promise.all([
+  const [courseRes, modulesRes, lessonsRes, quiz, lessonQuizzes] = await Promise.all([
     supabaseAdmin.from("lms_courses").select("*").eq("id", courseId).maybeSingle<LmsCourse>(),
     supabaseAdmin.from("lms_course_modules").select("*").eq("course_id", courseId).order("sort_order", { ascending: true }),
     supabaseAdmin.from("lms_lessons").select("*").eq("course_id", courseId).order("sort_order", { ascending: true }),
     getQuizPayloadForCourse(courseId),
+    fetchCourseQuizzes(courseId),
   ]);
   if (courseRes.error || !courseRes.data) throw courseRes.error ?? new Error("Curso nao encontrado.");
   if (access.companyId && courseRes.data.company_id && courseRes.data.company_id !== access.companyId) {
@@ -2095,6 +2590,15 @@ export async function duplicateCourse(access: Access, courseId: string) {
   const course = courseRes.data;
   const modules = (modulesRes.data ?? []) as LmsCourseModule[];
   const lessons = (lessonsRes.data ?? []) as LmsLesson[];
+  const lessonQuizPayloads = new Map<string, LmsQuizPayload>();
+  await Promise.all(
+    lessonQuizzes
+      .filter((item) => item.lesson_id)
+      .map(async (item) => {
+        const payload = await getQuizPayload(item.id);
+        if (payload && item.lesson_id) lessonQuizPayloads.set(item.lesson_id, payload);
+      }),
+  );
 
   const suffix = randomUUID().slice(0, 6).toLowerCase();
   const duplicated = await upsertCourseWithStructure(access, null, {
@@ -2129,6 +2633,9 @@ export async function duplicateCourse(access: Access, courseId: string) {
         allow_preview: lesson.allow_preview,
         storage_bucket: lesson.storage_bucket ?? null,
         storage_path: lesson.storage_path ?? null,
+        quiz: lessonQuizPayloads.get(lesson.id)
+          ? toEditorQuizPayload(lessonQuizPayloads.get(lesson.id)!)
+          : null,
       })),
     })),
     quiz: quiz

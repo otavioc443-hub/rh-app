@@ -13,7 +13,13 @@ export function QuizForm({ payload }: { payload: LmsQuizPayload }) {
     setLoading(true);
     try {
       const response = await quizzesService.submit(payload.quiz.id, answers);
-      setResult(response.passed ? `Aprovado com ${response.score}%` : `Reprovado com ${response.score}%`);
+      if (response.requiresManualReview) {
+        setResult("Respostas enviadas. Esta avaliacao depende de revisao antes do resultado final.");
+      } else if (response.showScoreOnSubmit === false) {
+        setResult(response.passed ? "Avaliacao enviada com sucesso." : "Avaliacao enviada para processamento.");
+      } else {
+        setResult(response.passed ? `Aprovado com ${response.score}%` : `Reprovado com ${response.score}%`);
+      }
     } catch (error) {
       setResult(error instanceof Error ? error.message : "Falha ao enviar avaliacao.");
     } finally {
@@ -26,13 +32,27 @@ export function QuizForm({ payload }: { payload: LmsQuizPayload }) {
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">Avaliacao</p>
         <h3 className="mt-2 text-2xl font-bold text-slate-900">{payload.quiz.title}</h3>
+        {payload.quiz.instructions ? <p className="mt-2 text-sm leading-6 text-slate-600">{payload.quiz.instructions}</p> : null}
       </div>
       <div className="space-y-4">
         {payload.questions.map((question) => (
           <div key={question.id} className="rounded-2xl border border-slate-100 p-4">
             <p className="text-sm font-semibold text-slate-900">{question.statement}</p>
-            <div className="mt-3 space-y-2">
-              {question.options.map((option) => {
+            {question.help_text ? <p className="mt-2 text-xs leading-5 text-slate-500">{question.help_text}</p> : null}
+            {question.image_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={question.image_url} alt={question.statement} className="mt-3 max-h-52 w-full rounded-2xl object-contain" />
+            ) : null}
+            {question.question_type === "short_text" || question.question_type === "essay" ? (
+              <textarea
+                value={answers[question.id]?.[0] ?? ""}
+                onChange={(event) => setAnswers((current) => ({ ...current, [question.id]: [event.target.value] }))}
+                className="mt-3 min-h-[120px] w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm text-slate-900"
+                placeholder={question.question_type === "essay" ? "Digite aqui sua resposta discursiva." : "Digite aqui sua resposta curta."}
+              />
+            ) : (
+              <div className="mt-3 space-y-2">
+                {question.options.map((option) => {
                 const checked = (answers[question.id] ?? []).includes(option.id);
                 return (
                   <label key={option.id} className="flex items-center gap-3 rounded-2xl border border-slate-100 px-3 py-2 text-sm text-slate-700">
@@ -53,11 +73,16 @@ export function QuizForm({ payload }: { payload: LmsQuizPayload }) {
                         })
                       }
                     />
-                    {option.text}
+                    <span className="flex-1">{option.text}</span>
+                    {option.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={option.image_url} alt={option.text} className="h-14 w-14 rounded-xl object-cover" />
+                    ) : null}
                   </label>
                 );
-              })}
-            </div>
+                })}
+              </div>
+            )}
           </div>
         ))}
       </div>

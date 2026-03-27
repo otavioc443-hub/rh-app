@@ -4,7 +4,14 @@ export const LMS_LESSON_TYPES = ["video", "pdf", "arquivo", "link", "texto", "av
 export const LMS_ASSIGNMENT_TARGET_TYPES = ["user", "department", "company", "role", "learning_path"] as const;
 export const LMS_ASSIGNMENT_STATUSES = ["active", "paused", "expired", "cancelled"] as const;
 export const LMS_PROGRESS_STATUSES = ["not_started", "in_progress", "completed", "overdue"] as const;
-export const LMS_QUIZ_QUESTION_TYPES = ["single_choice", "multiple_choice", "true_false"] as const;
+export const LMS_QUIZ_QUESTION_TYPES = [
+  "single_choice",
+  "multiple_choice",
+  "true_false",
+  "short_text",
+  "essay",
+  "image_choice",
+] as const;
 export const LMS_DISCUSSION_STATUSES = ["pending", "answered", "resolved"] as const;
 
 export type LmsCourseStatus = (typeof LMS_COURSE_STATUSES)[number];
@@ -104,6 +111,9 @@ export type LmsAssignment = {
   mandatory: boolean;
   status: LmsAssignmentStatus;
   expires_at: string | null;
+  recurring_every_days?: number | null;
+  auto_reassign_on_expiry?: boolean;
+  assignment_group?: string | null;
 };
 
 export type LmsAssignmentExpanded = LmsAssignment & {
@@ -158,9 +168,12 @@ export type LmsQuiz = {
   course_id: string | null;
   lesson_id: string | null;
   title: string;
+  instructions?: string | null;
   passing_score: number;
   max_attempts: number | null;
   randomize_questions: boolean;
+  show_score_on_submit?: boolean;
+  show_correct_answers?: boolean;
   created_at: string;
 };
 
@@ -169,6 +182,10 @@ export type LmsQuizQuestion = {
   quiz_id: string;
   statement: string;
   question_type: LmsQuizQuestionType;
+  help_text?: string | null;
+  image_url?: string | null;
+  accepted_answers?: string[] | null;
+  requires_manual_review?: boolean;
   sort_order: number;
 };
 
@@ -177,6 +194,7 @@ export type LmsQuizOption = {
   question_id: string;
   text: string;
   is_correct: boolean;
+  image_url?: string | null;
 };
 
 export type LmsQuizAttempt = {
@@ -187,6 +205,11 @@ export type LmsQuizAttempt = {
   score: number;
   passed: boolean;
   attempt_number: number;
+  review_status?: "pending_review" | "reviewed" | "auto_graded";
+  reviewer_comment?: string | null;
+  reviewed_score?: number | null;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
   submitted_at: string;
 };
 
@@ -197,6 +220,25 @@ export type LmsQuizAnswer = {
   option_id: string | null;
   answer_text: string | null;
   is_correct: boolean;
+};
+
+export type LmsQuizReviewRow = {
+  attempt: LmsQuizAttempt;
+  quiz: LmsQuiz;
+  course_title: string;
+  lesson_title: string | null;
+  user_name: string;
+  user_role: string | null;
+  reviewer_name: string | null;
+  questions: Array<
+    LmsQuizQuestionWithOptions & {
+      submitted_answers: Array<{
+        option_id: string | null;
+        answer_text: string | null;
+        is_correct: boolean;
+      }>;
+    }
+  >;
 };
 
 export type LmsCertificate = {
@@ -391,6 +433,8 @@ export type LmsAssignmentFormValues = {
   due_date: string;
   mandatory: boolean;
   expires_at: string;
+  recurring_every_days: string;
+  auto_reassign_on_expiry: boolean;
 };
 
 export type LmsCourseEditorPayload = LmsCourseFormValues & {
@@ -412,23 +456,57 @@ export type LmsCourseEditorPayload = LmsCourseFormValues & {
       allow_preview: boolean;
       storage_bucket?: string | null;
       storage_path?: string | null;
+      quiz?: {
+        id?: string;
+        title: string;
+        instructions: string;
+        passing_score: number;
+        max_attempts: number | null;
+        randomize_questions: boolean;
+        show_score_on_submit: boolean;
+        show_correct_answers: boolean;
+        questions: Array<{
+          id?: string;
+          statement: string;
+          help_text: string;
+          question_type: LmsQuizQuestionType;
+          sort_order: number;
+          image_url?: string | null;
+          accepted_answers?: string[];
+          requires_manual_review?: boolean;
+          options: Array<{
+            id?: string;
+            text: string;
+            is_correct: boolean;
+            image_url?: string | null;
+          }>;
+        }>;
+      } | null;
     }>;
   }>;
   quiz?: {
     id?: string;
     title: string;
+    instructions?: string;
     passing_score: number;
     max_attempts: number | null;
     randomize_questions: boolean;
+    show_score_on_submit?: boolean;
+    show_correct_answers?: boolean;
     questions: Array<{
       id?: string;
       statement: string;
+      help_text?: string;
       question_type: LmsQuizQuestionType;
       sort_order: number;
+      image_url?: string | null;
+      accepted_answers?: string[];
+      requires_manual_review?: boolean;
       options: Array<{
         id?: string;
         text: string;
         is_correct: boolean;
+        image_url?: string | null;
       }>;
     }>;
   } | null;
@@ -437,6 +515,16 @@ export type LmsCourseEditorPayload = LmsCourseFormValues & {
 export type LmsAssignmentTargetOption = {
   id: string;
   label: string;
+};
+
+export type LmsMediaLibraryItem = {
+  id: string;
+  name: string;
+  bucket: "lms-thumbnails" | "lms-banners" | "lms-materials" | "lms-videos";
+  path: string;
+  storageRef: string;
+  signedUrl: string | null;
+  createdAt: string | null;
 };
 
 export type LmsAssignmentSupportData = {

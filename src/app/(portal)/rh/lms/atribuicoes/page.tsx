@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
-import { PageHeader, TableShell, TableWrap } from "@/components/ui/PageShell";
 import { AssignmentDialog } from "@/components/lms/AssignmentDialog";
+import { RecurringAssignmentsButton } from "@/components/lms/RecurringAssignmentsButton";
+import { PageHeader, TableShell, TableWrap } from "@/components/ui/PageShell";
 import { getLmsAssignmentsAdminData } from "@/lib/lms/server";
 import { requireRoles } from "@/lib/server/feedbackGuard";
 
@@ -11,8 +12,13 @@ export default async function RhLmsAssignmentsPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader icon={<span className="text-xl font-bold">LMS</span>} title="Atribuições" subtitle="Distribua cursos e trilhas por usuario, area, empresa ou perfil." />
+      <PageHeader
+        icon={<span className="text-xl font-bold">LMS</span>}
+        title="Atribuicoes"
+        subtitle="Distribua cursos e trilhas por usuario, area, empresa ou perfil."
+      />
       <AssignmentDialog supportData={supportData} />
+      <RecurringAssignmentsButton />
       <TableShell>
         <TableWrap>
           <table className="min-w-full text-left text-sm">
@@ -21,7 +27,8 @@ export default async function RhLmsAssignmentsPage() {
                 <th className="px-6 py-3">Destino</th>
                 <th className="px-6 py-3">Curso / Trilha</th>
                 <th className="px-6 py-3">Prazo</th>
-                <th className="px-6 py-3">Obrigatório</th>
+                <th className="px-6 py-3">Recorrencia</th>
+                <th className="px-6 py-3">Obrigatorio</th>
               </tr>
             </thead>
             <tbody>
@@ -30,6 +37,9 @@ export default async function RhLmsAssignmentsPage() {
                   <td className="px-6 py-4 text-slate-700">{row.target_label ?? row.target_id}</td>
                   <td className="px-6 py-4 font-medium text-slate-900">{row.course_title ?? row.learning_path_title ?? "-"}</td>
                   <td className="px-6 py-4 text-slate-600">{row.due_date ?? "-"}</td>
+                  <td className="px-6 py-4 text-slate-600">
+                    {row.auto_reassign_on_expiry && row.recurring_every_days ? `A cada ${row.recurring_every_days} dia(s)` : "-"}
+                  </td>
                   <td className="px-6 py-4 text-slate-600">{row.mandatory ? "Sim" : "Nao"}</td>
                 </tr>
               ))}

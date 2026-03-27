@@ -153,6 +153,9 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
                 <p className="text-sm text-slate-500">Treinamentos vencidos ou que vencem em ate 7 dias.</p>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Link href="/rh/lms/avaliacoes" className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800">
+                  Corrigir avaliacoes
+                </Link>
                 <Link href="/rh/lms/interacoes" className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800">
                   Ver duvidas
                 </Link>

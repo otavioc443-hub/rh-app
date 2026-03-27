@@ -16,6 +16,8 @@ export function AssignmentDialog({ supportData }: { supportData: LmsAssignmentSu
     due_date: "",
     mandatory: true,
     expires_at: "",
+    recurring_every_days: "",
+    auto_reassign_on_expiry: false,
   });
 
   async function handleSubmit() {
@@ -77,9 +79,24 @@ export function AssignmentDialog({ supportData }: { supportData: LmsAssignmentSu
           </select>
           <input type="date" value={payload.due_date} onChange={(event) => setPayload((current) => ({ ...current, due_date: event.target.value }))} className="h-11 rounded-2xl border border-slate-200 px-3 text-sm text-slate-900" />
           <input type="date" value={payload.expires_at} onChange={(event) => setPayload((current) => ({ ...current, expires_at: event.target.value }))} className="h-11 rounded-2xl border border-slate-200 px-3 text-sm text-slate-900" />
+          <input
+            type="number"
+            value={payload.recurring_every_days}
+            onChange={(event) => setPayload((current) => ({ ...current, recurring_every_days: event.target.value }))}
+            className="h-11 rounded-2xl border border-slate-200 px-3 text-sm text-slate-900"
+            placeholder="Recorrencia em dias"
+          />
           <label className="flex items-center gap-2 text-sm text-slate-700">
             <input type="checkbox" checked={payload.mandatory} onChange={(event) => setPayload((current) => ({ ...current, mandatory: event.target.checked }))} />
             Obrigatorio
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input
+              type="checkbox"
+              checked={payload.auto_reassign_on_expiry}
+              onChange={(event) => setPayload((current) => ({ ...current, auto_reassign_on_expiry: event.target.checked }))}
+            />
+            Reatribuir automaticamente ao vencer
           </label>
           <button type="button" onClick={() => void handleSubmit()} disabled={saving} className="rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
             {saving ? "Salvando..." : "Salvar atribuicao"}

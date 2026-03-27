@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Clock3, FileDown, FileText, PlayCircle } from "lucide-react";
 import type { LmsLesson } from "@/lib/lms/types";
+import { parseStorageRef } from "@/lib/lms/utils";
 
 function lessonTypeLabel(type: LmsLesson["lesson_type"]) {
   if (type === "video") return "Video";
@@ -26,9 +27,39 @@ export function LessonPlayer({
   completing?: boolean;
 }) {
   const [autoMarked, setAutoMarked] = useState(false);
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(lesson.content_url ?? null);
   const isVideo = lesson.lesson_type === "video";
   const isPdf = lesson.lesson_type === "pdf";
   const isLink = lesson.lesson_type === "link" || lesson.lesson_type === "arquivo";
+
+  useEffect(() => {
+    let active = true;
+    const currentUrl = lesson.content_url ?? null;
+    const parsed = parseStorageRef(currentUrl);
+    if (!parsed) {
+      setResolvedUrl(currentUrl);
+      return () => {
+        active = false;
+      };
+    }
+
+    async function resolve() {
+      try {
+        const params = new URLSearchParams({ ref: currentUrl ?? "" });
+        const response = await fetch(`/api/lms/storage/resolve?${params.toString()}`);
+        const data = (await response.json()) as { signedUrl?: string | null };
+        if (active) setResolvedUrl(data.signedUrl ?? null);
+      } catch {
+        if (active) setResolvedUrl(null);
+      }
+    }
+
+    void resolve();
+
+    return () => {
+      active = false;
+    };
+  }, [lesson.content_url]);
 
   async function handleAutoComplete() {
     if (!onComplete || autoMarked) return;
@@ -55,26 +86,26 @@ export function LessonPlayer({
         </div>
       </div>
 
-      {isVideo && lesson.content_url ? (
+      {isVideo && resolvedUrl ? (
         <div className="space-y-3">
-          <video controls className="aspect-video w-full rounded-3xl bg-slate-900" src={lesson.content_url} onEnded={() => void handleAutoComplete()} />
+          <video controls className="aspect-video w-full rounded-3xl bg-slate-900" src={resolvedUrl} onEnded={() => void handleAutoComplete()} />
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
             Ao assistir o video ate o final, a aula sera marcada como concluida automaticamente.
           </div>
         </div>
       ) : null}
 
-      {isPdf && lesson.content_url ? (
+      {isPdf && resolvedUrl ? (
         <div className="space-y-3">
-          <iframe src={lesson.content_url} title={lesson.title} className="h-[620px] w-full rounded-3xl border border-slate-200" />
-          <a href={lesson.content_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800">
+          <iframe src={resolvedUrl} title={lesson.title} className="h-[620px] w-full rounded-3xl border border-slate-200" />
+          <a href={resolvedUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800">
             <FileDown size={16} />
             Baixar PDF
           </a>
         </div>
       ) : null}
 
-      {isLink && lesson.content_url ? (
+      {isLink && resolvedUrl ? (
         <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
           <div className="flex items-start gap-3">
             <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-700">
@@ -85,7 +116,7 @@ export function LessonPlayer({
               <div className="mt-1 text-sm text-slate-600">Abra o arquivo ou link principal para consumir este conteudo.</div>
             </div>
           </div>
-          <a href={lesson.content_url} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800">
+          <a href={resolvedUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800">
             <FileDown size={16} />
             Abrir material
           </a>
@@ -104,7 +135,7 @@ export function LessonPlayer({
         </div>
       ) : null}
 
-      {!lesson.content_url && !lesson.content_text && lesson.lesson_type !== "avaliacao" ? (
+      {!resolvedUrl && !lesson.content_text && lesson.lesson_type !== "avaliacao" ? (
         <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-600">
           O conteudo principal desta aula ainda nao foi configurado pelo RH.
         </div>

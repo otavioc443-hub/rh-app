@@ -16,6 +16,8 @@ export async function POST(request: Request) {
     due_date: body.due_date || null,
     mandatory: body.mandatory,
     expires_at: body.expires_at || null,
+    recurring_every_days: body.recurring_every_days ? Number(body.recurring_every_days) : null,
+    auto_reassign_on_expiry: body.auto_reassign_on_expiry,
   });
   return NextResponse.json({ id: saved.id });
 }

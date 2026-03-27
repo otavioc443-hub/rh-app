@@ -4,17 +4,17 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { CourseHeader } from "@/components/lms/CourseHeader";
 import { ModuleAccordion } from "@/components/lms/ModuleAccordion";
-import { QuizForm } from "@/components/lms/QuizForm";
 import { CertificateButton } from "@/components/lms/CertificateButton";
 import { useCourseDetail } from "@/hooks/lms/useCourseDetail";
 import { getRequiredLessonsSummary, getResumeLesson } from "@/lib/lms/utils";
-import type { LmsCourseDetail, LmsQuizPayload } from "@/lib/lms/types";
+import type { LmsCourseDetail } from "@/lib/lms/types";
 
-export function CourseDetailClient({ detail, quizPayload }: { detail: LmsCourseDetail; quizPayload: LmsQuizPayload | null }) {
+export function CourseDetailClient({ detail }: { detail: LmsCourseDetail }) {
   const { detail: currentDetail, expandedModuleId, setExpandedModuleId } = useCourseDetail(detail);
   const [search, setSearch] = useState("");
   const resumeLesson = getResumeLesson(currentDetail.modules, currentDetail.progress?.last_lesson_id);
   const summary = getRequiredLessonsSummary(currentDetail.modules);
+  const evaluationLessons = currentDetail.modules.flatMap((module) => module.lessons).filter((lesson) => lesson.lesson_type === "avaliacao").length;
   const normalizedSearch = search.trim().toLowerCase();
   const filteredDetail = useMemo<LmsCourseDetail>(() => {
     if (!normalizedSearch) return currentDetail;
@@ -67,8 +67,8 @@ export function CourseDetailClient({ detail, quizPayload }: { detail: LmsCourseD
           </div>
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Avaliacao</div>
-            <div className="mt-2 text-3xl font-semibold text-slate-950">{currentDetail.course.passing_score ?? 70}%</div>
-            <div className="mt-1 text-sm text-slate-500">nota minima para aprovacao</div>
+            <div className="mt-2 text-3xl font-semibold text-slate-950">{evaluationLessons}</div>
+            <div className="mt-1 text-sm text-slate-500">etapa(s) de avaliacao na trilha</div>
           </div>
         </div>
       </section>
@@ -101,7 +101,6 @@ export function CourseDetailClient({ detail, quizPayload }: { detail: LmsCourseD
         currentLessonId={resumeLesson?.id ?? null}
         lessonHrefBuilder={(lessonId) => `/lms/aprender/${currentDetail.course.id}/${lessonId}`}
       />
-      {quizPayload ? <QuizForm payload={quizPayload} /> : null}
     </div>
   );
 }
