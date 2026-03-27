@@ -528,34 +528,42 @@ export function LmsCourseEditor({
     [evaluationLessons, form.full_description, form.modules, form.short_description, form.title, totalLessons],
   );
   const stepChecklists = useMemo(
-    () => ({
-      identity: [
-        { label: "Titulo preenchido", done: Boolean(form.title.trim()) },
-        { label: "Endereco do curso definido", done: Boolean(form.slug.trim()) },
-        { label: "Categoria informada", done: Boolean(form.category.trim()) },
-        { label: "Resumo curto escrito", done: Boolean(form.short_description.trim()) },
-      ],
-      structure: [
-        { label: "Pelo menos um modulo criado", done: form.modules.length > 0 },
-        { label: "Pelo menos uma aula criada", done: totalLessons > 0 },
-        {
-          label: "Todas as aulas possuem titulo",
-          done: form.modules.every((module) => module.lessons.every((lesson) => Boolean(lesson.title.trim()))),
-        },
-        {
-          label: "Aulas de avaliacao possuem configuracao valida",
-          done: evaluationLessons.every(({ lesson }) => Boolean(lesson.quiz?.questions.length)),
-        },
-      ],
-      publication: [
-        { label: "Status definido", done: Boolean(form.status) },
-        { label: "Visibilidade definida", done: Boolean(form.visibility) },
-        { label: "Imagem do card ou banner cadastrados", done: Boolean(form.thumbnail_url || form.banner_url) },
-        { label: "Nota minima informada", done: form.passing_score !== null },
-      ],
-      review: publicationChecklist,
-    }),
-    [evaluationLessons, form.category, form.modules, form.passing_score, form.short_description, form.slug, form.status, form.thumbnail_url, form.title, form.visibility, form.banner_url, publicationChecklist, totalLessons],
+    () => [
+      {
+        title: "Identidade",
+        items: [
+          { label: "Titulo preenchido", done: Boolean(form.title.trim()) },
+          { label: "Endereco do curso definido", done: Boolean(form.slug.trim()) },
+          { label: "Categoria informada", done: Boolean(form.category.trim()) },
+          { label: "Resumo curto escrito", done: Boolean(form.short_description.trim()) },
+        ],
+      },
+      {
+        title: "Conteudo",
+        items: [
+          { label: "Pelo menos um modulo criado", done: form.modules.length > 0 },
+          { label: "Pelo menos uma aula criada", done: totalLessons > 0 },
+          {
+            label: "Todas as aulas possuem titulo",
+            done: form.modules.every((module) => module.lessons.every((lesson) => Boolean(lesson.title.trim()))),
+          },
+          {
+            label: "Aulas de avaliacao possuem configuracao valida",
+            done: evaluationLessons.every(({ lesson }) => Boolean(lesson.quiz?.questions.length)),
+          },
+        ],
+      },
+      {
+        title: "Publicacao",
+        items: [
+          { label: "Status definido", done: Boolean(form.status) },
+          { label: "Visibilidade definida", done: Boolean(form.visibility) },
+          { label: "Imagem do card ou banner cadastrados", done: Boolean(form.thumbnail_url || form.banner_url) },
+          { label: "Nota minima informada", done: form.passing_score !== null },
+        ],
+      },
+    ],
+    [evaluationLessons, form.category, form.modules, form.passing_score, form.short_description, form.slug, form.status, form.thumbnail_url, form.title, form.visibility, form.banner_url, totalLessons],
   );
 
   const previewDetail = useMemo<LmsCourseDetail>(
@@ -1861,6 +1869,28 @@ export function LmsCourseEditor({
           </div>
         </section>
 
+        <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-950">Checklist por etapa</h2>
+          <p className="mt-1 text-sm text-slate-500">Aqui voce revisa identidade, conteudo e publicacao no momento certo, sem poluir as etapas anteriores.</p>
+          <div className="mt-4 grid gap-4 xl:grid-cols-3">
+            {stepChecklists.map((group) => (
+              <div key={group.title} className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                <div className="text-sm font-semibold text-slate-900">{group.title}</div>
+                <div className="mt-3 space-y-3">
+                  {group.items.map((item) => (
+                    <div key={`${group.title}-${item.label}`} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                      <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${item.done ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                        {item.done ? "OK" : "!"}
+                      </span>
+                      <div className="text-sm text-slate-700">{item.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
         {selectedLessonQuizPreview ? (
           <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-4">
@@ -1955,7 +1985,7 @@ export function LmsCourseEditor({
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[0.33fr,0.67fr]">
-        <div className="space-y-4 xl:sticky xl:top-6 xl:self-start">
+        <div className="space-y-4">
           <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Assistente de criacao</div>
             <div className="mt-2 text-lg font-semibold text-slate-950">Avance por etapa</div>
@@ -1971,21 +2001,6 @@ export function LmsCourseEditor({
                   subtitle={step.subtitle}
                   onClick={() => setCurrentStep(step.id)}
                 />
-              ))}
-            </div>
-          </section>
-
-          <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Checklist da etapa</div>
-            <div className="mt-2 text-lg font-semibold text-slate-950">{steps[currentStepIndex]?.title}</div>
-            <div className="mt-4 space-y-3">
-              {stepChecklists[currentStep].map((item) => (
-                <div key={`${currentStep}-${item.label}`} className="flex items-start gap-3 rounded-2xl border border-slate-200 px-4 py-3">
-                  <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${item.done ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                    {item.done ? "OK" : "!"}
-                  </span>
-                  <div className="text-sm text-slate-700">{item.label}</div>
-                </div>
               ))}
             </div>
           </section>
