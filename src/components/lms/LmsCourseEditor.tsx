@@ -2367,6 +2367,21 @@ export function LmsCourseEditor({
           <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700"><input type="checkbox" checked={form.onboarding_recommended} onChange={(event) => setForm((current) => ({ ...current, onboarding_recommended: event.target.checked }))} /> Destacar no onboarding</label>
         </div>
 
+        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+          <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-semibold text-slate-900">Leitura de posicionamento</div>
+            <div className="mt-2 text-sm leading-6 text-slate-600">
+              Use esta etapa para decidir como o curso sera percebido: se ele deve ser exigido, se segue uma ordem de consumo e se merece destaque no onboarding.
+            </div>
+          </div>
+          <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-semibold text-slate-900">Leitura visual antes de publicar</div>
+            <div className="mt-2 text-sm leading-6 text-slate-600">
+              Card e banner nao sao decoracao. Eles ajudam o colaborador a entender rapidamente o tema, o tom e a relevancia do treinamento.
+            </div>
+          </div>
+        </div>
+
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
           <div className="space-y-4">
             <FileUploader
@@ -2460,6 +2475,51 @@ export function LmsCourseEditor({
                 <div className="text-sm text-slate-700">{item.label}</div>
               </div>
             ))}
+          </div>
+        </section>
+
+        <section className="grid gap-4 xl:grid-cols-[0.58fr,0.42fr]">
+          <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-950">Visao executiva da publicacao</h2>
+            <p className="mt-1 text-sm text-slate-500">Um resumo rapido para decidir com mais confianca se o curso segue para publicacao ou volta para ajuste.</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Curso</div>
+                <div className="mt-2 text-sm font-semibold text-slate-950">{form.title || "Sem titulo definido"}</div>
+                <div className="mt-1 text-sm text-slate-500">{form.category || "Categoria nao definida"}</div>
+              </div>
+              <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Publicacao</div>
+                <div className="mt-2 text-sm font-semibold text-slate-950 capitalize">{form.status}</div>
+                <div className="mt-1 text-sm text-slate-500">{form.visibility === "publico_interno" ? "Publico interno" : "Restrito"}</div>
+              </div>
+              <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Estrutura</div>
+                <div className="mt-2 text-sm font-semibold text-slate-950">{form.modules.length} fases e {totalLessons} aulas</div>
+                <div className="mt-1 text-sm text-slate-500">{form.sequence_required ? "Com ordem de consumo" : "Sem ordem obrigatoria"}</div>
+              </div>
+              <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Conclusao</div>
+                <div className="mt-2 text-sm font-semibold text-slate-950">{form.certificate_enabled ? "Com certificado" : "Sem certificado"}</div>
+                <div className="mt-1 text-sm text-slate-500">Nota minima: {form.passing_score ?? 0}%</div>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-[28px] border border-slate-200 bg-[linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] p-5 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Leitura de risco</div>
+            <div className="mt-2 text-lg font-semibold text-slate-950">
+              {pendingChecklistCount === 0 ? "Nada bloqueia a publicacao agora." : "Ainda existem pontos que podem prejudicar a experiencia."}
+            </div>
+            <div className="mt-3 text-sm leading-6 text-slate-600">
+              {pendingChecklistCount === 0
+                ? "Se a proposta estiver alinhada com o objetivo do RH, este treinamento ja pode seguir para o catalogo ou atribuicao."
+                : "Se publicar agora, o aluno pode encontrar lacunas de conteudo, midia ou avaliacao. Vale tratar as pendencias antes."}
+            </div>
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700">
+              {pendingChecklistCount === 0
+                ? "Recomendacao: publicar ou salvar como publicado, se este curso ja estiver aprovado internamente."
+                : "Recomendacao: manter em rascunho e corrigir os itens sinalizados no checklist principal."}
+            </div>
           </div>
         </section>
 
