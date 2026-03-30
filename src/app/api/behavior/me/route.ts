@@ -171,7 +171,7 @@ export async function GET() {
 
   const assessmentsByUserRes = await supabaseAdmin
     .from("behavior_assessments")
-    .select("id,created_at,predominant_self,predominant_others,self_result,others_result")
+    .select("id,created_at,predominant_self,predominant_others,self_result,others_result,self_selected_ids,others_selected_ids")
     .eq("user_id", context.userId)
     .order("created_at", { ascending: false })
     .limit(10);
@@ -179,9 +179,9 @@ export async function GET() {
     return NextResponse.json({ error: assessmentsByUserRes.error.message }, { status: 500 });
   }
   const assessmentsByCollaboratorRes = context.collaboratorIds.length
-    ? await supabaseAdmin
+      ? await supabaseAdmin
         .from("behavior_assessments")
-        .select("id,created_at,predominant_self,predominant_others,self_result,others_result")
+        .select("id,created_at,predominant_self,predominant_others,self_result,others_result,self_selected_ids,others_selected_ids")
         .in("collaborator_id", context.collaboratorIds)
         .order("created_at", { ascending: false })
         .limit(10)
@@ -196,6 +196,8 @@ export async function GET() {
     predominant_others: string[] | null;
     self_result: AxisResult;
     others_result: AxisResult;
+    self_selected_ids: string[] | null;
+    others_selected_ids: string[] | null;
   }>();
   for (const row of [
     ...((assessmentsByUserRes.data ?? []) as Array<{
@@ -205,6 +207,8 @@ export async function GET() {
       predominant_others: string[] | null;
       self_result: AxisResult;
       others_result: AxisResult;
+      self_selected_ids: string[] | null;
+      others_selected_ids: string[] | null;
     }>),
     ...((assessmentsByCollaboratorRes?.data ?? []) as Array<{
       id: string;
@@ -213,6 +217,8 @@ export async function GET() {
       predominant_others: string[] | null;
       self_result: AxisResult;
       others_result: AxisResult;
+      self_selected_ids: string[] | null;
+      others_selected_ids: string[] | null;
     }>),
   ]) {
     if (!assessmentMap.has(row.id)) assessmentMap.set(row.id, row);
