@@ -12,6 +12,18 @@ import { LMSStatsCards } from "@/components/lms/LMSStatsCards";
 import { SeasonCampaignPanel } from "@/components/lms/SeasonCampaignPanel";
 import type { LmsGamificationOverview, LmsMyTrainingCard } from "@/lib/lms/types";
 
+function formatDateBr(value: string | null | undefined) {
+  const normalized = (value ?? "").trim();
+  if (!normalized) return "Sem prazo definido";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    const [year, month, day] = normalized.split("-");
+    return `Prazo: ${day}/${month}/${year}`;
+  }
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return `Prazo: ${normalized}`;
+  return `Prazo: ${new Intl.DateTimeFormat("pt-BR").format(date)}`;
+}
+
 export function LmsLearnerHomeClient({
   recommended,
   deadlines,
@@ -86,9 +98,7 @@ export function LmsLearnerHomeClient({
                 deadlines.map((item) => (
                   <div key={item.course.id} className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
                     <div className="text-sm font-semibold text-slate-950">{item.course.title}</div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      {item.assignment?.due_date ? `Prazo: ${item.assignment.due_date}` : "Sem prazo definido"}
-                    </div>
+                    <div className="mt-1 text-xs text-slate-500">{formatDateBr(item.assignment?.due_date)}</div>
                   </div>
                 ))
               ) : (

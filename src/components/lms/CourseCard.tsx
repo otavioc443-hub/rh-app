@@ -7,6 +7,18 @@ import { CourseStatusBadge } from "@/components/lms/CourseStatusBadge";
 import { ProgressBar } from "@/components/lms/ProgressBar";
 import type { LmsMyTrainingCard } from "@/lib/lms/types";
 
+function formatDateBr(value: string | null | undefined) {
+  const normalized = (value ?? "").trim();
+  if (!normalized) return "Sem prazo";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    const [year, month, day] = normalized.split("-");
+    return `Prazo ${day}/${month}/${year}`;
+  }
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return `Prazo ${normalized}`;
+  return `Prazo ${new Intl.DateTimeFormat("pt-BR").format(date)}`;
+}
+
 export function CourseCard({ item }: { item: LmsMyTrainingCard }) {
   const [saved, setSaved] = useState(false);
   const progress = Math.round(item.progress?.progress_percent ?? 0);
@@ -79,7 +91,7 @@ export function CourseCard({ item }: { item: LmsMyTrainingCard }) {
               <Clock3 size={14} />
               {item.course.workload_hours ?? 0}h
             </span>
-            <span>{item.assignment?.due_date ? `Prazo ${item.assignment.due_date}` : "Sem prazo"}</span>
+            <span>{formatDateBr(item.assignment?.due_date)}</span>
           </div>
         </div>
         <div className="space-y-2">
