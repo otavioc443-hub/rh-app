@@ -17,13 +17,17 @@ import type {
   LmsAssignmentSupportData,
   LmsCertificate,
   LmsCourse,
+  LmsCourseEditorPayload,
   LmsCourseAccessLog,
   LmsCourseDetail,
+  LmsCourseVersion,
   LmsCourseModule,
   LmsCourseWithCounts,
   LmsDiscussionStatus,
   LmsLessonDiscussion,
   LmsLessonDiscussionAdminRow,
+  LmsLearnerCertificateItem,
+  LmsLearnerJourneyData,
   LmsLearningPath,
   LmsLearningPathCourse,
   LmsLesson,
@@ -40,6 +44,8 @@ import type {
   LmsQuizQuestionWithOptions,
   LmsQuizReviewRow,
   LmsQuizOption,
+  LmsGovernanceData,
+  LmsGovernanceLogRow,
   LmsReportRow,
   LmsReportsFilters,
   LmsTeamTrainingRow,
@@ -176,6 +182,32 @@ async function writeLmsAuditLog(input: {
       text.includes("schema cache") ||
       text.includes("column") ||
       text.includes("violates foreign key");
+    if (!ignorable) throw error;
+  }
+}
+
+async function writeLmsCourseVersionSnapshot(input: {
+  userId: string;
+  courseId: string;
+  status: string;
+  source: "create" | "update" | "publish" | "archive";
+  payload: unknown;
+}) {
+  const { error } = await supabaseAdmin.from("lms_course_versions").insert({
+    course_id: input.courseId,
+    version_label: `${input.source}-${new Date().toISOString()}`,
+    status: input.status,
+    snapshot_source: input.source,
+    payload_json: input.payload,
+    created_by: input.userId,
+  });
+  if (error) {
+    const text = error.message.toLowerCase();
+    const ignorable =
+      text.includes("does not exist") ||
+      text.includes("relation") ||
+      text.includes("schema cache") ||
+      text.includes("column");
     if (!ignorable) throw error;
   }
 }
@@ -1329,7 +1361,158 @@ async function getCourseEditorDetail(courseId: string, companyId: string | null)
 export async function getLmsCourseEditorData(courseId: string, companyId: string | null) {
   const detail = await getCourseEditorDetail(courseId, companyId);
   const supportData = await buildAssignmentSupportData(companyId);
-  return { detail, supportData };
+  const versions = await getLmsCourseVersions(courseId);
+  return { detail, supportData, versions };
+}
+
+export async function getLmsCourseVersions(courseId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("lms_course_versions")
+    .select("*")
+    .eq("course_id", courseId)
+    .order("created_at", { ascending: false })
+    .limit(12);
+
+  if (error) {
+    if (isMissingRelation(error)) return [] as LmsCourseVersion[];
+    throw error;
+  }
+
+  const rows = (data ?? []) as LmsCourseVersion[];
+  const authorIds = Array.from(new Set(rows.map((row) => row.created_by).filter(Boolean) as string[]));
+  const { data: authors } = authorIds.length
+    ? await supabaseAdmin.from("profiles").select("id,full_name,email").in("id", authorIds)
+    : { data: [] as Array<{ id: string; full_name: string | null; email: string | null }> };
+  const authorById = new Map(
+    ((authors ?? []) as Array<{ id: string; full_name: string | null; email: string | null }>).map((row) => [row.id, buildUserDisplayName(row)]),
+  );
+
+  return rows.map((row) => ({
+    ...row,
+    author_name: row.created_by ? authorById.get(row.created_by) ?? null : null,
+  }));
+}
+
+export async function restoreLmsCourseVersion(access: Access, courseId: string, versionId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("lms_course_versions")
+    .select("*")
+    .eq("id", versionId)
+    .eq("course_id", courseId)
+    .maybeSingle<LmsCourseVersion>();
+
+  if (error || !data) throw error ?? new Error("Versao nao encontrada.");
+
+  const payload = data.payload_json as LmsCourseEditorPayload;
+  if (!payload || typeof payload !== "object" || !("modules" in payload) || !("title" in payload)) {
+    throw new Error("A versao selecionada nao possui um snapshot valido para restauracao.");
+  }
+
+  const saved = await upsertCourseWithStructure(access, courseId, payload);
+  await writeLmsAuditLog({
+    userId: access.userId,
+    courseId,
+    action: "course_version_restored",
+  });
+
+  return saved;
+}
+
+export async function getLmsLearnerJourneyData(access: Access): Promise<LmsLearnerJourneyData> {
+  const [trainings, gamification, certificatesRes, coursesRes] = await Promise.all([
+    getMyTrainingsData(access),
+    getLearnerGamificationOverview(access),
+    supabaseAdmin.from("lms_certificates").select("id,course_id,validation_code,file_url,issued_at").eq("user_id", access.userId).order("issued_at", { ascending: false }),
+    fetchPublishedCourses(access.companyId),
+  ]);
+
+  const courseById = new Map(coursesRes.map((course) => [course.id, course.title]));
+  const certificates = ((certificatesRes.data ?? []) as Array<Omit<LmsLearnerCertificateItem, "course_title">>).map((row) => ({
+    ...row,
+    course_title: courseById.get(row.course_id) ?? "Treinamento",
+  }));
+
+  return {
+    trainings,
+    gamification,
+    certificates,
+  };
+}
+
+export async function getLmsGovernanceData(companyId: string | null): Promise<LmsGovernanceData> {
+  const [logsRes, coursesRes, lessonsRes, profilesRes] = await Promise.all([
+    supabaseAdmin.from("lms_course_access_logs").select("*").order("created_at", { ascending: false }).limit(80),
+    companyId
+      ? supabaseAdmin.from("lms_courses").select("id,title,company_id").or(`company_id.eq.${companyId},company_id.is.null`)
+      : supabaseAdmin.from("lms_courses").select("id,title,company_id"),
+    supabaseAdmin.from("lms_lessons").select("id,title"),
+    supabaseAdmin.from("profiles").select("id,full_name,email"),
+  ]);
+
+  const coursesById = new Map(((coursesRes.data ?? []) as Array<{ id: string; title: string; company_id: string | null }>).map((row) => [row.id, row]));
+  const lessonsById = new Map(((lessonsRes.data ?? []) as Array<{ id: string; title: string }>).map((row) => [row.id, row.title]));
+  const usersById = new Map(((profilesRes.data ?? []) as Array<{ id: string; full_name: string | null; email: string | null }>).map((row) => [row.id, buildUserDisplayName(row)]));
+  const relevantActions = new Set([
+    "course_created",
+    "course_updated",
+    "course_published",
+    "course_archived",
+    "course_version_restored",
+    "question_bank_created",
+    "question_bank_deleted",
+    "onboarding_assignments_generated",
+  ]);
+
+  const recentLogs = ((logsRes.data ?? []) as LmsCourseAccessLog[])
+    .filter((row) => relevantActions.has(row.action))
+    .filter((row) => {
+      if (!companyId) return true;
+      if (row.course_id === "00000000-0000-0000-0000-000000000000") return true;
+      const course = coursesById.get(row.course_id);
+      return !course?.company_id || course.company_id === companyId;
+    })
+    .slice(0, 20)
+    .map(
+      (row) =>
+        ({
+          id: row.id,
+          action: row.action,
+          created_at: row.created_at,
+          user_name: usersById.get(row.user_id) ?? "Usuario",
+          course_title: row.course_id === "00000000-0000-0000-0000-000000000000" ? null : coursesById.get(row.course_id)?.title ?? null,
+          lesson_title: row.lesson_id ? lessonsById.get(row.lesson_id) ?? null : null,
+        }) satisfies LmsGovernanceLogRow,
+    );
+
+  return {
+    recentLogs,
+    automationStatus: [
+      {
+        key: "email",
+        label: "Envio de e-mail LMS",
+        enabled: Boolean(process.env.RESEND_API_KEY?.trim() && process.env.LMS_EMAIL_FROM?.trim()),
+        helper: "Usado para lembretes e resumos semanais.",
+      },
+      {
+        key: "reminders",
+        label: "Lembretes programados",
+        enabled: Boolean(process.env.LMS_REMINDERS_CRON_TOKEN?.trim()),
+        helper: "Executa cobrancas de prazo e alertas de vencimento.",
+      },
+      {
+        key: "weekly",
+        label: "Resumo semanal",
+        enabled: Boolean(process.env.LMS_WEEKLY_SUMMARY_CRON_TOKEN?.trim()),
+        helper: "Dispara consolidado para RH e gestores.",
+      },
+      {
+        key: "recurring",
+        label: "Recorrencia automatica",
+        enabled: Boolean(process.env.LMS_RECURRING_ASSIGNMENTS_CRON_TOKEN?.trim()),
+        helper: "Gera novas atribuicoes em ciclos configurados.",
+      },
+    ],
+  };
 }
 
 export async function getLmsLearningPathsAdminData(companyId: string | null) {
@@ -1519,7 +1702,9 @@ export async function getLmsReportsData(companyId: string | null, filters?: Part
       const course = courseById.get(row.course_id)!;
       const attempt = latestAttempts.get(`${row.user_id}:${row.course_id}`);
       return {
+        user_id: row.user_id,
         user_name: profile.full_name ?? "Colaborador",
+        role: profile.role ?? null,
         department_name: profile.department_id ? departmentById.get(profile.department_id) ?? null : null,
         company_name: profile.company_id ? companyById.get(profile.company_id) ?? null : null,
         course_title: course.title,
@@ -1536,6 +1721,13 @@ export async function getLmsReportsData(companyId: string | null, filters?: Part
       if (filters?.departmentId && filters.departmentId !== "all") {
         const depName = departmentById.get(filters.departmentId) ?? filters.departmentId;
         if (row.department_name !== depName) return false;
+      }
+      if (filters?.role && filters.role !== "all") {
+        if (row.role !== filters.role) return false;
+      }
+      if (filters?.courseId && filters.courseId !== "all") {
+        const course = courseById.get(filters.courseId);
+        if (!course || row.course_title !== course.title) return false;
       }
       return true;
     });
@@ -2146,9 +2338,10 @@ export async function getPublicCertificateValidation(validationCode: string) {
 
 export async function getLmsReportCsv(companyId: string | null, filters?: Partial<LmsReportsFilters>) {
   const rows = await getLmsReportsData(companyId, filters);
-  const header = ["colaborador", "departamento", "empresa", "curso", "categoria", "status", "progresso", "conclusao", "nota"];
+  const header = ["colaborador", "perfil", "departamento", "empresa", "curso", "categoria", "status", "progresso", "conclusao", "nota"];
   const csvRows = rows.map((row) => [
     row.user_name,
+    row.role ?? "",
     row.department_name ?? "",
     row.company_name ?? "",
     row.course_title,
@@ -2508,6 +2701,29 @@ export async function upsertCourseWithStructure(
     action: courseId ? "course_updated" : "course_created",
   });
 
+  await writeLmsCourseVersionSnapshot({
+    userId: access.userId,
+    courseId: savedCourseId,
+    status: payload.status,
+    source: courseId ? "update" : "create",
+    payload,
+  });
+
+  if (payload.status === "published") {
+    await writeLmsAuditLog({
+      userId: access.userId,
+      courseId: savedCourseId,
+      action: courseId ? "course_published_after_update" : "course_published_on_create",
+    });
+    await writeLmsCourseVersionSnapshot({
+      userId: access.userId,
+      courseId: savedCourseId,
+      status: payload.status,
+      source: "publish",
+      payload,
+    });
+  }
+
   return courseRes.data;
 }
 
@@ -2791,6 +3007,18 @@ export async function archiveCourse(access: Access, courseId: string) {
     .select("*")
     .maybeSingle<LmsCourse>();
   if (error || !data) throw error ?? new Error("Nao foi possivel arquivar o curso.");
+  await writeLmsAuditLog({
+    userId: access.userId,
+    courseId,
+    action: "course_archived",
+  });
+  await writeLmsCourseVersionSnapshot({
+    userId: access.userId,
+    courseId,
+    status: "archived",
+    source: "archive",
+    payload: { courseId, status: "archived" },
+  });
   return data;
 }
 

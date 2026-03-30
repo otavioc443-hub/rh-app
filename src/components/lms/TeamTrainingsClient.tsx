@@ -15,6 +15,29 @@ export function TeamTrainingsClient({ data }: { data: LmsTeamTrainingsData }) {
     <div className="space-y-6">
       <PageHeader icon={<span className="text-xl font-bold">LMS</span>} title="Treinamentos da equipe" subtitle="Acompanhe prazos, progresso e pendencias da sua equipe." />
 
+      <section className="grid gap-4 xl:grid-cols-[1.2fr,0.8fr]">
+        <div className="rounded-[30px] border border-slate-200 bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_100%)] p-6 text-white shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-[0.22em] text-white/60">Painel do gestor</div>
+          <h2 className="mt-3 text-2xl font-semibold">Veja rapidamente quem esta em risco e quem precisa de acompanhamento.</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-7 text-white/75">
+            O objetivo desta tela e transformar pendencia em acao simples: cobrar, acompanhar e destravar a equipe antes do vencimento.
+          </p>
+        </div>
+        <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Leitura do momento</div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Risco alto</div>
+              <div className="mt-2 text-2xl font-semibold text-rose-600">{data.summary.overdue}</div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-slate-500">Vencendo</div>
+              <div className="mt-2 text-2xl font-semibold text-amber-600">{data.summary.dueSoon}</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between">

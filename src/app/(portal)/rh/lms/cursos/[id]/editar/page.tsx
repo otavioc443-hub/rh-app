@@ -11,5 +11,5 @@ export default async function RhLmsEditCoursePage({ params }: { params: Promise<
   const data = await getLmsCourseEditorData(id, access.companyId);
   if (!data.detail) notFound();
 
-  return <LmsCourseEditor mode="edit" courseId={id} initialData={data.detail} />;
+  return <LmsCourseEditor mode="edit" courseId={id} initialData={data.detail} versions={data.versions} />;
 }

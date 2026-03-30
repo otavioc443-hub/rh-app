@@ -196,6 +196,7 @@ export default function Sidebar({
         children: [
           { label: "Visão geral", icon: LayoutDashboard, href: "/lms", exact: true },
           { label: "Meus treinamentos", icon: GraduationCap, href: "/lms/meus-treinamentos" },
+          { label: "Minha jornada", icon: BadgeCheck, href: "/lms/minha-jornada" },
           { label: "Ranking", icon: Trophy, href: "/lms/ranking" },
           { label: "Desafios", icon: Target, href: "/lms/desafios" },
           { label: "Conquistas", icon: Medal, href: "/lms/conquistas" },
@@ -208,6 +209,7 @@ export default function Sidebar({
           { label: "Correção de avaliações", icon: ClipboardList, href: "/rh/lms/avaliacoes", roles: ["rh", "admin"] },
           { label: "Duvidas das aulas", icon: MessageSquareText, href: "/rh/lms/interacoes", roles: ["rh", "admin"] },
           { label: "Relatórios", icon: LineChart, href: "/rh/lms/relatorios", roles: ["rh", "admin"] },
+          { label: "Governança LMS", icon: ShieldCheck, href: "/rh/lms/governanca", roles: ["rh", "admin"] },
           { label: "Equipe", icon: Users, href: "/gestor/lms/equipe", roles: ["gestor", "admin"] },
         ],
       },

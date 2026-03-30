@@ -35,6 +35,40 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
 
       <SeasonCampaignPanel campaign={data.gamification.seasonCampaign} audience="admin" />
 
+      <section className="grid gap-4 xl:grid-cols-[1.1fr,0.9fr]">
+        <div className="rounded-[30px] border border-slate-200 bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_100%)] p-6 text-white shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-[0.22em] text-white/60">Leitura executiva</div>
+          <h2 className="mt-3 text-2xl font-semibold">O RH consegue ver onde agir antes do atraso virar problema.</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-7 text-white/75">
+            Esta visao concentra engajamento, risco de vencimento, campanhas e os pontos que mais pedem decisao ou cobranca.
+          </p>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-white/60">Atencao imediata</div>
+              <div className="mt-2 text-2xl font-semibold">{data.attentionItems.length}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-white/60">Cursos publicados</div>
+              <div className="mt-2 text-2xl font-semibold">{data.publishedCourses}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-white/60">XP da temporada</div>
+              <div className="mt-2 text-2xl font-semibold">{data.gamification.totalXpDistributed}</div>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Acoes rapidas do RH</div>
+          <h2 className="mt-2 text-xl font-semibold text-slate-950">Atue sem trocar de contexto</h2>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <Link href="/rh/lms/cursos" className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-800">Criar ou revisar cursos</Link>
+            <Link href="/rh/lms/atribuicoes" className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-800">Acompanhar atribuicoes</Link>
+            <Link href="/rh/lms/avaliacoes" className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-800">Corrigir avaliacoes</Link>
+            <Link href="/rh/lms/interacoes" className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm font-semibold text-slate-800">Responder duvidas</Link>
+          </div>
+        </div>
+      </section>
+
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -285,6 +319,25 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
 
           <TableShell>
             <div className="border-b border-slate-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-slate-900">Comparativo entre areas</h2>
+              <p className="text-sm text-slate-500">Ajuda a enxergar quais equipes estao puxando resultado e quais precisam de apoio adicional.</p>
+            </div>
+            <div className="grid gap-4 p-6 md:grid-cols-2">
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Melhor desempenho</div>
+                <div className="mt-2 text-lg font-semibold text-slate-950">{data.departmentRanking[0]?.departmentName ?? "Sem dados"}</div>
+                <div className="mt-1 text-sm text-slate-600">{data.departmentRanking[0]?.completionRate ?? 0}% de conclusao media</div>
+              </div>
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">Maior oportunidade</div>
+                <div className="mt-2 text-lg font-semibold text-slate-950">{data.departmentRanking.at(-1)?.departmentName ?? "Sem dados"}</div>
+                <div className="mt-1 text-sm text-slate-600">{data.departmentRanking.at(-1)?.completionRate ?? 0}% de conclusao media</div>
+              </div>
+            </div>
+          </TableShell>
+
+          <TableShell>
+            <div className="border-b border-slate-200 px-6 py-4">
               <h2 className="text-lg font-semibold text-slate-900">Atribuicoes recentes</h2>
             </div>
             <div className="space-y-3 p-6">
@@ -292,6 +345,31 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
                 <div key={row.id} className="rounded-2xl border border-slate-100 p-4">
                   <div className="text-sm font-semibold text-slate-900">{row.course_title ?? row.learning_path_title ?? "Atribuicao"}</div>
                   <div className="mt-1 text-xs text-slate-500">{row.target_label ?? row.target_id} - {row.assigned_at.slice(0, 10)}</div>
+                </div>
+              ))}
+            </div>
+          </TableShell>
+
+          <TableShell>
+            <div className="border-b border-slate-200 px-6 py-4">
+              <h2 className="text-lg font-semibold text-slate-900">Cursos em movimento</h2>
+              <p className="text-sm text-slate-500">Cursos mais recentes para revisar estrutura, atribuicoes e learner ativos.</p>
+            </div>
+            <div className="space-y-3 p-6">
+              {data.recentCourses.map((course) => (
+                <div key={course.id} className="rounded-2xl border border-slate-100 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">{course.title}</div>
+                      <div className="mt-1 text-xs text-slate-500 capitalize">{course.status} - {course.category ?? "Sem categoria"}</div>
+                    </div>
+                    <span className="rounded-full bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">{course.active_learners} learners</span>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3 text-xs text-slate-500">
+                    <div>Fases: <strong className="text-slate-700">{course.module_count}</strong></div>
+                    <div>Aulas: <strong className="text-slate-700">{course.lesson_count}</strong></div>
+                    <div>Atribuicoes: <strong className="text-slate-700">{course.assignment_count}</strong></div>
+                  </div>
                 </div>
               ))}
             </div>

@@ -12,7 +12,7 @@ import { QuizPreviewCard } from "@/components/lms/QuizPreviewCard";
 import { PageHeader } from "@/components/ui/PageShell";
 import { PageHelpModal } from "@/components/ui/PageHelpModal";
 import { coursesService } from "@/lib/lms/coursesService";
-import type { LmsCourseDetail, LmsCourseEditorPayload, LmsQuestionBankItem, LmsQuizPayload, LmsQuizQuestionType } from "@/lib/lms/types";
+import type { LmsCourseDetail, LmsCourseEditorPayload, LmsCourseVersion, LmsQuestionBankItem, LmsQuizPayload, LmsQuizQuestionType } from "@/lib/lms/types";
 import { buildCourseDefaults, slugifyCourseTitle } from "@/lib/lms/utils";
 
 type EditorData = {
@@ -514,10 +514,12 @@ export function LmsCourseEditor({
   mode,
   courseId,
   initialData,
+  versions = [],
 }: {
   mode: "create" | "edit";
   courseId: string | null;
   initialData?: EditorData | null;
+  versions?: LmsCourseVersion[];
 }) {
   const router = useRouter();
   const [saving, setSaving] = useState(false);
@@ -531,6 +533,9 @@ export function LmsCourseEditor({
   const [previewExpanded, setPreviewExpanded] = useState(false);
   const [selectedModuleIndex, setSelectedModuleIndex] = useState(0);
   const [selectedLessonIndex, setSelectedLessonIndex] = useState(0);
+  const [draggingModuleIndex, setDraggingModuleIndex] = useState<number | null>(null);
+  const [draggingLessonIndex, setDraggingLessonIndex] = useState<{ moduleIndex: number; lessonIndex: number } | null>(null);
+  const [restoringVersionId, setRestoringVersionId] = useState<string | null>(null);
   const [previewExpandedModuleId, setPreviewExpandedModuleId] = useState<string | null>("preview-module-0");
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydratedRef = useRef(false);
@@ -835,6 +840,95 @@ export function LmsCourseEditor({
       };
     });
     setSelectedLessonIndex((current) => (direction === "up" ? Math.max(0, current - 1) : current + 1));
+  }
+
+  function moveLessonAcrossModules(sourceModuleIndex: number, sourceLessonIndex: number, targetModuleIndex: number) {
+    if (sourceModuleIndex === targetModuleIndex) return;
+    setForm((current) => {
+      const sourceModule = current.modules[sourceModuleIndex];
+      const targetModule = current.modules[targetModuleIndex];
+      if (!sourceModule || !targetModule) return current;
+      const lesson = sourceModule.lessons[sourceLessonIndex];
+      if (!lesson) return current;
+
+      const nextModules = current.modules.map((module, index) => {
+        if (index === sourceModuleIndex) {
+          const lessons = module.lessons
+            .filter((_, lessonIndex) => lessonIndex !== sourceLessonIndex)
+            .map((currentLesson, lessonOrder) => ({ ...currentLesson, sort_order: lessonOrder + 1 }));
+          return {
+            ...module,
+            lessons: lessons.length ? lessons : [createLesson(1)],
+          };
+        }
+        if (index === targetModuleIndex) {
+          const lessons = [...module.lessons, { ...lesson, sort_order: module.lessons.length + 1 }].map((currentLesson, lessonOrder) => ({
+            ...currentLesson,
+            sort_order: lessonOrder + 1,
+          }));
+          return { ...module, lessons };
+        }
+        return module;
+      });
+      return { ...current, modules: nextModules };
+    });
+    setSelectedModuleIndex(targetModuleIndex);
+    setSelectedLessonIndex((current) => {
+      if (targetModuleIndex === sourceModuleIndex) return current;
+      return form.modules[targetModuleIndex]?.lessons.length ?? 0;
+    });
+  }
+
+  async function handleRestoreVersion(versionId: string) {
+    if (!courseId) return;
+    setRestoringVersionId(versionId);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/lms/admin/courses/${courseId}/restore-version`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ versionId }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "Nao foi possivel restaurar a versao.");
+      setDraftState("restored");
+      setMessage("Versao restaurada. Recarregando o editor...");
+      router.refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel restaurar a versao.");
+    } finally {
+      setRestoringVersionId(null);
+    }
+  }
+
+  function reorderModule(fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex || toIndex < 0 || toIndex >= form.modules.length) return;
+    setForm((current) => {
+      const modules = [...current.modules];
+      const [moved] = modules.splice(fromIndex, 1);
+      modules.splice(toIndex, 0, moved);
+      return {
+        ...current,
+        modules: modules.map((module, index) => ({ ...module, sort_order: index + 1 })),
+      };
+    });
+    setSelectedModuleIndex(toIndex);
+    setSelectedLessonIndex(0);
+  }
+
+  function reorderLesson(moduleIndex: number, fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex) return;
+    patchModule(moduleIndex, (current) => {
+      if (toIndex < 0 || toIndex >= current.lessons.length) return current;
+      const lessons = [...current.lessons];
+      const [moved] = lessons.splice(fromIndex, 1);
+      lessons.splice(toIndex, 0, moved);
+      return {
+        ...current,
+        lessons: lessons.map((lesson, index) => ({ ...lesson, sort_order: index + 1 })),
+      };
+    });
+    setSelectedLessonIndex(toIndex);
   }
 
   async function handleSave() {
@@ -1580,17 +1674,26 @@ export function LmsCourseEditor({
               Pense como o aluno: fase por fase, com objetivos claros, aulas curtas e checkpoints no momento certo.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setForm((current) => ({ ...current, modules: [...current.modules, createModule(current.modules.length + 1)] }));
-              setSelectedModuleIndex(form.modules.length);
-              setSelectedLessonIndex(0);
-            }}
-            className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-          >
-            <Plus size={16} /> Novo modulo
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setPreviewExpanded(true)}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700"
+            >
+              <Eye size={16} /> Ver esta etapa como aluno
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setForm((current) => ({ ...current, modules: [...current.modules, createModule(current.modules.length + 1)] }));
+                setSelectedModuleIndex(form.modules.length);
+                setSelectedLessonIndex(0);
+              }}
+              className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+            >
+              <Plus size={16} /> Novo modulo
+            </button>
+          </div>
         </div>
 
         <div className="mt-5 grid gap-4 xl:grid-cols-[1.2fr,0.8fr]">
@@ -1623,6 +1726,8 @@ export function LmsCourseEditor({
               <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">Crie fases curtas, com nome claro e papel bem definido na trilha.</div>
               <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">Misture formatos quando fizer sentido: video para contexto, texto para instrucoes e avaliacao para validacao.</div>
               <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">Pense sempre no proximo passo do aluno. Cada aula precisa convidar a continuar.</div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">Use o botao de preview para conferir se a aula escolhida realmente parece clara para quem vai aprender.</div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">Voce pode arrastar fases e aulas para reorganizar a narrativa sem perder o que ja foi criado.</div>
             </div>
           </div>
         </div>
@@ -1656,7 +1761,24 @@ export function LmsCourseEditor({
         <div className="mt-5 grid gap-5 xl:grid-cols-[0.4fr,0.6fr]">
           <div className="space-y-3 rounded-[24px] border border-slate-200 bg-slate-50 p-4">
             {form.modules.map((module, moduleIndex) => (
-              <div key={`${module.title}-${moduleIndex}`} className={`rounded-[22px] border px-4 py-4 ${moduleIndex === selectedModuleIndex ? "border-slate-900 bg-white shadow-sm" : "border-slate-200 bg-white"}`}>
+              <div
+                key={`${module.title}-${moduleIndex}`}
+                draggable
+                onDragStart={() => setDraggingModuleIndex(moduleIndex)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => {
+                  if (draggingLessonIndex) {
+                    moveLessonAcrossModules(draggingLessonIndex.moduleIndex, draggingLessonIndex.lessonIndex, moduleIndex);
+                    setDraggingLessonIndex(null);
+                    return;
+                  }
+                  if (draggingModuleIndex === null) return;
+                  reorderModule(draggingModuleIndex, moduleIndex);
+                  setDraggingModuleIndex(null);
+                }}
+                onDragEnd={() => setDraggingModuleIndex(null)}
+                className={`rounded-[22px] border px-4 py-4 ${moduleIndex === selectedModuleIndex ? "border-slate-900 bg-white shadow-sm" : "border-slate-200 bg-white"} ${draggingModuleIndex === moduleIndex ? "opacity-60" : ""}`}
+              >
                 <div className="flex items-start justify-between gap-3">
                   <button type="button" onClick={() => { setSelectedModuleIndex(moduleIndex); setSelectedLessonIndex(0); }} className="min-w-0 text-left">
                     <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Fase {moduleIndex + 1}</div>
@@ -1733,7 +1855,19 @@ export function LmsCourseEditor({
                 {moduleIndex === selectedModuleIndex ? (
                   <div className="mt-4 space-y-2 border-t border-slate-100 pt-4">
                     {module.lessons.map((lesson, lessonIndex) => (
-                      <div key={`${lesson.title}-${lessonIndex}`} className={`rounded-2xl border px-3 py-3 transition ${lessonIndex === selectedLessonIndex ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-white"}`}>
+                      <div
+                        key={`${lesson.title}-${lessonIndex}`}
+                        draggable
+                        onDragStart={() => setDraggingLessonIndex({ moduleIndex, lessonIndex })}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={() => {
+                          if (!draggingLessonIndex || draggingLessonIndex.moduleIndex !== moduleIndex) return;
+                          reorderLesson(moduleIndex, draggingLessonIndex.lessonIndex, lessonIndex);
+                          setDraggingLessonIndex(null);
+                        }}
+                        onDragEnd={() => setDraggingLessonIndex(null)}
+                        className={`rounded-2xl border px-3 py-3 transition ${lessonIndex === selectedLessonIndex ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-white"} ${draggingLessonIndex?.moduleIndex === moduleIndex && draggingLessonIndex.lessonIndex === lessonIndex ? "opacity-60" : ""}`}
+                      >
                         <div className="flex items-center justify-between gap-3">
                           <button type="button" onClick={() => setSelectedLessonIndex(lessonIndex)} className="min-w-0 flex-1 text-left">
                             <div className="text-sm font-semibold">{lesson.title}</div>
@@ -1915,6 +2049,14 @@ export function LmsCourseEditor({
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="text-sm font-semibold text-slate-900">Configuracao principal da aula</div>
                 <div className="mt-1 text-xs text-slate-500">Preencha so o que o colaborador realmente vai ver ou usar nesta etapa.</div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-[linear-gradient(135deg,#f8fafc_0%,#eef2ff_100%)] p-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Leitura do aluno nesta aula</div>
+                <div className="mt-2 text-sm font-semibold text-slate-950">{selectedLesson.title || "Nova aula"} / {selectedLesson.lesson_type === "avaliacao" ? "Avaliacao" : selectedLesson.lesson_type}</div>
+                <div className="mt-2 text-sm leading-6 text-slate-600">
+                  {selectedLesson.description || "Assim que voce preencher a descricao e o conteudo principal, este resumo fica mais fiel ao que o colaborador realmente vai perceber nesta etapa."}
+                </div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -2568,6 +2710,80 @@ export function LmsCourseEditor({
           </div>
         </section>
 
+        <section className="grid gap-4 xl:grid-cols-[0.62fr,0.38fr]">
+          <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-lg font-semibold text-slate-950">Governanca do curso</h2>
+            <p className="mt-1 text-sm text-slate-500">Cada salvamento relevante pode gerar um retrato do curso para rastreabilidade de criacao, revisao e publicacao.</p>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Criacao</div>
+                <div className="mt-2 text-sm font-semibold text-slate-950">Snapshot inicial</div>
+                <div className="mt-1 text-sm text-slate-500">Mantem o retrato da primeira estrutura do curso.</div>
+              </div>
+              <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Atualizacoes</div>
+                <div className="mt-2 text-sm font-semibold text-slate-950">Historico de versoes</div>
+                <div className="mt-1 text-sm text-slate-500">Facilita revisar o que mudou antes da publicacao.</div>
+              </div>
+              <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Publicacao</div>
+                <div className="mt-2 text-sm font-semibold text-slate-950">Marco de liberacao</div>
+                <div className="mt-1 text-sm text-slate-500">Registra a versao usada quando o curso foi publicado.</div>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-[28px] border border-slate-200 bg-slate-50 p-5 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Antes de concluir</div>
+            <div className="mt-2 text-lg font-semibold text-slate-950">Vale mais a pena publicar ou revisar?</div>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              Se a jornada estiver pronta, a avaliacao estiver clara e o preview fizer sentido para o aluno, a publicacao ja pode seguir. Caso contrario, salve com tranquilidade e refine a proxima versao.
+            </p>
+          </div>
+        </section>
+
+        {mode === "edit" ? (
+          <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-950">Historico de versoes</h2>
+                <p className="mt-1 text-sm text-slate-500">Snapshots recentes do curso para dar rastreabilidade de criacao, ajuste e publicacao.</p>
+              </div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">{versions.length} registro(s)</div>
+            </div>
+            <div className="mt-4 space-y-3">
+              {versions.length ? (
+                versions.map((version) => (
+                  <div key={version.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-semibold text-slate-950">{version.snapshot_source === "publish" ? "Publicacao registrada" : version.version_label}</div>
+                        <div className="mt-1 text-xs text-slate-500">
+                          {version.author_name ?? "Sem autor"} - {new Date(version.created_at).toLocaleString("pt-BR")} - status {version.status}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">{version.snapshot_source}</span>
+                        <button
+                          type="button"
+                          onClick={() => void handleRestoreVersion(version.id)}
+                          disabled={restoringVersionId === version.id}
+                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 disabled:opacity-60"
+                        >
+                          {restoringVersionId === version.id ? "Restaurando..." : "Restaurar"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-sm text-slate-500">
+                  O historico de versoes aparecera aqui assim que a migration de versionamento estiver aplicada e novas gravacoes forem registradas.
+                </div>
+              )}
+            </div>
+          </section>
+        ) : null}
+
         {selectedLessonQuizPreview ? (
           <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
             <div className="mb-4">
@@ -2960,8 +3176,6 @@ export function LmsCourseEditor({
             )}
           </div>
         </div>
-
-        {renderPreviewWorkspace()}
       </div>
     </div>
   );

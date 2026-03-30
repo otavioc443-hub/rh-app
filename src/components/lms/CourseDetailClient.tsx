@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { Award, BookMarked, Sparkles, Trophy } from "lucide-react";
 import { CourseHeader } from "@/components/lms/CourseHeader";
 import { ModuleAccordion } from "@/components/lms/ModuleAccordion";
 import { CertificateButton } from "@/components/lms/CertificateButton";
@@ -69,6 +70,65 @@ export function CourseDetailClient({ detail }: { detail: LmsCourseDetail }) {
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Avaliacao</div>
             <div className="mt-2 text-3xl font-semibold text-slate-950">{evaluationLessons}</div>
             <div className="mt-1 text-sm text-slate-500">etapa(s) de avaliacao na trilha</div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.2fr,0.8fr]">
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">O que voce vai encontrar</div>
+              <h2 className="mt-2 text-xl font-semibold text-slate-950">Visao da jornada do aluno</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Use este espaco para entender a promessa do curso, o ritmo esperado e os marcos que liberam conclusao e certificado.
+              </p>
+            </div>
+            <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white">
+              <Sparkles size={18} />
+            </span>
+          </div>
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ritmo esperado</div>
+              <div className="mt-2 text-sm font-semibold text-slate-950">{currentDetail.course.sequence_required ? "Seguir a ordem das fases" : "Voce pode navegar livremente"}</div>
+            </div>
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Certificacao</div>
+              <div className="mt-2 text-sm font-semibold text-slate-950">{currentDetail.course.certificate_enabled ? "Disponivel ao concluir" : "Nao habilitada neste curso"}</div>
+            </div>
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Aprovacao</div>
+              <div className="mt-2 text-sm font-semibold text-slate-950">{currentDetail.course.passing_score ?? 0}% de aproveitamento minimo</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Marcos da sua jornada</div>
+              <h2 className="mt-2 text-xl font-semibold text-slate-950">Conquistas e comprovacao</h2>
+            </div>
+            <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
+              <Trophy size={18} />
+            </span>
+          </div>
+          <div className="mt-5 space-y-3">
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900"><BookMarked size={16} /> Trilhas obrigatorias</div>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Voce precisa concluir {summary.requiredLessons} aula(s) obrigatoria(s) para fechar esta jornada.</p>
+            </div>
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900"><Award size={16} /> Certificado e comprovacao</div>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {currentDetail.certificate
+                  ? "Seu certificado ja esta disponivel para download."
+                  : currentDetail.course.certificate_enabled
+                    ? "Assim que os criterios forem atingidos, o certificado sera liberado aqui."
+                    : "Este curso nao gera certificado, mas continua contando na sua trilha de desenvolvimento."}
+              </p>
+            </div>
           </div>
         </div>
       </section>

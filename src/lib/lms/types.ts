@@ -285,6 +285,52 @@ export type LmsCourseAccessLog = {
   created_at: string;
 };
 
+export type LmsCourseVersion = {
+  id: string;
+  course_id: string;
+  version_label: string;
+  status: string;
+  snapshot_source: "create" | "update" | "publish" | "archive";
+  payload_json: Record<string, unknown>;
+  created_by: string | null;
+  created_at: string;
+  author_name?: string | null;
+};
+
+export type LmsLearnerCertificateItem = {
+  id: string;
+  course_id: string;
+  course_title: string;
+  validation_code: string;
+  file_url: string | null;
+  issued_at: string;
+};
+
+export type LmsLearnerJourneyData = {
+  trainings: LmsMyTrainingCard[];
+  gamification: LmsGamificationOverview;
+  certificates: LmsLearnerCertificateItem[];
+};
+
+export type LmsGovernanceLogRow = {
+  id: string;
+  action: string;
+  created_at: string;
+  user_name: string;
+  course_title: string | null;
+  lesson_title: string | null;
+};
+
+export type LmsGovernanceData = {
+  recentLogs: LmsGovernanceLogRow[];
+  automationStatus: Array<{
+    key: string;
+    label: string;
+    enabled: boolean;
+    helper: string;
+  }>;
+};
+
 export type LmsLessonDiscussion = {
   id: string;
   company_id: string | null;
@@ -414,7 +460,9 @@ export type LmsTeamTrainingsData = {
 };
 
 export type LmsReportRow = {
+  user_id?: string;
   user_name: string;
+  role?: string | null;
   department_name: string | null;
   company_name: string | null;
   course_title: string;
