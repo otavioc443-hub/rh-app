@@ -2,6 +2,10 @@
 
 Este guia acompanha o modelo `Laboratorio completo do LMS`, disponivel no criador de cursos.
 
+Se preferir subir um exemplo completo direto no banco, use o seed:
+
+- [`2026-03-30_seed_lms_demo_course.sql`](c:/Users/Cliente/rh-app/supabase/sql/2026-03-30_seed_lms_demo_course.sql)
+
 ## Objetivo
 
 Validar o modulo de treinamentos de ponta a ponta, cobrindo:
@@ -26,6 +30,12 @@ Validar o modulo de treinamentos de ponta a ponta, cobrindo:
 4. Revise os textos, troque imagens e complete os arquivos reais.
 5. Passe pela revisao final.
 6. Publique o curso.
+
+## Como criar direto no Supabase
+
+1. Garanta que as migrations do LMS ja foram aplicadas.
+2. Rode o arquivo `2026-03-30_seed_lms_demo_course.sql` no SQL Editor.
+3. O curso sera criado uma unica vez com slug `laboratorio-completo-lms`.
 
 ## Estrutura do curso-modelo
 
