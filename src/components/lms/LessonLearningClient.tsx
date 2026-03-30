@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { LessonPlayer } from "@/components/lms/LessonPlayer";
 import { LessonDiscussionPanel } from "@/components/lms/LessonDiscussionPanel";
@@ -21,13 +22,14 @@ export function LessonLearningClient({
   courseId: string;
   detail: Parameters<typeof ModuleAccordion>[0]["detail"];
   currentLesson: Parameters<typeof LessonPlayer>[0]["lesson"];
-  completedLessonIds: Set<string>;
+  completedLessonIds: string[];
   nextLesson: { id: string } | null;
   quizPayload: LmsQuizPayload | null;
   discussions: LmsLessonDiscussion[];
 }) {
   const router = useRouter();
   const { progressPercent, loading, completeLesson } = useUserProgress(detail.progress?.progress_percent ?? 0);
+  const completedLessonIdsSet = useMemo(() => new Set(completedLessonIds), [completedLessonIds]);
   const summary = getRequiredLessonsSummary(detail.modules);
   const currentModule = detail.modules.find((module) => module.lessons.some((lesson) => lesson.id === currentLesson.id)) ?? detail.modules[0] ?? null;
 
@@ -62,8 +64,8 @@ export function LessonLearningClient({
           detail={detail}
           expandedModuleId={currentModule?.id ?? null}
           onToggle={() => undefined}
-          completedLessonIds={completedLessonIds}
-          isLessonLocked={(lessonId) => isLessonLocked(detail.course.sequence_required, detail.modules, lessonId, completedLessonIds)}
+          completedLessonIds={completedLessonIdsSet}
+          isLessonLocked={(lessonId) => isLessonLocked(detail.course.sequence_required, detail.modules, lessonId, completedLessonIdsSet)}
           currentLessonId={currentLesson.id}
           lessonHrefBuilder={(lessonId) => `/lms/aprender/${courseId}/${lessonId}`}
         />

@@ -634,9 +634,9 @@ export async function getLessonPlayerData(access: Access, courseId: string, less
     .eq("user_id", access.userId)
     .eq("course_id", courseId);
 
-  const completedLessonIds = new Set<string>(
+  const completedLessonIds = Array.from(new Set<string>(
     ((lessonProgressRes ?? []) as LmsLessonProgress[]).filter((item) => item.completed).map((item) => item.lesson_id),
-  );
+  ));
   const currentLesson = detail.modules.flatMap((module) => module.lessons).find((lesson) => lesson.id === lessonId) ?? null;
   if (!currentLesson) return null;
 
@@ -1872,13 +1872,27 @@ export async function recomputeUserCourseProgress(access: Access, courseId: stri
 
 export async function getQuizPayload(quizId: string): Promise<LmsQuizPayload | null> {
   const { data: quizData, error: quizError } = await supabaseAdmin.from("lms_quizzes").select("*").eq("id", quizId).maybeSingle<LmsQuiz>();
-  if (quizError || !quizData) return null;
+  if (quizError || !quizData) {
+    if (quizError && !isMissingRelation(quizError) && !/column|schema cache/i.test(quizError.message)) throw quizError;
+    return null;
+  }
 
-  const { data: questionsData } = await supabaseAdmin.from("lms_quiz_questions").select("*").eq("quiz_id", quizId).order("sort_order", { ascending: true });
+  const { data: questionsData, error: questionsError } = await supabaseAdmin
+    .from("lms_quiz_questions")
+    .select("*")
+    .eq("quiz_id", quizId)
+    .order("sort_order", { ascending: true });
+  if (questionsError) {
+    if (!isMissingRelation(questionsError) && !/column|schema cache/i.test(questionsError.message)) throw questionsError;
+    return { quiz: quizData, questions: [] };
+  }
   const questionIds = ((questionsData ?? []) as LmsQuizQuestion[]).map((row) => row.id);
-  const { data: optionsData } = questionIds.length
+  const { data: optionsData, error: optionsError } = questionIds.length
     ? await supabaseAdmin.from("lms_quiz_options").select("*").in("question_id", questionIds)
-    : { data: [] as LmsQuizOption[] };
+    : { data: [] as LmsQuizOption[], error: null };
+  if (optionsError) {
+    if (!isMissingRelation(optionsError) && !/column|schema cache/i.test(optionsError.message)) throw optionsError;
+  }
 
   const payloadQuestions: LmsQuizQuestionWithOptions[] = ((questionsData ?? []) as LmsQuizQuestion[]).map((question) => ({
     ...question,

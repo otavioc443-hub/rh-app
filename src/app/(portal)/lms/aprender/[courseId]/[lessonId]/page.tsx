@@ -12,8 +12,10 @@ export default async function LmsLessonPage({ params }: { params: Promise<{ cour
   if (!data) notFound();
 
   const [quizPayload, discussions] = await Promise.all([
-    data.currentLesson.lesson_type === "avaliacao" ? getQuizPayloadByLessonId(data.currentLesson.id) : Promise.resolve(null),
-    getLessonDiscussions(access, courseId, lessonId),
+    data.currentLesson.lesson_type === "avaliacao"
+      ? getQuizPayloadByLessonId(data.currentLesson.id).catch(() => null)
+      : Promise.resolve(null),
+    getLessonDiscussions(access, courseId, lessonId).catch(() => []),
   ]);
 
   return (
