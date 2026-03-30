@@ -4,6 +4,23 @@ import { useState } from "react";
 import { useAssignments } from "@/hooks/lms/useAssignments";
 import type { LmsAssignmentFormValues, LmsAssignmentSupportData } from "@/lib/lms/types";
 
+function formatDateDigits(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+function parseBrDateToIso(value: string) {
+  const normalized = value.trim();
+  if (!normalized) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized;
+  const match = normalized.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return normalized;
+  const [, day, month, year] = match;
+  return `${year}-${month}-${day}`;
+}
+
 export function AssignmentDialog({ supportData }: { supportData: LmsAssignmentSupportData }) {
   const { saving, createAssignment } = useAssignments();
   const [open, setOpen] = useState(false);
@@ -22,7 +39,11 @@ export function AssignmentDialog({ supportData }: { supportData: LmsAssignmentSu
 
   async function handleSubmit() {
     try {
-      await createAssignment(payload);
+      await createAssignment({
+        ...payload,
+        due_date: parseBrDateToIso(payload.due_date),
+        expires_at: parseBrDateToIso(payload.expires_at),
+      });
       setMessage("Atribuicao registrada.");
       setOpen(false);
     } catch (error) {
@@ -100,8 +121,22 @@ export function AssignmentDialog({ supportData }: { supportData: LmsAssignmentSu
               <div className="text-sm font-semibold text-slate-900">Prazos e validade</div>
               <div className="mt-1 text-sm text-slate-600">Defina quando a pessoa precisa concluir e ate quando a atribuicao fica ativa.</div>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <input type="date" value={payload.due_date} onChange={(event) => setPayload((current) => ({ ...current, due_date: event.target.value }))} className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900" />
-                <input type="date" value={payload.expires_at} onChange={(event) => setPayload((current) => ({ ...current, expires_at: event.target.value }))} className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900" />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="DD/MM/AAAA"
+                  value={payload.due_date}
+                  onChange={(event) => setPayload((current) => ({ ...current, due_date: formatDateDigits(event.target.value) }))}
+                  className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="DD/MM/AAAA"
+                  value={payload.expires_at}
+                  onChange={(event) => setPayload((current) => ({ ...current, expires_at: formatDateDigits(event.target.value) }))}
+                  className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                />
               </div>
             </div>
 

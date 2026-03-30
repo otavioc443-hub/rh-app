@@ -6,6 +6,13 @@ import { PageHeader, TableShell, TableWrap } from "@/components/ui/PageShell";
 import { getLmsAssignmentsAdminData } from "@/lib/lms/server";
 import { requireRoles } from "@/lib/server/feedbackGuard";
 
+function formatDateBr(value: string | null) {
+  if (!value) return "-";
+  const [year, month, day] = value.split("-");
+  if (!year || !month || !day) return value;
+  return `${day}/${month}/${year}`;
+}
+
 export default async function RhLmsAssignmentsPage() {
   const access = await requireRoles(["rh", "admin"]);
   if (!access.ok) redirect("/unauthorized");
@@ -40,7 +47,7 @@ export default async function RhLmsAssignmentsPage() {
                 <tr key={row.id} className="border-t border-slate-100">
                   <td className="px-6 py-4 text-slate-700">{row.target_label ?? row.target_id}</td>
                   <td className="px-6 py-4 font-medium text-slate-900">{row.course_title ?? row.learning_path_title ?? "-"}</td>
-                  <td className="px-6 py-4 text-slate-600">{row.due_date ?? "-"}</td>
+                  <td className="px-6 py-4 text-slate-600">{formatDateBr(row.due_date)}</td>
                   <td className="px-6 py-4 text-slate-600">
                     {row.auto_reassign_on_expiry && row.recurring_every_days ? `A cada ${row.recurring_every_days} dia(s)` : "-"}
                   </td>

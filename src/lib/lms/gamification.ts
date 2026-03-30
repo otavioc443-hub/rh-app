@@ -250,9 +250,31 @@ async function ensureUserStreak(context: LmsAccessContext) {
 async function fetchProfilesMap(companyId: string | null) {
   let query = supabaseAdmin.from("profiles").select("id,full_name,email,company_id,department_id").eq("active", true);
   if (companyId) query = query.eq("company_id", companyId);
-  const { data, error } = await query;
-  if (error) throw error;
-  return new Map<string, ProfileShape>(((data ?? []) as ProfileShape[]).map((row) => [row.id, row]));
+  const [profilesRes, collaboratorsRes] = await Promise.all([
+    query,
+    supabaseAdmin.from("colaboradores").select("user_id,nome,email"),
+  ]);
+  if (profilesRes.error) throw profilesRes.error;
+
+  const collaboratorNamesByUserId = new Map<string, string>();
+  const collaboratorNamesByEmail = new Map<string, string>();
+  for (const row of (collaboratorsRes.data ?? []) as Array<{ user_id: string | null; nome: string | null; email?: string | null }>) {
+    if (row.user_id && row.nome) collaboratorNamesByUserId.set(row.user_id, row.nome);
+    if (row.email && row.nome) collaboratorNamesByEmail.set(row.email.trim().toLowerCase(), row.nome);
+  }
+
+  return new Map<string, ProfileShape>(
+    ((profilesRes.data ?? []) as ProfileShape[]).map((row) => [
+      row.id,
+      {
+        ...row,
+        full_name:
+          collaboratorNamesByUserId.get(row.id) ??
+          (row.email ? collaboratorNamesByEmail.get(row.email.trim().toLowerCase()) : undefined) ??
+          row.full_name,
+      },
+    ]),
+  );
 }
 
 async function fetchDepartmentNames() {

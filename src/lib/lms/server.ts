@@ -323,6 +323,19 @@ function calculateDaysUntilDue(dueDate: string | null) {
   return Math.ceil((due.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+function getDueDateEnd(dueDate: string | null) {
+  if (!dueDate) return null;
+  const due = new Date(`${dueDate}T23:59:59.999`);
+  if (Number.isNaN(due.getTime())) return null;
+  return due;
+}
+
+function isDueDateExpired(dueDate: string | null, now = new Date()) {
+  const dueEnd = getDueDateEnd(dueDate);
+  if (!dueEnd) return false;
+  return now.getTime() > dueEnd.getTime();
+}
+
 function resolveUrgency(dueDate: string | null, status: LmsProgressStatus): "overdue" | "due_soon" | "on_track" | "none" {
   if (!dueDate || status === "completed") return "none";
   const daysUntilDue = calculateDaysUntilDue(dueDate);
@@ -467,8 +480,7 @@ export async function getMyTrainingsData(access: Access) {
     .map((course) => {
       const progress = progressMap.get(course.id) ?? null;
       const assignment = visibilityMap.get(course.id) ?? null;
-      const dueDate = assignment?.due_date ? new Date(assignment.due_date) : null;
-      const overdue = dueDate && dueDate < new Date() && progress?.status !== "completed";
+      const overdue = isDueDateExpired(assignment?.due_date ?? null) && progress?.status !== "completed";
       const status = overdue ? "overdue" : (progress?.status ?? "not_started");
       return { course, progress, assignment, status };
     });
@@ -1070,13 +1082,14 @@ export async function buildAssignmentSupportData(companyId: string | null): Prom
 }
 
 export async function getLmsAdminDashboardData(companyId: string | null): Promise<LmsAdminDashboardData> {
-  const [coursesRes, progressRes, accessLogsRes, assignmentsRes, departments, profilesRes, gamification, graph] = await Promise.all([
+  const [coursesRes, progressRes, accessLogsRes, assignmentsRes, departments, profilesRes, collaboratorsRes, gamification, graph] = await Promise.all([
     fetchPublishedCourses(companyId),
     supabaseAdmin.from("lms_user_progress").select("*"),
     supabaseAdmin.from("lms_course_access_logs").select("*"),
     supabaseAdmin.from("lms_assignments").select("*").order("assigned_at", { ascending: false }).limit(8),
     fetchCompanyAndDepartments(companyId),
     supabaseAdmin.from("profiles").select("id,full_name,company_id,department_id").eq("active", true),
+    supabaseAdmin.from("colaboradores").select("user_id,nome,email"),
     getAdminGamificationDashboard(companyId),
     fetchActiveAssignmentGraph(),
   ]);
@@ -1092,6 +1105,12 @@ export async function getLmsAdminDashboardData(companyId: string | null): Promis
   const accessLogs = (accessLogsRes.data ?? []) as LmsCourseAccessLog[];
   const courseById = new Map(courses.map((course) => [course.id, course]));
   const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+  const collaboratorNamesByUserId = new Map<string, string>();
+  const collaboratorNamesByEmail = new Map<string, string>();
+  for (const row of (collaboratorsRes.data ?? []) as Array<{ user_id: string | null; nome: string | null; email?: string | null }>) {
+    if (row.user_id && row.nome) collaboratorNamesByUserId.set(row.user_id, row.nome);
+    if (row.email && row.nome) collaboratorNamesByEmail.set(row.email.trim().toLowerCase(), row.nome);
+  }
   const progressMap = new Map(progressRows.map((row) => [`${row.user_id}:${row.course_id}`, row]));
   const assignmentRows = (assignmentsRes.data ?? []) as LmsAssignment[];
   const assignmentSupport = await buildAssignmentSupportData(companyId);
@@ -1132,7 +1151,7 @@ export async function getLmsAdminDashboardData(companyId: string | null): Promis
     .slice(0, 5);
 
   const now = new Date();
-  const overdueTrainings = assignmentRows.filter((item) => item.due_date && new Date(item.due_date) < now).length;
+  const overdueTrainings = assignmentRows.filter((item) => isDueDateExpired(item.due_date, now)).length;
   const delayedUsers = new Set(progressRows.filter((row) => row.status === "overdue").map((row) => row.user_id)).size;
   const attentionItems: LmsTrainingAttentionItem[] = [];
 
@@ -1145,7 +1164,10 @@ export async function getLmsAdminDashboardData(companyId: string | null): Promis
       if (urgency !== "overdue" && urgency !== "due_soon") continue;
       attentionItems.push({
         user_id: profile.id,
-        full_name: profile.full_name ?? "Colaborador",
+        full_name: buildUserDisplayName(
+          { full_name: profile.full_name ?? null },
+          collaboratorNamesByUserId.get(profile.id),
+        ) || "Colaborador",
         department_name: profile.department_id ? departments.departments.find((item) => item.id === profile.department_id)?.name ?? null : null,
         course_id: assignment.course_id,
         course_title: courseById.get(assignment.course_id)?.title ?? "Curso",
@@ -1213,7 +1235,12 @@ export async function getLmsAdminDashboardData(companyId: string | null): Promis
     overdueTrainings,
     delayedUsers,
     departmentRanking,
-    dueSoon: assignmentRows.filter((item) => item.due_date && new Date(item.due_date).getTime() - now.getTime() <= 1000 * 60 * 60 * 24 * 7).length,
+    dueSoon: assignmentRows.filter((item) => {
+      if (!item.due_date || isDueDateExpired(item.due_date, now)) return false;
+      const dueEnd = getDueDateEnd(item.due_date);
+      if (!dueEnd) return false;
+      return dueEnd.getTime() - now.getTime() <= 1000 * 60 * 60 * 24 * 7;
+    }).length,
     completionByStatus,
     recentAssignments,
     recentCourses,

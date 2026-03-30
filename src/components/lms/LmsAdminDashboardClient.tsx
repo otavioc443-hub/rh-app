@@ -10,6 +10,18 @@ import { PageHeader, TableShell, TableWrap } from "@/components/ui/PageShell";
 import { useLmsDashboard } from "@/hooks/lms/useLmsDashboard";
 import type { LmsAdminDashboardData } from "@/lib/lms/types";
 
+function formatDateBr(value: string | null | undefined) {
+  const normalized = (value ?? "").trim();
+  if (!normalized) return "-";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    const [year, month, day] = normalized.split("-");
+    return `${day}/${month}/${year}`;
+  }
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return normalized;
+  return new Intl.DateTimeFormat("pt-BR").format(date);
+}
+
 export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData }) {
   const { cards } = useLmsDashboard(data);
 
@@ -218,7 +230,7 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
                       </span>
                     </div>
                     <div className="mt-2 text-xs text-slate-500">
-                      {item.department_name ?? "Sem departamento"} - Prazo {item.due_date ?? "-"} - {Math.round(item.progress_percent)}%
+                      {item.department_name ?? "Sem departamento"} - Prazo {formatDateBr(item.due_date)} - {Math.round(item.progress_percent)}%
                     </div>
                   </div>
                 ))
@@ -344,7 +356,7 @@ export function LmsAdminDashboardClient({ data }: { data: LmsAdminDashboardData 
               {data.recentAssignments.map((row) => (
                 <div key={row.id} className="rounded-2xl border border-slate-100 p-4">
                   <div className="text-sm font-semibold text-slate-900">{row.course_title ?? row.learning_path_title ?? "Atribuicao"}</div>
-                  <div className="mt-1 text-xs text-slate-500">{row.target_label ?? row.target_id} - {row.assigned_at.slice(0, 10)}</div>
+                  <div className="mt-1 text-xs text-slate-500">{row.target_label ?? row.target_id} - {formatDateBr(row.assigned_at)}</div>
                 </div>
               ))}
             </div>
