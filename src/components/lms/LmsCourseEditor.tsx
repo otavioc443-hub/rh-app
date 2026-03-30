@@ -24,6 +24,21 @@ type EditorData = {
 type EditorStep = "identity" | "structure" | "publication" | "review";
 type PreviewMode = "catalog" | "journey" | "lesson";
 
+function summarizeVersionPayload(payload: Record<string, unknown>) {
+  const modules = Array.isArray(payload.modules) ? payload.modules : [];
+  const lessons = modules.reduce((sum, module) => {
+    if (!module || typeof module !== "object" || !Array.isArray((module as { lessons?: unknown[] }).lessons)) return sum;
+    return sum + (((module as { lessons?: unknown[] }).lessons ?? []).length || 0);
+  }, 0);
+  return {
+    title: typeof payload.title === "string" ? payload.title : "Sem titulo",
+    status: typeof payload.status === "string" ? payload.status : "draft",
+    category: typeof payload.category === "string" ? payload.category : "",
+    modules: modules.length,
+    lessons,
+  };
+}
+
 const steps: Array<{ id: EditorStep; title: string; subtitle: string }> = [
   { id: "identity", title: "Identidade", subtitle: "Nome, objetivo e resumo" },
   { id: "structure", title: "Conteudo", subtitle: "Fases, aulas e avaliacao" },
@@ -536,6 +551,7 @@ export function LmsCourseEditor({
   const [draggingModuleIndex, setDraggingModuleIndex] = useState<number | null>(null);
   const [draggingLessonIndex, setDraggingLessonIndex] = useState<{ moduleIndex: number; lessonIndex: number } | null>(null);
   const [restoringVersionId, setRestoringVersionId] = useState<string | null>(null);
+  const [compareVersionId, setCompareVersionId] = useState<string | null>(null);
   const [previewExpandedModuleId, setPreviewExpandedModuleId] = useState<string | null>("preview-module-0");
   const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hydratedRef = useRef(false);
@@ -763,6 +779,18 @@ export function LmsCourseEditor({
   ];
   const pendingChecklistCount = publicationChecklist.filter((item) => !item.done).length;
   const completedChecklistCount = publicationChecklist.length - pendingChecklistCount;
+  const comparedVersion = versions.find((version) => version.id === compareVersionId) ?? null;
+  const comparedSummary = comparedVersion ? summarizeVersionPayload(comparedVersion.payload_json) : null;
+  const currentSummary = useMemo(
+    () => ({
+      title: form.title || "Sem titulo",
+      status: form.status,
+      category: form.category || "",
+      modules: form.modules.length,
+      lessons: totalLessons,
+    }),
+    [form.category, form.modules.length, form.status, form.title, totalLessons],
+  );
 
   function patchModule(index: number, updater: (value: LmsCourseEditorPayload["modules"][number]) => LmsCourseEditorPayload["modules"][number]) {
     setForm((current) => ({
@@ -2765,6 +2793,13 @@ export function LmsCourseEditor({
                         <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-600">{version.snapshot_source}</span>
                         <button
                           type="button"
+                          onClick={() => setCompareVersionId((current) => (current === version.id ? null : version.id))}
+                          className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700"
+                        >
+                          {compareVersionId === version.id ? "Ocultar comparacao" : "Comparar"}
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => void handleRestoreVersion(version.id)}
                           disabled={restoringVersionId === version.id}
                           className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700 disabled:opacity-60"
@@ -2781,6 +2816,32 @@ export function LmsCourseEditor({
                 </div>
               )}
             </div>
+            {comparedSummary ? (
+              <div className="mt-5 rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+                <div className="text-sm font-semibold text-slate-950">Comparacao rapida com a versao selecionada</div>
+                <div className="mt-1 text-sm text-slate-500">Use este bloco para entender se a versao anterior estava mais enxuta, mais completa ou apenas em outro estagio de publicacao.</div>
+                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Versao atual</div>
+                    <div className="mt-3 space-y-2 text-sm text-slate-700">
+                      <div><span className="font-semibold text-slate-950">Titulo:</span> {currentSummary.title}</div>
+                      <div><span className="font-semibold text-slate-950">Status:</span> {currentSummary.status}</div>
+                      <div><span className="font-semibold text-slate-950">Categoria:</span> {currentSummary.category || "Nao definida"}</div>
+                      <div><span className="font-semibold text-slate-950">Estrutura:</span> {currentSummary.modules} fases e {currentSummary.lessons} aulas</div>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Versao selecionada</div>
+                    <div className="mt-3 space-y-2 text-sm text-slate-700">
+                      <div><span className="font-semibold text-slate-950">Titulo:</span> {comparedSummary.title}</div>
+                      <div><span className="font-semibold text-slate-950">Status:</span> {comparedSummary.status}</div>
+                      <div><span className="font-semibold text-slate-950">Categoria:</span> {comparedSummary.category || "Nao definida"}</div>
+                      <div><span className="font-semibold text-slate-950">Estrutura:</span> {comparedSummary.modules} fases e {comparedSummary.lessons} aulas</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </section>
         ) : null}
 

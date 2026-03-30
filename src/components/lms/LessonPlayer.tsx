@@ -86,6 +86,26 @@ export function LessonPlayer({
         </div>
       </div>
 
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Formato</div>
+          <div className="mt-2 text-sm font-semibold text-slate-950">{lessonTypeLabel(lesson.lesson_type)}</div>
+          <div className="mt-1 text-sm text-slate-600">Escolha o ritmo ideal para consumir este conteudo.</div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Como concluir</div>
+          <div className="mt-2 text-sm font-semibold text-slate-950">
+            {lesson.lesson_type === "video" ? "Assistir ate o final" : lesson.lesson_type === "avaliacao" ? "Responder o questionario" : "Consumir o material e concluir"}
+          </div>
+          <div className="mt-1 text-sm text-slate-600">Voce pode marcar manualmente quando terminar esta etapa.</div>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Proximo passo</div>
+          <div className="mt-2 text-sm font-semibold text-slate-950">{nextLessonHref ? "A trilha continua apos esta aula" : "Esta e a ultima etapa desta sequencia"}</div>
+          <div className="mt-1 text-sm text-slate-600">Assim fica mais facil manter o ritmo e concluir a jornada.</div>
+        </div>
+      </div>
+
       {isVideo && resolvedUrl ? (
         <div className="space-y-3">
           <video controls className="aspect-video w-full rounded-3xl bg-slate-900" src={resolvedUrl} onEnded={() => void handleAutoComplete()} />

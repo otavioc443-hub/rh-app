@@ -17,13 +17,13 @@ function actionLabel(action: string) {
     case "course_archived":
       return "Curso arquivado";
     case "course_version_restored":
-      return "Versão restaurada";
+      return "Versao restaurada";
     case "question_bank_created":
       return "Pergunta adicionada ao banco";
     case "question_bank_deleted":
       return "Pergunta removida do banco";
     case "onboarding_assignments_generated":
-      return "Atribuições de onboarding geradas";
+      return "Atribuicoes de onboarding geradas";
     default:
       return action;
   }
@@ -34,20 +34,20 @@ export function LmsGovernanceClient({ data }: { data: LmsGovernanceData }) {
     <div className="space-y-6">
       <PageHeader
         icon={<span className="text-xl font-bold">LMS</span>}
-        title="Governança LMS"
-        subtitle="Acompanhe automações, rastreabilidade operacional e mudanças relevantes da autoria."
+        title="Governanca LMS"
+        subtitle="Acompanhe automacoes, rastreabilidade operacional e mudancas relevantes da autoria."
       />
 
       <section className="grid gap-4 xl:grid-cols-[1.1fr,0.9fr]">
         <div className="rounded-[30px] border border-slate-200 bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_100%)] p-6 text-white shadow-sm">
           <div className="text-xs font-semibold uppercase tracking-[0.22em] text-white/60">Leitura operacional</div>
-          <h2 className="mt-3 text-2xl font-semibold">O LMS está pronto para sustentar criação, recorrência e comunicação.</h2>
+          <h2 className="mt-3 text-2xl font-semibold">O LMS esta pronto para sustentar criacao, recorrencia e comunicacao.</h2>
           <p className="mt-3 max-w-2xl text-sm leading-7 text-white/75">
-            Use esta visão para conferir rapidamente se os gatilhos críticos estão ativos e se as trilhas de auditoria já registram a movimentação do módulo.
+            Use esta visao para conferir rapidamente se os gatilhos criticos estao ativos e se as trilhas de auditoria ja registram a movimentacao do modulo.
           </p>
         </div>
         <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Automações críticas</div>
+          <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Automacoes criticas</div>
           <div className="mt-4 space-y-3">
             {data.automationStatus.map((item) => (
               <div key={item.key} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
@@ -69,7 +69,7 @@ export function LmsGovernanceClient({ data }: { data: LmsGovernanceData }) {
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Rastreabilidade recente</div>
-            <h2 className="mt-2 text-xl font-semibold text-slate-950">Últimos eventos relevantes do LMS</h2>
+            <h2 className="mt-2 text-xl font-semibold text-slate-950">Ultimos eventos relevantes do LMS</h2>
           </div>
           <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white">
             <ShieldCheck size={18} />
@@ -99,7 +99,7 @@ export function LmsGovernanceClient({ data }: { data: LmsGovernanceData }) {
             ))
           ) : (
             <div className="rounded-[22px] border border-dashed border-slate-200 bg-slate-50 px-4 py-10 text-center text-sm text-slate-500">
-              Ainda não há eventos recentes suficientes para exibir nesta linha do tempo.
+              Ainda nao ha eventos recentes suficientes para exibir nesta linha do tempo.
             </div>
           )}
         </div>

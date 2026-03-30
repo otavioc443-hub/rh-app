@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ChevronDown, Lock } from "lucide-react";
 import type { LmsCourseDetail } from "@/lib/lms/types";
+import { ProgressBar } from "@/components/lms/ProgressBar";
 
 function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -29,6 +30,9 @@ export function ModuleAccordion({
     <div className="space-y-4">
       {detail.modules.map((module) => {
         const open = expandedModuleId === module.id;
+        const moduleTotal = module.lessons.length;
+        const moduleCompleted = module.lessons.filter((lesson) => completedLessonIds?.has(lesson.id)).length;
+        const moduleProgress = moduleTotal ? Math.round((moduleCompleted / moduleTotal) * 100) : 0;
         return (
           <div key={module.id} className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
             <button type="button" className="flex w-full items-center justify-between px-5 py-4 text-left" onClick={() => onToggle(module.id)}>
@@ -36,6 +40,13 @@ export function ModuleAccordion({
                 <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Fase {module.sort_order}</div>
                 <h3 className="mt-1 text-lg font-semibold text-slate-900">{module.title}</h3>
                 {module.description ? <p className="mt-1 text-sm text-slate-500">{module.description}</p> : null}
+                <div className="mt-3 max-w-md">
+                  <div className="mb-2 flex items-center justify-between text-xs text-slate-500">
+                    <span>{moduleCompleted}/{moduleTotal} aula(s) concluida(s)</span>
+                    <span>{moduleProgress}%</span>
+                  </div>
+                  <ProgressBar value={moduleProgress} />
+                </div>
               </div>
               <ChevronDown size={18} className={cx("transition-transform", open && "rotate-180")} />
             </button>
