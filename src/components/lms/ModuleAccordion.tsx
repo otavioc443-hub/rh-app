@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, Lock } from "lucide-react";
+import { ChevronDown, Lock, PlayCircle } from "lucide-react";
 import type { LmsCourseDetail } from "@/lib/lms/types";
-import { ProgressBar } from "@/components/lms/ProgressBar";
 
 function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -32,49 +31,56 @@ export function ModuleAccordion({
         const open = expandedModuleId === module.id;
         const moduleTotal = module.lessons.length;
         const moduleCompleted = module.lessons.filter((lesson) => completedLessonIds?.has(lesson.id)).length;
-        const moduleProgress = moduleTotal ? Math.round((moduleCompleted / moduleTotal) * 100) : 0;
         return (
-          <div key={module.id} className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
-            <button type="button" className="flex w-full items-center justify-between px-5 py-4 text-left" onClick={() => onToggle(module.id)}>
+          <div key={module.id} className="overflow-hidden rounded-[28px] border border-slate-800 bg-[#171717] text-white shadow-sm">
+            <button type="button" className="flex w-full items-center justify-between px-5 py-5 text-left" onClick={() => onToggle(module.id)}>
               <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Fase {module.sort_order}</div>
-                <h3 className="mt-1 text-lg font-semibold text-slate-900">{module.title}</h3>
-                {module.description ? <p className="mt-1 text-sm text-slate-500">{module.description}</p> : null}
-                <div className="mt-3 max-w-md">
-                  <div className="mb-2 flex items-center justify-between text-xs text-slate-500">
-                    <span>{moduleCompleted}/{moduleTotal} aula(s) concluida(s)</span>
-                    <span>{moduleProgress}%</span>
-                  </div>
-                  <ProgressBar value={moduleProgress} />
-                </div>
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/45">Fase {module.sort_order}</div>
+                <h3 className="mt-1 text-xl font-semibold text-white">{module.title}</h3>
+                {module.description ? <p className="mt-1 text-sm text-white/60">{module.description}</p> : null}
               </div>
-              <ChevronDown size={18} className={cx("transition-transform", open && "rotate-180")} />
+              <div className="flex items-center gap-4">
+                <span className="rounded-full bg-white/5 px-3 py-1 text-sm text-white/60">{moduleCompleted}/{moduleTotal}</span>
+                <ChevronDown size={18} className={cx("transition-transform text-white/70", open && "rotate-180")} />
+              </div>
             </button>
             {open ? (
-              <div className="border-t border-slate-100 px-5 py-4">
+              <div className="border-t border-slate-800 px-5 py-4">
                 <div className="space-y-3">
                   {module.lessons.map((lesson) => {
                     const locked = isLessonLocked?.(lesson.id) ?? false;
                     const selected = currentLessonId === lesson.id;
+                    const completed = completedLessonIds?.has(lesson.id);
                     const className = cx(
-                      "flex items-center justify-between rounded-2xl border px-4 py-3",
-                      selected ? "border-slate-900 bg-slate-50" : "border-slate-100",
-                      lessonHrefBuilder && !locked && "transition hover:border-slate-300 hover:bg-slate-50",
+                      "flex items-center justify-between rounded-2xl border px-4 py-4",
+                      selected ? "border-white/15 bg-white/10 shadow-[0_0_0_1px_rgba(255,255,255,0.04)]" : "border-slate-800 bg-transparent",
+                      lessonHrefBuilder && !locked && "transition hover:border-white/15 hover:bg-white/5",
                     );
 
                     const content = (
                       <>
-                        <div>
-                          <div className="text-sm font-semibold text-slate-900">{lesson.title}</div>
-                          <div className="text-xs capitalize text-slate-500">
-                            {lesson.lesson_type} / {lesson.duration_minutes ?? 0} min
+                        <div className="flex items-start gap-3">
+                          <span
+                            className={cx(
+                              "mt-0.5 inline-flex h-9 w-9 items-center justify-center rounded-full border text-xs font-semibold",
+                              selected ? "border-white/20 bg-white/10 text-white" : "border-slate-700 text-white/55",
+                            )}
+                          >
+                            {completed ? "✓" : module.lessons.findIndex((item) => item.id === lesson.id) + 1}
+                          </span>
+                          <div>
+                            <div className="text-sm font-semibold text-white">{lesson.title}</div>
+                            <div className="mt-1 text-xs capitalize text-white/50">
+                              {lesson.lesson_type} • {lesson.duration_minutes ?? 0} min
+                            </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          {completedLessonIds?.has(lesson.id) ? (
-                            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">Concluida</span>
+                          {selected ? <PlayCircle size={16} className="text-white/75" /> : null}
+                          {completed ? (
+                            <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-300">Concluida</span>
                           ) : null}
-                          {locked ? <Lock size={16} className="text-slate-400" /> : null}
+                          {locked ? <Lock size={16} className="text-white/35" /> : null}
                         </div>
                       </>
                     );

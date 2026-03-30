@@ -68,48 +68,40 @@ export function LessonPlayer({
   }
 
   return (
-    <div className="space-y-5 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="space-y-5 rounded-3xl border border-slate-800 bg-[#171717] p-6 text-white shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">{lessonTypeLabel(lesson.lesson_type)}</p>
-          <h2 className="mt-2 text-2xl font-bold text-slate-900">{lesson.title}</h2>
-          {lesson.description ? <p className="mt-3 max-w-3xl text-sm leading-7 text-slate-600">{lesson.description}</p> : null}
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/45">{lessonTypeLabel(lesson.lesson_type)}</p>
+          <h2 className="mt-2 text-2xl font-bold text-white">{lesson.title}</h2>
+          {lesson.description ? <p className="mt-3 max-w-3xl text-sm leading-7 text-white/65">{lesson.description}</p> : null}
         </div>
         <div className="flex flex-wrap gap-2">
-          <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">
+          <span className="rounded-full bg-white/5 px-3 py-2 text-xs font-semibold text-white/75">
             <span className="inline-flex items-center gap-2">
               <Clock3 size={14} />
               {lesson.duration_minutes ?? 0} min
             </span>
           </span>
-          {lesson.is_required ? <span className="rounded-full bg-slate-900 px-3 py-2 text-xs font-semibold text-white">Obrigatoria</span> : null}
+          {lesson.is_required ? <span className="rounded-full bg-white px-3 py-2 text-xs font-semibold text-slate-950">Obrigatoria</span> : null}
         </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Formato</div>
-          <div className="mt-2 text-sm font-semibold text-slate-950">{lessonTypeLabel(lesson.lesson_type)}</div>
-          <div className="mt-1 text-sm text-slate-600">Escolha o ritmo ideal para consumir este conteudo.</div>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Como concluir</div>
-          <div className="mt-2 text-sm font-semibold text-slate-950">
-            {lesson.lesson_type === "video" ? "Assistir ate o final" : lesson.lesson_type === "avaliacao" ? "Responder o questionario" : "Consumir o material e concluir"}
-          </div>
-          <div className="mt-1 text-sm text-slate-600">Voce pode marcar manualmente quando terminar esta etapa.</div>
-        </div>
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Proximo passo</div>
-          <div className="mt-2 text-sm font-semibold text-slate-950">{nextLessonHref ? "A trilha continua apos esta aula" : "Esta e a ultima etapa desta sequencia"}</div>
-          <div className="mt-1 text-sm text-slate-600">Assim fica mais facil manter o ritmo e concluir a jornada.</div>
-        </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+        <div className="h-full w-1/3 rounded-full bg-white/75" />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 border-y border-slate-800 py-3 text-xs text-white/60">
+        <span className="rounded-full bg-white/5 px-3 py-2">{lessonTypeLabel(lesson.lesson_type)}</span>
+        <span className="rounded-full bg-white/5 px-3 py-2">
+          {lesson.lesson_type === "video" ? "Assistir ate o final" : lesson.lesson_type === "avaliacao" ? "Responder o questionario" : "Consumir e concluir"}
+        </span>
+        {nextLessonHref ? <span className="rounded-full bg-white/5 px-3 py-2">Ha uma proxima aula</span> : null}
       </div>
 
       {isVideo && resolvedUrl ? (
         <div className="space-y-3">
           <video controls className="aspect-video w-full rounded-3xl bg-slate-900" src={resolvedUrl} onEnded={() => void handleAutoComplete()} />
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+          <div className="rounded-2xl border border-slate-800 bg-white/5 px-4 py-3 text-sm text-white/65">
             Ao assistir o video ate o final, a aula sera marcada como concluida automaticamente.
           </div>
         </div>
@@ -117,8 +109,8 @@ export function LessonPlayer({
 
       {isPdf && resolvedUrl ? (
         <div className="space-y-3">
-          <iframe src={resolvedUrl} title={lesson.title} className="h-[620px] w-full rounded-3xl border border-slate-200" />
-          <a href={resolvedUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800">
+          <iframe src={resolvedUrl} title={lesson.title} className="h-[620px] w-full rounded-3xl border border-slate-800 bg-white" />
+          <a href={resolvedUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 px-4 py-2 text-sm font-semibold text-white">
             <FileDown size={16} />
             Baixar PDF
           </a>
@@ -126,17 +118,17 @@ export function LessonPlayer({
       ) : null}
 
       {isLink && resolvedUrl ? (
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+        <div className="rounded-3xl border border-slate-800 bg-white/5 p-5">
           <div className="flex items-start gap-3">
-            <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-slate-700">
+            <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-white">
               <FileText size={18} />
             </span>
             <div>
-              <div className="text-sm font-semibold text-slate-900">Material da aula</div>
-              <div className="mt-1 text-sm text-slate-600">Abra o arquivo ou link principal para consumir este conteudo.</div>
+              <div className="text-sm font-semibold text-white">Material da aula</div>
+              <div className="mt-1 text-sm text-white/65">Abra o arquivo ou link principal para consumir este conteudo.</div>
             </div>
           </div>
-          <a href={resolvedUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800">
+          <a href={resolvedUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-slate-700 bg-transparent px-4 py-2 text-sm font-semibold text-white">
             <FileDown size={16} />
             Abrir material
           </a>
@@ -144,32 +136,32 @@ export function LessonPlayer({
       ) : null}
 
       {lesson.lesson_type === "texto" && lesson.content_text ? (
-        <article className="prose prose-slate max-w-none rounded-3xl border border-slate-100 bg-slate-50 p-5">
+        <article className="prose prose-invert max-w-none rounded-3xl border border-slate-800 bg-white/5 p-5">
           <div dangerouslySetInnerHTML={{ __html: lesson.content_text }} />
         </article>
       ) : null}
 
       {lesson.lesson_type === "avaliacao" && !lesson.content_url && !lesson.content_text ? (
-        <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-600">
+        <div className="rounded-3xl border border-dashed border-slate-700 bg-white/5 p-5 text-sm text-white/65">
           Esta etapa funciona como avaliacao. O questionario correspondente aparece logo abaixo quando estiver configurado.
         </div>
       ) : null}
 
       {!resolvedUrl && !lesson.content_text && lesson.lesson_type !== "avaliacao" ? (
-        <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-600">
+        <div className="rounded-3xl border border-dashed border-slate-700 bg-white/5 p-5 text-sm text-white/65">
           O conteudo principal desta aula ainda nao foi configurado pelo RH.
         </div>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-3">
         {onComplete ? (
-          <button type="button" onClick={() => void onComplete()} disabled={completing} className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
+          <button type="button" onClick={() => void onComplete()} disabled={completing} className="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-60">
             <PlayCircle size={16} />
             {completing ? "Salvando..." : "Marcar como concluida"}
           </button>
         ) : null}
         {nextLessonHref ? (
-          <Link href={nextLessonHref} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800">
+          <Link href={nextLessonHref} className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 px-4 py-2 text-sm font-semibold text-white">
             Proxima aula
             <ArrowRight size={16} />
           </Link>

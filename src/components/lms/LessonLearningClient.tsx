@@ -39,7 +39,7 @@ export function LessonLearningClient({
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
+    <div className="grid gap-6 xl:grid-cols-[1.38fr_0.62fr]">
       <div className="space-y-6">
         <LessonPlayer
           lesson={currentLesson}
@@ -50,14 +50,16 @@ export function LessonLearningClient({
         {quizPayload ? <QuizForm payload={quizPayload} /> : null}
         <LessonDiscussionPanel courseId={courseId} lessonId={currentLesson.id} initialItems={discussions} />
       </div>
-      <div className="space-y-4">
-        <div className="rounded-3xl border border-slate-200 bg-white p-5 text-sm text-slate-600 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Resumo da jornada</div>
-          <div className="mt-2 text-lg font-semibold text-slate-900">{Math.round(progressPercent)}% do curso concluido</div>
-          <div className="mt-2 space-y-1 text-sm text-slate-600">
+      <div className="space-y-4 xl:sticky xl:top-24 xl:self-start">
+        <div className="rounded-3xl border border-slate-800 bg-[#171717] p-5 text-sm text-white/70 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">Agora</div>
+          <div className="mt-2 text-lg font-semibold text-white">{currentLesson.title}</div>
+          <div className="mt-3 space-y-1 text-sm text-white/65">
+            <div>Progresso total: {Math.round(progressPercent)}%</div>
             <div>Fase atual: {currentModule?.title ?? "Etapa do treinamento"}</div>
-            <div>Aulas obrigatorias: {summary.requiredLessons}</div>
-            <div>Carga estimada: {summary.totalMinutes} min</div>
+            <div>
+              {summary.requiredLessons} aulas obrigatorias • {summary.totalMinutes} min
+            </div>
           </div>
         </div>
         <ModuleAccordion

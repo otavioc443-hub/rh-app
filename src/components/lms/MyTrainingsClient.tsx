@@ -20,41 +20,13 @@ export function MyTrainingsClient({ trainings }: { trainings: LmsMyTrainingCard[
 
   return (
     <div className="space-y-6">
-      <PageHeader icon={<span className="text-xl font-bold">LMS</span>} title="Meus treinamentos" subtitle="Acompanhe prazos, consumo e certificados do seu desenvolvimento corporativo." />
-      <section className="grid gap-4 xl:grid-cols-[1.2fr,0.8fr]">
-        <div className="overflow-hidden rounded-[30px] border border-slate-200 bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_100%)] p-6 text-white shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-white/60">Sua jornada no LMS</div>
-              <h2 className="mt-3 text-2xl font-semibold">Retome com clareza e acompanhe seus marcos.</h2>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/75">
-                Aqui voce encontra os treinamentos em andamento, os prazos que pedem atencao e os cursos ja concluidos com certificado.
-              </p>
-            </div>
-            <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
-              <GraduationCap size={20} />
-            </span>
-          </div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-white/60">Em andamento</div>
-              <div className="mt-2 text-2xl font-semibold">{inProgress}</div>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-white/60">Concluidos</div>
-              <div className="mt-2 text-2xl font-semibold">{completed}</div>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-4">
-              <div className="text-xs uppercase tracking-[0.18em] text-white/60">Pendencias</div>
-              <div className="mt-2 text-2xl font-semibold">{overdue}</div>
-            </div>
-          </div>
-        </div>
+      <PageHeader icon={<span className="text-xl font-bold">LMS</span>} title="Meus treinamentos" subtitle="Continue estudando com foco no que importa agora." />
+      <section className="grid gap-4 xl:grid-cols-[0.9fr,1.1fr]">
         <div className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Acao recomendada</div>
-              <h2 className="mt-2 text-xl font-semibold text-slate-950">Continue de onde voce parou</h2>
+              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Continue assistindo</div>
+              <h2 className="mt-2 text-xl font-semibold text-slate-950">Retome sua proxima aula</h2>
             </div>
             <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white">
               <Sparkles size={18} />
@@ -87,6 +59,34 @@ export function MyTrainingsClient({ trainings }: { trainings: LmsMyTrainingCard[
             </div>
           )}
         </div>
+        <div className="overflow-hidden rounded-[30px] border border-slate-800 bg-[linear-gradient(135deg,#111111_0%,#1f1f1f_100%)] p-6 text-white shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-white/50">Sua jornada no LMS</div>
+              <h2 className="mt-3 text-2xl font-semibold">Pouco ruido, foco no que importa.</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/70">
+                Acompanhe sua fila de cursos sem excesso de informacao: avance, conclua e volte quando quiser.
+              </p>
+            </div>
+            <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10">
+              <GraduationCap size={20} />
+            </span>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-white/55">Em andamento</div>
+              <div className="mt-2 text-2xl font-semibold">{inProgress}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-white/55">Concluidos</div>
+              <div className="mt-2 text-2xl font-semibold">{completed}</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-4">
+              <div className="text-xs uppercase tracking-[0.18em] text-white/55">Pendencias</div>
+              <div className="mt-2 text-2xl font-semibold">{overdue}</div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <LMSFilters search={search} onSearchChange={setSearch} status={status} onStatusChange={setStatus} />
@@ -96,11 +96,22 @@ export function MyTrainingsClient({ trainings }: { trainings: LmsMyTrainingCard[
         </div>
       ) : null}
       {items.length ? (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {items.map((item) => (
-            <CourseCard key={item.course.id} item={item} />
-          ))}
-        </div>
+        <section className="space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Catalogo pessoal</div>
+              <h2 className="mt-1 text-2xl font-semibold text-slate-950">Cursos atribuidos a voce</h2>
+            </div>
+            <Link href="/lms/minha-jornada" className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700">
+              Ver jornada completa
+            </Link>
+          </div>
+          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {items.map((item) => (
+              <CourseCard key={item.course.id} item={item} />
+            ))}
+          </div>
+        </section>
       ) : (
         <EmptyState title="Nenhum treinamento encontrado" description="Ajuste os filtros ou aguarde novas atribuicoes do RH." />
       )}
