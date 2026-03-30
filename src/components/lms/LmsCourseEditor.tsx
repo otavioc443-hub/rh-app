@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, ChevronLeft, ChevronRight, Eye, FileText, GraduationCap, ImagePlus, Plus, Sparkles, Trash2, Video } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Eye, FileText, GraduationCap, ImagePlus, Plus, Sparkles, Trash2, Video } from "lucide-react";
 import { CourseHeader } from "@/components/lms/CourseHeader";
 import { FileUploader } from "@/components/lms/FileUploader";
 import { LessonPlayer } from "@/components/lms/LessonPlayer";
@@ -29,6 +29,47 @@ const steps: Array<{ id: EditorStep; title: string; subtitle: string }> = [
   { id: "review", title: "Revisao final", subtitle: "Checklist e publicacao" },
 ];
 
+const stepExperienceGuide: Record<
+  EditorStep,
+  { eyebrow: string; title: string; description: string; outcomes: string[] }
+> = {
+  identity: {
+    eyebrow: "Primeiro passo",
+    title: "Defina a promessa do treinamento",
+    description: "Aqui o RH decide como o curso vai ser percebido no catalogo e qual ganho o colaborador deve enxergar logo de cara.",
+    outcomes: ["Nome claro", "Resumo objetivo", "Categoria e carga horaria"],
+  },
+  structure: {
+    eyebrow: "Montagem da jornada",
+    title: "Organize fases, aulas e checkpoints",
+    description: "Essa etapa deve parecer um mapa de aprendizagem: o que vem primeiro, o que valida conhecimento e qual e o proximo passo natural.",
+    outcomes: ["Fases em ordem", "Aulas com formato certo", "Avaliacao quando fizer sentido"],
+  },
+  publication: {
+    eyebrow: "Ajuste final de exibicao",
+    title: "Prepare a apresentacao e as regras do curso",
+    description: "A publicacao fica depois da estrutura para que voce pense em identidade visual, acesso e criterios de aprovacao so quando o curso ja estiver montado.",
+    outcomes: ["Status e visibilidade", "Imagem do card e banner", "Regras de obrigatoriedade e aprovacao"],
+  },
+  review: {
+    eyebrow: "Decisao final",
+    title: "Revise a experiencia inteira antes de salvar",
+    description: "Use esta etapa como uma aprovacao final: confirme clareza, jornada, midias e se faz sentido publicar agora ou manter em rascunho.",
+    outcomes: ["Checklist completo", "Jornada revisada", "Decisao segura de publicar ou salvar"],
+  },
+};
+
+const courseStatusOptions = [
+  { value: "draft", label: "Rascunho", description: "Ainda em construcao. Nao aparece para o colaborador." },
+  { value: "published", label: "Publicado", description: "Pronto para aparecer e ser atribuido." },
+  { value: "archived", label: "Arquivado", description: "Fica guardado e nao recebe novas atribuicoes." },
+] as const;
+
+const courseVisibilityOptions = [
+  { value: "publico_interno", label: "Publico interno", description: "Disponivel no catalogo interno." },
+  { value: "restrito", label: "Restrito", description: "Exibicao controlada por contexto de atribuicao." },
+] as const;
+
 const questionTypeLabels: Record<LmsQuizQuestionType, string> = {
   single_choice: "Objetiva com uma resposta",
   multiple_choice: "Multipla escolha",
@@ -37,6 +78,19 @@ const questionTypeLabels: Record<LmsQuizQuestionType, string> = {
   essay: "Discursiva",
   image_choice: "Escolha por imagem",
 };
+
+const lessonTypeOptions: Array<{
+  value: LmsCourseEditorPayload["modules"][number]["lessons"][number]["lesson_type"];
+  label: string;
+  description: string;
+}> = [
+  { value: "texto", label: "Texto", description: "Leitura guiada direto no portal." },
+  { value: "video", label: "Video", description: "Aula com link externo ou arquivo hospedado." },
+  { value: "pdf", label: "PDF", description: "Norma, manual, politica ou leitura formal." },
+  { value: "arquivo", label: "Arquivo", description: "Planilha, documento, imagem ou anexo." },
+  { value: "link", label: "Link", description: "Acesso para ferramenta, formulario ou pagina externa." },
+  { value: "avaliacao", label: "Avaliacao", description: "Valide a aprendizagem com perguntas e nota." },
+];
 
 const lessonTemplates = [
   {
@@ -484,6 +538,7 @@ export function LmsCourseEditor({
 
   const selectedModule = form.modules[selectedModuleIndex] ?? form.modules[0];
   const selectedLesson = selectedModule?.lessons[selectedLessonIndex] ?? selectedModule?.lessons[0];
+  const currentStepGuide = stepExperienceGuide[currentStep];
   const draftStorageKey = useMemo(() => `lms-course-editor:${courseId ?? "new"}`, [courseId]);
   const totalLessons = useMemo(() => form.modules.reduce((sum, module) => sum + module.lessons.length, 0), [form.modules]);
   const evaluationLessons = useMemo(
@@ -721,6 +776,37 @@ export function LmsCourseEditor({
             : lesson.content_text,
       quiz: nextType === "avaliacao" ? lesson.quiz ?? createLessonQuiz(lesson.title || "Avaliacao") : null,
     }));
+  }
+
+  function moveModule(moduleIndex: number, direction: "up" | "down") {
+    setForm((current) => {
+      const targetIndex = direction === "up" ? moduleIndex - 1 : moduleIndex + 1;
+      if (targetIndex < 0 || targetIndex >= current.modules.length) return current;
+      const modules = [...current.modules];
+      const [moved] = modules.splice(moduleIndex, 1);
+      modules.splice(targetIndex, 0, moved);
+      return {
+        ...current,
+        modules: modules.map((module, index) => ({ ...module, sort_order: index + 1 })),
+      };
+    });
+    setSelectedModuleIndex((current) => (direction === "up" ? Math.max(0, current - 1) : current + 1));
+    setSelectedLessonIndex(0);
+  }
+
+  function moveLesson(moduleIndex: number, lessonIndex: number, direction: "up" | "down") {
+    patchModule(moduleIndex, (current) => {
+      const targetIndex = direction === "up" ? lessonIndex - 1 : lessonIndex + 1;
+      if (targetIndex < 0 || targetIndex >= current.lessons.length) return current;
+      const lessons = [...current.lessons];
+      const [moved] = lessons.splice(lessonIndex, 1);
+      lessons.splice(targetIndex, 0, moved);
+      return {
+        ...current,
+        lessons: lessons.map((lesson, index) => ({ ...lesson, sort_order: index + 1 })),
+      };
+    });
+    setSelectedLessonIndex((current) => (direction === "up" ? Math.max(0, current - 1) : current + 1));
   }
 
   async function handleSave() {
@@ -1072,33 +1158,48 @@ export function LmsCourseEditor({
                 </button>
               </div>
 
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <FieldGroup label="Tipo da pergunta" hint="Escolha o formato de resposta.">
-                  <select
-                    value={question.question_type}
-                    onChange={(event) =>
-                      patchLessonQuiz(selectedModuleIndex, selectedLessonIndex, (current) => ({
-                        ...current,
-                        questions: current.questions.map((item, index) =>
-                          index === questionIndex
-                            ? {
-                                ...createQuestion(questionIndex + 1, event.target.value as LmsQuizQuestionType),
-                                ...item,
-                                question_type: event.target.value as LmsQuizQuestionType,
-                                requires_manual_review: event.target.value === "essay",
-                              }
-                            : item,
-                        ),
-                      }))
-                    }
-                    className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900"
-                  >
-                    {Object.entries(questionTypeLabels).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+              <div className="mt-4 space-y-4">
+                <FieldGroup label="Tipo da pergunta" hint="Escolha o formato que melhor representa a experiencia de resposta.">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {Object.entries(questionTypeLabels).map(([value, label]) => {
+                      const active = question.question_type === value;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() =>
+                            patchLessonQuiz(selectedModuleIndex, selectedLessonIndex, (current) => ({
+                              ...current,
+                              questions: current.questions.map((item, index) =>
+                                index === questionIndex
+                                  ? {
+                                      ...createQuestion(questionIndex + 1, value as LmsQuizQuestionType),
+                                      ...item,
+                                      question_type: value as LmsQuizQuestionType,
+                                      requires_manual_review: value === "essay",
+                                    }
+                                  : item,
+                              ),
+                            }))
+                          }
+                          className={`rounded-2xl border px-4 py-4 text-left transition ${
+                            active ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-white"
+                          }`}
+                        >
+                          <div className="text-sm font-semibold">{label}</div>
+                          <div className={`mt-1 text-xs leading-5 ${active ? "text-white/70" : "text-slate-500"}`}>
+                            {value === "essay"
+                              ? "Resposta livre, com revisao manual."
+                              : value === "short_text"
+                                ? "Resposta curta com aceite automatico ou revisao."
+                                : value === "image_choice"
+                                  ? "Alternativas visuais com imagem."
+                                  : "Correcao automatica ao finalizar."}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </FieldGroup>
                 <FieldGroup label="Orientacao opcional" hint="Contexto adicional para ajudar na resposta.">
                   <input
@@ -1430,9 +1531,9 @@ export function LmsCourseEditor({
       <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h2 className="text-lg font-semibold text-slate-950">Conteudo do curso por fases</h2>
+            <h2 className="text-lg font-semibold text-slate-950">Desenhe a jornada de aprendizagem</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Estruture o treinamento em modulos curtos. A publicacao so aparece depois que a trilha estiver pronta.
+              Pense como o aluno: fase por fase, com objetivos claros, aulas curtas e checkpoints no momento certo.
             </p>
           </div>
           <button
@@ -1448,6 +1549,41 @@ export function LmsCourseEditor({
           </button>
         </div>
 
+        <div className="mt-5 rounded-[24px] border border-slate-200 bg-[linear-gradient(135deg,#f8fafc_0%,#eef2ff_100%)] p-5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Mapa da experiencia</div>
+              <div className="mt-1 text-xl font-semibold text-slate-950">{selectedModule?.title || "Nova fase"} • {selectedLesson?.title || "Nova aula"}</div>
+              <div className="mt-2 text-sm text-slate-600">
+                O criador organiza o curso em fases. O colaborador enxerga uma trilha simples, com proximo passo claro.
+              </div>
+            </div>
+            <div className="grid min-w-[260px] gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl bg-white/90 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Fases</div>
+                <div className="mt-1 text-lg font-semibold text-slate-950">{form.modules.length}</div>
+              </div>
+              <div className="rounded-2xl bg-white/90 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Aulas</div>
+                <div className="mt-1 text-lg font-semibold text-slate-950">{totalLessons}</div>
+              </div>
+              <div className="rounded-2xl bg-white/90 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Etapa atual</div>
+                <div className="mt-1 text-sm font-semibold text-slate-950">{selectedLesson?.lesson_type === "avaliacao" ? "Avaliacao" : selectedLesson?.lesson_type || "Texto"}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-3">
+          {stepExperienceGuide.structure.outcomes.map((item, index) => (
+            <div key={`${item}-${index}`} className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ponto de atencao {index + 1}</div>
+              <div className="mt-2 text-sm font-semibold text-slate-900">{item}</div>
+            </div>
+          ))}
+        </div>
+
         <div className="mt-5 grid gap-5 xl:grid-cols-[0.4fr,0.6fr]">
           <div className="space-y-3 rounded-[24px] border border-slate-200 bg-slate-50 p-4">
             {form.modules.map((module, moduleIndex) => (
@@ -1458,6 +1594,22 @@ export function LmsCourseEditor({
                     <div className="mt-1 truncate text-sm font-semibold text-slate-950">{module.title}</div>
                   </button>
                   <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => moveModule(moduleIndex, "up")}
+                      disabled={moduleIndex === 0}
+                      className="rounded-xl border border-slate-200 p-2 text-slate-500 disabled:opacity-40"
+                    >
+                      <ChevronUp size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => moveModule(moduleIndex, "down")}
+                      disabled={moduleIndex === form.modules.length - 1}
+                      className="rounded-xl border border-slate-200 p-2 text-slate-500 disabled:opacity-40"
+                    >
+                      <ChevronDown size={14} />
+                    </button>
                     <button
                       type="button"
                     onClick={() => {
@@ -1512,13 +1664,33 @@ export function LmsCourseEditor({
                 {moduleIndex === selectedModuleIndex ? (
                   <div className="mt-4 space-y-2 border-t border-slate-100 pt-4">
                     {module.lessons.map((lesson, lessonIndex) => (
-                      <button key={`${lesson.title}-${lessonIndex}`} type="button" onClick={() => setSelectedLessonIndex(lessonIndex)} className={`flex w-full items-center justify-between rounded-2xl px-3 py-3 text-left ${lessonIndex === selectedLessonIndex ? "bg-slate-900 text-white" : "bg-slate-50 text-slate-700"}`}>
-                        <div>
-                          <div className="text-sm font-semibold">{lesson.title}</div>
-                          <div className={`text-xs capitalize ${lessonIndex === selectedLessonIndex ? "text-white/70" : "text-slate-500"}`}>{lesson.lesson_type === "avaliacao" ? "avaliacao" : lesson.lesson_type}</div>
+                      <div key={`${lesson.title}-${lessonIndex}`} className={`rounded-2xl border px-3 py-3 transition ${lessonIndex === selectedLessonIndex ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300 hover:bg-white"}`}>
+                        <div className="flex items-center justify-between gap-3">
+                          <button type="button" onClick={() => setSelectedLessonIndex(lessonIndex)} className="min-w-0 flex-1 text-left">
+                            <div className="text-sm font-semibold">{lesson.title}</div>
+                            <div className={`text-xs capitalize ${lessonIndex === selectedLessonIndex ? "text-white/70" : "text-slate-500"}`}>{lesson.lesson_type === "avaliacao" ? "avaliacao" : lesson.lesson_type}</div>
+                          </button>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs font-semibold ${lessonIndex === selectedLessonIndex ? "text-white/70" : "text-slate-500"}`}>{lesson.duration_minutes ?? 0} min</span>
+                            <button
+                              type="button"
+                              onClick={() => moveLesson(moduleIndex, lessonIndex, "up")}
+                              disabled={lessonIndex === 0}
+                              className={`rounded-lg border p-1.5 ${lessonIndex === selectedLessonIndex ? "border-white/20 text-white/80" : "border-slate-200 text-slate-500"} disabled:opacity-40`}
+                            >
+                              <ChevronUp size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => moveLesson(moduleIndex, lessonIndex, "down")}
+                              disabled={lessonIndex === module.lessons.length - 1}
+                              className={`rounded-lg border p-1.5 ${lessonIndex === selectedLessonIndex ? "border-white/20 text-white/80" : "border-slate-200 text-slate-500"} disabled:opacity-40`}
+                            >
+                              <ChevronDown size={12} />
+                            </button>
+                          </div>
                         </div>
-                        <span className={`text-xs font-semibold ${lessonIndex === selectedLessonIndex ? "text-white/70" : "text-slate-500"}`}>{lesson.duration_minutes ?? 0} min</span>
-                      </button>
+                      </div>
                     ))}
                     <button
                       type="button"
@@ -1643,21 +1815,30 @@ export function LmsCourseEditor({
                 </FieldGroup>
               </div>
 
-              <div className="grid gap-4 md:grid-cols-3">
-                <FieldGroup label="Tipo de conteudo" hint="Cada tipo abre os campos corretos logo abaixo.">
-                  <select
-                    value={selectedLesson.lesson_type}
-                    onChange={(event) => updateLessonType(selectedModuleIndex, selectedLessonIndex, event.target.value as LmsCourseEditorPayload["modules"][number]["lessons"][number]["lesson_type"])}
-                    className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900"
-                  >
-                    <option value="texto">Texto</option>
-                    <option value="video">Video</option>
-                    <option value="pdf">PDF</option>
-                    <option value="arquivo">Arquivo</option>
-                    <option value="link">Link</option>
-                    <option value="avaliacao">Avaliacao</option>
-                  </select>
+              <div className="space-y-4">
+                <FieldGroup label="Formato da experiencia" hint="Escolha como o colaborador vai consumir esta aula.">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    {lessonTypeOptions.map((option) => {
+                      const active = selectedLesson.lesson_type === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => updateLessonType(selectedModuleIndex, selectedLessonIndex, option.value)}
+                          className={`rounded-2xl border px-4 py-4 text-left transition ${
+                            active ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                          }`}
+                        >
+                          <div className="text-sm font-semibold">{option.label}</div>
+                          <div className={`mt-1 text-xs leading-5 ${active ? "text-white/70" : "text-slate-500"}`}>{option.description}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </FieldGroup>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
                 <FieldGroup label="Duracao estimada" hint="Tempo medio, em minutos.">
                   <input
                     type="number"
@@ -1854,12 +2035,58 @@ export function LmsCourseEditor({
   }
 
   function renderIdentityStep() {
+    const identityChecklist = stepChecklists.find((group) => group.title === "Identidade");
+
     return (
       <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-slate-950">Identidade do curso</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Aqui voce define como o treinamento sera entendido no catalogo e na pagina do colaborador.
-        </p>
+        <div className="grid gap-5 xl:grid-cols-[0.48fr,0.28fr,0.24fr]">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">Identidade do curso</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Aqui voce define como o treinamento sera entendido no catalogo e na pagina do colaborador.
+            </p>
+          </div>
+          <div className="rounded-[24px] border border-slate-200 bg-[linear-gradient(135deg,#f8fafc_0%,#eef2ff_100%)] p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Resumo da proposta</div>
+            <div className="mt-2 text-lg font-semibold text-slate-950">{form.title || "Seu curso ainda esta sem nome"}</div>
+            <div className="mt-2 text-sm leading-6 text-slate-600">
+              {form.short_description || "Descreva o principal ganho de quem vai fazer este treinamento."}
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl bg-white/80 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Categoria</div>
+                <div className="mt-1 text-sm font-semibold text-slate-950">{form.category || "Defina a categoria"}</div>
+              </div>
+              <div className="rounded-2xl bg-white/80 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Carga horaria</div>
+                <div className="mt-1 text-sm font-semibold text-slate-950">{form.workload_hours ? `${form.workload_hours} hora(s)` : "Ainda nao definida"}</div>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">O que esta etapa precisa entregar</div>
+            <div className="mt-3 space-y-3">
+              {stepExperienceGuide.identity.outcomes.map((item) => (
+                <div key={item} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Antes de avancar</div>
+            <div className="mt-3 space-y-3">
+              {(identityChecklist?.items ?? []).map((item) => (
+                <div key={item.label} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                  <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${item.done ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
+                    {item.done ? "OK" : "!"}
+                  </span>
+                  <span className="text-sm text-slate-700">{item.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
 
         <div className="mt-5 rounded-[24px] border border-slate-200 bg-slate-50 p-4">
           <div className="text-sm font-semibold text-slate-900">Comece por um modelo completo</div>
@@ -1964,37 +2191,119 @@ export function LmsCourseEditor({
           Esta etapa so aparece depois da estrutura do curso, para voce publicar apenas o que estiver pronto.
         </p>
 
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
-          <FieldGroup label="Status do curso" hint="Rascunho nao aparece para colaborador. Publicado pode ser atribuido.">
-            <select
-              value={form.status}
-              onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as typeof current.status }))}
-              className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900"
-            >
-              <option value="draft">Rascunho</option>
-              <option value="published">Publicado</option>
-              <option value="archived">Arquivado</option>
-            </select>
-          </FieldGroup>
-          <FieldGroup label="Quem pode ver" hint="Defina se o curso aparece no catalogo interno ou em contexto restrito.">
-            <select
-              value={form.visibility}
-              onChange={(event) => setForm((current) => ({ ...current, visibility: event.target.value as typeof current.visibility }))}
-              className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900"
-            >
-              <option value="publico_interno">Publico interno</option>
-              <option value="restrito">Restrito</option>
-            </select>
-          </FieldGroup>
-          <FieldGroup label="Nota minima do curso" hint="Percentual minimo para aprovacao final.">
-            <input
-              type="number"
-              value={form.passing_score ?? ""}
-              onChange={(event) => setForm((current) => ({ ...current, passing_score: Number(event.target.value) || null }))}
-              className="h-12 rounded-2xl border border-slate-200 px-4 text-sm text-slate-900"
-              placeholder="70"
-            />
-          </FieldGroup>
+        <div className="mt-5 grid gap-4 xl:grid-cols-[0.56fr,0.44fr]">
+          <div className="rounded-[24px] border border-slate-200 bg-[linear-gradient(135deg,#f8fafc_0%,#eef2ff_100%)] p-5">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Antes de publicar</div>
+            <div className="mt-2 text-xl font-semibold text-slate-950">Confirme como o curso vai aparecer no catalogo.</div>
+            <div className="mt-2 text-sm leading-6 text-slate-600">
+              Aqui voce define o status, quem pode ver, criterios de aprovacao e as imagens que vao dar identidade ao treinamento.
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl bg-white/85 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Status</div>
+                <div className="mt-1 text-sm font-semibold text-slate-950 capitalize">{form.status}</div>
+              </div>
+              <div className="rounded-2xl bg-white/85 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Visibilidade</div>
+                <div className="mt-1 text-sm font-semibold text-slate-950">{form.visibility === "publico_interno" ? "Publico interno" : "Restrito"}</div>
+              </div>
+              <div className="rounded-2xl bg-white/85 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Nota minima</div>
+                <div className="mt-1 text-sm font-semibold text-slate-950">{form.passing_score ?? "-"}%</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-slate-50">
+            <div className="h-28 bg-slate-100">
+              {form.banner_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={form.banner_url} alt={form.title || "Banner"} className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full items-center justify-center text-sm font-semibold text-slate-400">Preview do banner</div>
+              )}
+            </div>
+            <div className="flex gap-4 p-4">
+              <div className="h-16 w-16 overflow-hidden rounded-[18px] bg-slate-100">
+                {form.thumbnail_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={form.thumbnail_url} alt={form.title || "Capa"} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-slate-400">
+                    <ImagePlus size={16} />
+                  </div>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{form.category || "Treinamento"}</div>
+                <div className="mt-1 truncate text-sm font-semibold text-slate-950">{form.title || "Seu curso ainda esta sem titulo"}</div>
+                <div className="mt-2 line-clamp-3 text-sm text-slate-600">
+                  {form.short_description || "O resumo curto aparecera aqui assim que voce preencher a identidade do curso."}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-[1.1fr,0.9fr]">
+          <div className="space-y-4 rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+            <div>
+              <div className="text-sm font-semibold text-slate-900">Status do curso</div>
+              <div className="mt-1 text-xs text-slate-500">Escolha o momento da vida do treinamento. Assim o RH publica com mais seguranca.</div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              {courseStatusOptions.map((option) => {
+                const active = form.status === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setForm((current) => ({ ...current, status: option.value }))}
+                    className={`rounded-2xl border px-4 py-4 text-left transition ${
+                      active ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                    }`}
+                  >
+                    <div className="text-sm font-semibold">{option.label}</div>
+                    <div className={`mt-1 text-xs leading-5 ${active ? "text-white/70" : "text-slate-500"}`}>{option.description}</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-4 rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+            <div>
+              <div className="text-sm font-semibold text-slate-900">Visibilidade e aprovacao</div>
+              <div className="mt-1 text-xs text-slate-500">Defina quem vai ver o curso e qual e a nota minima para conclui-lo.</div>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {courseVisibilityOptions.map((option) => {
+                const active = form.visibility === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setForm((current) => ({ ...current, visibility: option.value }))}
+                    className={`rounded-2xl border px-4 py-4 text-left transition ${
+                      active ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                    }`}
+                  >
+                    <div className="text-sm font-semibold">{option.label}</div>
+                    <div className={`mt-1 text-xs leading-5 ${active ? "text-white/70" : "text-slate-500"}`}>{option.description}</div>
+                  </button>
+                );
+              })}
+            </div>
+            <FieldGroup label="Nota minima do curso" hint="Percentual minimo para aprovacao final.">
+              <input
+                type="number"
+                value={form.passing_score ?? ""}
+                onChange={(event) => setForm((current) => ({ ...current, passing_score: Number(event.target.value) || null }))}
+                className="h-12 rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-900"
+                placeholder="70"
+              />
+            </FieldGroup>
+          </div>
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -2043,6 +2352,30 @@ export function LmsCourseEditor({
   function renderReviewStep() {
     return (
       <div className="space-y-6">
+        <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_100%)] p-6 text-white shadow-sm">
+          <div className="grid gap-5 lg:grid-cols-[1fr,0.7fr]">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">Momento de aprovar a experiencia</div>
+              <h2 className="mt-2 text-2xl font-semibold">Revise o curso como se voce fosse o aluno antes de publicar.</h2>
+              <p className="mt-3 text-sm leading-7 text-white/75">
+                Esta etapa foi pensada para a ultima checagem: clareza da proposta, trilha coerente, boas midias e criterios de aprovacao prontos.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-[22px] border border-white/10 bg-white/8 px-4 py-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">Status atual</div>
+                <div className="mt-2 text-lg font-semibold capitalize">{form.status}</div>
+                <div className="text-sm text-white/70">{form.visibility === "publico_interno" ? "Publico interno" : "Restrito"}</div>
+              </div>
+              <div className="rounded-[22px] border border-white/10 bg-white/8 px-4 py-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">Estrutura pronta</div>
+                <div className="mt-2 text-lg font-semibold">{form.modules.length} fases</div>
+                <div className="text-sm text-white/70">{totalLessons} aulas planejadas</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-950">Revisao final antes de salvar</h2>
           <p className="mt-1 text-sm text-slate-500">Confira se o treinamento esta claro, completo e pronto para atribuicao.</p>
@@ -2055,6 +2388,29 @@ export function LmsCourseEditor({
                 <div className="text-sm text-slate-700">{item.label}</div>
               </div>
             ))}
+          </div>
+        </section>
+
+        <section className="grid gap-4 xl:grid-cols-2">
+          <div className="rounded-[28px] border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Quando publicar agora</div>
+            <h3 className="mt-2 text-lg font-semibold text-slate-950">Use esta opcao quando a experiencia estiver redonda.</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Publicar faz sentido quando a trilha esta clara, as aulas estao completas e a avaliacao ja foi revisada como se voce fosse o aluno.
+            </p>
+            <div className="mt-4 rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm text-slate-700">
+              Sinal mais forte: checklist completo, capa definida e jornada coerente do inicio ao fim.
+            </div>
+          </div>
+          <div className="rounded-[28px] border border-amber-200 bg-amber-50 p-5 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">Quando salvar como rascunho</div>
+            <h3 className="mt-2 text-lg font-semibold text-slate-950">Mantenha em rascunho se ainda houver ajuste critico.</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Se ainda faltar midia, revisar a avaliacao ou organizar melhor as fases, o melhor caminho e salvar e voltar depois sem expor o treinamento cedo demais.
+            </p>
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-white px-4 py-3 text-sm text-slate-700">
+              Sinal mais forte: itens pendentes no checklist, experiencia confusa ou conteudo principal ainda incompleto.
+            </div>
           </div>
         </section>
 
@@ -2173,113 +2529,176 @@ export function LmsCourseEditor({
             : "O editor salva um rascunho local enquanto voce trabalha."}
       </div>
 
-      <div className="grid gap-6 xl:grid-cols-[0.33fr,0.67fr]">
-        <div className="space-y-4">
-          <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Assistente de criacao</div>
-            <div className="mt-2 text-lg font-semibold text-slate-950">Avance por etapa</div>
-            <div className="mt-1 text-sm text-slate-600">Sem rolagem longa. Cada fase libera a proxima parte do curso.</div>
-            <div className="mt-4 space-y-3">
-              {steps.map((step, index) => (
-                <StepCard
-                  key={step.id}
-                  active={step.id === currentStep}
-                  completed={index < currentStepIndex}
-                  index={index}
-                  title={step.title}
-                  subtitle={step.subtitle}
-                  onClick={() => {
-                    if (index <= currentStepIndex) {
-                      setMessage("");
-                      setCurrentStep(step.id);
-                      return;
-                    }
-                    const validationError = validateStep(currentStep);
-                    if (validationError) {
-                      setMessage(validationError);
-                      return;
-                    }
-                    setMessage("");
-                    setCurrentStep(step.id);
-                  }}
-                />
-              ))}
-            </div>
-          </section>
-        </div>
-
-        <div className="space-y-6">
-          {currentStep === "identity" ? renderIdentityStep() : null}
-          {currentStep === "structure" ? renderStructureStep() : null}
-          {currentStep === "publication" ? renderPublicationStep() : null}
-          {currentStep === "review" ? renderReviewStep() : null}
-
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="text-sm text-slate-600">
-              {message ? <span className="font-medium text-rose-600">{message}</span> : "Use Voltar e Avancar para seguir pelas etapas."}
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={goToPreviousStep}
-                disabled={currentStepIndex === 0}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 disabled:opacity-50"
-              >
-                <ChevronLeft size={16} /> Voltar
-              </button>
-              {currentStep !== "review" ? (
-                <button
-                  type="button"
-                  onClick={goToNextStep}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white"
-                >
-                  Avancar <ChevronRight size={16} />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void handleSave()}
-                  disabled={saving}
-                  className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
-                >
-                  {saving ? "Salvando..." : form.status === "published" ? "Salvar e publicar treinamento" : "Salvar treinamento"}
-                </button>
-              )}
+      <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-[linear-gradient(135deg,#0f172a_0%,#1e293b_52%,#334155_100%)] text-white shadow-sm">
+        <div className="grid gap-6 px-6 py-6 lg:grid-cols-[1.1fr,0.9fr]">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.22em] text-white/60">Modo criador de treinamento</div>
+            <h2 className="mt-3 text-3xl font-semibold">
+              Monte o curso como uma experiencia de aprendizagem, nao como um cadastro.
+            </h2>
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-white/75">
+              Cada etapa foi reorganizada para voce pensar primeiro em jornada, depois em conteudo e so no final em publicacao.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3 text-sm text-white/75">
+              <span className="rounded-full border border-white/15 px-3 py-2">{form.modules.length} fases</span>
+              <span className="rounded-full border border-white/15 px-3 py-2">{totalLessons} aulas</span>
+              <span className="rounded-full border border-white/15 px-3 py-2">{steps[currentStepIndex]?.title ?? "Etapa"} em andamento</span>
             </div>
           </div>
-
-          <section className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex items-center gap-3">
-              <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white">
-                <Eye size={18} />
-              </span>
-              <div>
-                <h2 className="text-lg font-semibold text-slate-950">Preview do colaborador</h2>
-                <p className="mt-1 text-sm text-slate-500">Veja como o treinamento esta ficando sem sair do editor.</p>
-              </div>
-            </div>
-            <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50">
-              <CourseHeader detail={previewDetail} />
-            </div>
-            <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 p-4">
-              <ModuleAccordion
-                detail={previewDetail}
-                expandedModuleId={previewExpandedModuleId}
-                onToggle={setPreviewExpandedModuleId}
-              />
-            </div>
-            {selectedLesson ? (
-              <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 p-4">
-                <div className="mb-4 text-sm font-semibold text-slate-900">Preview da aula selecionada</div>
-                {selectedLesson.lesson_type === "avaliacao" && selectedLessonQuizPreview ? (
-                  <QuizPreviewCard payload={selectedLessonQuizPreview} />
+          <div className="rounded-[28px] border border-white/10 bg-white/8 p-5 backdrop-blur">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">Visao que o aluno vai ter</div>
+            <div className="mt-3 flex items-start gap-4">
+              <div className="h-20 w-20 overflow-hidden rounded-[22px] bg-white/10">
+                {form.thumbnail_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={form.thumbnail_url} alt={form.title || "Capa"} className="h-full w-full object-cover" />
                 ) : (
-                  <LessonPlayer lesson={{ ...previewDetail.modules[selectedModuleIndex].lessons[selectedLessonIndex] }} />
+                  <div className="flex h-full items-center justify-center text-white/50">
+                    <ImagePlus size={18} />
+                  </div>
                 )}
               </div>
-            ) : null}
-          </section>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/50">{form.category || "Treinamento"}</div>
+                <div className="mt-1 truncate text-xl font-semibold">{form.title || "Seu curso ainda esta ganhando forma"}</div>
+                <div className="mt-2 line-clamp-3 text-sm leading-6 text-white/75">
+                  {form.short_description || "Assim que voce preencher identidade, estrutura e publicacao, essa experiencia fica pronta para o colaborador."}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
+      </section>
+
+      <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Assistente de criacao</div>
+            <div className="mt-1 text-lg font-semibold text-slate-950">Siga etapa por etapa</div>
+          </div>
+          <div className="text-sm text-slate-500">{currentStepIndex + 1} de {steps.length}</div>
+        </div>
+        <div className="mt-4 h-2 rounded-full bg-slate-100">
+          <div className="h-2 rounded-full bg-slate-900 transition-all" style={{ width: `${((currentStepIndex + 1) / steps.length) * 100}%` }} />
+        </div>
+        <div className="mt-5 grid gap-3 lg:grid-cols-4">
+          {steps.map((step, index) => (
+            <StepCard
+              key={step.id}
+              active={step.id === currentStep}
+              completed={index < currentStepIndex}
+              index={index}
+              title={step.title}
+              subtitle={step.subtitle}
+              onClick={() => {
+                if (index <= currentStepIndex) {
+                  setMessage("");
+                  setCurrentStep(step.id);
+                  return;
+                }
+                const validationError = validateStep(currentStep);
+                if (validationError) {
+                  setMessage(validationError);
+                  return;
+                }
+                setMessage("");
+                setCurrentStep(step.id);
+              }}
+            />
+          ))}
+        </div>
+        <div className="mt-5 rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="max-w-3xl">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{currentStepGuide.eyebrow}</div>
+              <div className="mt-1 text-lg font-semibold text-slate-950">{currentStepGuide.title}</div>
+              <div className="mt-2 text-sm leading-6 text-slate-600">{currentStepGuide.description}</div>
+            </div>
+            <div className="grid min-w-[280px] gap-3 md:grid-cols-3">
+              {currentStepGuide.outcomes.map((item) => (
+                <div key={item} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="space-y-6">
+        {currentStep === "identity" ? renderIdentityStep() : null}
+        {currentStep === "structure" ? renderStructureStep() : null}
+        {currentStep === "publication" ? renderPublicationStep() : null}
+        {currentStep === "review" ? renderReviewStep() : null}
+
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="space-y-1 text-sm text-slate-600">
+            <div className="font-semibold text-slate-900">{steps[currentStepIndex]?.title}</div>
+            <div>
+              {message ? <span className="font-medium text-rose-600">{message}</span> : steps[currentStepIndex]?.subtitle}
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={goToPreviousStep}
+              disabled={currentStepIndex === 0}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700 disabled:opacity-50"
+            >
+              <ChevronLeft size={16} /> Voltar
+            </button>
+            {currentStep !== "review" ? (
+              <button
+                type="button"
+                onClick={goToNextStep}
+                className="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white"
+              >
+                Avancar <ChevronRight size={16} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void handleSave()}
+                disabled={saving}
+                className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {saving ? "Salvando..." : form.status === "published" ? "Salvar e publicar treinamento" : "Salvar treinamento"}
+              </button>
+            )}
+          </div>
+        </div>
+
+        <section className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white">
+              <Eye size={18} />
+            </span>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950">Preview do colaborador</h2>
+              <p className="mt-1 text-sm text-slate-500">Veja como o treinamento esta ficando sem sair do editor.</p>
+            </div>
+          </div>
+          <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50">
+            <CourseHeader detail={previewDetail} />
+          </div>
+          <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 p-4">
+            <ModuleAccordion
+              detail={previewDetail}
+              expandedModuleId={previewExpandedModuleId}
+              onToggle={setPreviewExpandedModuleId}
+            />
+          </div>
+          {selectedLesson ? (
+            <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 p-4">
+              <div className="mb-4 text-sm font-semibold text-slate-900">Preview da aula selecionada</div>
+              {selectedLesson.lesson_type === "avaliacao" && selectedLessonQuizPreview ? (
+                <QuizPreviewCard payload={selectedLessonQuizPreview} />
+              ) : (
+                <LessonPlayer lesson={{ ...previewDetail.modules[selectedModuleIndex].lessons[selectedLessonIndex] }} />
+              )}
+            </div>
+          ) : null}
+        </section>
       </div>
     </div>
   );
