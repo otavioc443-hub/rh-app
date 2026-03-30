@@ -56,7 +56,7 @@ export function ModuleAccordion({
                         <div>
                           <div className="text-sm font-semibold text-slate-900">{lesson.title}</div>
                           <div className="text-xs capitalize text-slate-500">
-                            {lesson.lesson_type} · {lesson.duration_minutes ?? 0} min
+                            {lesson.lesson_type} / {lesson.duration_minutes ?? 0} min
                           </div>
                         </div>
                         <div className="flex items-center gap-3">

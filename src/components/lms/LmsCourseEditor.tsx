@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Eye, FileText, GraduationCap, ImagePlus, Plus, Sparkles, Trash2, Video } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Eye, FileText, GraduationCap, ImagePlus, Maximize2, Plus, Sparkles, Trash2, Video, X } from "lucide-react";
 import { CourseHeader } from "@/components/lms/CourseHeader";
 import { FileUploader } from "@/components/lms/FileUploader";
 import { LessonPlayer } from "@/components/lms/LessonPlayer";
@@ -10,6 +10,7 @@ import { LmsMediaLibrary } from "@/components/lms/LmsMediaLibrary";
 import { ModuleAccordion } from "@/components/lms/ModuleAccordion";
 import { QuizPreviewCard } from "@/components/lms/QuizPreviewCard";
 import { PageHeader } from "@/components/ui/PageShell";
+import { PageHelpModal } from "@/components/ui/PageHelpModal";
 import { coursesService } from "@/lib/lms/coursesService";
 import type { LmsCourseDetail, LmsCourseEditorPayload, LmsQuestionBankItem, LmsQuizPayload, LmsQuizQuestionType } from "@/lib/lms/types";
 import { buildCourseDefaults, slugifyCourseTitle } from "@/lib/lms/utils";
@@ -21,6 +22,7 @@ type EditorData = {
 };
 
 type EditorStep = "identity" | "structure" | "publication" | "review";
+type PreviewMode = "catalog" | "journey" | "lesson";
 
 const steps: Array<{ id: EditorStep; title: string; subtitle: string }> = [
   { id: "identity", title: "Identidade", subtitle: "Nome, objetivo e resumo" },
@@ -524,6 +526,9 @@ export function LmsCourseEditor({
   const [currentStep, setCurrentStep] = useState<EditorStep>("identity");
   const [questionBank, setQuestionBank] = useState<LmsQuestionBankItem[]>([]);
   const [questionBankLoading, setQuestionBankLoading] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [previewMode, setPreviewMode] = useState<PreviewMode>("catalog");
+  const [previewExpanded, setPreviewExpanded] = useState(false);
   const [selectedModuleIndex, setSelectedModuleIndex] = useState(0);
   const [selectedLessonIndex, setSelectedLessonIndex] = useState(0);
   const [previewExpandedModuleId, setPreviewExpandedModuleId] = useState<string | null>("preview-module-0");
@@ -621,6 +626,22 @@ export function LmsCourseEditor({
       },
     ],
     [evaluationLessons, form.category, form.modules, form.passing_score, form.short_description, form.slug, form.status, form.thumbnail_url, form.title, form.visibility, form.banner_url, totalLessons],
+  );
+  const currentStepChecklist = useMemo(() => {
+    if (currentStep === "identity") return stepChecklists.find((group) => group.title === "Identidade");
+    if (currentStep === "structure") return stepChecklists.find((group) => group.title === "Conteudo");
+    if (currentStep === "publication") return stepChecklists.find((group) => group.title === "Publicacao");
+    return undefined;
+  }, [currentStep, stepChecklists]);
+  const helpModalItems = useMemo(
+    () => [
+      ...currentStepGuide.outcomes.map((item) => ({ title: "Resultado esperado", text: item })),
+      ...(currentStepChecklist?.items ?? []).map((item) => ({
+        title: item.done ? "Ja conferido" : "Vale revisar",
+        text: item.label,
+      })),
+    ],
+    [currentStepChecklist, currentStepGuide.outcomes],
   );
 
   const previewDetail = useMemo<LmsCourseDetail>(
@@ -730,6 +751,13 @@ export function LmsCourseEditor({
       })),
     };
   }, [courseId, selectedLesson, selectedLessonIndex, selectedModuleIndex]);
+  const previewModes: Array<{ id: PreviewMode; label: string; description: string }> = [
+    { id: "catalog", label: "Catalogo", description: "Como o curso se apresenta para entrar." },
+    { id: "journey", label: "Trilha", description: "Como as fases e aulas aparecem para o aluno." },
+    { id: "lesson", label: "Aula ativa", description: "Como o conteudo atual sera consumido." },
+  ];
+  const pendingChecklistCount = publicationChecklist.filter((item) => !item.done).length;
+  const completedChecklistCount = publicationChecklist.length - pendingChecklistCount;
 
   function patchModule(index: number, updater: (value: LmsCourseEditorPayload["modules"][number]) => LmsCourseEditorPayload["modules"][number]) {
     setForm((current) => ({
@@ -861,6 +889,22 @@ export function LmsCourseEditor({
   useEffect(() => {
     void loadQuestionBank();
   }, []);
+
+  useEffect(() => {
+    if (currentStep === "identity") {
+      setPreviewMode("catalog");
+      return;
+    }
+    if (currentStep === "structure") {
+      setPreviewMode(selectedLesson?.lesson_type === "avaliacao" ? "lesson" : "journey");
+      return;
+    }
+    if (currentStep === "publication") {
+      setPreviewMode("catalog");
+      return;
+    }
+    setPreviewMode(selectedLesson?.lesson_type === "avaliacao" ? "lesson" : "journey");
+  }, [currentStep, selectedLesson?.lesson_type]);
 
   const currentStepIndex = steps.findIndex((step) => step.id === currentStep);
 
@@ -1549,6 +1593,40 @@ export function LmsCourseEditor({
           </button>
         </div>
 
+        <div className="mt-5 grid gap-4 xl:grid-cols-[1.2fr,0.8fr]">
+          <div className="rounded-[24px] border border-slate-200 bg-[linear-gradient(135deg,#f8fafc_0%,#eef2ff_100%)] p-5">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Cena atual da jornada</div>
+            <div className="mt-2 text-xl font-semibold text-slate-950">
+              {selectedModule?.title || "Nova fase"}
+            </div>
+            <div className="mt-1 text-sm text-slate-500">
+              {selectedLesson?.title || "Nova aula"} {selectedLesson ? `/ ${selectedLesson.lesson_type === "avaliacao" ? "avaliacao" : selectedLesson.lesson_type}` : ""}
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl bg-white/90 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Fases</div>
+                <div className="mt-1 text-lg font-semibold text-slate-950">{form.modules.length}</div>
+              </div>
+              <div className="rounded-2xl bg-white/90 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Aulas</div>
+                <div className="mt-1 text-lg font-semibold text-slate-950">{totalLessons}</div>
+              </div>
+              <div className="rounded-2xl bg-white/90 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Fluxo</div>
+                <div className="mt-1 text-sm font-semibold text-slate-950">{form.sequence_required ? "Em sequencia" : "Livre"}</div>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Como deixar essa etapa melhor</div>
+            <div className="mt-3 space-y-3">
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">Crie fases curtas, com nome claro e papel bem definido na trilha.</div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">Misture formatos quando fizer sentido: video para contexto, texto para instrucoes e avaliacao para validacao.</div>
+              <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700">Pense sempre no proximo passo do aluno. Cada aula precisa convidar a continuar.</div>
+            </div>
+          </div>
+        </div>
+
         <div className="mt-5 rounded-[24px] border border-slate-200 bg-[linear-gradient(135deg,#f8fafc_0%,#eef2ff_100%)] p-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -1573,15 +1651,6 @@ export function LmsCourseEditor({
               </div>
             </div>
           </div>
-        </div>
-
-        <div className="mt-5 grid gap-4 xl:grid-cols-3">
-          {stepExperienceGuide.structure.outcomes.map((item, index) => (
-            <div key={`${item}-${index}`} className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Ponto de atencao {index + 1}</div>
-              <div className="mt-2 text-sm font-semibold text-slate-900">{item}</div>
-            </div>
-          ))}
         </div>
 
         <div className="mt-5 grid gap-5 xl:grid-cols-[0.4fr,0.6fr]">
@@ -1815,6 +1884,11 @@ export function LmsCourseEditor({
                 </FieldGroup>
               </div>
 
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-sm font-semibold text-slate-900">Escolha o formato da aula</div>
+                <div className="mt-1 text-xs text-slate-500">O editor mostra apenas os campos que fazem sentido para o tipo de conteudo escolhido.</div>
+              </div>
+
               <div className="space-y-4">
                 <FieldGroup label="Formato da experiencia" hint="Escolha como o colaborador vai consumir esta aula.">
                   <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -1836,6 +1910,11 @@ export function LmsCourseEditor({
                     })}
                   </div>
                 </FieldGroup>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-sm font-semibold text-slate-900">Configuracao principal da aula</div>
+                <div className="mt-1 text-xs text-slate-500">Preencha so o que o colaborador realmente vai ver ou usar nesta etapa.</div>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -2035,11 +2114,9 @@ export function LmsCourseEditor({
   }
 
   function renderIdentityStep() {
-    const identityChecklist = stepChecklists.find((group) => group.title === "Identidade");
-
     return (
       <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="grid gap-5 xl:grid-cols-[0.48fr,0.28fr,0.24fr]">
+        <div className="grid gap-5 xl:grid-cols-[0.65fr,0.35fr]">
           <div>
             <h2 className="text-lg font-semibold text-slate-950">Identidade do curso</h2>
             <p className="mt-1 text-sm text-slate-500">
@@ -2061,29 +2138,6 @@ export function LmsCourseEditor({
                 <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Carga horaria</div>
                 <div className="mt-1 text-sm font-semibold text-slate-950">{form.workload_hours ? `${form.workload_hours} hora(s)` : "Ainda nao definida"}</div>
               </div>
-            </div>
-          </div>
-          <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">O que esta etapa precisa entregar</div>
-            <div className="mt-3 space-y-3">
-              {stepExperienceGuide.identity.outcomes.map((item) => (
-                <div key={item} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
-                  {item}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Antes de avancar</div>
-            <div className="mt-3 space-y-3">
-              {(identityChecklist?.items ?? []).map((item) => (
-                <div key={item.label} className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-                  <span className={`mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold ${item.done ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-                    {item.done ? "OK" : "!"}
-                  </span>
-                  <span className="text-sm text-slate-700">{item.label}</span>
-                </div>
-              ))}
             </div>
           </div>
         </div>
@@ -2379,6 +2433,24 @@ export function LmsCourseEditor({
         <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-950">Revisao final antes de salvar</h2>
           <p className="mt-1 text-sm text-slate-500">Confira se o treinamento esta claro, completo e pronto para atribuicao.</p>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Itens prontos</div>
+              <div className="mt-2 text-2xl font-semibold text-slate-950">{completedChecklistCount}</div>
+              <div className="text-sm text-slate-500">Pontos ja validados para publicar.</div>
+            </div>
+            <div className="rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Pendencias</div>
+              <div className="mt-2 text-2xl font-semibold text-slate-950">{pendingChecklistCount}</div>
+              <div className="text-sm text-slate-500">Itens que ainda merecem sua atencao.</div>
+            </div>
+            <div className={`rounded-[22px] border px-4 py-4 ${pendingChecklistCount === 0 ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+              <div className={`text-xs font-semibold uppercase tracking-[0.18em] ${pendingChecklistCount === 0 ? "text-emerald-700" : "text-amber-700"}`}>Leitura executiva</div>
+              <div className="mt-2 text-sm font-semibold text-slate-950">
+                {pendingChecklistCount === 0 ? "Curso pronto para publicar com seguranca." : "Ainda vale revisar antes de liberar para o catalogo."}
+              </div>
+            </div>
+          </div>
           <div className="mt-4 space-y-3">
             {publicationChecklist.map((item) => (
               <div key={item.label} className="flex items-start gap-3 rounded-2xl border border-slate-200 px-4 py-3">
@@ -2513,8 +2585,142 @@ export function LmsCourseEditor({
     );
   }
 
+  function renderPreviewWorkspace(compact = false) {
+    return (
+      <section className={`space-y-4 rounded-[28px] border border-slate-200 bg-white shadow-sm ${compact ? "p-4" : "p-5"}`}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white">
+              <Eye size={18} />
+            </span>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-950">Visao do colaborador</h2>
+              <p className="mt-1 text-sm text-slate-500">Use este espaco para validar a experiencia que o aluno realmente vai enxergar.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setPreviewExpanded(true)}
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+          >
+            <Maximize2 size={16} />
+            Abrir ampliado
+          </button>
+        </div>
+
+        <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-wrap gap-3">
+            {previewModes.map((mode) => {
+              const active = previewMode === mode.id;
+              return (
+                <button
+                  key={mode.id}
+                  type="button"
+                  onClick={() => setPreviewMode(mode.id)}
+                  className={`rounded-2xl border px-4 py-3 text-left transition ${
+                    active ? "border-slate-900 bg-slate-900 text-white shadow-sm" : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+                  }`}
+                >
+                  <div className="text-sm font-semibold">{mode.label}</div>
+                  <div className={`mt-1 text-xs ${active ? "text-white/70" : "text-slate-500"}`}>{mode.description}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {previewMode === "catalog" ? (
+          <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50">
+            <CourseHeader detail={previewDetail} />
+          </div>
+        ) : null}
+
+        {previewMode === "journey" ? (
+          <div className="space-y-4 overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 p-4">
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-[22px] bg-white px-4 py-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Fases</div>
+                <div className="mt-2 text-lg font-semibold text-slate-950">{form.modules.length}</div>
+                <div className="text-sm text-slate-500">Blocos principais da jornada.</div>
+              </div>
+              <div className="rounded-[22px] bg-white px-4 py-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Aulas</div>
+                <div className="mt-2 text-lg font-semibold text-slate-950">{totalLessons}</div>
+                <div className="text-sm text-slate-500">Etapas que o colaborador vai percorrer.</div>
+              </div>
+              <div className="rounded-[22px] bg-white px-4 py-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Fluxo atual</div>
+                <div className="mt-2 text-sm font-semibold text-slate-950">{form.sequence_required ? "Ordem obrigatoria" : "Livre navegacao"}</div>
+                <div className="text-sm text-slate-500">Define se a trilha segue sequencia.</div>
+              </div>
+            </div>
+            <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-white p-4">
+              <ModuleAccordion
+                detail={previewDetail}
+                expandedModuleId={previewExpandedModuleId}
+                onToggle={setPreviewExpandedModuleId}
+              />
+            </div>
+          </div>
+        ) : null}
+
+        {previewMode === "lesson" ? (
+          <div className="space-y-4 overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 p-4">
+            <div className="rounded-[22px] border border-slate-200 bg-white px-4 py-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Foco da validacao</div>
+              <div className="mt-2 text-sm font-semibold text-slate-950">
+                {selectedLesson ? `${selectedLesson.title || "Aula atual"} / ${selectedLesson.lesson_type === "avaliacao" ? "Avaliacao" : selectedLesson.lesson_type}` : "Selecione uma aula"}
+              </div>
+              <div className="mt-1 text-sm text-slate-500">Esse bloco mostra exatamente o conteudo que o aluno consumira na etapa selecionada.</div>
+            </div>
+            {selectedLesson ? (
+              selectedLesson.lesson_type === "avaliacao" && selectedLessonQuizPreview ? (
+                <QuizPreviewCard payload={selectedLessonQuizPreview} />
+              ) : (
+                <LessonPlayer lesson={{ ...previewDetail.modules[selectedModuleIndex].lessons[selectedLessonIndex] }} />
+              )
+            ) : (
+              <div className="rounded-[22px] border border-dashed border-slate-300 bg-white px-4 py-10 text-center text-sm text-slate-500">
+                Selecione uma aula na etapa de conteudo para validar como ela ficara para o colaborador.
+              </div>
+            )}
+          </div>
+        ) : null}
+      </section>
+    );
+  }
+
   return (
     <div className="space-y-6">
+      <PageHelpModal
+        open={helpOpen}
+        title={currentStepGuide.title}
+        subtitle={currentStepGuide.description}
+        items={helpModalItems}
+        onClose={() => setHelpOpen(false)}
+      />
+      {previewExpanded ? (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/65 p-4 backdrop-blur-sm">
+          <div className="mx-auto max-w-7xl">
+            <div className="mb-4 flex items-center justify-between gap-3 rounded-[28px] border border-white/10 bg-slate-950/85 px-5 py-4 text-white shadow-2xl">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">Preview ampliado</div>
+                <div className="mt-1 text-lg font-semibold">Valide a experiencia do colaborador sem distracoes do editor</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewExpanded(false)}
+                className="inline-flex items-center gap-2 rounded-2xl border border-white/15 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+              >
+                <X size={16} />
+                Fechar preview
+              </button>
+            </div>
+            {renderPreviewWorkspace(true)}
+          </div>
+        </div>
+      ) : null}
+
       <PageHeader
         icon={<GraduationCap size={24} />}
         title={mode === "create" ? "Criar treinamento" : "Editar treinamento"}
@@ -2546,9 +2752,22 @@ export function LmsCourseEditor({
             </div>
           </div>
           <div className="rounded-[28px] border border-white/10 bg-white/8 p-5 backdrop-blur">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">Visao que o aluno vai ter</div>
-            <div className="mt-3 flex items-start gap-4">
-              <div className="h-20 w-20 overflow-hidden rounded-[22px] bg-white/10">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">Visao que o aluno vai ter</div>
+                <div className="mt-1 text-sm text-white/70">O preview agora pode ser alternado entre catalogo, trilha e aula ativa.</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewExpanded(true)}
+                className="inline-flex items-center gap-2 rounded-2xl border border-white/15 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+              >
+                <Eye size={16} />
+                Abrir preview
+              </button>
+            </div>
+            <div className="mt-4 flex items-start gap-4">
+              <div className="h-24 w-24 overflow-hidden rounded-[24px] bg-white/10">
                 {form.thumbnail_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={form.thumbnail_url} alt={form.title || "Capa"} className="h-full w-full object-cover" />
@@ -2566,6 +2785,20 @@ export function LmsCourseEditor({
                 </div>
               </div>
             </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">Modo atual</div>
+                <div className="mt-1 text-sm font-semibold text-white">{previewModes.find((mode) => mode.id === previewMode)?.label ?? "Catalogo"}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">Fase em foco</div>
+                <div className="mt-1 text-sm font-semibold text-white">{selectedModule?.title || "Defina a estrutura"}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/60">Aula em foco</div>
+                <div className="mt-1 text-sm font-semibold text-white">{selectedLesson?.title || "Selecione uma aula"}</div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -2576,7 +2809,16 @@ export function LmsCourseEditor({
             <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Assistente de criacao</div>
             <div className="mt-1 text-lg font-semibold text-slate-950">Siga etapa por etapa</div>
           </div>
-          <div className="text-sm text-slate-500">{currentStepIndex + 1} de {steps.length}</div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setHelpOpen(true)}
+              className="rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+            >
+              Ajuda desta etapa
+            </button>
+            <div className="text-sm text-slate-500">{currentStepIndex + 1} de {steps.length}</div>
+          </div>
         </div>
         <div className="mt-4 h-2 rounded-full bg-slate-100">
           <div className="h-2 rounded-full bg-slate-900 transition-all" style={{ width: `${((currentStepIndex + 1) / steps.length) * 100}%` }} />
@@ -2607,21 +2849,12 @@ export function LmsCourseEditor({
             />
           ))}
         </div>
-        <div className="mt-5 rounded-[24px] border border-slate-200 bg-slate-50 p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="max-w-3xl">
-              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{currentStepGuide.eyebrow}</div>
-              <div className="mt-1 text-lg font-semibold text-slate-950">{currentStepGuide.title}</div>
-              <div className="mt-2 text-sm leading-6 text-slate-600">{currentStepGuide.description}</div>
-            </div>
-            <div className="grid min-w-[280px] gap-3 md:grid-cols-3">
-              {currentStepGuide.outcomes.map((item) => (
-                <div key={item} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700">
-                  {item}
-                </div>
-              ))}
-            </div>
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{currentStepGuide.eyebrow}</div>
+            <div className="mt-1 text-sm font-semibold text-slate-900">{currentStepGuide.title}</div>
           </div>
+          <div className="text-sm text-slate-500">{currentStepGuide.description}</div>
         </div>
       </section>
 
@@ -2668,37 +2901,7 @@ export function LmsCourseEditor({
           </div>
         </div>
 
-        <section className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center gap-3">
-            <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 text-white">
-              <Eye size={18} />
-            </span>
-            <div>
-              <h2 className="text-lg font-semibold text-slate-950">Preview do colaborador</h2>
-              <p className="mt-1 text-sm text-slate-500">Veja como o treinamento esta ficando sem sair do editor.</p>
-            </div>
-          </div>
-          <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50">
-            <CourseHeader detail={previewDetail} />
-          </div>
-          <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 p-4">
-            <ModuleAccordion
-              detail={previewDetail}
-              expandedModuleId={previewExpandedModuleId}
-              onToggle={setPreviewExpandedModuleId}
-            />
-          </div>
-          {selectedLesson ? (
-            <div className="overflow-hidden rounded-[28px] border border-slate-200 bg-slate-50 p-4">
-              <div className="mb-4 text-sm font-semibold text-slate-900">Preview da aula selecionada</div>
-              {selectedLesson.lesson_type === "avaliacao" && selectedLessonQuizPreview ? (
-                <QuizPreviewCard payload={selectedLessonQuizPreview} />
-              ) : (
-                <LessonPlayer lesson={{ ...previewDetail.modules[selectedModuleIndex].lessons[selectedLessonIndex] }} />
-              )}
-            </div>
-          ) : null}
-        </section>
+        {renderPreviewWorkspace()}
       </div>
     </div>
   );
