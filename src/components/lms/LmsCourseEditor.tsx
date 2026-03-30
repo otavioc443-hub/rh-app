@@ -175,6 +175,191 @@ const lessonTemplates = [
 
 const courseTemplates = [
   {
+    id: "laboratorio-funcional-lms",
+    label: "Laboratorio completo do LMS",
+    description: "Modelo de ponta a ponta para validar criacao, midias, avaliacao, atribuicao, certificacao e gamificacao do modulo.",
+    build: (): LmsCourseEditorPayload => ({
+      ...buildCourseDefaults(),
+      title: "Laboratorio completo do LMS",
+      slug: "laboratorio-completo-lms",
+      category: "Ambiente de testes",
+      workload_hours: 8,
+      short_description: "Curso-modelo criado para validar todas as funcoes principais do modulo de treinamentos.",
+      full_description:
+        "Use este curso para testar a jornada completa do LMS: criacao de trilha, aulas em varios formatos, avaliacao automatica, correcao manual, atribuicao, notificacoes, certificado e recursos de gamificacao.",
+      required: true,
+      certificate_enabled: true,
+      passing_score: 75,
+      status: "draft",
+      visibility: "publico_interno",
+      sequence_required: true,
+      onboarding_recommended: false,
+      modules: [
+        {
+          ...createModule(1),
+          title: "Fase 1 - Entrada na jornada",
+          description: "Apresenta o curso, explica o objetivo da trilha e testa a experiencia inicial do colaborador.",
+          lessons: [
+            {
+              ...lessonTemplates[0].build(),
+              title: "Boas-vindas em video",
+              description: "Use um video curto para validar reproducao, conclusao automatica e abertura da jornada.",
+              content_text:
+                "<h2>Objetivo</h2><p>Apresente o curso, mostre o valor da trilha e diga o que o colaborador precisa concluir nesta fase.</p><p><strong>Teste sugerido:</strong> subir um video curto e verificar a marcacao de progresso.</p>",
+              allow_preview: true,
+              sort_order: 1,
+            },
+            {
+              ...lessonTemplates[2].build(),
+              title: "Guia textual de navegação",
+              description: "Valida leitura no portal, formatacao de texto e sequencia entre aulas.",
+              content_text:
+                "<h2>Como usar este curso</h2><ul><li>Avance fase por fase.</li><li>Marque as aulas concluidas.</li><li>Observe badges, XP e ranking.</li></ul><p>Este bloco serve para testar uma aula puramente textual.</p>",
+              sort_order: 2,
+            },
+          ],
+        },
+        {
+          ...createModule(2),
+          title: "Fase 2 - Midias e materiais",
+          description: "Explora PDF, arquivo complementar e link externo para validar todos os formatos de conteudo.",
+          lessons: [
+            {
+              ...lessonTemplates[1].build(),
+              title: "Leitura de politica em PDF",
+              description: "Use para validar upload, visualizacao e download de PDF.",
+              content_text:
+                "Explique quais secoes do PDF precisam ser lidas e como isso sera cobrado no restante da trilha.",
+              sort_order: 1,
+            },
+            {
+              ...lessonTemplates[3].build(),
+              title: "Acesso a formulario externo",
+              description: "Valida redirecionamento para link externo e retorno ao curso.",
+              content_url: "https://example.com/formulario-lms",
+              content_text:
+                "Abra o link, preencha o formulario de teste e volte para concluir a aula no portal.",
+              sort_order: 2,
+            },
+            {
+              ...createLesson(3),
+              title: "Download de material complementar",
+              lesson_type: "arquivo",
+              description: "Use para validar anexos como planilhas, guias ou documentos auxiliares.",
+              content_text:
+                "Envie aqui um arquivo complementar e confirme se o colaborador consegue baixar o material pela experiencia do aluno.",
+              sort_order: 3,
+              is_required: false,
+            },
+          ],
+        },
+        {
+          ...createModule(3),
+          title: "Fase 3 - Checkpoint automatico",
+          description: "Fase pensada para validar correcao automatica, nota minima e exibicao de feedback.",
+          lessons: [
+            {
+              ...lessonTemplates[4].build(),
+              title: "Checkpoint automatico da trilha",
+              description: "Reune tipos diferentes de pergunta com correcao imediata.",
+              sort_order: 1,
+              quiz: {
+                title: "Checkpoint automatico da trilha",
+                instructions:
+                  "Responda as perguntas abaixo para validar a compreensao da fase. Esta avaliacao foi montada para testar correcoes automaticas do LMS.",
+                passing_score: 75,
+                max_attempts: 2,
+                randomize_questions: false,
+                show_score_on_submit: true,
+                show_correct_answers: true,
+                questions: [
+                  {
+                    ...createQuestion(1, "single_choice"),
+                    statement: "Qual opcao representa uma aula em leitura diretamente dentro do portal?",
+                    options: [
+                      { text: "Texto", is_correct: true, image_url: "" },
+                      { text: "Video", is_correct: false, image_url: "" },
+                      { text: "Arquivo", is_correct: false, image_url: "" },
+                    ],
+                  },
+                  {
+                    ...createQuestion(2, "multiple_choice"),
+                    statement: "Quais recursos deste curso servem para testar midias e materiais?",
+                    options: [
+                      { text: "PDF", is_correct: true, image_url: "" },
+                      { text: "Arquivo complementar", is_correct: true, image_url: "" },
+                      { text: "Link externo", is_correct: true, image_url: "" },
+                      { text: "Somente badge", is_correct: false, image_url: "" },
+                    ],
+                  },
+                  {
+                    ...createQuestion(3, "true_false"),
+                    statement: "Cursos em rascunho podem ser vistos normalmente pelo colaborador.",
+                    options: [
+                      { text: "Verdadeiro", is_correct: false, image_url: "" },
+                      { text: "Falso", is_correct: true, image_url: "" },
+                    ],
+                  },
+                  {
+                    ...createQuestion(4, "short_text"),
+                    statement: "Escreva uma palavra-chave que represente o objetivo principal deste curso-modelo.",
+                    accepted_answers: ["teste", "validacao", "lms"],
+                    requires_manual_review: false,
+                    options: [],
+                  },
+                  {
+                    ...createQuestion(5, "image_choice"),
+                    statement: "Use esta pergunta para testar alternativas visuais no banco de questoes ou na propria aula.",
+                    help_text: "Adicione imagens nas opcoes quando quiser testar a experiencia completa.",
+                    options: [
+                      { text: "Opcao visual A", is_correct: true, image_url: "" },
+                      { text: "Opcao visual B", is_correct: false, image_url: "" },
+                    ],
+                  },
+                ],
+              },
+            },
+          ],
+        },
+        {
+          ...createModule(4),
+          title: "Fase 4 - Avaliacao com revisao manual",
+          description: "Valida fluxo de questao discursiva, fila de correcao e liberacao de nota apos revisao do RH.",
+          lessons: [
+            {
+              ...createLesson(1),
+              title: "Avaliacao final com revisao manual",
+              lesson_type: "avaliacao",
+              description: "Use esta avaliacao para testar resposta discursiva e aprovacao apos correcao administrativa.",
+              content_text: "",
+              sort_order: 1,
+              quiz: {
+                title: "Avaliacao final com revisao manual",
+                instructions:
+                  "Descreva como voce usaria o LMS em um contexto real da empresa. Esta resposta deve passar pela fila de correcao manual.",
+                passing_score: 80,
+                max_attempts: 1,
+                randomize_questions: false,
+                show_score_on_submit: false,
+                show_correct_answers: false,
+                questions: [
+                  {
+                    ...createQuestion(1, "essay"),
+                    statement:
+                      "Explique, em um paragrafo, como este curso-modelo ajudou a validar a criacao, a jornada do aluno e os recursos de avaliacao do LMS.",
+                    requires_manual_review: true,
+                    options: [],
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+      quiz: null,
+    }),
+  },
+  {
     id: "onboarding-corporativo",
     label: "Onboarding corporativo",
     description: "Estrutura base para integrar novos colaboradores com cultura, processos e avaliacao final.",
