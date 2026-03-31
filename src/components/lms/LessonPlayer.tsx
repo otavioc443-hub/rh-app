@@ -15,6 +15,38 @@ function lessonTypeLabel(type: LmsLesson["lesson_type"]) {
   return "Texto";
 }
 
+function getEmbeddedVideoUrl(value: string | null | undefined) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.toLowerCase();
+
+    if (host.includes("youtube.com")) {
+      const videoId = url.searchParams.get("v");
+      if (!videoId) return null;
+      return `https://www.youtube.com/embed/${videoId}`;
+    }
+
+    if (host.includes("youtu.be")) {
+      const videoId = url.pathname.split("/").filter(Boolean)[0];
+      if (!videoId) return null;
+      return `https://www.youtube.com/embed/${videoId}`;
+    }
+
+    if (host.includes("vimeo.com")) {
+      const videoId = url.pathname.split("/").filter(Boolean).pop();
+      if (!videoId) return null;
+      return `https://player.vimeo.com/video/${videoId}`;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function LessonPlayer({
   lesson,
   nextLessonHref,
@@ -31,6 +63,7 @@ export function LessonPlayer({
   const isVideo = lesson.lesson_type === "video";
   const isPdf = lesson.lesson_type === "pdf";
   const isLink = lesson.lesson_type === "link" || lesson.lesson_type === "arquivo";
+  const embeddedVideoUrl = isVideo ? getEmbeddedVideoUrl(resolvedUrl) : null;
 
   useEffect(() => {
     let active = true;
@@ -100,10 +133,36 @@ export function LessonPlayer({
 
       {isVideo && resolvedUrl ? (
         <div className="space-y-3">
-          <video controls className="aspect-video w-full rounded-3xl bg-slate-900" src={resolvedUrl} onEnded={() => void handleAutoComplete()} />
+          {embeddedVideoUrl ? (
+            <div className="overflow-hidden rounded-3xl bg-slate-900">
+              <iframe
+                src={embeddedVideoUrl}
+                title={lesson.title}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+                className="aspect-video w-full"
+              />
+            </div>
+          ) : (
+            <video
+              controls
+              playsInline
+              preload="metadata"
+              className="aspect-video w-full rounded-3xl bg-slate-900"
+              src={resolvedUrl}
+              onEnded={() => void handleAutoComplete()}
+            />
+          )}
           <div className="rounded-2xl border border-slate-800 bg-white/5 px-4 py-3 text-sm text-white/65">
-            Ao assistir o video ate o final, a aula sera marcada como concluida automaticamente.
+            {embeddedVideoUrl
+              ? "Se o video estiver em plataforma externa, use o player incorporado ou abra em nova aba se preferir."
+              : "Ao assistir o video ate o final, a aula sera marcada como concluida automaticamente."}
           </div>
+          <a href={resolvedUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 px-4 py-2 text-sm font-semibold text-white">
+            <PlayCircle size={16} />
+            Abrir video em nova aba
+          </a>
         </div>
       ) : null}
 
