@@ -26,19 +26,19 @@ function getEmbeddedVideoUrl(value: string | null | undefined) {
     if (host.includes("youtube.com")) {
       const videoId = url.searchParams.get("v");
       if (!videoId) return null;
-      return `https://www.youtube.com/embed/${videoId}`;
+      return `https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&fs=0&disablekb=1`;
     }
 
     if (host.includes("youtu.be")) {
       const videoId = url.pathname.split("/").filter(Boolean)[0];
       if (!videoId) return null;
-      return `https://www.youtube.com/embed/${videoId}`;
+      return `https://www.youtube-nocookie.com/embed/${videoId}?rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&fs=0&disablekb=1`;
     }
 
     if (host.includes("vimeo.com")) {
       const videoId = url.pathname.split("/").filter(Boolean).pop();
       if (!videoId) return null;
-      return `https://player.vimeo.com/video/${videoId}`;
+      return `https://player.vimeo.com/video/${videoId}?title=0&byline=0&portrait=0&badge=0&share=0`;
     }
 
     return null;
@@ -123,14 +123,6 @@ export function LessonPlayer({
         <div className="h-full w-1/3 rounded-full bg-white/75" />
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-y border-slate-800 py-3 text-xs text-white/60">
-        <span className="rounded-full bg-white/5 px-3 py-2">{lessonTypeLabel(lesson.lesson_type)}</span>
-        <span className="rounded-full bg-white/5 px-3 py-2">
-          {lesson.lesson_type === "video" ? "Assistir ate o final" : lesson.lesson_type === "avaliacao" ? "Responder o questionario" : "Consumir e concluir"}
-        </span>
-        {nextLessonHref ? <span className="rounded-full bg-white/5 px-3 py-2">Ha uma proxima aula</span> : null}
-      </div>
-
       {isVideo && resolvedUrl ? (
         <div className="space-y-3">
           {embeddedVideoUrl ? (
@@ -138,9 +130,9 @@ export function LessonPlayer({
               <iframe
                 src={embeddedVideoUrl}
                 title={lesson.title}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allow="autoplay; encrypted-media; picture-in-picture"
                 referrerPolicy="strict-origin-when-cross-origin"
-                allowFullScreen
+                sandbox="allow-same-origin allow-scripts allow-presentation"
                 className="aspect-video w-full"
               />
             </div>
@@ -156,13 +148,9 @@ export function LessonPlayer({
           )}
           <div className="rounded-2xl border border-slate-800 bg-white/5 px-4 py-3 text-sm text-white/65">
             {embeddedVideoUrl
-              ? "Se o video estiver em plataforma externa, use o player incorporado ou abra em nova aba se preferir."
+              ? "Este video esta incorporado em modo mais restrito para manter a experiencia focada na aula."
               : "Ao assistir o video ate o final, a aula sera marcada como concluida automaticamente."}
           </div>
-          <a href={resolvedUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-2xl border border-slate-700 px-4 py-2 text-sm font-semibold text-white">
-            <PlayCircle size={16} />
-            Abrir video em nova aba
-          </a>
         </div>
       ) : null}
 
