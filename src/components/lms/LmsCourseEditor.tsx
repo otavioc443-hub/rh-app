@@ -2738,7 +2738,7 @@ export function LmsCourseEditor({
         </div>
 
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
-          <div className="space-y-4">
+          <div>
             <FileUploader
               bucket="lms-thumbnails"
               label="Imagem do card do curso"
@@ -2746,26 +2746,14 @@ export function LmsCourseEditor({
               accept="image/*"
               onUploaded={(value) => setForm((current) => ({ ...current, thumbnail_url: value }))}
             />
-            <LmsMediaLibrary
-              bucket="lms-thumbnails"
-              title="Biblioteca de imagens de card"
-              description="Escolha uma capa ja enviada para reaproveitar neste curso."
-              onSelect={(value) => setForm((current) => ({ ...current, thumbnail_url: value }))}
-            />
           </div>
-          <div className="space-y-4">
+          <div>
             <FileUploader
               bucket="lms-banners"
               label="Banner do curso"
               description="Imagem ampla usada no topo da pagina do treinamento."
               accept="image/*"
               onUploaded={(value) => setForm((current) => ({ ...current, banner_url: value }))}
-            />
-            <LmsMediaLibrary
-              bucket="lms-banners"
-              title="Biblioteca de banners"
-              description="Reuse um banner ja publicado em outro treinamento."
-              onSelect={(value) => setForm((current) => ({ ...current, banner_url: value }))}
             />
           </div>
         </div>

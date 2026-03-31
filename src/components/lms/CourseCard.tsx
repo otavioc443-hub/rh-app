@@ -21,6 +21,7 @@ function formatDateBr(value: string | null | undefined) {
 
 export function CourseCard({ item }: { item: LmsMyTrainingCard }) {
   const [saved, setSaved] = useState(false);
+  const [coverFailed, setCoverFailed] = useState(false);
   const progress = Math.round(item.progress?.progress_percent ?? 0);
   const primaryLabel =
     item.status === "completed"
@@ -46,9 +47,9 @@ export function CourseCard({ item }: { item: LmsMyTrainingCard }) {
   return (
     <div className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
       <div className="relative h-72 bg-slate-100">
-        {item.course.thumbnail_url ? (
+        {item.course.thumbnail_url && !coverFailed ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.course.thumbnail_url} alt={item.course.title} className="h-full w-full object-cover" />
+          <img src={item.course.thumbnail_url} alt={item.course.title} className="h-full w-full object-cover" onError={() => setCoverFailed(true)} />
         ) : (
           <div className="flex h-full items-center justify-center text-sm font-semibold text-slate-400">Sem capa</div>
         )}

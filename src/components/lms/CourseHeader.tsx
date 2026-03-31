@@ -1,7 +1,12 @@
+"use client";
+
+import { useState } from "react";
 import { Award, Clock3, Layers3, PlaySquare } from "lucide-react";
 import type { LmsCourseDetail } from "@/lib/lms/types";
 
 export function CourseHeader({ detail }: { detail: LmsCourseDetail }) {
+  const [bannerFailed, setBannerFailed] = useState(false);
+  const [thumbFailed, setThumbFailed] = useState(false);
   const lessonCount = detail.modules.reduce((sum, module) => sum + module.lessons.length, 0);
   const progress = Math.round(detail.progress?.progress_percent ?? 0);
 
@@ -66,17 +71,17 @@ export function CourseHeader({ detail }: { detail: LmsCourseDetail }) {
         </div>
 
         <div className="relative overflow-hidden rounded-[28px] border border-slate-200 bg-slate-100">
-          {detail.course.banner_url ? (
+          {detail.course.banner_url && !bannerFailed ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={detail.course.banner_url} alt={detail.course.title} className="absolute inset-0 h-full w-full object-cover opacity-80" />
+            <img src={detail.course.banner_url} alt={detail.course.title} className="absolute inset-0 h-full w-full object-cover opacity-80" onError={() => setBannerFailed(true)} />
           ) : null}
           <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-900/35 to-white/10" />
           <div className="relative flex h-full min-h-[260px] flex-col justify-between p-6">
             <div className="flex items-start justify-between gap-4">
               <div className="h-16 w-16 overflow-hidden rounded-[22px] border border-white/40 bg-white/50 backdrop-blur">
-                {detail.course.thumbnail_url ? (
+                {detail.course.thumbnail_url && !thumbFailed ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={detail.course.thumbnail_url} alt={detail.course.title} className="h-full w-full object-cover" />
+                  <img src={detail.course.thumbnail_url} alt={detail.course.title} className="h-full w-full object-cover" onError={() => setThumbFailed(true)} />
                 ) : null}
               </div>
               <span className="rounded-full border border-white/40 bg-white/70 px-3 py-1.5 text-xs font-semibold text-slate-900">
