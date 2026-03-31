@@ -101,6 +101,17 @@ export function parseStorageRef(value: string | null | undefined) {
   const raw = String(value ?? "").trim();
   if (!raw) return null;
 
+  if (raw.startsWith("/api/lms/storage/file?") || raw.startsWith("/api/lms/storage/resolve?")) {
+    try {
+      const url = new URL(raw, "http://local");
+      const nestedRef = url.searchParams.get("ref");
+      if (!nestedRef || nestedRef === raw) return null;
+      return parseStorageRef(nestedRef);
+    } catch {
+      return null;
+    }
+  }
+
   if (raw.startsWith("storage://")) {
     const withoutPrefix = raw.slice("storage://".length);
     const slashIndex = withoutPrefix.indexOf("/");
