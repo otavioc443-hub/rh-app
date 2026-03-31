@@ -99,14 +99,38 @@ export function buildStorageRef(bucket: string, path: string) {
 
 export function parseStorageRef(value: string | null | undefined) {
   const raw = String(value ?? "").trim();
-  if (!raw.startsWith("storage://")) return null;
-  const withoutPrefix = raw.slice("storage://".length);
-  const slashIndex = withoutPrefix.indexOf("/");
-  if (slashIndex <= 0) return null;
-  return {
-    bucket: withoutPrefix.slice(0, slashIndex),
-    path: withoutPrefix.slice(slashIndex + 1),
-  };
+  if (!raw) return null;
+
+  if (raw.startsWith("storage://")) {
+    const withoutPrefix = raw.slice("storage://".length);
+    const slashIndex = withoutPrefix.indexOf("/");
+    if (slashIndex <= 0) return null;
+    return {
+      bucket: withoutPrefix.slice(0, slashIndex),
+      path: withoutPrefix.slice(slashIndex + 1),
+    };
+  }
+
+  try {
+    const url = new URL(raw);
+    const segments = url.pathname.split("/").filter(Boolean);
+    const objectIndex = segments.findIndex((segment) => segment === "object");
+    if (objectIndex < 0) return null;
+
+    const mode = segments[objectIndex + 1];
+    const bucket = segments[objectIndex + 2];
+    const pathSegments = segments.slice(objectIndex + 3);
+
+    if (!bucket || !pathSegments.length) return null;
+    if (!["sign", "public", "authenticated"].includes(mode ?? "")) return null;
+
+    return {
+      bucket,
+      path: decodeURIComponent(pathSegments.join("/")),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function isLessonLocked(
