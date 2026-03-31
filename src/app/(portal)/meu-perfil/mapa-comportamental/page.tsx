@@ -67,6 +67,13 @@ function firstName(value: string | null | undefined) {
   return normalized.split(/\s+/)[0] ?? null;
 }
 
+function initials(value: string | null | undefined) {
+  const normalized = normalizeDisplayName(value);
+  if (!normalized) return "PC";
+  const parts = normalized.split(/\s+/).filter(Boolean).slice(0, 2);
+  return parts.map((part) => part[0]?.toUpperCase() ?? "").join("") || "PC";
+}
+
 function summarizePredominance(predominant: BehaviorAxisResult[]) {
   if (!predominant.length) return "Perfil equilibrado";
   return predominant.map((item) => item.label).join(" + ");
@@ -75,6 +82,28 @@ function summarizePredominance(predominant: BehaviorAxisResult[]) {
 function signedValue(value: number) {
   const rounded = value.toFixed(2);
   return value > 0 ? `+${rounded}` : rounded;
+}
+
+function getAxisTextClass(key: string) {
+  switch (key) {
+    case "executor":
+      return "text-rose-600";
+    case "communicator":
+      return "text-amber-500";
+    case "planner":
+      return "text-emerald-600";
+    case "analyst":
+      return "text-blue-600";
+    default:
+      return "text-violet-700";
+  }
+}
+
+function getCompetencyLevel(score: number) {
+  if (score >= 8.6) return "Alta";
+  if (score >= 7.4) return "Normal alta";
+  if (score >= 6.2) return "Normal baixa";
+  return "Baixa";
 }
 
 function buildFactorAttention(selfFactors: BehaviorFactorResult[], othersFactors: BehaviorFactorResult[]) {
@@ -579,8 +608,54 @@ export default function MapaComportamentalPage() {
 
           {showReport ? (
             <section ref={reportRef} className="report-page space-y-6">
-              <section className="hero overflow-hidden rounded-[30px] bg-[radial-gradient(circle_at_top_left,_rgba(216,180,254,0.28),_transparent_28%),linear-gradient(135deg,_#20103b_0%,_#5b21b6_48%,_#7c3aed_100%)] p-8 text-white shadow-xl shadow-violet-200/60">
-                <div className="flex flex-wrap items-start justify-between gap-4">
+              <section id="perfil-predominante" className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-violet-100 bg-gradient-to-r from-white via-violet-50/50 to-white px-8 py-10">
+                  <div className="flex flex-col items-center text-center">
+                    <div className="flex items-center gap-4">
+                      <div className="inline-flex rounded-full border border-violet-200 bg-white px-4 py-1.5 text-sm font-semibold text-violet-700">
+                        Liderança
+                      </div>
+                      <div className="flex h-32 w-32 items-center justify-center rounded-full border-[12px] border-violet-100 bg-amber-400 text-5xl font-semibold text-white shadow-lg shadow-amber-100">
+                        {initials(fullName)}
+                      </div>
+                      <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-amber-400 bg-white text-2xl font-semibold text-violet-700">
+                        {reportPredominantSelf.map((item) => item.label[0]).join("").slice(0, 2)}
+                      </div>
+                    </div>
+
+                    <h2 className="mt-6 text-4xl font-semibold tracking-tight text-violet-800">{fullName || "Colaborador"}</h2>
+                    <div className="mt-3 space-y-1 text-sm leading-6 text-violet-700/80">
+                      <p>{email || "Perfil comportamental"}</p>
+                      <p>Relatório comportamental executivo</p>
+                    </div>
+
+                    <div className="mt-6 flex flex-wrap justify-center gap-6 border-b border-violet-100 pb-5 text-sm font-medium text-violet-700">
+                      <span className="border-b-4 border-violet-700 pb-2 text-violet-800">Profiler</span>
+                      <span className="pb-2 text-violet-500">Cadastro</span>
+                      <span className="pb-2 text-violet-500">Currículo</span>
+                      <span className="pb-2 text-violet-500">Histórico</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="px-8 py-8">
+                  <p className="text-center text-xl text-violet-700">Neste momento, {personName} está:</p>
+                  <h1 className="mt-1 text-center text-5xl font-semibold tracking-tight text-violet-800">
+                    {summarizePredominance(reportPredominantSelf)}
+                  </h1>
+                  <p className="mt-1 text-center text-lg text-violet-600">
+                    em {new Date(latestAssessment.created_at).toLocaleDateString("pt-BR")}
+                  </p>
+                  <div className="mt-8">
+                    <PredominanceSpectrum results={reportSelfResults} />
+                  </div>
+                  <p className="mx-auto mt-8 max-w-5xl text-center text-lg leading-8 text-violet-800/90">
+                    {getBehaviorSummaryLine(reportSelfResults, personName)} O contexto atual também aponta para{" "}
+                    <strong>{summarizePredominance(reportPredominantOthers)}</strong>, trazendo uma leitura mais completa sobre como este perfil pode gerar valor, se adaptar ao ambiente e evoluir com o time.
+                  </p>
+                </div>
+              </section>
+              <section hidden className="hidden">
+                <div className="border-b border-violet-100 bg-gradient-to-r from-white via-violet-50/50 to-white px-8 py-10">
                   <div className="max-w-3xl">
                     <p className="text-xs font-semibold uppercase tracking-[0.28em] text-violet-200">Leitura executiva do perfil</p>
                     <h1 className="mt-3 text-4xl font-semibold tracking-tight">
@@ -591,7 +666,7 @@ export default function MapaComportamentalPage() {
                       <b>{summarizePredominance(reportPredominantOthers)}</b>, o que ajuda a orientar conversas de desenvolvimento, composição de equipe e forma de atuação.
                     </p>
                     <div className="mt-5 flex flex-wrap gap-2">
-                      <ProfileTag icon={<Sparkles size={14} />} label={`Confianca do perfil: ${selfConfidence.label}`} />
+                      <ProfileTag icon={<Sparkles size={14} />} label={`Confiança do perfil: ${selfConfidence.label}`} />
                       <ProfileTag icon={<TrendingUp size={14} />} label={`Ambiente atual: ${summarizePredominance(reportPredominantOthers)}`} />
                       <ProfileTag icon={<Target size={14} />} label={`Ultima leitura em ${new Date(latestAssessment.created_at).toLocaleDateString("pt-BR")}`} />
                     </div>
@@ -615,39 +690,68 @@ export default function MapaComportamentalPage() {
 
               <div className="grid gap-4 xl:grid-cols-4">
                 <ExecutiveSummaryTile
-                  title="Confianca do perfil natural"
+                  title="Confiança do perfil natural"
                   value={selfConfidence.label}
                   description={`${reportSelfSelectedIds.length} adjetivos considerados nesta leitura.`}
                 />
                 <ExecutiveSummaryTile
-                  title="Confianca da exigencia do meio"
+                  title="Confiança da exigência do meio"
                   value={othersConfidence.label}
                   description={`${reportOthersSelectedIds.length} adjetivos considerados na leitura do ambiente.`}
                 />
                 <ExecutiveSummaryTile
-                  title="Competencia mais favorecida"
+                  title="Competência mais favorecida"
                   value={mainCompetencies[0]?.label ?? "Sem leitura"}
                   description="Ponto com maior potencial de entrega e consistencia neste momento."
                 />
                 <ExecutiveSummaryTile
-                  title="Maior ponto de atencao"
+                  title="Maior ponto de atenção"
                   value={dominantGaps[0]?.label ?? "Sem alerta forte"}
                   description="Eixo que merece observacao para reduzir atrito e desgaste."
                 />
               </div>
 
-              <section className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-violet-50/30 p-6 shadow-sm">
+              <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_280px]">
+                <div className="rounded-[28px] border border-amber-100 bg-gradient-to-r from-amber-50 to-white px-5 py-4 text-sm text-violet-800 shadow-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p>
+                      <strong>Leitura principal:</strong> {summarizePredominance(reportPredominantSelf)}. Ambiente atual:{" "}
+                      {summarizePredominance(reportPredominantOthers)}.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <ProfileTag icon={<Sparkles size={14} />} label={`Confiança do perfil: ${selfConfidence.label}`} />
+                      <ProfileTag icon={<TrendingUp size={14} />} label={`Leitura em ${new Date(latestAssessment.created_at).toLocaleDateString("pt-BR")}`} />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-700">Atalhos</p>
+                  <div className="mt-4 space-y-2">
+                    <a href="#perfil-predominante" className="block rounded-2xl bg-violet-100 px-4 py-3 text-sm font-semibold text-violet-800">Perfil predominante</a>
+                    <a href="#subcaracteristicas" className="block rounded-2xl px-4 py-2.5 text-sm font-medium text-violet-700 hover:bg-violet-50">Subcaracterísticas</a>
+                    <a href="#perfil-natural-x-meio" className="block rounded-2xl px-4 py-2.5 text-sm font-medium text-violet-700 hover:bg-violet-50">Habilidades básicas</a>
+                    <a href="#indicadores-situacionais" className="block rounded-2xl px-4 py-2.5 text-sm font-medium text-violet-700 hover:bg-violet-50">Indicadores situacionais</a>
+                    <a href="#perfil-isolado" className="block rounded-2xl px-4 py-2.5 text-sm font-medium text-violet-700 hover:bg-violet-50">Perfil isolado</a>
+                    <a href="#lideranca" className="block rounded-2xl px-4 py-2.5 text-sm font-medium text-violet-700 hover:bg-violet-50">Liderança atual</a>
+                    <a href="#competencias" className="block rounded-2xl px-4 py-2.5 text-sm font-medium text-violet-700 hover:bg-violet-50">Competências</a>
+                    <a href="#recomendacoes" className="block rounded-2xl px-4 py-2.5 text-sm font-medium text-violet-700 hover:bg-violet-50">Área de talentos</a>
+                  </div>
+                </div>
+              </div>
+
+              <section id="subcaracteristicas" className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-violet-50/30 p-6 shadow-sm">
                 <SectionHeader
                   title="Leitura executiva do comportamento"
                   description="Síntese mais próxima de um relatório corporativo, com leitura editorial para entendimento rápido e aplicação prática."
                 />
                 <div className="mt-5 grid gap-4 xl:grid-cols-3">
                   <NarrativeBlock
-                    title="Subcaracteristicas"
+                    title="Subcaracterísticas"
                     text={executiveNarrative.subcharacteristics}
                   />
                   <NarrativeBlock
-                    title="Habilidades basicas"
+                    title="Habilidades básicas"
                     text={executiveNarrative.basicSkills}
                   />
                   <NarrativeBlock
@@ -657,9 +761,9 @@ export default function MapaComportamentalPage() {
                 </div>
               </section>
 
-              <section className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-6 shadow-sm">
+              <section id="perfil-natural-x-meio" className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-6 shadow-sm">
                 <SectionHeader
-                  title="Perfil natural e exigencia do meio"
+                  title="Perfil natural e exigência do meio"
                   description="Comparativo visual entre como voce tende a atuar e o que o ambiente atual mais exige, com leitura mais corporativa e direta."
                 />
                 <div className="mt-5 grid gap-5 xl:grid-cols-2">
@@ -672,7 +776,7 @@ export default function MapaComportamentalPage() {
                     accentClass="from-amber-50 via-white to-rose-50"
                   />
                   <ResultCard
-                    title="Exigencia do meio"
+                    title="Exigência do meio"
                     icon={<Users size={16} />}
                     personName={personName}
                     results={reportOthersResults}
@@ -682,9 +786,9 @@ export default function MapaComportamentalPage() {
                 </div>
               </section>
 
-              <section className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-violet-50/20 p-6 shadow-sm">
+              <section id="perfil-isolado" className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-violet-50/20 p-6 shadow-sm">
                 <SectionHeader
-                  title="Adaptacao ao contexto"
+                  title="Adaptação ao contexto"
                   description="O quanto cada eixo esta sendo puxado ou comprimido pelo ambiente atual. Isso ajuda a perceber onde existe energia natural e onde existe ajuste mais intenso."
                 />
                 <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -694,14 +798,14 @@ export default function MapaComportamentalPage() {
                 </div>
               </section>
 
-              <section className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-amber-50/30 p-6 shadow-sm">
+              <section id="indicadores-situacionais" className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-amber-50/30 p-6 shadow-sm">
                 <SectionHeader
                   title="Indicadores situacionais"
                   description="Leitura resumida de energia, flexibilidade, confiança e pressão do contexto, em uma linguagem mais gerencial."
                 />
-                <div className="mt-5 grid gap-4 xl:grid-cols-2">
+                <div className="mt-6 space-y-5">
                   {situationalIndicators.map((item) => (
-                    <IndicatorCard key={item.title} title={item.title} status={item.status} description={item.description} />
+                    <SituationalIndicatorRow key={item.title} title={item.title} status={item.status} description={item.description} />
                   ))}
                 </div>
               </section>
@@ -717,7 +821,7 @@ export default function MapaComportamentalPage() {
                     return <AxisComparisonCard key={item.key} current={item} environment={environment} />;
                   })}
                 </div>
-                <div className="mt-6">
+                <div className="mt-6 grid gap-6 xl:grid-cols-2">
                   <TrendLineChart
                     title="Perfil isolado"
                     items={isolatedProfile}
@@ -725,24 +829,28 @@ export default function MapaComportamentalPage() {
                     lineBColor="#ef4444"
                     lineCColor="#334155"
                   />
+                  <LeadershipLineChart items={leadershipProfile} />
                 </div>
               </section>
 
-              <section className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-sky-50/20 p-6 shadow-sm">
+              <section id="competencias" className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-sky-50/20 p-6 shadow-sm">
                 <SectionHeader
-                  title="Competencias comportamentais"
-                  description="Potenciais mais favorecidos a partir da combinacao entre perfil natural, exigencia do meio e estilo de conducao."
+                  title="Competências comportamentais"
+                  description="Potenciais mais favorecidos a partir da combinação entre perfil natural, exigência do meio e estilo de condução."
                 />
-                <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                <div className="mt-6">
+                  <CompetencyRadar points={mainCompetencies.slice(0, 12)} />
+                </div>
+                <div className="mt-8 rounded-[26px] border border-slate-200 bg-white px-8 py-4 shadow-sm">
                   {mainCompetencies.map((item, index) => (
-                    <CompetencyBar key={item.label} point={item} highlight={index < 3} />
+                    <CompetencyBar key={item.label} point={item} highlight={index < 3} index={index} />
                   ))}
                 </div>
               </section>
 
-              <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <section id="pontos-de-atencao" className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
                 <SectionHeader
-                  title="Pontos de atencao"
+                  title="Pontos de atenção"
                   description="Sinais de observacao para apoiar conversas com lideranca, distribuicao de demandas e calibragem da forma de trabalho."
                 />
                 <div className="mt-5 grid gap-4 xl:grid-cols-2">
@@ -757,7 +865,7 @@ export default function MapaComportamentalPage() {
                 </div>
               </section>
 
-              <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <section id="lideranca" className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
                 <SectionHeader
                   title="Estilo de lideranca"
                   description="Leitura sintetica da forma mais provavel de conduzir, comunicar expectativa e influenciar o time a partir do momento atual."
@@ -767,14 +875,11 @@ export default function MapaComportamentalPage() {
                     <LeadershipCard key={item.key} point={item} />
                   ))}
                 </div>
-                <div className="mt-6">
-                  <LeadershipLineChart items={leadershipProfile} />
-                </div>
               </section>
 
-              <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+              <section id="recomendacoes" className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
                 <SectionHeader
-                  title="Recomendacoes praticas"
+                  title="Recomendações práticas"
                   description="Uma leitura mais motivadora e aplicavel para apoiar desenvolvimento individual, combinacao com o time e alinhamento com a lideranca."
                 />
                 <div className="mt-5 grid gap-4 xl:grid-cols-2">
@@ -784,9 +889,6 @@ export default function MapaComportamentalPage() {
                   {recommendations.map((item, index) => (
                     <RecommendationCard key={item.title} title={item.title} text={item.text} index={index + teamHighlights.length} />
                   ))}
-                </div>
-                <div className="mt-6">
-                  <CompetencyRadar points={mainCompetencies.slice(0, 8)} />
                 </div>
               </section>
             </section>
@@ -900,6 +1002,33 @@ function SectionHeader({ title, description }: { title: string; description: str
   );
 }
 
+function PredominanceSpectrum({ results }: { results: BehaviorAxisResult[] }) {
+  return (
+    <div>
+      <div className="overflow-hidden rounded-full border border-slate-200">
+        <div className="grid grid-cols-4">
+          {results.map((item) => (
+            <div key={item.key} className={cx("relative py-6", BEHAVIOR_AXIS_META[item.key].colorClass)}>
+              <div className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-white bg-white/80" />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-5 grid gap-4 text-center md:grid-cols-4">
+        {results.map((item) => (
+          <div key={item.key}>
+            <div className={cx("text-4xl font-semibold", getAxisTextClass(item.key))}>{item.percent.toFixed(2)}%</div>
+            <div className={cx("mt-1 text-2xl font-semibold", getAxisTextClass(item.key))}>{item.label}</div>
+            <div className="mt-1 text-sm font-semibold uppercase tracking-[0.12em] text-violet-700">
+              {getBehaviorClassificationLabel(item.classification)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ExecutiveSummaryTile({ title, value, description }: { title: string; value: string; description: string }) {
   return (
     <div className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-white to-violet-50/30 p-5 shadow-sm">
@@ -975,6 +1104,56 @@ function IndicatorCard({
   );
 }
 
+function SituationalIndicatorRow({
+  title,
+  status,
+  description,
+}: {
+  title: string;
+  status: string;
+  description: string;
+}) {
+  const statusMap: Record<string, number> = {
+    "Baixa": 38,
+    "Muito baixa": 26,
+    "Normal baixa": 50,
+    "Moderada": 58,
+    "Consistente": 64,
+    "Normal alta": 76,
+    "Alta": 88,
+    "Em formação": 34,
+    "Em atenção": 42,
+    "Alto": 82,
+  };
+  const normalized = status.toLowerCase();
+  const width =
+    statusMap[status] ??
+    (normalized.includes("alta")
+      ? 82
+      : normalized.includes("media")
+        ? 60
+        : normalized.includes("aten")
+          ? 42
+          : normalized.includes("baixa")
+            ? 38
+            : 55);
+
+  return (
+    <div className="grid gap-4 rounded-[22px] border border-violet-100 bg-white px-6 py-5 shadow-sm md:grid-cols-[220px_minmax(0,1fr)] md:items-center">
+      <div>
+        <p className="text-2xl font-semibold text-violet-800">{title}</p>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+      </div>
+      <div>
+        <div className="text-sm font-semibold uppercase tracking-[0.12em] text-violet-700">{status}</div>
+        <div className="mt-2 h-3 rounded-full bg-violet-100">
+          <div className="h-3 rounded-full bg-gradient-to-r from-violet-700 to-fuchsia-600" style={{ width: `${width}%` }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MetricRow({
   label,
   value,
@@ -992,16 +1171,32 @@ function MetricRow({
   );
 }
 
-function CompetencyBar({ point, highlight }: { point: BehaviorCompetencyPoint; highlight?: boolean }) {
+function CompetencyBar({
+  point,
+  highlight,
+  index,
+}: {
+  point: BehaviorCompetencyPoint;
+  highlight?: boolean;
+  index: number;
+}) {
   const width = `${Math.min(100, (point.score / 10) * 100)}%`;
+  const level = getCompetencyLevel(point.score);
   return (
-    <div className={cx("rounded-[24px] border p-4", highlight ? "border-sky-200 bg-sky-50/60" : "border-slate-200 bg-slate-50")}>
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold text-slate-900">{point.label}</span>
-        <span className="text-sm font-semibold text-slate-700">{point.score.toFixed(2)}</span>
-      </div>
-      <div className="mt-3 h-2.5 rounded-full bg-slate-200">
-        <div className={cx("h-2.5 rounded-full", highlight ? "bg-gradient-to-r from-sky-600 to-blue-600" : "bg-slate-900")} style={{ width }} />
+    <div className="grid gap-4 border-b border-slate-200 py-4 md:grid-cols-[64px_260px_minmax(0,1fr)] md:items-center">
+      <div className="text-xl font-semibold text-violet-800">{index + 1}</div>
+      <div className="text-2xl font-semibold text-violet-800">{point.label}</div>
+      <div>
+        <div className="text-sm font-semibold uppercase tracking-[0.12em] text-violet-700">{level}</div>
+        <div className="mt-2 h-3 rounded-full bg-violet-100">
+          <div
+            className={cx(
+              "h-3 rounded-full bg-gradient-to-r from-violet-700 to-fuchsia-600",
+              highlight && "from-violet-800 to-violet-600"
+            )}
+            style={{ width }}
+          />
+        </div>
       </div>
     </div>
   );
@@ -1197,8 +1392,11 @@ function TrendLineChart({
       .join(" ");
 
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{title}</p>
+    <div className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-3">
+        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-900">{title}</p>
+        <div className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-900 text-[11px] font-semibold text-white">i</div>
+      </div>
       <svg viewBox={`0 0 ${width} ${height}`} className="mt-4 w-full">
         {[-20, -10, 0, 10, 20].map((tick) => (
           <g key={tick}>
@@ -1225,7 +1423,8 @@ function TrendLineChart({
           );
         })}
       </svg>
-      <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-600">
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-6 border-t border-slate-200 pt-4 text-xs font-semibold uppercase tracking-[0.08em] text-slate-700">
+        <span className="text-slate-900">Legenda:</span>
         <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: lineAColor }} /> Perfil atual</span>
         <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: lineBColor }} /> Exigencia do meio</span>
         <span className="inline-flex items-center gap-2"><span className="h-0 w-0 border-l-[6px] border-r-[6px] border-b-[10px] border-l-transparent border-r-transparent" style={{ borderBottomColor: lineCColor }} /> Forca de adaptacao</span>
@@ -1276,9 +1475,9 @@ function CompetencyRadar({ points }: { points: BehaviorCompetencyPoint[] }) {
   }).join(" ");
 
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Competencias em destaque</p>
-      <div className="mt-4 grid gap-4 xl:grid-cols-[440px_minmax(0,1fr)] xl:items-center">
+    <div className="rounded-[26px] border border-slate-200 bg-white p-6 shadow-sm">
+      <p className="text-center text-4xl font-semibold uppercase tracking-[0.1em] text-violet-800">Competências</p>
+      <div className="mt-6 grid gap-6 xl:grid-cols-[520px_minmax(0,1fr)] xl:items-center">
         <svg viewBox={`0 0 ${size} ${size}`} className="mx-auto w-full max-w-[420px]">
           {levels.map((level) => {
             const polygonPoints = points.map((_, index) => {
@@ -1300,17 +1499,17 @@ function CompetencyRadar({ points }: { points: BehaviorCompetencyPoint[] }) {
               </g>
             );
           })}
-          <polygon points={polygon} fill="rgba(124,58,237,0.18)" stroke="#7c3aed" strokeWidth="3" />
+          <polygon points={polygon} fill="rgba(124,58,237,0.32)" stroke="#7c3aed" strokeWidth="3" />
           {points.map((point, index) => {
             const { x, y } = pointFor(point.score, index);
             return <circle key={point.label} cx={x} cy={y} r="4" fill="#7c3aed" />;
           })}
         </svg>
         <div className="space-y-3">
-          {points.map((point) => (
-            <div key={point.label} className="rounded-[18px] border border-white bg-white p-3 shadow-sm">
+          {points.map((point, index) => (
+            <div key={point.label} className="rounded-[18px] border border-slate-200 bg-gradient-to-r from-white to-violet-50/40 p-3 shadow-sm">
               <div className="flex items-center justify-between gap-3">
-                <span className="text-sm font-semibold text-slate-900">{point.label}</span>
+                <span className="text-sm font-semibold text-slate-900">{index + 1}. {point.label}</span>
                 <span className="text-sm font-semibold text-violet-700">{point.score.toFixed(2)}</span>
               </div>
             </div>
