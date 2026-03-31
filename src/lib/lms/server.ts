@@ -278,9 +278,7 @@ function isMissingRelation(error: unknown) {
 async function maybeSignedUrl(ref: string | null | undefined) {
   const parsed = parseStorageRef(ref);
   if (!parsed) return ref ?? null;
-  const { data, error } = await supabaseAdmin.storage.from(parsed.bucket).createSignedUrl(parsed.path, 60 * 60 * 6);
-  if (error || !data?.signedUrl) return null;
-  return data.signedUrl;
+  return `/api/lms/storage/file?ref=${encodeURIComponent(ref ?? "")}`;
 }
 
 async function mapCourseAssets(course: LmsCourse) {
