@@ -39,20 +39,20 @@ export function CourseDetailClient({ detail }: { detail: LmsCourseDetail }) {
       <div className="grid gap-6 xl:grid-cols-[1.38fr_0.62fr]">
         <div className="space-y-6">
           <CourseHeader detail={currentDetail} />
-          <section className="rounded-3xl border border-slate-800 bg-[#171717] p-5 text-white shadow-sm md:p-6">
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 text-slate-900 shadow-sm md:p-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/45">Seu proximo passo</div>
-                <h2 className="mt-2 text-2xl font-semibold text-white">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Seu proximo passo</div>
+                <h2 className="mt-2 text-2xl font-semibold text-slate-950">
                   {resumeLesson ? `Continue por ${resumeLesson.title}` : "Curso pronto para iniciar"}
                 </h2>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-white/65">
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
                   {currentDetail.course.sequence_required
                     ? "A experiencia foi organizada em sequencia para manter a jornada simples e objetiva."
                     : "Escolha a proxima aula e avance no seu ritmo, sem perder o fio da trilha."}
                 </p>
               </div>
-              <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-white">
+              <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
                 <Sparkles size={18} />
               </span>
             </div>
@@ -61,7 +61,7 @@ export function CourseDetailClient({ detail }: { detail: LmsCourseDetail }) {
               {resumeLesson ? (
                 <Link
                   href={`/lms/aprender/${currentDetail.course.id}/${resumeLesson.id}`}
-                  className="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-100"
+                  className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                 >
                   {currentDetail.progress?.progress_percent ? "Continuar treinamento" : "Iniciar treinamento"}
                 </Link>
@@ -70,14 +70,14 @@ export function CourseDetailClient({ detail }: { detail: LmsCourseDetail }) {
             </div>
 
             <div className="mt-5 flex flex-wrap gap-2.5">
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/75">
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
                 {summary.requiredLessons} aulas obrigatorias
               </span>
-              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/75">
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
                 {summary.totalMinutes} min
               </span>
               {evaluationLessons ? (
-                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-white/75">
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
                   {evaluationLessons} avaliacao(oes)
                 </span>
               ) : null}
@@ -86,10 +86,10 @@ export function CourseDetailClient({ detail }: { detail: LmsCourseDetail }) {
         </div>
 
         <div className="space-y-4 xl:sticky xl:top-24 xl:self-start">
-          <section className="rounded-3xl border border-slate-800 bg-[#171717] p-5 text-white shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">Agora</div>
-            <div className="mt-2 text-lg font-semibold text-white">{resumeLesson?.title ?? currentDetail.course.title}</div>
-            <div className="mt-3 space-y-1 text-sm text-white/65">
+          <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-slate-800 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Agora</div>
+            <div className="mt-2 text-lg font-semibold text-slate-950">{resumeLesson?.title ?? currentDetail.course.title}</div>
+            <div className="mt-3 space-y-1 text-sm text-slate-600">
               <div>Progresso total: {Math.round(currentDetail.progress?.progress_percent ?? 0)}%</div>
               <div>Fase atual: {currentModule?.title ?? "Primeira etapa da trilha"}</div>
               <div>
@@ -98,15 +98,15 @@ export function CourseDetailClient({ detail }: { detail: LmsCourseDetail }) {
             </div>
           </section>
 
-          <section className="rounded-3xl border border-slate-800 bg-[#171717] p-4 text-white shadow-sm">
-            <label className="block text-xs font-semibold uppercase tracking-[0.18em] text-white/40">Buscar no curso</label>
+          <section className="rounded-3xl border border-slate-200 bg-white p-4 text-slate-900 shadow-sm">
+            <label className="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Buscar no curso</label>
             <div className="relative mt-3">
-              <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/35" />
+              <Search size={16} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Buscar aula, modulo ou assunto"
-                className="h-11 w-full rounded-2xl border border-slate-700 bg-transparent pl-11 pr-4 text-sm text-white placeholder:text-white/35"
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-800 placeholder:text-slate-400"
               />
             </div>
           </section>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LessonPlayer } from "@/components/lms/LessonPlayer";
 import { LessonDiscussionPanel } from "@/components/lms/LessonDiscussionPanel";
@@ -29,12 +29,18 @@ export function LessonLearningClient({
 }) {
   const router = useRouter();
   const { progressPercent, loading, completeLesson } = useUserProgress(detail.progress?.progress_percent ?? 0);
-  const completedLessonIdsSet = useMemo(() => new Set(completedLessonIds), [completedLessonIds]);
+  const [completedIds, setCompletedIds] = useState(completedLessonIds);
+  const completedLessonIdsSet = useMemo(() => new Set(completedIds), [completedIds]);
   const summary = getRequiredLessonsSummary(detail.modules);
   const currentModule = detail.modules.find((module) => module.lessons.some((lesson) => lesson.id === currentLesson.id)) ?? detail.modules[0] ?? null;
 
+  useEffect(() => {
+    setCompletedIds(completedLessonIds);
+  }, [completedLessonIds, currentLesson.id]);
+
   async function handleComplete() {
     await completeLesson(courseId, currentLesson.id, true);
+    setCompletedIds((current) => (current.includes(currentLesson.id) ? current : [...current, currentLesson.id]));
     router.refresh();
   }
 
@@ -51,10 +57,10 @@ export function LessonLearningClient({
         <LessonDiscussionPanel courseId={courseId} lessonId={currentLesson.id} initialItems={discussions} />
       </div>
       <div className="space-y-4 xl:sticky xl:top-24 xl:self-start">
-        <div className="rounded-3xl border border-slate-800 bg-[#171717] p-5 text-sm text-white/70 shadow-sm">
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">Agora</div>
-          <div className="mt-2 text-lg font-semibold text-white">{currentLesson.title}</div>
-          <div className="mt-3 space-y-1 text-sm text-white/65">
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-700 shadow-sm">
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Agora</div>
+          <div className="mt-2 text-lg font-semibold text-slate-950">{currentLesson.title}</div>
+          <div className="mt-3 space-y-1 text-sm text-slate-600">
             <div>Progresso total: {Math.round(progressPercent)}%</div>
             <div>Fase atual: {currentModule?.title ?? "Etapa do treinamento"}</div>
             <div>
