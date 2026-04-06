@@ -213,6 +213,35 @@ function buildExecutiveBehaviorNarrative(
   };
 }
 
+function buildPredominanceOpeningSummary(
+  personName: string,
+  selfResults: BehaviorAxisResult[],
+  othersResults: BehaviorAxisResult[]
+) {
+  const [primary, secondary] = selfResults;
+  const lowest = [...selfResults].sort((a, b) => a.percent - b.percent)[0];
+  const environmentLead = othersResults[0];
+
+  if (!primary) {
+    return `${personName} apresenta uma leitura equilibrada neste momento, sem um eixo isolado dominando de forma clara.`;
+  }
+
+  const secondaryText =
+    secondary && secondary.percent >= 20
+      ? ` com apoio relevante de ${secondary.label.toLowerCase()}`
+      : "";
+
+  const lowestText = lowest
+    ? ` O eixo com menor expressão agora é ${lowest.label.toLowerCase()}, o que ajuda a entender onde tende a existir menor espontaneidade.`
+    : "";
+
+  const environmentText = environmentLead
+    ? ` No contexto atual, o ambiente parece demandar mais ${environmentLead.label.toLowerCase()}, o que orienta melhor os ajustes esperados nas relações e entregas.`
+    : "";
+
+  return `${personName} tende a atuar com maior naturalidade em ${primary.label.toLowerCase()}${secondaryText}.${lowestText}${environmentText}`;
+}
+
 function buildSituationalIndicators(
   selfConfidenceLabel: string,
   othersConfidenceLabel: string,
@@ -358,6 +387,10 @@ export default function MapaComportamentalPage() {
   const teamHighlights = useMemo(
     () => buildTeamContributionHighlights(personName, reportPredominantSelf, mainCompetencies),
     [personName, reportPredominantSelf, mainCompetencies]
+  );
+  const openingSummary = useMemo(
+    () => buildPredominanceOpeningSummary(personName, reportSelfResults, reportOthersResults),
+    [personName, reportSelfResults, reportOthersResults]
   );
   const executiveNarrative = useMemo(
     () => buildExecutiveBehaviorNarrative(personName, reportPredominantSelf, mainCompetencies),
@@ -609,37 +642,9 @@ export default function MapaComportamentalPage() {
           {showReport ? (
             <section ref={reportRef} className="report-page space-y-6">
               <section id="perfil-predominante" className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-violet-100 bg-gradient-to-r from-white via-violet-50/50 to-white px-8 py-10">
-                  <div className="flex flex-col items-center text-center">
-                    <div className="flex items-center gap-4">
-                      <div className="inline-flex rounded-full border border-violet-200 bg-white px-4 py-1.5 text-sm font-semibold text-violet-700">
-                        Liderança
-                      </div>
-                      <div className="flex h-32 w-32 items-center justify-center rounded-full border-[12px] border-violet-100 bg-amber-400 text-5xl font-semibold text-white shadow-lg shadow-amber-100">
-                        {initials(fullName)}
-                      </div>
-                      <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-amber-400 bg-white text-2xl font-semibold text-violet-700">
-                        {reportPredominantSelf.map((item) => item.label[0]).join("").slice(0, 2)}
-                      </div>
-                    </div>
-
-                    <h2 className="mt-6 text-4xl font-semibold tracking-tight text-violet-800">{fullName || "Colaborador"}</h2>
-                    <div className="mt-3 space-y-1 text-sm leading-6 text-violet-700/80">
-                      <p>{email || "Perfil comportamental"}</p>
-                      <p>Painel comportamental executivo</p>
-                    </div>
-
-                    <div className="mt-6 flex flex-wrap justify-center gap-6 border-b border-violet-100 pb-5 text-sm font-medium text-violet-700">
-                      <span className="border-b-4 border-violet-700 pb-2 text-violet-800">Profiler</span>
-                      <span className="pb-2 text-violet-500">Cadastro</span>
-                      <span className="pb-2 text-violet-500">Currículo</span>
-                      <span className="pb-2 text-violet-500">Histórico</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="px-8 py-8">
+                <div className="px-8 py-10">
                   <p className="text-center text-xl text-violet-700">Neste momento, {personName} está:</p>
-                  <h1 className="mt-1 text-center text-5xl font-semibold tracking-tight text-violet-800">
+                  <h1 className="mt-2 text-center text-5xl font-semibold tracking-tight text-violet-800">
                     {summarizePredominance(reportPredominantSelf)}
                   </h1>
                   <p className="mt-1 text-center text-lg text-violet-600">
@@ -649,42 +654,8 @@ export default function MapaComportamentalPage() {
                     <PredominanceSpectrum results={reportSelfResults} />
                   </div>
                   <p className="mx-auto mt-8 max-w-5xl text-center text-lg leading-8 text-violet-800/90">
-                    {getBehaviorSummaryLine(reportSelfResults, personName)} O contexto atual também aponta para{" "}
-                    <strong>{summarizePredominance(reportPredominantOthers)}</strong>, trazendo uma leitura mais completa sobre como este perfil pode gerar valor, se adaptar ao ambiente e evoluir com o time.
+                    {openingSummary}
                   </p>
-                </div>
-              </section>
-              <section hidden className="hidden">
-                <div className="border-b border-violet-100 bg-gradient-to-r from-white via-violet-50/50 to-white px-8 py-10">
-                  <div className="max-w-3xl">
-                    <p className="text-xs font-semibold uppercase tracking-[0.28em] text-violet-200">Leitura executiva do perfil</p>
-                    <h1 className="mt-3 text-4xl font-semibold tracking-tight">
-                      {summarizePredominance(reportPredominantSelf)}
-                    </h1>
-                    <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-200">
-                      {getBehaviorSummaryLine(reportSelfResults, personName)} O momento atual do ambiente aponta para{" "}
-                      <b>{summarizePredominance(reportPredominantOthers)}</b>, o que ajuda a orientar conversas de desenvolvimento, composição de equipe e forma de atuação.
-                    </p>
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      <ProfileTag icon={<Sparkles size={14} />} label={`Confiança do perfil: ${selfConfidence.label}`} />
-                      <ProfileTag icon={<TrendingUp size={14} />} label={`Ambiente atual: ${summarizePredominance(reportPredominantOthers)}`} />
-                      <ProfileTag icon={<Target size={14} />} label={`Ultima leitura em ${new Date(latestAssessment.created_at).toLocaleDateString("pt-BR")}`} />
-                    </div>
-                  </div>
-
-                  <div className="grid w-full gap-3 sm:w-[360px]">
-                    <ExecutiveStatCard
-                      title="Perfil natural"
-                      value={summarizePredominance(reportPredominantSelf)}
-                      description="Como sua energia tende a aparecer com mais espontaneidade."
-                      highlighted
-                    />
-                    <ExecutiveStatCard
-                      title="Exigencia do meio"
-                      value={summarizePredominance(reportPredominantOthers)}
-                      description="Como o contexto atual pede que voce opere e se adapte."
-                    />
-                  </div>
                 </div>
               </section>
 
@@ -1003,12 +974,23 @@ function SectionHeader({ title, description }: { title: string; description: str
 }
 
 function PredominanceSpectrum({ results }: { results: BehaviorAxisResult[] }) {
+  const palette: Record<string, { segment: string; text: string }> = {
+    executor: { segment: "#E36A2E", text: "text-orange-600" },
+    communicator: { segment: "#0EA5A3", text: "text-teal-600" },
+    planner: { segment: "#6D5BD0", text: "text-violet-600" },
+    analyst: { segment: "#2563EB", text: "text-blue-600" },
+  };
+
   return (
     <div>
       <div className="overflow-hidden rounded-full border border-slate-200">
-        <div className="grid grid-cols-4">
+        <div className="flex h-12 w-full">
           {results.map((item) => (
-            <div key={item.key} className={cx("relative py-6", BEHAVIOR_AXIS_META[item.key].colorClass)}>
+            <div
+              key={item.key}
+              className="relative h-12"
+              style={{ width: `${item.percent}%`, backgroundColor: palette[item.key]?.segment ?? "#64748B" }}
+            >
               <div className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-4 border-white bg-white/80" />
             </div>
           ))}
@@ -1017,9 +999,9 @@ function PredominanceSpectrum({ results }: { results: BehaviorAxisResult[] }) {
       <div className="mt-5 grid gap-4 text-center md:grid-cols-4">
         {results.map((item) => (
           <div key={item.key}>
-            <div className={cx("text-4xl font-semibold", getAxisTextClass(item.key))}>{item.percent.toFixed(2)}%</div>
-            <div className={cx("mt-1 text-2xl font-semibold", getAxisTextClass(item.key))}>{item.label}</div>
-            <div className="mt-1 text-sm font-semibold uppercase tracking-[0.12em] text-violet-700">
+            <div className={cx("text-4xl font-semibold", palette[item.key]?.text ?? "text-slate-700")}>{item.percent.toFixed(2)}%</div>
+            <div className={cx("mt-1 text-2xl font-semibold", palette[item.key]?.text ?? "text-slate-700")}>{item.label}</div>
+            <div className="mt-1 text-sm font-semibold uppercase tracking-[0.12em] text-slate-600">
               {getBehaviorClassificationLabel(item.classification)}
             </div>
           </div>
