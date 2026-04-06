@@ -1,5 +1,6 @@
 ﻿"use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Download,
@@ -42,6 +43,8 @@ type BehaviorHistoryItem = {
   self_selected_ids: string[] | null;
   others_selected_ids: string[] | null;
 };
+
+type HistoryWindow = "all" | "3m" | "6m" | "12m";
 
 function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -87,15 +90,15 @@ function signedValue(value: number) {
 function getAxisTextClass(key: string) {
   switch (key) {
     case "executor":
-      return "text-rose-600";
+      return "text-amber-600";
     case "communicator":
-      return "text-amber-500";
+      return "text-cyan-700";
     case "planner":
       return "text-emerald-600";
     case "analyst":
-      return "text-blue-600";
+      return "text-sky-700";
     default:
-      return "text-violet-700";
+      return "text-slate-800";
   }
 }
 
@@ -161,6 +164,60 @@ function buildBehaviorRecommendations(
   ];
 }
 
+function buildManagerGuidance(
+  personName: string,
+  predominantSelf: BehaviorAxisResult[],
+  predominantOthers: BehaviorAxisResult[],
+  competencies: BehaviorCompetencyPoint[],
+  dominantGaps: BehaviorIsolatedProfilePoint[]
+) {
+  const primary = predominantSelf[0]?.label ?? "Perfil equilibrado";
+  const environment = predominantOthers[0]?.label ?? "um contexto mais equilibrado";
+  const topCompetencies = competencies.slice(0, 3).map((item) => item.label);
+  const mainGap = dominantGaps[0]?.label ?? null;
+
+  return [
+    {
+      title: "Como essa pessoa tende a render melhor",
+      text: `${personName} tende a responder melhor quando pode usar ${primary.toLowerCase()} com clareza de expectativa, espaço de decisão e contexto bem sinalizado.`,
+    },
+    {
+      title: "Como alinhar com o ambiente atual",
+      text: `Hoje o ambiente parece demandar mais ${environment.toLowerCase()}. Para RH e liderança, isso sugere combinar autonomia com alinhamento frequente sobre ritmo, prioridades e forma de entrega.`,
+    },
+    {
+      title: "Onde vale acompanhar mais de perto",
+      text: mainGap
+        ? `O maior desvio atual aparece em ${mainGap}. Esse eixo merece observação em one-on-ones, feedbacks e combinados de rotina para evitar desgaste desnecessário.`
+        : "O perfil está relativamente equilibrado. O ganho aqui é manter boa cadência de alinhamento e usar o relatório como apoio de desenvolvimento, não como rótulo fixo.",
+    },
+    {
+      title: "Como usar essa leitura em PDI e feedback",
+      text: topCompetencies.length
+        ? `As competências mais fortes hoje são ${topCompetencies.join(", ")}. Elas podem servir como base para PDI, definição de projetos e feedbacks mais objetivos sobre contribuição e desenvolvimento.`
+        : "Use esta leitura para reforçar pontos fortes observáveis, registrar exemplos práticos e construir próximos passos de desenvolvimento com o colaborador.",
+    },
+  ];
+}
+
+function buildHistoryComparison(
+  currentResults: BehaviorAxisResult[],
+  previousResults: BehaviorAxisResult[]
+) {
+  const previousByKey = new Map(previousResults.map((item) => [item.key, item]));
+
+  return currentResults.map((item) => {
+    const previous = previousByKey.get(item.key);
+    return {
+      key: item.key,
+      label: item.label,
+      current: item.percent,
+      previous: previous?.percent ?? 0,
+      delta: item.percent - (previous?.percent ?? 0),
+    };
+  });
+}
+
 function buildTeamContributionHighlights(
   personName: string,
   predominantSelf: BehaviorAxisResult[],
@@ -211,6 +268,32 @@ function buildExecutiveBehaviorNarrative(
     basicSkills: `${styleSummary} As competências mais favorecidas nesta leitura são ${topCompetencies.slice(0, 3).join(", ")}, o que tende a favorecer entregas com mais aderência e consistência.`,
     commonSkills: `No funcionamento cotidiano, esse perfil costuma responder melhor quando existe espaço para usar ${topCompetencies.slice(0, 4).join(", ")} em situações reais de trabalho, com clareza de expectativa e contexto.`,
   };
+}
+
+function buildProfileCombinationNarrative(
+  personName: string,
+  predominantSelf: BehaviorAxisResult[],
+  predominantOthers: BehaviorAxisResult[]
+) {
+  const primary = predominantSelf[0]?.label ?? "Perfil equilibrado";
+  const secondary = predominantSelf[1]?.label ?? null;
+  const environment = predominantOthers[0]?.label ?? null;
+  const combinationKey = [primary, secondary].filter(Boolean).join("|");
+
+  const combinationCopy: Record<string, string> = {
+    "Comunicador|Executor": `${personName} tende a combinar presença relacional com impulso de ação, o que favorece influência, mobilização e ritmo nas entregas.`,
+    "Executor|Analista": `${personName} tende a unir velocidade de execução com leitura crítica, o que pode gerar entregas objetivas e decisões mais racionais.`,
+    "Planejador|Analista": `${personName} tende a operar com mais estabilidade, organização e cuidado com consistência, favorecendo previsibilidade e qualidade.`,
+    "Comunicador|Planejador": `${personName} tende a sustentar colaboração com boa leitura de clima e continuidade, o que ajuda em alinhamento, suporte e cadência.`,
+  };
+
+  const base =
+    combinationCopy[combinationKey] ??
+    `${personName} tende a atuar com maior naturalidade em ${primary.toLowerCase()}${secondary ? `, apoiado por ${secondary.toLowerCase()}` : ""}.`;
+
+  return environment
+    ? `${base} No contexto atual, o ambiente parece valorizar mais ${environment.toLowerCase()}, o que ajuda a orientar ajustes sem perder autenticidade.`
+    : base;
 }
 
 function buildPredominanceOpeningSummary(
@@ -301,6 +384,47 @@ function buildSituationalIndicators(
   return indicators;
 }
 
+function filterBehaviorHistory(history: BehaviorHistoryItem[], window: HistoryWindow) {
+  if (window === "all") return history;
+
+  const months = window === "3m" ? 3 : window === "6m" ? 6 : 12;
+  const limit = new Date();
+  limit.setMonth(limit.getMonth() - months);
+
+  return history.filter((item) => new Date(item.created_at) >= limit);
+}
+
+function buildDevelopmentPlan(
+  personName: string,
+  predominantSelf: BehaviorAxisResult[],
+  dominantGaps: BehaviorIsolatedProfilePoint[],
+  competencies: BehaviorCompetencyPoint[]
+) {
+  const primary = predominantSelf[0]?.label ?? "perfil predominante";
+  const topCompetencies = competencies.slice(0, 2).map((item) => item.label);
+  const mainGap = dominantGaps[0]?.label ?? "o eixo de maior oscilação";
+
+  return [
+    {
+      horizon: "30 dias",
+      title: "Consolidar força principal",
+      text: `${personName} pode focar em usar ${primary.toLowerCase()} com mais intenção em reuniões, decisões e rotina, registrando exemplos concretos de onde isso mais gera resultado.`,
+    },
+    {
+      horizon: "60 dias",
+      title: "Aplicar a leitura em entregas reais",
+      text: topCompetencies.length
+        ? `Vale escolher uma atividade do dia a dia para exercitar ${topCompetencies.join(" e ")} de forma observável, com feedback simples do gestor ou do time.`
+        : "Vale escolher uma atividade do dia a dia para transformar esta leitura em comportamento observável e passível de feedback.",
+    },
+    {
+      horizon: "90 dias",
+      title: "Calibrar o principal ponto de ajuste",
+      text: `O próximo ciclo pode mirar ${mainGap.toLowerCase()}, testando pequenas mudanças de ritmo, organização ou comunicação para reduzir desgaste e ampliar aderência ao contexto.`,
+    },
+  ];
+}
+
 export default function MapaComportamentalPage() {
   const reportRef = useRef<HTMLDivElement | null>(null);
   const [loading, setLoading] = useState(true);
@@ -314,6 +438,7 @@ export default function MapaComportamentalPage() {
     window_end: string;
   } | null>(null);
   const [step, setStep] = useState<Step>(2);
+  const [historyWindow, setHistoryWindow] = useState<HistoryWindow>("12m");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [selfSelected, setSelfSelected] = useState<string[]>([]);
@@ -323,8 +448,11 @@ export default function MapaComportamentalPage() {
   const personName = firstName(fullName) ?? "O colaborador";
   const canPerformAssessment = !!activeRelease;
   const latestAssessment = history[0] ?? null;
+  const filteredHistory = useMemo(() => filterBehaviorHistory(history, historyWindow), [history, historyWindow]);
+  const previousAssessment = filteredHistory[1] ?? null;
   const reportSelfResults = sortResults(latestAssessment?.self_result ?? []);
   const reportOthersResults = sortResults(latestAssessment?.others_result ?? []);
+  const previousSelfResults = sortResults(previousAssessment?.self_result ?? []);
   const reportPredominantSelf = getPredominantBehaviorAxes(reportSelfResults);
   const reportPredominantOthers = getPredominantBehaviorAxes(reportOthersResults);
   const reportSelfSelectedIds = latestAssessment?.self_selected_ids ?? [];
@@ -388,6 +516,17 @@ export default function MapaComportamentalPage() {
     () => buildTeamContributionHighlights(personName, reportPredominantSelf, mainCompetencies),
     [personName, reportPredominantSelf, mainCompetencies]
   );
+  const managerGuidance = useMemo(
+    () =>
+      buildManagerGuidance(
+        personName,
+        reportPredominantSelf,
+        reportPredominantOthers,
+        mainCompetencies,
+        dominantGaps
+      ),
+    [personName, reportPredominantSelf, reportPredominantOthers, mainCompetencies, dominantGaps]
+  );
   const openingSummary = useMemo(
     () => buildPredominanceOpeningSummary(personName, reportSelfResults, reportOthersResults),
     [personName, reportSelfResults, reportOthersResults]
@@ -396,10 +535,33 @@ export default function MapaComportamentalPage() {
     () => buildExecutiveBehaviorNarrative(personName, reportPredominantSelf, mainCompetencies),
     [personName, reportPredominantSelf, mainCompetencies]
   );
+  const combinationNarrative = useMemo(
+    () => buildProfileCombinationNarrative(personName, reportPredominantSelf, reportPredominantOthers),
+    [personName, reportPredominantSelf, reportPredominantOthers]
+  );
   const situationalIndicators = useMemo(
     () => buildSituationalIndicators(selfConfidence.label, othersConfidence.label, selfFactors, isolatedProfile, mainCompetencies),
     [selfConfidence.label, othersConfidence.label, selfFactors, isolatedProfile, mainCompetencies]
   );
+  const historyComparison = useMemo(
+    () => (previousSelfResults.length ? buildHistoryComparison(reportSelfResults, previousSelfResults) : []),
+    [reportSelfResults, previousSelfResults]
+  );
+  const historySummary = useMemo(() => {
+    const up = historyComparison.filter((item) => item.delta > 0.15).length;
+    const down = historyComparison.filter((item) => item.delta < -0.15).length;
+    const stable = historyComparison.length - up - down;
+    return { up, down, stable };
+  }, [historyComparison]);
+  const developmentPlan = useMemo(
+    () => buildDevelopmentPlan(personName, reportPredominantSelf, dominantGaps, mainCompetencies),
+    [personName, reportPredominantSelf, dominantGaps, mainCompetencies]
+  );
+  const pdiPrefillHref = useMemo(() => {
+    const focus = dominantGaps[0]?.label ?? reportPredominantSelf[0]?.label ?? "Desenvolvimento";
+    const strength = mainCompetencies[0]?.label ?? reportPredominantSelf[0]?.label ?? "Competência principal";
+    return `/meu-perfil/pdi?origem=mapa-comportamental&foco=${encodeURIComponent(focus)}&forca=${encodeURIComponent(strength)}`;
+  }, [dominantGaps, mainCompetencies, reportPredominantSelf]);
 
   async function exportReportAsPdf() {
     if (!reportRef.current) return;
@@ -412,6 +574,7 @@ export default function MapaComportamentalPage() {
 
     const reportHtml = reportRef.current.innerHTML;
     const title = `Relatório comportamental - ${fullName || "Colaborador"}`;
+    const exportDate = new Date().toLocaleDateString("pt-BR");
 
     printWindow.document.open();
     printWindow.document.write(`
@@ -423,19 +586,51 @@ export default function MapaComportamentalPage() {
           <style>
             * { box-sizing: border-box; }
             body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #0f172a; background: white; }
-            .print-shell { padding: 0; }
+            .print-shell { padding: 0 0 18mm; }
+            .print-cover { border-bottom: 1px solid #dbe4f0; padding: 0 0 12px; margin: 0 0 16px; }
+            .print-cover h1 { margin: 0; font-size: 26px; line-height: 1.1; color: #0f172a; }
+            .print-cover p { margin: 6px 0 0; font-size: 12px; color: #475569; }
+            .print-footer {
+              position: fixed;
+              left: 0;
+              right: 0;
+              bottom: 0;
+              display: flex;
+              justify-content: space-between;
+              border-top: 1px solid #dbe4f0;
+              background: white;
+              padding: 6px 10mm 0;
+              font-size: 11px;
+              color: #475569;
+            }
+            .print-page-number::after { content: counter(page); }
             .report-page { display: flex; flex-direction: column; gap: 14px; }
             .report-page > section { break-inside: avoid; page-break-inside: avoid; }
             svg { max-width: 100%; height: auto; }
-            @page { size: A4; margin: 10mm; }
+            .text-sky-700,.text-cyan-700,.text-teal-700,.text-blue-600,.text-slate-900,.text-slate-950 { color: #0f172a !important; }
+            .text-slate-600,.text-slate-700,.text-slate-500 { color: #475569 !important; }
+            .bg-slate-900 { background: #0f172a !important; color: white !important; }
+            .border-slate-200 { border-color: #dbe4f0 !important; }
+            .from-white,.to-slate-50,.to-sky-50\/20,.to-sky-50\/30,.to-amber-50\/30 { background: white !important; }
+            @page { size: A4; margin: 12mm 10mm 16mm; }
             @media print {
               body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-              .print-shell { padding: 0; }
+              .print-shell { padding: 0 0 16mm; }
             }
           </style>
         </head>
         <body>
-          <div class="print-shell">${reportHtml}</div>
+          <div class="print-shell">
+            <div class="print-cover">
+              <h1>Relatório comportamental</h1>
+              <p>${fullName || "Colaborador"} • ${exportDate} • Portal RH</p>
+            </div>
+            ${reportHtml}
+            <div class="print-footer">
+              <span>Portal RH • Relatório comportamental</span>
+              <span>${exportDate} • Página <span class="print-page-number"></span></span>
+            </div>
+          </div>
         </body>
       </html>
     `);
@@ -563,8 +758,8 @@ export default function MapaComportamentalPage() {
         <div className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-700">Mapa comportamental</p>
-              <h1 className="mt-2 text-2xl font-semibold text-slate-950">Sua leitura comportamental</h1>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-sky-700">Mapa comportamental</p>
+              <h1 className="mt-2 text-2xl font-semibold text-slate-950">Sua leitura de perfil</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
                 Uma leitura mais executiva, inspiradora e aplicável do seu estilo de trabalho, de como o contexto atual te demanda e dos pontos que mais podem acelerar seu desenvolvimento em equipe.
               </p>
@@ -627,26 +822,72 @@ export default function MapaComportamentalPage() {
             <section ref={reportRef} className="report-page space-y-6">
               <section id="perfil-predominante" className="overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-sm">
                 <div className="px-8 py-10">
-                  <p className="text-center text-xl text-violet-700">Neste momento, {personName} está:</p>
-                  <h1 className="mt-2 text-center text-5xl font-semibold tracking-tight text-violet-800">
+                  <p className="text-center text-sm font-semibold uppercase tracking-[0.28em] text-sky-700">Síntese comportamental</p>
+                  <h1 className="mt-3 text-center text-5xl font-semibold tracking-tight text-slate-950">
                     {summarizePredominance(reportPredominantSelf)}
                   </h1>
-                  <p className="mt-1 text-center text-lg text-violet-600">
+                  <p className="mt-2 text-center text-base text-slate-500">
                     em {new Date(latestAssessment.created_at).toLocaleDateString("pt-BR")}
                   </p>
                   <div className="mt-8">
                     <PredominanceSpectrum results={reportSelfResults} />
                   </div>
-                  <p className="mx-auto mt-8 max-w-5xl text-center text-lg leading-8 text-violet-800/90">
+                  <p className="mx-auto mt-8 max-w-5xl text-center text-lg leading-8 text-slate-700">
                     {openingSummary}
+                  </p>
+                  <p className="mx-auto mt-4 max-w-4xl text-center text-sm leading-7 text-slate-500">
+                    {combinationNarrative}
                   </p>
                 </div>
               </section>
 
-              <section id="subcaracteristicas" className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-violet-50/30 p-6 shadow-sm">
+              {historyComparison.length ? (
+                <section className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-6 shadow-sm">
+                  <div className="flex flex-wrap items-end justify-between gap-4">
+                    <SectionHeader
+                      title="Evolução desde a leitura anterior"
+                      description="Comparativo visual do que ganhou força, cedeu espaço ou permaneceu estável na leitura mais recente."
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      {[
+                        { value: "3m", label: "3 meses" },
+                        { value: "6m", label: "6 meses" },
+                        { value: "12m", label: "12 meses" },
+                        { value: "all", label: "Tudo" },
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setHistoryWindow(option.value as HistoryWindow)}
+                          className={cx(
+                            "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+                            historyWindow === option.value
+                              ? "border-sky-600 bg-sky-600 text-white"
+                              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                          )}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="mt-5 grid gap-4 md:grid-cols-3">
+                    <MiniHistoryStat label="Ganharam força" value={String(historySummary.up)} tone="emerald" />
+                    <MiniHistoryStat label="Caíram" value={String(historySummary.down)} tone="amber" />
+                    <MiniHistoryStat label="Estáveis" value={String(historySummary.stable)} tone="slate" />
+                  </div>
+                  <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    {historyComparison.map((item) => (
+                      <HistoryDeltaCard key={item.key} item={item} />
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+
+              <section id="subcaracteristicas" className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-sky-50/30 p-6 shadow-sm">
                 <SectionHeader
-                  title="Leitura executiva do comportamento"
-                  description="Síntese mais próxima de um relatório corporativo, com leitura editorial para entendimento rápido e aplicação prática."
+                  title="Como seu estilo tende a aparecer no trabalho"
+                  description="Uma leitura prática da sua forma de atuar, se relacionar e transformar intenção em entrega."
                 />
                 <div className="mt-5 grid gap-4 xl:grid-cols-3">
                   <NarrativeBlock
@@ -667,7 +908,7 @@ export default function MapaComportamentalPage() {
               <section id="indicadores-situacionais" className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-amber-50/30 p-6 shadow-sm">
                 <SectionHeader
                   title="Indicadores situacionais"
-                  description="Leitura resumida de energia, flexibilidade, confiança e pressão do contexto, em uma linguagem mais gerencial."
+                  description="Sinais de ritmo, confiança, flexibilidade e aproveitamento no contexto atual."
                 />
                 <div className="mt-6 space-y-5">
                   {situationalIndicators.map((item) => (
@@ -676,18 +917,18 @@ export default function MapaComportamentalPage() {
                 </div>
               </section>
 
-              <section className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-violet-50/20 p-6 shadow-sm">
+              <section className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-6 shadow-sm">
                 <SectionHeader
-                  title="Leituras comparativas"
-                  description="Gráficos de perfil e liderança para apoiar conversas de desenvolvimento e entendimento do contexto atual."
+                  title="Leitura gráfica do perfil"
+                  description="Comparativos visuais para apoiar entendimento do momento atual e conversas de desenvolvimento."
                 />
                 <div className="mt-6 grid gap-6 xl:grid-cols-2">
                   <TrendLineChart
                     title="Perfil isolado"
                     items={isolatedProfile}
-                    lineAColor="#7c3aed"
-                    lineBColor="#ef4444"
-                    lineCColor="#334155"
+                    lineAColor="#0f766e"
+                    lineBColor="#d97706"
+                    lineCColor="#475569"
                   />
                   <LeadershipLineChart items={leadershipProfile} />
                 </div>
@@ -695,8 +936,8 @@ export default function MapaComportamentalPage() {
 
               <section id="competencias" className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-sky-50/20 p-6 shadow-sm">
                 <SectionHeader
-                  title="Competências comportamentais"
-                  description="Potenciais mais favorecidos a partir da combinação entre perfil natural, exigência do meio e estilo de condução."
+                  title="Competências em evidência"
+                  description="Potenciais com maior tendência de aparecer no seu jeito de contribuir, organizar e se relacionar."
                 />
                 <div className="mt-8">
                   <CompetencyRadar points={mainCompetencies.slice(0, 20)} />
@@ -710,8 +951,8 @@ export default function MapaComportamentalPage() {
 
               <section id="pontos-de-atencao" className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
                 <SectionHeader
-                  title="Pontos de atenção"
-                  description="Sinais de observação para apoiar conversas com liderança, distribuição de demandas e calibragem da forma de trabalho."
+                  title="Pontos para calibragem"
+                  description="Sinais de observação para apoiar desenvolvimento, distribuição de demandas e ajuste fino da forma de trabalhar."
                 />
                 <div className="mt-5 grid gap-4 xl:grid-cols-2">
                   <AttentionPanel
@@ -727,8 +968,8 @@ export default function MapaComportamentalPage() {
 
               <section id="lideranca" className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
                 <SectionHeader
-                  title="Estilo de liderança"
-                  description="Leitura sintética da forma mais provável de conduzir, comunicar expectativa e influenciar o time a partir do momento atual."
+                  title="Como tende a conduzir e influenciar"
+                  description="Leitura da forma mais provável de comunicar expectativa, orientar o time e responder ao contexto."
                 />
                 <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   {leadershipProfile.map((item) => (
@@ -739,8 +980,8 @@ export default function MapaComportamentalPage() {
 
               <section id="recomendacoes" className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
                 <SectionHeader
-                  title="Recomendações práticas"
-                  description="Uma leitura mais motivadora e aplicável para apoiar desenvolvimento individual, combinação com o time e alinhamento com a liderança."
+                  title="Direções de desenvolvimento"
+                  description="Sugestões objetivas para potencializar sua contribuição, reduzir desgaste e evoluir no contexto atual."
                 />
                 <div className="mt-5 grid gap-4 xl:grid-cols-2">
                   {teamHighlights.map((item, index) => (
@@ -748,6 +989,60 @@ export default function MapaComportamentalPage() {
                   ))}
                   {recommendations.map((item, index) => (
                     <RecommendationCard key={item.title} title={item.title} text={item.text} index={index + teamHighlights.length} />
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-sky-50/30 p-6 shadow-sm">
+                <SectionHeader
+                  title="Leitura para RH e liderança"
+                  description="Uma visão mais gerencial para apoiar PDI, feedback, distribuição de responsabilidades e acompanhamento de desenvolvimento."
+                />
+                <div className="mt-5 grid gap-4 xl:grid-cols-2">
+                  {managerGuidance.map((item, index) => (
+                    <RecommendationCard key={item.title} title={item.title} text={item.text} index={index} highlighted={index === 0} />
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                <SectionHeader
+                  title="Transformar leitura em ação"
+                  description="Atalhos práticos para levar essa leitura para desenvolvimento individual, feedbacks e conversas de acompanhamento."
+                />
+                <div className="mt-5 grid gap-4 md:grid-cols-3">
+                  <PortalActionCard
+                    href={pdiPrefillHref}
+                    title="Levar para o PDI"
+                    text="Abrir o PDI já com foco sugerido a partir do seu perfil, para transformar leitura em próximos passos concretos."
+                  />
+                  <PortalActionCard
+                    href="/meu-perfil/feedback"
+                    title="Conectar com feedback"
+                    text="Usar os pontos fortes e de atenção para preparar conversas mais objetivas e úteis."
+                  />
+                  <PortalActionCard
+                    href="/meu-perfil/competencias"
+                    title="Cruzar com competências"
+                    text="Comparar essa leitura com outras avaliações e construir um plano mais consistente."
+                  />
+                </div>
+              </section>
+
+              <section className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-sky-50/30 p-6 shadow-sm">
+                <SectionHeader
+                  title="Plano sugerido para desenvolvimento"
+                  description="Um roteiro simples de 30, 60 e 90 dias para transformar a leitura comportamental em prática observável."
+                />
+                <div className="mt-5 grid gap-4 xl:grid-cols-3">
+                  {developmentPlan.map((item, index) => (
+                    <RecommendationCard
+                      key={item.horizon}
+                      title={`${item.horizon} • ${item.title}`}
+                      text={item.text}
+                      index={index}
+                      highlighted={index === 0}
+                    />
                   ))}
                 </div>
               </section>
@@ -855,7 +1150,7 @@ export default function MapaComportamentalPage() {
 function SectionHeader({ title, description }: { title: string; description: string }) {
   return (
     <div>
-      <div className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-700">Relatório</div>
+      <div className="text-xs font-semibold uppercase tracking-[0.22em] text-sky-700">Relatório</div>
       <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{title}</div>
       <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">{description}</p>
     </div>
@@ -864,10 +1159,10 @@ function SectionHeader({ title, description }: { title: string; description: str
 
 function PredominanceSpectrum({ results }: { results: BehaviorAxisResult[] }) {
   const palette: Record<string, { segment: string; text: string }> = {
-    executor: { segment: "#E36A2E", text: "text-orange-600" },
-    comunicador: { segment: "#0EA5A3", text: "text-teal-600" },
-    planejador: { segment: "#6D5BD0", text: "text-violet-600" },
-    analista: { segment: "#2563EB", text: "text-blue-600" },
+    executor: { segment: "#D97706", text: "text-amber-600" },
+    comunicador: { segment: "#0F766E", text: "text-teal-700" },
+    planejador: { segment: "#2563EB", text: "text-blue-600" },
+    analista: { segment: "#475569", text: "text-slate-600" },
   };
 
   return (
@@ -902,8 +1197,8 @@ function PredominanceSpectrum({ results }: { results: BehaviorAxisResult[] }) {
 
 function ExecutiveSummaryTile({ title, value, description }: { title: string; value: string; description: string }) {
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-white to-violet-50/30 p-5 shadow-sm">
-      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-700">{title}</div>
+    <div className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-white to-sky-50/30 p-5 shadow-sm">
+      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">{title}</div>
       <div className="mt-3 text-2xl font-semibold leading-tight text-slate-950">{value}</div>
       <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
     </div>
@@ -946,8 +1241,8 @@ function ProfileTag({ icon, label }: { icon: ReactNode; label: string }) {
 
 function NarrativeBlock({ title, text }: { title: string; text: string }) {
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-white to-violet-50/30 p-5 shadow-sm">
-      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-violet-700">{title}</p>
+    <div className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-white to-sky-50/30 p-5 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">{title}</p>
       <p className="mt-4 text-sm leading-7 text-slate-700">{text}</p>
     </div>
   );
@@ -963,7 +1258,7 @@ function IndicatorCard({
   description: string;
 }) {
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-white to-violet-50/20 p-5 shadow-sm">
+    <div className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-500">{title}</p>
@@ -1012,13 +1307,13 @@ function SituationalIndicatorRow({
   return (
     <div className="grid gap-4 md:grid-cols-[240px_minmax(0,1fr)] md:items-center">
       <div>
-        <p className="text-[28px] font-semibold tracking-tight text-violet-800">{title}</p>
+        <p className="text-[28px] font-semibold tracking-tight text-slate-900">{title}</p>
         <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p>
       </div>
       <div>
-        <div className="text-sm font-semibold uppercase tracking-[0.12em] text-violet-700">{status}</div>
-        <div className="mt-2 h-2 rounded-full bg-violet-100">
-          <div className="h-2 rounded-full bg-violet-700" style={{ width: `${width}%` }} />
+        <div className="text-sm font-semibold uppercase tracking-[0.12em] text-sky-700">{status}</div>
+        <div className="mt-2 h-2 rounded-full bg-slate-200">
+          <div className="h-2 rounded-full bg-gradient-to-r from-cyan-600 to-blue-700" style={{ width: `${width}%` }} />
         </div>
       </div>
     </div>
@@ -1055,15 +1350,15 @@ function CompetencyBar({
   const level = getCompetencyLevel(point.score);
   return (
     <div className="grid gap-4 border-b border-slate-200 py-4 md:grid-cols-[56px_320px_minmax(0,1fr)] md:items-center">
-      <div className="text-xl font-semibold text-violet-800">{index + 1}</div>
-      <div className="text-[30px] font-semibold tracking-tight text-violet-800">{point.label}</div>
+      <div className="text-xl font-semibold text-sky-700">{index + 1}</div>
+      <div className="text-[30px] font-semibold tracking-tight text-slate-900">{point.label}</div>
       <div>
-        <div className="text-sm font-semibold uppercase tracking-[0.12em] text-violet-700">{level}</div>
-        <div className="mt-2 h-2 rounded-full bg-violet-100">
+        <div className="text-sm font-semibold uppercase tracking-[0.12em] text-sky-700">{level}</div>
+        <div className="mt-2 h-2 rounded-full bg-slate-200">
           <div
             className={cx(
-              "h-2 rounded-full bg-violet-700",
-              highlight && "bg-violet-800"
+              "h-2 rounded-full bg-gradient-to-r from-cyan-600 to-blue-700",
+              highlight && "from-sky-700 to-slate-900"
             )}
             style={{ width }}
           />
@@ -1154,7 +1449,7 @@ function ResultCard({
 function AdaptationCard({ point }: { point: BehaviorIsolatedProfilePoint }) {
   const intensity = Math.min(100, Math.abs(point.environmentDemand - point.profileCurrent) * 4);
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-white to-violet-50/20 p-4 shadow-sm">
+    <div className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-lg font-semibold text-slate-950">{point.label}</p>
@@ -1163,7 +1458,7 @@ function AdaptationCard({ point }: { point: BehaviorIsolatedProfilePoint }) {
         <span className="text-lg font-semibold text-slate-950">{signedValue(point.adaptationStrength)}</span>
       </div>
       <div className="mt-4 h-2.5 rounded-full bg-slate-200">
-        <div className="h-2.5 rounded-full bg-gradient-to-r from-fuchsia-500 via-violet-500 to-blue-700" style={{ width: `${intensity}%` }} />
+        <div className="h-2.5 rounded-full bg-gradient-to-r from-cyan-600 via-blue-600 to-slate-700" style={{ width: `${intensity}%` }} />
       </div>
       <div className="mt-4 space-y-2 text-sm text-slate-600">
         <MetricRow label="Perfil atual" value={signedValue(point.profileCurrent)} />
@@ -1175,7 +1470,7 @@ function AdaptationCard({ point }: { point: BehaviorIsolatedProfilePoint }) {
 
 function LeadershipCard({ point }: { point: BehaviorLeadershipPoint }) {
   return (
-    <div className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-white to-violet-50/20 p-4 shadow-sm">
+    <div className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm">
       <p className="text-lg font-semibold text-slate-950">{point.label}</p>
       <div className="mt-4 space-y-2 text-sm text-slate-600">
         <MetricRow label="Natural" value={signedValue(point.profileCurrent)} />
@@ -1317,9 +1612,9 @@ function LeadershipLineChart({ items }: { items: BehaviorLeadershipPoint[] }) {
     <TrendLineChart
       title="Estilo de liderança x contexto atual"
       items={adapted}
-        lineAColor="#6d28d9"
-        lineBColor="#fb7185"
-        lineCColor="#334155"
+        lineAColor="#0f766e"
+        lineBColor="#d97706"
+        lineCColor="#475569"
       />
   );
 }
@@ -1347,7 +1642,7 @@ function CompetencyRadar({ points }: { points: BehaviorCompetencyPoint[] }) {
 
   return (
     <div className="rounded-[26px] border border-slate-200 bg-white p-6 shadow-sm">
-      <p className="text-center text-4xl font-semibold uppercase tracking-[0.1em] text-violet-800">Competências</p>
+      <p className="text-center text-4xl font-semibold uppercase tracking-[0.1em] text-slate-900">Competências</p>
       <div className="mt-6 grid gap-6 xl:grid-cols-[520px_minmax(0,1fr)] xl:items-center">
         <svg viewBox={`0 0 ${size} ${size}`} className="mx-auto w-full max-w-[420px]">
           {levels.map((level) => {
@@ -1370,18 +1665,18 @@ function CompetencyRadar({ points }: { points: BehaviorCompetencyPoint[] }) {
               </g>
             );
           })}
-          <polygon points={polygon} fill="rgba(124,58,237,0.32)" stroke="#7c3aed" strokeWidth="3" />
+          <polygon points={polygon} fill="rgba(14,116,144,0.24)" stroke="#0f766e" strokeWidth="3" />
           {points.map((point, index) => {
             const { x, y } = pointFor(point.score, index);
-            return <circle key={point.label} cx={x} cy={y} r="4" fill="#7c3aed" />;
+            return <circle key={point.label} cx={x} cy={y} r="4" fill="#0f766e" />;
           })}
         </svg>
         <div className="space-y-3">
           {points.map((point, index) => (
-            <div key={point.label} className="rounded-[18px] border border-slate-200 bg-gradient-to-r from-white to-violet-50/40 p-3 shadow-sm">
+            <div key={point.label} className="rounded-[18px] border border-slate-200 bg-gradient-to-r from-white to-sky-50/30 p-3 shadow-sm">
               <div className="flex items-center justify-between gap-3">
                 <span className="text-sm font-semibold text-slate-900">{index + 1}. {point.label}</span>
-                <span className="text-sm font-semibold text-violet-700">{point.score.toFixed(2)}</span>
+                <span className="text-sm font-semibold text-sky-700">{point.score.toFixed(2)}</span>
               </div>
             </div>
           ))}
@@ -1410,6 +1705,95 @@ function RecommendationCard({
       <div className="mt-4 text-base font-semibold text-slate-950">{title}</div>
       <p className="mt-2 text-sm leading-7 text-slate-600">{text}</p>
     </div>
+  );
+}
+
+function MiniHistoryStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "emerald" | "amber" | "slate";
+}) {
+  const toneClass =
+    tone === "emerald"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tone === "amber"
+        ? "border-amber-200 bg-amber-50 text-amber-700"
+        : "border-slate-200 bg-slate-50 text-slate-700";
+
+  return (
+    <div className={cx("rounded-[22px] border p-4", toneClass)}>
+      <div className="text-xs font-semibold uppercase tracking-[0.14em]">{label}</div>
+      <div className="mt-2 text-3xl font-semibold leading-none">{value}</div>
+    </div>
+  );
+}
+
+function HistoryDeltaCard({
+  item,
+}: {
+  item: { key: string; label: string; current: number; previous: number; delta: number };
+}) {
+  const positive = item.delta > 0.15;
+  const negative = item.delta < -0.15;
+  const tone = positive
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : negative
+      ? "border-amber-200 bg-amber-50 text-amber-700"
+      : "border-slate-200 bg-slate-50 text-slate-700";
+  const statusLabel = positive ? "Subiu" : negative ? "Caiu" : "Estável";
+
+  return (
+    <div className="rounded-[22px] border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className={cx("text-lg font-semibold", getAxisTextClass(item.key))}>{item.label}</p>
+          <p className="mt-1 text-sm text-slate-500">Leitura anterior: {item.previous.toFixed(2)}%</p>
+        </div>
+        <span className={cx("rounded-full border px-3 py-1 text-xs font-semibold", tone)}>
+          {statusLabel} •{" "}
+          {item.delta > 0 ? "+" : ""}
+          {item.delta.toFixed(2)} p.p.
+        </span>
+      </div>
+      <div className="mt-4 text-3xl font-semibold tracking-tight text-slate-950">{item.current.toFixed(2)}%</div>
+      <div className="mt-3 h-2 rounded-full bg-slate-200">
+        <div
+          className={cx(
+            "h-2 rounded-full",
+            item.key === "executor" && "bg-amber-600",
+            item.key === "comunicador" && "bg-teal-700",
+            item.key === "planejador" && "bg-blue-600",
+            item.key === "analista" && "bg-slate-600"
+          )}
+          style={{ width: `${item.current}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function PortalActionCard({
+  href,
+  title,
+  text,
+}: {
+  href: string;
+  title: string;
+  text: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="rounded-[22px] border border-slate-200 bg-gradient-to-br from-white to-sky-50/30 p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-md"
+    >
+      <div className="text-base font-semibold text-slate-950">{title}</div>
+      <p className="mt-2 text-sm leading-7 text-slate-600">{text}</p>
+      <div className="mt-4 text-sm font-semibold text-sky-700">Abrir área</div>
+    </Link>
   );
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Plus, CheckCircle2, Clock3, Trash2, RefreshCcw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -30,6 +31,7 @@ function statusClass(status: PdiStatus) {
 }
 
 export default function PdiPage() {
+  const searchParams = useSearchParams();
   const { loading: roleLoading, role } = useUserRole();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -40,8 +42,23 @@ export default function PdiPage() {
   const [title, setTitle] = useState("");
   const [action, setAction] = useState("");
   const [targetDate, setTargetDate] = useState("");
+  const suggestedFocus = searchParams.get("foco") ?? "";
+  const suggestedStrength = searchParams.get("forca") ?? "";
+  const fromBehaviorMap = searchParams.get("origem") === "mapa-comportamental";
   const isSetupHint = msg.toLowerCase().includes("supabase/sql/");
   const canManagePdi = role !== "colaborador";
+
+  useEffect(() => {
+    if (!fromBehaviorMap) return;
+    if (!title && suggestedFocus) {
+      setTitle(`Desenvolver ${suggestedFocus}`);
+    }
+    if (!action && (suggestedFocus || suggestedStrength)) {
+      setAction(
+        `Usar ${suggestedStrength || "o principal ponto forte"} como base e acompanhar evolucao em ${suggestedFocus || "um eixo prioritario"} nas proximas semanas.`
+      );
+    }
+  }, [fromBehaviorMap, suggestedFocus, suggestedStrength, title, action]);
 
   async function load() {
     setLoading(true);
@@ -169,6 +186,19 @@ export default function PdiPage() {
         <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800">
           Como colaborador, voce pode apenas acompanhar seus itens de PDI. Inclusao e alteracoes sao realizadas por
           gestor/coordenador/RH.
+        </div>
+      ) : null}
+
+      {fromBehaviorMap && (suggestedFocus || suggestedStrength) ? (
+        <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900">
+          Sugestao trazida do mapa comportamental: foco em <b>{suggestedFocus || "desenvolvimento prioritario"}</b>
+          {suggestedStrength ? (
+            <>
+              {" "}com apoio da forca <b>{suggestedStrength}</b>.
+            </>
+          ) : (
+            "."
+          )}
         </div>
       ) : null}
 
