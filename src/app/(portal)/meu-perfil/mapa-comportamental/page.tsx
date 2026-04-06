@@ -425,10 +425,46 @@ function buildDevelopmentPlan(
   ];
 }
 
+function buildManagerActionMatrix(
+  personName: string,
+  predominantSelf: BehaviorAxisResult[],
+  predominantOthers: BehaviorAxisResult[],
+  dominantGaps: BehaviorIsolatedProfilePoint[],
+  competencies: BehaviorCompetencyPoint[]
+) {
+  const mainStyle = predominantSelf[0]?.label ?? "Perfil equilibrado";
+  const mainDemand = predominantOthers[0]?.label ?? "um contexto mais equilibrado";
+  const criticalGap = dominantGaps[0]?.label ?? "o principal ponto de ajuste";
+  const topCompetency = competencies[0]?.label ?? "a principal competência observada";
+
+  return [
+    {
+      title: "Leitura de aderência ao contexto",
+      text: `${personName} tende a operar com mais naturalidade em ${mainStyle.toLowerCase()}, enquanto o contexto atual parece pedir mais ${mainDemand.toLowerCase()}. Esse distanciamento orienta o nível de calibração que liderança e RH devem acompanhar.`,
+    },
+    {
+      title: "Cuidados de gestão",
+      text: `O eixo mais sensível hoje é ${criticalGap.toLowerCase()}. Vale usar conversas curtas e frequentes para ajustar expectativa, clareza de prioridade e forma de acompanhamento.`,
+    },
+    {
+      title: "Onde apoiar desenvolvimento",
+      text: `${topCompetency} aparece como um bom ponto de alavanca. O melhor uso gerencial é transformar essa força em responsabilidade prática, projeto real e critério objetivo de evolução.`,
+    },
+  ];
+}
+
+function formatHistoryWindowLabel(window: HistoryWindow) {
+  if (window === "3m") return "3 meses";
+  if (window === "6m") return "6 meses";
+  if (window === "12m") return "12 meses";
+  return "todo o histórico";
+}
+
 export default function MapaComportamentalPage() {
   const reportRef = useRef<HTMLDivElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingPdiPlan, setSavingPdiPlan] = useState(false);
   const [msg, setMsg] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
   const [history, setHistory] = useState<BehaviorHistoryItem[]>([]);
@@ -556,6 +592,17 @@ export default function MapaComportamentalPage() {
   const developmentPlan = useMemo(
     () => buildDevelopmentPlan(personName, reportPredominantSelf, dominantGaps, mainCompetencies),
     [personName, reportPredominantSelf, dominantGaps, mainCompetencies]
+  );
+  const managerActionMatrix = useMemo(
+    () =>
+      buildManagerActionMatrix(
+        personName,
+        reportPredominantSelf,
+        reportPredominantOthers,
+        dominantGaps,
+        mainCompetencies
+      ),
+    [personName, reportPredominantSelf, reportPredominantOthers, dominantGaps, mainCompetencies]
   );
   const pdiPrefillHref = useMemo(() => {
     const focus = dominantGaps[0]?.label ?? reportPredominantSelf[0]?.label ?? "Desenvolvimento";
@@ -730,6 +777,30 @@ export default function MapaComportamentalPage() {
     }
   }
 
+  async function createSuggestedPdiPlan() {
+    setSavingPdiPlan(true);
+    setMsg("");
+    try {
+      const res = await fetch("/api/behavior/pdi-plan", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plan: developmentPlan,
+          focus: dominantGaps[0]?.label ?? reportPredominantSelf[0]?.label ?? "Desenvolvimento",
+          strength: mainCompetencies[0]?.label ?? reportPredominantSelf[0]?.label ?? "Competência principal",
+        }),
+      });
+      const body = (await res.json()) as { error?: string; created?: number };
+      if (!res.ok) throw new Error(body.error || "Não foi possível gerar o plano no PDI.");
+      setMsg(`Plano sugerido enviado ao PDI com ${body.created ?? 0} item(ns).`);
+    } catch (error: unknown) {
+      setMsg(error instanceof Error ? error.message : "Erro ao gerar plano no PDI.");
+    } finally {
+      setSavingPdiPlan(false);
+    }
+  }
+
   const showReport = !!latestAssessment;
   const showAssessmentArea = !latestAssessment || showAssessmentForm;
 
@@ -884,6 +955,25 @@ export default function MapaComportamentalPage() {
                 </section>
               ) : null}
 
+              {filteredHistory.length > 1 ? (
+                <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <SectionHeader
+                    title="Linha do tempo das leituras"
+                    description={`Resumo cronológico das leituras registradas em ${formatHistoryWindowLabel(historyWindow)}, para facilitar percepção de continuidade e mudança.`}
+                  />
+                  <div className="mt-5 grid gap-4">
+                    {filteredHistory.slice(0, 6).map((item, index) => (
+                      <HistoryTimelineCard
+                        key={item.id}
+                        item={item}
+                        index={index}
+                        isLatest={index === 0}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+
               <section id="subcaracteristicas" className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-sky-50/30 p-6 shadow-sm">
                 <SectionHeader
                   title="Como seu estilo tende a aparecer no trabalho"
@@ -1003,6 +1093,16 @@ export default function MapaComportamentalPage() {
                     <RecommendationCard key={item.title} title={item.title} text={item.text} index={index} highlighted={index === 0} />
                   ))}
                 </div>
+                <div className="mt-5 grid gap-4 xl:grid-cols-3">
+                  {managerActionMatrix.map((item, index) => (
+                    <RecommendationCard
+                      key={item.title}
+                      title={item.title}
+                      text={item.text}
+                      index={index + managerGuidance.length}
+                    />
+                  ))}
+                </div>
               </section>
 
               <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
@@ -1010,6 +1110,16 @@ export default function MapaComportamentalPage() {
                   title="Transformar leitura em ação"
                   description="Atalhos práticos para levar essa leitura para desenvolvimento individual, feedbacks e conversas de acompanhamento."
                 />
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void createSuggestedPdiPlan()}
+                    disabled={savingPdiPlan}
+                    className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60"
+                  >
+                    {savingPdiPlan ? "Gerando plano..." : "Gerar plano no PDI"}
+                  </button>
+                </div>
                 <div className="mt-5 grid gap-4 md:grid-cols-3">
                   <PortalActionCard
                     href={pdiPrefillHref}
@@ -1771,6 +1881,61 @@ function HistoryDeltaCard({
           )}
           style={{ width: `${item.current}%` }}
         />
+      </div>
+    </div>
+  );
+}
+
+function HistoryTimelineCard({
+  item,
+  index,
+  isLatest,
+}: {
+  item: BehaviorHistoryItem;
+  index: number;
+  isLatest?: boolean;
+}) {
+  const sorted = sortResults(item.self_result ?? []);
+  const predominant = summarizePredominance(getPredominantBehaviorAxes(sorted));
+  const topAxis = sorted[0];
+
+  return (
+    <div className="rounded-[22px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+              Leitura {index + 1}
+            </span>
+            {isLatest ? (
+              <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
+                Atual
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-3 text-lg font-semibold text-slate-950">{predominant}</p>
+          <p className="mt-1 text-sm text-slate-500">
+            {new Date(item.created_at).toLocaleDateString("pt-BR")} • eixo líder {topAxis?.label ?? "não identificado"}
+          </p>
+        </div>
+        <div className="min-w-[180px]">
+          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-sky-700">Distribuição</div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+            {sorted.map((axis) => (
+              <div
+                key={axis.key}
+                className={cx(
+                  "h-2 float-left",
+                  axis.key === "executor" && "bg-amber-600",
+                  axis.key === "comunicador" && "bg-teal-700",
+                  axis.key === "planejador" && "bg-blue-600",
+                  axis.key === "analista" && "bg-slate-600"
+                )}
+                style={{ width: `${axis.percent}%` }}
+              />
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
