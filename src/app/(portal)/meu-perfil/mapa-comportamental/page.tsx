@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
@@ -141,12 +141,12 @@ function buildBehaviorRecommendations(
 
   return [
     {
-      title: "Usar a predominancia natural com intencao",
+      title: "Usar a predominância natural com intencao",
       text: `${personName} tende a operar com maior naturalidade em ${topSelf}. Vale priorizar contextos e entregas em que esse estilo apareca como forca principal, sem perder abertura para ajuste situacional.`,
     },
     {
       title: "Adaptacao ao contexto atual",
-      text: `O ambiente hoje puxa mais para ${topEnvironment}. Isso sugere calibrar comunicacao, ritmo e forma de decisao para reduzir desgaste sem descaracterizar o perfil natural.`,
+      text: `O ambiente hoje puxa mais para ${topEnvironment}. Isso sugere calibrar comunicação, ritmo e forma de decisão para reduzir desgaste sem descaracterizar o perfil natural.`,
     },
     {
       title: "Foco de desenvolvimento",
@@ -202,14 +202,14 @@ function buildExecutiveBehaviorNarrative(
         ? `${personName} tende a operar com forte presenca relacional, repertorio verbal e capacidade de mobilizar pessoas em torno de ideias e projetos.`
         : primary === "Planejador"
           ? `${personName} tende a agir com constancia, estabilidade e boa leitura do coletivo, favorecendo continuidade e colaboracao.`
-          : `${personName} tende a atuar com analise, critério e cuidado com estrutura, priorizando clareza, previsibilidade e qualidade.`;
+          : `${personName} tende a atuar com analise, critÃ©rio e cuidado com estrutura, priorizando clareza, previsibilidade e qualidade.`;
 
   return {
     subcharacteristics: secondary
-      ? `A combinacao entre ${primary} e ${secondary} sugere um estilo de atuação com boa complementaridade entre ritmo, comunicação e forma de decisão.`
-      : `A leitura atual mostra uma predominancia mais clara em ${primary}, reforcando um estilo de atuação mais reconhecível no dia a dia.`,
+      ? `A combinação entre ${primary} e ${secondary} sugere um estilo de atuação com boa complementaridade entre ritmo, comunicaÃ§Ã£o e forma de decisÃ£o.`
+      : `A leitura atual mostra uma predominância mais clara em ${primary}, reforcando um estilo de atuação mais reconhecÃ­vel no dia a dia.`,
     basicSkills: `${styleSummary} As competencias mais favorecidas nesta leitura sao ${topCompetencies.slice(0, 3).join(", ")}, o que tende a favorecer entregas com mais aderencia e consistencia.`,
-    commonSkills: `No funcionamento cotidiano, esse perfil costuma responder melhor quando existe espaço para usar ${topCompetencies.slice(0, 4).join(", ")} em situações reais de trabalho, com clareza de expectativa e contexto.`,
+    commonSkills: `No funcionamento cotidiano, esse perfil costuma responder melhor quando existe espaÃ§o para usar ${topCompetencies.slice(0, 4).join(", ")} em situaÃ§Ãµes reais de trabalho, com clareza de expectativa e contexto.`,
   };
 }
 
@@ -232,27 +232,27 @@ function buildSituationalIndicators(
     {
       title: "Energia",
       status: topCompetency >= 8 ? "Alta" : topCompetency >= 6.5 ? "Normal alta" : "Moderada",
-      description: "Estimativa de intensidade com que o perfil tende a sustentar ritmo, iniciativa e presença nas entregas.",
+      description: "Estimativa de intensidade com que o perfil tende a sustentar ritmo, iniciativa e presenÃ§a nas entregas.",
     },
     {
       title: "Exigencia do meio",
       status: largestGap >= 20 ? "Alta" : largestGap >= 12 ? "Moderada" : "Baixa",
-      description: "Leitura do quanto o contexto atual está pedindo ajustes além do padrão mais natural de atuação.",
+      description: "Leitura do quanto o contexto atual estÃ¡ pedindo ajustes alÃ©m do padrÃ£o mais natural de atuação.",
     },
     {
       title: "Aproveitamento",
-      status: selfConfidenceLabel === "Confianca alta" ? "Alto" : selfConfidenceLabel === "Confianca media" ? "Consistente" : "Em formação",
+      status: selfConfidenceLabel === "Confianca alta" ? "Alto" : selfConfidenceLabel === "Confianca media" ? "Consistente" : "Em formaÃ§Ã£o",
       description: "Sinal de quanto o desenho atual da leitura consegue capturar o melhor do perfil percebido.",
     },
     {
-      title: "Autoconfianca",
+      title: "Autoconfiança",
       status: selfConfidenceLabel,
-      description: "Nível de consistência da leitura do perfil natural com base no volume de adjetivos selecionados.",
+      description: "NÃ­vel de consistência da leitura do perfil natural com base no volume de adjetivos selecionados.",
     },
     {
       title: "Leitura do ambiente",
       status: othersConfidenceLabel,
-      description: "Segurança da leitura sobre a exigência atual do contexto, útil para calibrar adaptação e expectativas.",
+      description: "SeguranÃ§a da leitura sobre a exigÃªncia atual do contexto, Ãºtil para calibrar adaptaÃ§Ã£o e expectativas.",
     },
     {
       title: "Flexibilidade",
@@ -263,9 +263,9 @@ function buildSituationalIndicators(
 
   if (attentionAverage > 18) {
     indicators.push({
-      title: "Fatores de observacao",
+      title: "Fatores de observação",
       status: "Em atenção",
-      description: "Há sinais de tensão comportamental que merecem acompanhamento próximo para evitar desgaste ou ruído relacional.",
+      description: "HÃ¡ sinais de tensÃ£o comportamental que merecem acompanhamento prÃ³ximo para evitar desgaste ou ruÃ­do relacional.",
     });
   }
 
@@ -341,7 +341,7 @@ export default function MapaComportamentalPage() {
     [isolatedProfile]
   );
   const mainCompetencies = useMemo(
-    () => [...competencies].sort((a, b) => b.score - a.score).slice(0, 6),
+    () => [...competencies].sort((a, b) => b.score - a.score),
     [competencies]
   );
   const recommendations = useMemo(
@@ -528,7 +528,7 @@ export default function MapaComportamentalPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-700">Relatorio comportamental</p>
             <h1 className="mt-2 text-2xl font-semibold text-slate-950">Mapa comportamental</h1>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-              Uma leitura mais executiva, inspiradora e aplicável do seu estilo de trabalho, da forma como o contexto atual te demanda e dos pontos que mais podem acelerar seu desenvolvimento em equipe.
+              Uma leitura mais executiva, inspiradora e aplicÃ¡vel do seu estilo de trabalho, da forma como o contexto atual te demanda e dos pontos que mais podem acelerar seu desenvolvimento em equipe.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -626,7 +626,7 @@ export default function MapaComportamentalPage() {
                     <h2 className="mt-6 text-4xl font-semibold tracking-tight text-violet-800">{fullName || "Colaborador"}</h2>
                     <div className="mt-3 space-y-1 text-sm leading-6 text-violet-700/80">
                       <p>{email || "Perfil comportamental"}</p>
-                      <p>Relatório comportamental executivo</p>
+                      <p>Painel comportamental executivo</p>
                     </div>
 
                     <div className="mt-6 flex flex-wrap justify-center gap-6 border-b border-violet-100 pb-5 text-sm font-medium text-violet-700">
@@ -725,7 +725,7 @@ export default function MapaComportamentalPage() {
                   </div>
                 </div>
 
-                <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm xl:sticky xl:top-24">
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-700">Atalhos</p>
                   <div className="mt-4 space-y-2">
                     <a href="#perfil-predominante" className="block rounded-2xl bg-violet-100 px-4 py-3 text-sm font-semibold text-violet-800">Perfil predominante</a>
@@ -838,10 +838,10 @@ export default function MapaComportamentalPage() {
                   title="Competências comportamentais"
                   description="Potenciais mais favorecidos a partir da combinação entre perfil natural, exigência do meio e estilo de condução."
                 />
-                <div className="mt-6">
-                  <CompetencyRadar points={mainCompetencies.slice(0, 12)} />
+                <div className="mt-8">
+                  <CompetencyRadar points={mainCompetencies.slice(0, 20)} />
                 </div>
-                <div className="mt-8 rounded-[26px] border border-slate-200 bg-white px-8 py-4 shadow-sm">
+                <div className="mt-10 rounded-[26px] border border-slate-200 bg-white px-8 py-4 shadow-sm">
                   {mainCompetencies.map((item, index) => (
                     <CompetencyBar key={item.label} point={item} highlight={index < 3} index={index} />
                   ))}
@@ -851,7 +851,7 @@ export default function MapaComportamentalPage() {
               <section id="pontos-de-atencao" className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
                 <SectionHeader
                   title="Pontos de atenção"
-                  description="Sinais de observacao para apoiar conversas com lideranca, distribuicao de demandas e calibragem da forma de trabalho."
+                  description="Sinais de observacao para apoiar conversas com liderança, distribuicao de demandas e calibragem da forma de trabalho."
                 />
                 <div className="mt-5 grid gap-4 xl:grid-cols-2">
                   <AttentionPanel
@@ -859,7 +859,7 @@ export default function MapaComportamentalPage() {
                     items={dominantGaps.map((item) => `${item.label}: diferenca de ${Math.abs(item.environmentDemand - item.profileCurrent).toFixed(2)} pontos entre perfil atual e demanda do meio.`)}
                   />
                   <AttentionPanel
-                    title="Fatores de observacao"
+                    title="Fatores de observação"
                     items={buildFactorAttention(selfFactors, othersFactors)}
                   />
                 </div>
@@ -867,8 +867,8 @@ export default function MapaComportamentalPage() {
 
               <section id="lideranca" className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
                 <SectionHeader
-                  title="Estilo de lideranca"
-                  description="Leitura sintetica da forma mais provavel de conduzir, comunicar expectativa e influenciar o time a partir do momento atual."
+                  title="Estilo de liderança"
+                  description="Leitura sintética da forma mais provável de conduzir, comunicar expectativa e influenciar o time a partir do momento atual."
                 />
                 <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   {leadershipProfile.map((item) => (
@@ -880,7 +880,7 @@ export default function MapaComportamentalPage() {
               <section id="recomendacoes" className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
                 <SectionHeader
                   title="Recomendações práticas"
-                  description="Uma leitura mais motivadora e aplicavel para apoiar desenvolvimento individual, combinacao com o time e alinhamento com a lideranca."
+                  description="Uma leitura mais motivadora e aplicável para apoiar desenvolvimento individual, combinação com o time e alinhamento com a liderança."
                 />
                 <div className="mt-5 grid gap-4 xl:grid-cols-2">
                   {teamHighlights.map((item, index) => (
@@ -904,7 +904,7 @@ export default function MapaComportamentalPage() {
                     : "Agora marque como os outros pensam que voce deveria ser"}
                 </h2>
                 <p className="mt-1 text-xs text-slate-500">
-                  Nao existem respostas certas. O objetivo e identificar predominancia relativa entre os perfis.
+                  Nao existem respostas certas. O objetivo e identificar predominância relativa entre os perfis.
                 </p>
               </div>
 
@@ -1139,15 +1139,15 @@ function SituationalIndicatorRow({
             : 55);
 
   return (
-    <div className="grid gap-4 rounded-[22px] border border-violet-100 bg-white px-6 py-5 shadow-sm md:grid-cols-[220px_minmax(0,1fr)] md:items-center">
+    <div className="grid gap-4 md:grid-cols-[240px_minmax(0,1fr)] md:items-center">
       <div>
-        <p className="text-2xl font-semibold text-violet-800">{title}</p>
-        <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+        <p className="text-[28px] font-semibold tracking-tight text-violet-800">{title}</p>
+        <p className="mt-1 text-sm leading-6 text-slate-600">{description}</p>
       </div>
       <div>
         <div className="text-sm font-semibold uppercase tracking-[0.12em] text-violet-700">{status}</div>
-        <div className="mt-2 h-3 rounded-full bg-violet-100">
-          <div className="h-3 rounded-full bg-gradient-to-r from-violet-700 to-fuchsia-600" style={{ width: `${width}%` }} />
+        <div className="mt-2 h-2 rounded-full bg-violet-100">
+          <div className="h-2 rounded-full bg-violet-700" style={{ width: `${width}%` }} />
         </div>
       </div>
     </div>
@@ -1183,16 +1183,16 @@ function CompetencyBar({
   const width = `${Math.min(100, (point.score / 10) * 100)}%`;
   const level = getCompetencyLevel(point.score);
   return (
-    <div className="grid gap-4 border-b border-slate-200 py-4 md:grid-cols-[64px_260px_minmax(0,1fr)] md:items-center">
+    <div className="grid gap-4 border-b border-slate-200 py-4 md:grid-cols-[56px_320px_minmax(0,1fr)] md:items-center">
       <div className="text-xl font-semibold text-violet-800">{index + 1}</div>
-      <div className="text-2xl font-semibold text-violet-800">{point.label}</div>
+      <div className="text-[30px] font-semibold tracking-tight text-violet-800">{point.label}</div>
       <div>
         <div className="text-sm font-semibold uppercase tracking-[0.12em] text-violet-700">{level}</div>
-        <div className="mt-2 h-3 rounded-full bg-violet-100">
+        <div className="mt-2 h-2 rounded-full bg-violet-100">
           <div
             className={cx(
-              "h-3 rounded-full bg-gradient-to-r from-violet-700 to-fuchsia-600",
-              highlight && "from-violet-800 to-violet-600"
+              "h-2 rounded-full bg-violet-700",
+              highlight && "bg-violet-800"
             )}
             style={{ width }}
           />
@@ -1273,7 +1273,7 @@ function ResultCard({
       </div>
 
       <div className="mt-4 rounded-[18px] border border-white/80 bg-white/85 p-3 text-xs text-slate-700">
-        <p className="font-semibold text-slate-900">Leitura de predominancia</p>
+        <p className="font-semibold text-slate-900">Leitura de predominância</p>
         <p className="mt-1">{getBehaviorSummaryLine(results, personName)}</p>
       </div>
     </div>
@@ -1444,7 +1444,7 @@ function LeadershipLineChart({ items }: { items: BehaviorLeadershipPoint[] }) {
 
   return (
     <TrendLineChart
-      title="Estilo de liderança x contexto atual"
+      title="Estilo de lideranÃ§a x contexto atual"
       items={adapted}
         lineAColor="#6d28d9"
         lineBColor="#fb7185"
@@ -1541,3 +1541,4 @@ function RecommendationCard({
     </div>
   );
 }
+
