@@ -460,6 +460,43 @@ function formatHistoryWindowLabel(window: HistoryWindow) {
   return "todo o histórico";
 }
 
+function buildAxisWordDrivers(selectedIds: string[]) {
+  return (Object.keys(BEHAVIOR_AXIS_META) as Array<keyof typeof BEHAVIOR_AXIS_META>).map((axisKey) => {
+    const topWords = BEHAVIOR_ADJECTIVES.filter((item) => selectedIds.includes(item.id))
+      .map((item) => ({
+        label: item.label,
+        weight: item.weights[axisKey],
+      }))
+      .filter((item) => item.weight > 0)
+      .sort((a, b) => b.weight - a.weight || a.label.localeCompare(b.label, "pt-BR"))
+      .slice(0, 5);
+
+    return {
+      key: axisKey,
+      label: BEHAVIOR_AXIS_META[axisKey].label,
+      words: topWords,
+    };
+  });
+}
+
+function buildCompetencyDriversSummary(
+  competencies: BehaviorCompetencyPoint[],
+  consolidatedResults: BehaviorAxisResult[]
+) {
+  const sortedAxes = [...consolidatedResults].sort((a, b) => b.percent - a.percent);
+  const primaryAxis = sortedAxes[0]?.label ?? "perfil predominante";
+  const secondaryAxis = sortedAxes[1]?.label ?? "perfil complementar";
+
+  return competencies.slice(0, 6).map((item, index) => ({
+    label: item.label,
+    score: item.score,
+    explanation:
+      index < 2
+        ? `Esta competência aparece forte principalmente pela combinação entre ${primaryAxis.toLowerCase()} e ${secondaryAxis.toLowerCase()}.`
+        : `Esta competência é reforçada pela distribuição atual dos eixos e pela forma como o perfil vem respondendo ao contexto.`,
+  }));
+}
+
 export default function MapaComportamentalPage() {
   const reportRef = useRef<HTMLDivElement | null>(null);
   const [loading, setLoading] = useState(true);
@@ -592,6 +629,14 @@ export default function MapaComportamentalPage() {
   const developmentPlan = useMemo(
     () => buildDevelopmentPlan(personName, reportPredominantSelf, dominantGaps, mainCompetencies),
     [personName, reportPredominantSelf, dominantGaps, mainCompetencies]
+  );
+  const selfAxisWordDrivers = useMemo(
+    () => buildAxisWordDrivers(reportSelfSelectedIds),
+    [reportSelfSelectedIds]
+  );
+  const competencyDrivers = useMemo(
+    () => buildCompetencyDriversSummary(mainCompetencies, consolidatedResults),
+    [mainCompetencies, consolidatedResults]
   );
   const managerActionMatrix = useMemo(
     () =>
@@ -1035,6 +1080,36 @@ export default function MapaComportamentalPage() {
                 <div className="mt-10 rounded-[26px] border border-slate-200 bg-white px-8 py-4 shadow-sm">
                   {mainCompetencies.map((item, index) => (
                     <CompetencyBar key={item.label} point={item} highlight={index < 3} index={index} />
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                <SectionHeader
+                  title="Como as palavras influenciaram a leitura"
+                  description="Os eixos e competências não são fixos: eles mudam conforme os adjetivos selecionados. Aqui estão os termos que mais puxaram cada eixo nesta leitura."
+                />
+                <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  {selfAxisWordDrivers.map((axis) => (
+                    <AxisDriverCard key={axis.key} title={axis.label} axisKey={axis.key} words={axis.words} />
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-[28px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-6 shadow-sm">
+                <SectionHeader
+                  title="Como isso se converte em competências"
+                  description="As competências do radar são derivadas da combinação entre eixos predominantes, fatores positivos/atenção e estilo de liderança percebido."
+                />
+                <div className="mt-5 grid gap-4 xl:grid-cols-2">
+                  {competencyDrivers.map((item, index) => (
+                    <RecommendationCard
+                      key={item.label}
+                      title={`${item.label} • ${item.score.toFixed(2)}`}
+                      text={item.explanation}
+                      index={index}
+                      highlighted={index < 2}
+                    />
                   ))}
                 </div>
               </section>
@@ -1491,6 +1566,38 @@ function AttentionPanel({ title, items }: { title: string; items: string[] }) {
             {item}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function AxisDriverCard({
+  title,
+  axisKey,
+  words,
+}: {
+  title: string;
+  axisKey: string;
+  words: Array<{ label: string; weight: number }>;
+}) {
+  return (
+    <div className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5 shadow-sm">
+      <div className={cx("text-sm font-semibold", getAxisTextClass(axisKey))}>{title}</div>
+      <div className="mt-4 space-y-2">
+        {words.length ? (
+          words.map((word) => (
+            <div key={`${title}-${word.label}`} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2">
+              <span className="text-sm text-slate-700">{word.label}</span>
+              <span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white">
+                peso {word.weight}
+              </span>
+            </div>
+          ))
+        ) : (
+          <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">
+            Nenhum adjetivo selecionado puxou este eixo com peso relevante nesta leitura.
+          </div>
+        )}
       </div>
     </div>
   );
