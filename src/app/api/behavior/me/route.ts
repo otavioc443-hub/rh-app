@@ -45,9 +45,15 @@ async function resolveCurrentUserContext() {
 
   const profileRes = await supabaseAdmin
     .from("profiles")
-    .select("full_name,email")
+    .select("full_name,email,role,company_id,department_id")
     .eq("id", user.id)
-    .maybeSingle<{ full_name: string | null; email: string | null }>();
+    .maybeSingle<{
+      full_name: string | null;
+      email: string | null;
+      role: string | null;
+      company_id: string | null;
+      department_id: string | null;
+    }>();
   if (profileRes.error) return { ok: false as const, status: 500, error: profileRes.error.message };
 
   const resolvedEmail = user.email ?? profileRes.data?.email ?? null;
@@ -58,48 +64,76 @@ async function resolveCurrentUserContext() {
 
   const collaboratorIds = new Set<string>();
   let collaboratorName: string | null = null;
+  let collaboratorJobTitle: string | null = null;
   const byUser = await supabaseAdmin
     .from("colaboradores")
-    .select("id,nome")
+    .select("id,nome,cargo")
     .eq("user_id", user.id)
     .limit(5);
   if (byUser.error) return { ok: false as const, status: 500, error: byUser.error.message };
-  for (const row of (byUser.data ?? []) as Array<{ id: string; nome: string | null }>) {
+  for (const row of (byUser.data ?? []) as Array<{ id: string; nome: string | null; cargo: string | null }>) {
     collaboratorIds.add(row.id);
     collaboratorName = collaboratorName ?? normalizeDisplayName(row.nome);
+    collaboratorJobTitle = collaboratorJobTitle ?? (typeof row.cargo === "string" && row.cargo.trim() ? row.cargo.trim() : null);
   }
 
   if (resolvedEmail) {
     const byEmail = await supabaseAdmin
       .from("colaboradores")
-      .select("id,nome")
+      .select("id,nome,cargo")
       .ilike("email", resolvedEmail)
       .limit(5);
     if (byEmail.error) return { ok: false as const, status: 500, error: byEmail.error.message };
-    for (const row of (byEmail.data ?? []) as Array<{ id: string; nome: string | null }>) {
+    for (const row of (byEmail.data ?? []) as Array<{ id: string; nome: string | null; cargo: string | null }>) {
       collaboratorIds.add(row.id);
       collaboratorName = collaboratorName ?? normalizeDisplayName(row.nome);
+      collaboratorJobTitle = collaboratorJobTitle ?? (typeof row.cargo === "string" && row.cargo.trim() ? row.cargo.trim() : null);
     }
   }
 
   if (resolvedFullName.trim()) {
     const byName = await supabaseAdmin
       .from("colaboradores")
-      .select("id,nome")
+      .select("id,nome,cargo")
       .ilike("nome", resolvedFullName.trim())
       .limit(5);
     if (byName.error) return { ok: false as const, status: 500, error: byName.error.message };
-    for (const row of (byName.data ?? []) as Array<{ id: string; nome: string | null }>) {
+    for (const row of (byName.data ?? []) as Array<{ id: string; nome: string | null; cargo: string | null }>) {
       collaboratorIds.add(row.id);
       collaboratorName = collaboratorName ?? normalizeDisplayName(row.nome);
+      collaboratorJobTitle = collaboratorJobTitle ?? (typeof row.cargo === "string" && row.cargo.trim() ? row.cargo.trim() : null);
     }
   }
+
+  const [companyRes, departmentRes] = await Promise.all([
+    profileRes.data?.company_id
+      ? supabaseAdmin
+          .from("companies")
+          .select("name")
+          .eq("id", profileRes.data.company_id)
+          .maybeSingle<{ name: string | null }>()
+      : Promise.resolve({ data: null, error: null }),
+    profileRes.data?.department_id
+      ? supabaseAdmin
+          .from("departments")
+          .select("name")
+          .eq("id", profileRes.data.department_id)
+          .maybeSingle<{ name: string | null }>()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+
+  if (companyRes.error) return { ok: false as const, status: 500, error: companyRes.error.message };
+  if (departmentRes.error) return { ok: false as const, status: 500, error: departmentRes.error.message };
 
   return {
     ok: true as const,
     userId: user.id,
     email: resolvedEmail,
     fullName: collaboratorName ?? normalizeDisplayName(resolvedFullName) ?? resolvedFullName,
+    role: profileRes.data?.role ?? null,
+    companyName: companyRes.data?.name?.trim() || null,
+    departmentName: departmentRes.data?.name?.trim() || null,
+    jobTitle: collaboratorJobTitle,
     collaboratorId: collaboratorIds.values().next().value ?? null,
     collaboratorIds: Array.from(collaboratorIds),
   };
@@ -229,6 +263,10 @@ export async function GET() {
     userId: context.userId,
     fullName: context.fullName,
     email: context.email,
+    role: context.role,
+    companyName: context.companyName,
+    departmentName: context.departmentName,
+    jobTitle: context.jobTitle,
     collaboratorId: context.collaboratorId,
     activeRelease: activeRelease
       ? {

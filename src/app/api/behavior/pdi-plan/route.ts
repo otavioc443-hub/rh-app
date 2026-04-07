@@ -6,10 +6,16 @@ type InputPlanItem = {
   horizon?: string;
   title?: string;
   text?: string;
+  target_date?: string | null;
 };
 
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeDate(value: unknown) {
+  const text = typeof value === "string" ? value.trim() : "";
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
 }
 
 export async function POST(req: Request) {
@@ -41,18 +47,22 @@ export async function POST(req: Request) {
         const horizon = normalizeText(item.horizon);
         const title = normalizeText(item.title);
         const text = normalizeText(item.text);
+
         if (!title) return null;
+
         return {
           user_id: user.id,
           title: horizon ? `${horizon} • ${title}` : title,
           action: text || `Usar ${strength} como alavanca e acompanhar evolução em ${focus}.`,
-          status: "planejado",
+          target_date: normalizeDate(item.target_date),
+          status: "planejado" as const,
         };
       })
       .filter(Boolean) as Array<{
         user_id: string;
         title: string;
         action: string;
+        target_date: string | null;
         status: "planejado";
       }>;
 
@@ -71,7 +81,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: existingErr.message }, { status: 400 });
     }
 
-    const existingTitles = new Set(((existingRows ?? []) as Array<{ title: string | null }>).map((row) => row.title).filter(Boolean));
+    const existingTitles = new Set(
+      ((existingRows ?? []) as Array<{ title: string | null }>)
+        .map((row) => row.title)
+        .filter(Boolean)
+    );
     const itemsToCreate = normalizedItems.filter((item) => !existingTitles.has(item.title));
 
     if (!itemsToCreate.length) {

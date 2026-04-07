@@ -15,6 +15,7 @@ import {
 import {
   BEHAVIOR_ADJECTIVES,
   BEHAVIOR_AXIS_META,
+  BEHAVIOR_COMPETENCY_RULES,
   calculateBehaviorCompetencies,
   calculateBehaviorFactorResults,
   calculateBehaviorIsolatedProfile,
@@ -45,6 +46,20 @@ type BehaviorHistoryItem = {
 };
 
 type HistoryWindow = "all" | "3m" | "6m" | "12m";
+
+type PersonContext = {
+  role: string | null;
+  companyName: string | null;
+  departmentName: string | null;
+  jobTitle: string | null;
+};
+
+type EditableDevelopmentItem = {
+  horizon: string;
+  title: string;
+  text: string;
+  target_date: string | null;
+};
 
 function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
@@ -80,6 +95,12 @@ function initials(value: string | null | undefined) {
 function summarizePredominance(predominant: BehaviorAxisResult[]) {
   if (!predominant.length) return "Perfil equilibrado";
   return predominant.map((item) => item.label).join(" + ");
+}
+
+function addDaysToIso(days: number) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
 function signedValue(value: number) {
@@ -462,19 +483,31 @@ function formatHistoryWindowLabel(window: HistoryWindow) {
 
 function buildAxisWordDrivers(selectedIds: string[]) {
   return (Object.keys(BEHAVIOR_AXIS_META) as Array<keyof typeof BEHAVIOR_AXIS_META>).map((axisKey) => {
-    const topWords = BEHAVIOR_ADJECTIVES.filter((item) => selectedIds.includes(item.id))
+    const selectedWords = BEHAVIOR_ADJECTIVES.filter((item) => selectedIds.includes(item.id));
+    const positiveWords = selectedWords
+      .map((item) => ({
+        label: item.label,
+        weight: item.weights[axisKey],
+        attention: !!item.attention,
+      }))
+      .filter((item) => item.weight > 0 && !item.attention)
+      .sort((a, b) => b.weight - a.weight || a.label.localeCompare(b.label, "pt-BR"))
+      .slice(0, 4);
+    const negativeWords = selectedWords
+      .filter((item) => item.attention)
       .map((item) => ({
         label: item.label,
         weight: item.weights[axisKey],
       }))
       .filter((item) => item.weight > 0)
       .sort((a, b) => b.weight - a.weight || a.label.localeCompare(b.label, "pt-BR"))
-      .slice(0, 5);
+      .slice(0, 3);
 
     return {
       key: axisKey,
       label: BEHAVIOR_AXIS_META[axisKey].label,
-      words: topWords,
+      positiveWords,
+      negativeWords,
     };
   });
 }
@@ -483,17 +516,33 @@ function buildCompetencyDriversSummary(
   competencies: BehaviorCompetencyPoint[],
   consolidatedResults: BehaviorAxisResult[]
 ) {
-  const sortedAxes = [...consolidatedResults].sort((a, b) => b.percent - a.percent);
-  const primaryAxis = sortedAxes[0]?.label ?? "perfil predominante";
-  const secondaryAxis = sortedAxes[1]?.label ?? "perfil complementar";
+  const axisByKey = new Map(consolidatedResults.map((item) => [item.key, item.label]));
+  const toLabel = (source: (typeof BEHAVIOR_COMPETENCY_RULES)[number]["drivers"][number]) => {
+    if (source.source === "axis") return `${axisByKey.get(source.key) ?? source.key} (${Math.round(source.weight * 100)}%)`;
+    if (source.source === "factor") return `fatores de ${axisByKey.get(source.key) ?? source.key} (${Math.round(source.weight * 100)}%)`;
+    return `liderança ${source.key} (${Math.round(source.weight * 100)}%)`;
+  };
 
-  return competencies.slice(0, 6).map((item, index) => ({
-    label: item.label,
-    score: item.score,
-    explanation:
-      index < 2
-        ? `Esta competência aparece forte principalmente pela combinação entre ${primaryAxis.toLowerCase()} e ${secondaryAxis.toLowerCase()}.`
-        : `Esta competência é reforçada pela distribuição atual dos eixos e pela forma como o perfil vem respondendo ao contexto.`,
+  return competencies.slice(0, 6).map((item) => {
+    const rule = BEHAVIOR_COMPETENCY_RULES.find((candidate) => candidate.label === item.label);
+    const primaryDrivers = (rule?.drivers ?? []).slice(0, 3).map(toLabel);
+    return {
+      label: item.label,
+      score: item.score,
+      explanation: primaryDrivers.length
+        ? `Leitura derivada da combinação entre ${primaryDrivers.join(", ")}.`
+        : "Leitura derivada da combinação entre eixos, fatores de atenção e estilo de liderança.",
+    };
+  });
+}
+
+function buildEditableDevelopmentPlan(
+  plan: Array<{ horizon: string; title: string; text: string }>
+): EditableDevelopmentItem[] {
+  const defaults = [30, 60, 90];
+  return plan.map((item, index) => ({
+    ...item,
+    target_date: addDaysToIso(defaults[index] ?? 30 * (index + 1)),
   }));
 }
 
@@ -504,6 +553,12 @@ export default function MapaComportamentalPage() {
   const [savingPdiPlan, setSavingPdiPlan] = useState(false);
   const [msg, setMsg] = useState("");
   const [userId, setUserId] = useState<string | null>(null);
+  const [personContext, setPersonContext] = useState<PersonContext>({
+    role: null,
+    companyName: null,
+    departmentName: null,
+    jobTitle: null,
+  });
   const [history, setHistory] = useState<BehaviorHistoryItem[]>([]);
   const [activeRelease, setActiveRelease] = useState<{
     id: string;
@@ -517,6 +572,9 @@ export default function MapaComportamentalPage() {
   const [selfSelected, setSelfSelected] = useState<string[]>([]);
   const [othersSelected, setOthersSelected] = useState<string[]>([]);
   const [showAssessmentForm, setShowAssessmentForm] = useState(false);
+  const [leftCompareId, setLeftCompareId] = useState<string>("");
+  const [rightCompareId, setRightCompareId] = useState<string>("");
+  const [editablePlan, setEditablePlan] = useState<EditableDevelopmentItem[]>([]);
 
   const personName = firstName(fullName) ?? "O colaborador";
   const canPerformAssessment = !!activeRelease;
@@ -630,6 +688,21 @@ export default function MapaComportamentalPage() {
     () => buildDevelopmentPlan(personName, reportPredominantSelf, dominantGaps, mainCompetencies),
     [personName, reportPredominantSelf, dominantGaps, mainCompetencies]
   );
+  const leftCompareAssessment = useMemo(
+    () => filteredHistory.find((item) => item.id === leftCompareId) ?? filteredHistory[0] ?? null,
+    [filteredHistory, leftCompareId]
+  );
+  const rightCompareAssessment = useMemo(
+    () => filteredHistory.find((item) => item.id === rightCompareId) ?? filteredHistory[1] ?? null,
+    [filteredHistory, rightCompareId]
+  );
+  const manualComparison = useMemo(() => {
+    if (!leftCompareAssessment || !rightCompareAssessment) return [];
+    return buildHistoryComparison(
+      sortResults(leftCompareAssessment.self_result ?? []),
+      sortResults(rightCompareAssessment.self_result ?? [])
+    );
+  }, [leftCompareAssessment, rightCompareAssessment]);
   const selfAxisWordDrivers = useMemo(
     () => buildAxisWordDrivers(reportSelfSelectedIds),
     [reportSelfSelectedIds]
@@ -655,6 +728,16 @@ export default function MapaComportamentalPage() {
     return `/meu-perfil/pdi?origem=mapa-comportamental&foco=${encodeURIComponent(focus)}&forca=${encodeURIComponent(strength)}`;
   }, [dominantGaps, mainCompetencies, reportPredominantSelf]);
 
+  useEffect(() => {
+    setEditablePlan(buildEditableDevelopmentPlan(developmentPlan));
+  }, [developmentPlan]);
+
+  useEffect(() => {
+    if (!filteredHistory.length) return;
+    setLeftCompareId((prev) => prev || filteredHistory[0]?.id || "");
+    setRightCompareId((prev) => prev || filteredHistory[1]?.id || filteredHistory[0]?.id || "");
+  }, [filteredHistory]);
+
   async function exportReportAsPdf() {
     if (!reportRef.current) return;
 
@@ -667,6 +750,15 @@ export default function MapaComportamentalPage() {
     const reportHtml = reportRef.current.innerHTML;
     const title = `Relatório comportamental - ${fullName || "Colaborador"}`;
     const exportDate = new Date().toLocaleDateString("pt-BR");
+    const sectionTitles = Array.from(reportRef.current.querySelectorAll("section[id] h2, section[id] h1"))
+      .map((node) => node.textContent?.trim())
+      .filter(Boolean)
+      .slice(0, 10) as string[];
+    const indexHtml = sectionTitles.length
+      ? `<div class="print-index"><h2>Sumário executivo</h2><ol>${sectionTitles
+          .map((item) => `<li>${item}</li>`)
+          .join("")}</ol></div>`
+      : "";
 
     printWindow.document.open();
     printWindow.document.write(`
@@ -682,6 +774,9 @@ export default function MapaComportamentalPage() {
             .print-cover { border-bottom: 1px solid #dbe4f0; padding: 0 0 12px; margin: 0 0 16px; }
             .print-cover h1 { margin: 0; font-size: 26px; line-height: 1.1; color: #0f172a; }
             .print-cover p { margin: 6px 0 0; font-size: 12px; color: #475569; }
+            .print-index { page-break-inside: avoid; border: 1px solid #dbe4f0; border-radius: 16px; padding: 12px 16px; margin: 0 0 16px; }
+            .print-index h2 { margin: 0 0 8px; font-size: 15px; color: #0f172a; }
+            .print-index ol { margin: 0; padding-left: 18px; color: #334155; font-size: 12px; line-height: 1.7; }
             .print-footer {
               position: fixed;
               left: 0;
@@ -715,11 +810,12 @@ export default function MapaComportamentalPage() {
           <div class="print-shell">
             <div class="print-cover">
               <h1>Relatório comportamental</h1>
-              <p>${fullName || "Colaborador"} • ${exportDate} • Portal RH</p>
+              <p>${fullName || "Colaborador"} • ${exportDate} • ${personContext.companyName || "Portal RH"}</p>
             </div>
+            ${indexHtml}
             ${reportHtml}
             <div class="print-footer">
-              <span>Portal RH • Relatório comportamental</span>
+              <span>${personContext.companyName || "Portal RH"} • Relatório comportamental</span>
               <span>${exportDate} • Página <span class="print-page-number"></span></span>
             </div>
           </div>
@@ -747,6 +843,10 @@ export default function MapaComportamentalPage() {
         userId?: string;
         fullName?: string;
         email?: string;
+        role?: string | null;
+        companyName?: string | null;
+        departmentName?: string | null;
+        jobTitle?: string | null;
         activeRelease?: { id: string; window_start: string; window_end: string } | null;
         history?: BehaviorHistoryItem[];
       };
@@ -758,6 +858,12 @@ export default function MapaComportamentalPage() {
       setUserId(body.userId ?? null);
       setFullName((prev) => normalizeDisplayName(prev) ?? normalizeDisplayName(body.fullName) ?? "");
       setEmail((prev) => prev || body.email || "");
+      setPersonContext({
+        role: body.role ?? null,
+        companyName: body.companyName ?? null,
+        departmentName: body.departmentName ?? null,
+        jobTitle: body.jobTitle ?? null,
+      });
       setHistory(body.history ?? []);
       setActiveRelease(body.activeRelease ?? null);
     } catch (error: unknown) {
@@ -831,7 +937,7 @@ export default function MapaComportamentalPage() {
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          plan: developmentPlan,
+          plan: editablePlan,
           focus: dominantGaps[0]?.label ?? reportPredominantSelf[0]?.label ?? "Desenvolvimento",
           strength: mainCompetencies[0]?.label ?? reportPredominantSelf[0]?.label ?? "Competência principal",
         }),
@@ -945,6 +1051,14 @@ export default function MapaComportamentalPage() {
                   <p className="mt-2 text-center text-base text-slate-500">
                     em {new Date(latestAssessment.created_at).toLocaleDateString("pt-BR")}
                   </p>
+                  {(personContext.jobTitle || personContext.departmentName || personContext.role || personContext.companyName) ? (
+                    <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                      {personContext.jobTitle ? <ProfileTag icon={<Target size={12} />} label={personContext.jobTitle} /> : null}
+                      {personContext.departmentName ? <ProfileTag icon={<Users size={12} />} label={personContext.departmentName} /> : null}
+                      {personContext.role ? <ProfileTag icon={<User2 size={12} />} label={personContext.role} /> : null}
+                      {personContext.companyName ? <ProfileTag icon={<Sparkles size={12} />} label={personContext.companyName} /> : null}
+                    </div>
+                  ) : null}
                   <div className="mt-8">
                     <PredominanceSpectrum results={reportSelfResults} />
                   </div>
@@ -1003,6 +1117,50 @@ export default function MapaComportamentalPage() {
               {filteredHistory.length > 1 ? (
                 <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
                   <SectionHeader
+                    title="Comparar duas leituras"
+                    description="Escolha duas leituras para visualizar manualmente o que avançou, cedeu espaço ou permaneceu estável entre momentos diferentes."
+                  />
+                  <div className="mt-5 grid gap-4 md:grid-cols-2">
+                    <label className="space-y-2">
+                      <span className="text-sm font-semibold text-slate-800">Leitura mais recente</span>
+                      <select
+                        value={leftCompareId}
+                        onChange={(e) => setLeftCompareId(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-slate-300"
+                      >
+                        {filteredHistory.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {new Date(item.created_at).toLocaleDateString("pt-BR")}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-2">
+                      <span className="text-sm font-semibold text-slate-800">Leitura de comparação</span>
+                      <select
+                        value={rightCompareId}
+                        onChange={(e) => setRightCompareId(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-slate-300"
+                      >
+                        {filteredHistory.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {new Date(item.created_at).toLocaleDateString("pt-BR")}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                  <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    {manualComparison.map((item) => (
+                      <HistoryDeltaCard key={`manual-${item.key}`} item={item} />
+                    ))}
+                  </div>
+                </section>
+              ) : null}
+
+              {filteredHistory.length > 1 ? (
+                <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                  <SectionHeader
                     title="Linha do tempo das leituras"
                     description={`Resumo cronológico das leituras registradas em ${formatHistoryWindowLabel(historyWindow)}, para facilitar percepção de continuidade e mudança.`}
                   />
@@ -1015,6 +1173,9 @@ export default function MapaComportamentalPage() {
                         isLatest={index === 0}
                       />
                     ))}
+                  </div>
+                  <div className="mt-6">
+                    <HistoryAxisTrendChart history={filteredHistory.slice(0, 6)} />
                   </div>
                 </section>
               ) : null}
@@ -1091,7 +1252,13 @@ export default function MapaComportamentalPage() {
                 />
                 <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   {selfAxisWordDrivers.map((axis) => (
-                    <AxisDriverCard key={axis.key} title={axis.label} axisKey={axis.key} words={axis.words} />
+                    <AxisDriverCard
+                      key={axis.key}
+                      title={axis.label}
+                      axisKey={axis.key}
+                      positiveWords={axis.positiveWords}
+                      negativeWords={axis.negativeWords}
+                    />
                   ))}
                 </div>
               </section>
@@ -1220,13 +1387,17 @@ export default function MapaComportamentalPage() {
                   description="Um roteiro simples de 30, 60 e 90 dias para transformar a leitura comportamental em prática observável."
                 />
                 <div className="mt-5 grid gap-4 xl:grid-cols-3">
-                  {developmentPlan.map((item, index) => (
-                    <RecommendationCard
+                  {editablePlan.map((item, index) => (
+                    <EditableDevelopmentCard
                       key={item.horizon}
-                      title={`${item.horizon} • ${item.title}`}
-                      text={item.text}
+                      item={item}
                       index={index}
                       highlighted={index === 0}
+                      onChange={(next) =>
+                        setEditablePlan((prev) =>
+                          prev.map((entry, entryIndex) => (entryIndex === index ? { ...entry, ...next } : entry))
+                        )
+                      }
                     />
                   ))}
                 </div>
@@ -1335,8 +1506,7 @@ export default function MapaComportamentalPage() {
 function SectionHeader({ title, description }: { title: string; description: string }) {
   return (
     <div>
-      <div className="text-xs font-semibold uppercase tracking-[0.22em] text-sky-700">Relatório</div>
-      <div className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{title}</div>
+      <div className="text-2xl font-semibold tracking-tight text-slate-950">{title}</div>
       <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-600">{description}</p>
     </div>
   );
@@ -1574,30 +1744,56 @@ function AttentionPanel({ title, items }: { title: string; items: string[] }) {
 function AxisDriverCard({
   title,
   axisKey,
-  words,
+  positiveWords,
+  negativeWords,
 }: {
   title: string;
   axisKey: string;
-  words: Array<{ label: string; weight: number }>;
+  positiveWords: Array<{ label: string; weight: number }>;
+  negativeWords: Array<{ label: string; weight: number }>;
 }) {
   return (
     <div className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5 shadow-sm">
       <div className={cx("text-sm font-semibold", getAxisTextClass(axisKey))}>{title}</div>
-      <div className="mt-4 space-y-2">
-        {words.length ? (
-          words.map((word) => (
-            <div key={`${title}-${word.label}`} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2">
-              <span className="text-sm text-slate-700">{word.label}</span>
-              <span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white">
-                peso {word.weight}
-              </span>
-            </div>
-          ))
-        ) : (
-          <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">
-            Nenhum adjetivo selecionado puxou este eixo com peso relevante nesta leitura.
+      <div className="mt-4 space-y-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">Palavras que puxaram esse eixo</p>
+          <div className="mt-2 space-y-2">
+            {positiveWords.length ? (
+              positiveWords.map((word) => (
+                <div key={`${title}-${word.label}`} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-3 py-2">
+                  <span className="text-sm text-slate-700">{word.label}</span>
+                  <span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white">
+                    peso {word.weight}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">
+                Nenhuma palavra selecionada puxou este eixo com peso relevante.
+              </div>
+            )}
           </div>
-        )}
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-700">Palavras de atenção</p>
+          <div className="mt-2 space-y-2">
+            {negativeWords.length ? (
+              negativeWords.map((word) => (
+                <div key={`${title}-attention-${word.label}`} className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/50 px-3 py-2">
+                  <span className="text-sm text-slate-700">{word.label}</span>
+                  <span className="rounded-full bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white">
+                    peso {word.weight}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500">
+                Não houve palavras de atenção com impacto relevante neste eixo.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1836,6 +2032,73 @@ function LeadershipLineChart({ items }: { items: BehaviorLeadershipPoint[] }) {
   );
 }
 
+function HistoryAxisTrendChart({ history }: { history: BehaviorHistoryItem[] }) {
+  const items = [...history].reverse();
+  const axisKeys: Array<keyof typeof BEHAVIOR_AXIS_META> = ["executor", "comunicador", "planejador", "analista"];
+  const palette: Record<string, string> = {
+    executor: "#d97706",
+    comunicador: "#0f766e",
+    planejador: "#2563eb",
+    analista: "#475569",
+  };
+  const width = 760;
+  const height = 220;
+  const padding = 28;
+  const innerWidth = width - padding * 2;
+  const innerHeight = height - padding * 2;
+  const stepX = items.length > 1 ? innerWidth / (items.length - 1) : innerWidth;
+  const mapY = (value: number) => padding + ((40 - value) / 40) * innerHeight;
+  const getAxisPoint = (axisKey: keyof typeof BEHAVIOR_AXIS_META, item: BehaviorHistoryItem) =>
+    sortResults(item.self_result ?? []).find((entry) => entry.key === axisKey)?.percent ?? 0;
+
+  return (
+    <div className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-950">Tendência por eixo</p>
+          <p className="mt-1 text-sm text-slate-500">Evolução visual da leitura natural ao longo das avaliações filtradas.</p>
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="mt-4 w-full">
+        {[0, 10, 20, 30, 40].map((tick) => (
+          <g key={tick}>
+            <line x1={padding} x2={width - padding} y1={mapY(tick)} y2={mapY(tick)} stroke="#dbe4f0" strokeWidth="1" />
+            <text x={4} y={mapY(tick) + 4} fontSize="11" fill="#64748b">
+              {tick}%
+            </text>
+          </g>
+        ))}
+        {axisKeys.map((axisKey) => {
+          const points = items
+            .map((item, index) => `${padding + stepX * index},${mapY(getAxisPoint(axisKey, item))}`)
+            .join(" ");
+          return <polyline key={axisKey} fill="none" stroke={palette[axisKey]} strokeWidth="3" points={points} />;
+        })}
+        {items.map((item, index) => (
+          <text
+            key={item.id}
+            x={padding + stepX * index}
+            y={height - 6}
+            textAnchor="middle"
+            fontSize="11"
+            fill="#475569"
+          >
+            {new Date(item.created_at).toLocaleDateString("pt-BR")}
+          </text>
+        ))}
+      </svg>
+      <div className="mt-4 flex flex-wrap gap-3 text-xs font-semibold text-slate-600">
+        {axisKeys.map((axisKey) => (
+          <span key={axisKey} className="inline-flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: palette[axisKey] }} />
+            {BEHAVIOR_AXIS_META[axisKey].label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CompetencyRadar({ points }: { points: BehaviorCompetencyPoint[] }) {
   const size = 420;
   const center = size / 2;
@@ -1921,6 +2184,51 @@ function RecommendationCard({
       </div>
       <div className="mt-4 text-base font-semibold text-slate-950">{title}</div>
       <p className="mt-2 text-sm leading-7 text-slate-600">{text}</p>
+    </div>
+  );
+}
+
+function EditableDevelopmentCard({
+  item,
+  index,
+  highlighted,
+  onChange,
+}: {
+  item: EditableDevelopmentItem;
+  index: number;
+  highlighted?: boolean;
+  onChange: (next: Partial<EditableDevelopmentItem>) => void;
+}) {
+  return (
+    <div className={cx("rounded-[24px] border p-5 shadow-sm", highlighted ? "border-sky-200 bg-gradient-to-br from-sky-50 to-white" : "border-slate-200 bg-gradient-to-br from-white to-sky-50/50")}>
+      <div className={cx("inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em]", highlighted ? "bg-sky-600 text-white" : "bg-slate-900 text-white")}>
+        Etapa {index + 1}
+      </div>
+      <div className="mt-4 text-base font-semibold text-slate-950">{item.horizon}</div>
+      <div className="mt-4 space-y-3">
+        <input
+          value={item.title}
+          onChange={(e) => onChange({ title: e.target.value })}
+          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-slate-300"
+        />
+        <textarea
+          value={item.text}
+          onChange={(e) => onChange({ text: e.target.value })}
+          rows={4}
+          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-700 outline-none focus:border-slate-300"
+        />
+        <div>
+          <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+            Prazo sugerido
+          </label>
+          <input
+            type="date"
+            value={item.target_date ?? ""}
+            onChange={(e) => onChange({ target_date: e.target.value || null })}
+            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-slate-300"
+          />
+        </div>
+      </div>
     </div>
   );
 }

@@ -61,6 +61,17 @@ export type BehaviorCompetencyPoint = {
   score: number;
 };
 
+export type BehaviorCompetencyRule = {
+  order: number;
+  label: string;
+  base: number;
+  drivers: Array<
+    | { source: "axis"; key: BehaviorAxisKey; weight: number }
+    | { source: "factor"; key: BehaviorAxisKey; weight: number }
+    | { source: "leadership"; key: BehaviorLeadershipKey; weight: number }
+  >;
+};
+
 export type BehaviorConfidenceLevel = "baixa" | "media" | "alta";
 
 export const BEHAVIOR_AXIS_META: Record<
@@ -93,7 +104,7 @@ export const BEHAVIOR_AXIS_META: Record<
   },
 };
 
-const BEHAVIOR_AXIS_PERCENT_CALIBRATION: Record<
+export const BEHAVIOR_AXIS_PERCENT_CALIBRATION: Record<
   BehaviorAxisKey,
   { slope: number; intercept: number }
 > = {
@@ -275,6 +286,187 @@ export function getBehaviorConfidence(selectedCount: number): {
     reliability: 1,
   };
 }
+
+export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
+  {
+    order: 1,
+    label: "Tolerancia",
+    base: 5,
+    drivers: [
+      { source: "axis", key: "planejador", weight: 0.5 },
+      { source: "factor", key: "planejador", weight: 0.4 },
+    ],
+  },
+  {
+    order: 2,
+    label: "Planejamento",
+    base: 5,
+    drivers: [
+      { source: "axis", key: "planejador", weight: 0.8 },
+      { source: "leadership", key: "formal", weight: 0.3 },
+    ],
+  },
+  {
+    order: 3,
+    label: "Empatia",
+    base: 5,
+    drivers: [
+      { source: "axis", key: "comunicador", weight: 0.5 },
+      { source: "axis", key: "planejador", weight: 0.3 },
+      { source: "factor", key: "comunicador", weight: 0.3 },
+    ],
+  },
+  {
+    order: 4,
+    label: "Capacidade de ouvir",
+    base: 5,
+    drivers: [
+      { source: "axis", key: "planejador", weight: 0.4 },
+      { source: "axis", key: "analista", weight: 0.4 },
+    ],
+  },
+  {
+    order: 5,
+    label: "Concentracao",
+    base: 5,
+    drivers: [
+      { source: "axis", key: "analista", weight: 0.7 },
+      { source: "leadership", key: "formal", weight: 0.2 },
+    ],
+  },
+  {
+    order: 6,
+    label: "Condescendencia",
+    base: 5,
+    drivers: [
+      { source: "axis", key: "planejador", weight: 0.5 },
+      { source: "leadership", key: "condescendente", weight: 0.5 },
+    ],
+  },
+  {
+    order: 7,
+    label: "Perfil Tecnico",
+    base: 5,
+    drivers: [
+      { source: "axis", key: "analista", weight: 0.8 },
+      { source: "factor", key: "analista", weight: 0.3 },
+    ],
+  },
+  {
+    order: 8,
+    label: "Organizacao",
+    base: 5,
+    drivers: [
+      { source: "axis", key: "analista", weight: 0.5 },
+      { source: "axis", key: "planejador", weight: 0.5 },
+    ],
+  },
+  {
+    order: 9,
+    label: "Detalhismo",
+    base: 5,
+    drivers: [{ source: "axis", key: "analista", weight: 0.8 }],
+  },
+  {
+    order: 10,
+    label: "Rigorosidade",
+    base: 5,
+    drivers: [
+      { source: "axis", key: "analista", weight: 0.7 },
+      { source: "leadership", key: "formal", weight: 0.3 },
+    ],
+  },
+  {
+    order: 11,
+    label: "Orientado por resultado",
+    base: 5,
+    drivers: [
+      { source: "axis", key: "executor", weight: 0.8 },
+      { source: "leadership", key: "dominante", weight: 0.2 },
+    ],
+  },
+  {
+    order: 12,
+    label: "Multitarefas",
+    base: 5,
+    drivers: [
+      { source: "axis", key: "executor", weight: 0.4 },
+      { source: "axis", key: "comunicador", weight: 0.4 },
+    ],
+  },
+  {
+    order: 13,
+    label: "Automotivacao",
+    base: 5,
+    drivers: [
+      { source: "axis", key: "executor", weight: 0.7 },
+      { source: "factor", key: "executor", weight: 0.2 },
+    ],
+  },
+  {
+    order: 14,
+    label: "Proatividade",
+    base: 5,
+    drivers: [
+      { source: "axis", key: "executor", weight: 0.7 },
+      { source: "axis", key: "comunicador", weight: 0.2 },
+    ],
+  },
+  {
+    order: 15,
+    label: "Dinamismo",
+    base: 5,
+    drivers: [
+      { source: "axis", key: "executor", weight: 0.5 },
+      { source: "axis", key: "comunicador", weight: 0.5 },
+    ],
+  },
+  {
+    order: 16,
+    label: "Dominancia",
+    base: 5,
+    drivers: [
+      { source: "leadership", key: "dominante", weight: 0.8 },
+      { source: "axis", key: "executor", weight: 0.3 },
+    ],
+  },
+  {
+    order: 17,
+    label: "Extroversao",
+    base: 5,
+    drivers: [
+      { source: "axis", key: "comunicador", weight: 0.8 },
+      { source: "leadership", key: "informal", weight: 0.2 },
+    ],
+  },
+  {
+    order: 18,
+    label: "Relacionamento interpessoal",
+    base: 5,
+    drivers: [
+      { source: "axis", key: "comunicador", weight: 0.6 },
+      { source: "axis", key: "planejador", weight: 0.2 },
+    ],
+  },
+  {
+    order: 19,
+    label: "Sociabilidade",
+    base: 5,
+    drivers: [
+      { source: "axis", key: "comunicador", weight: 0.8 },
+      { source: "factor", key: "comunicador", weight: 0.2 },
+    ],
+  },
+  {
+    order: 20,
+    label: "Orientado por relacionamento",
+    base: 5,
+    drivers: [
+      { source: "axis", key: "comunicador", weight: 0.5 },
+      { source: "axis", key: "planejador", weight: 0.4 },
+    ],
+  },
+];
 
 export function calculateBehaviorAxisResults(selectedIds: string[]): BehaviorAxisResult[] {
   const found = BEHAVIOR_ADJECTIVES.filter((item) => selectedIds.includes(item.id));
@@ -458,28 +650,19 @@ export function calculateBehaviorCompetencies(
 
   const metric = (value: number) => Number(Math.max(2.5, Math.min(9.5, value)).toFixed(2));
 
-  return [
-    { order: 1, label: "Tolerancia", score: metric(5 + consolidated.planejador * 0.5 + factors.planejador * 0.4) },
-    { order: 2, label: "Planejamento", score: metric(5 + consolidated.planejador * 0.8 + leadership.formal * 0.3) },
-    { order: 3, label: "Empatia", score: metric(5 + consolidated.comunicador * 0.5 + consolidated.planejador * 0.3 + factors.comunicador * 0.3) },
-    { order: 4, label: "Capacidade de ouvir", score: metric(5 + consolidated.planejador * 0.4 + consolidated.analista * 0.4) },
-    { order: 5, label: "Concentracao", score: metric(5 + consolidated.analista * 0.7 + leadership.formal * 0.2) },
-    { order: 6, label: "Condescendencia", score: metric(5 + consolidated.planejador * 0.5 + leadership.condescendente * 0.5) },
-    { order: 7, label: "Perfil Tecnico", score: metric(5 + consolidated.analista * 0.8 + factors.analista * 0.3) },
-    { order: 8, label: "Organizacao", score: metric(5 + consolidated.analista * 0.5 + consolidated.planejador * 0.5) },
-    { order: 9, label: "Detalhismo", score: metric(5 + consolidated.analista * 0.8) },
-    { order: 10, label: "Rigorosidade", score: metric(5 + consolidated.analista * 0.7 + leadership.formal * 0.3) },
-    { order: 11, label: "Orientado por resultado", score: metric(5 + consolidated.executor * 0.8 + leadership.dominante * 0.2) },
-    { order: 12, label: "Multitarefas", score: metric(5 + consolidated.executor * 0.4 + consolidated.comunicador * 0.4) },
-    { order: 13, label: "Automotivacao", score: metric(5 + consolidated.executor * 0.7 + factors.executor * 0.2) },
-    { order: 14, label: "Proatividade", score: metric(5 + consolidated.executor * 0.7 + consolidated.comunicador * 0.2) },
-    { order: 15, label: "Dinamismo", score: metric(5 + consolidated.executor * 0.5 + consolidated.comunicador * 0.5) },
-    { order: 16, label: "Dominancia", score: metric(5 + leadership.dominante * 0.8 + consolidated.executor * 0.3) },
-    { order: 17, label: "Extroversao", score: metric(5 + consolidated.comunicador * 0.8 + leadership.informal * 0.2) },
-    { order: 18, label: "Relacionamento interpessoal", score: metric(5 + consolidated.comunicador * 0.6 + consolidated.planejador * 0.2) },
-    { order: 19, label: "Sociabilidade", score: metric(5 + consolidated.comunicador * 0.8 + factors.comunicador * 0.2) },
-    { order: 20, label: "Orientado por relacionamento", score: metric(5 + consolidated.comunicador * 0.5 + consolidated.planejador * 0.4) },
-  ];
+  return BEHAVIOR_COMPETENCY_RULES.map((rule) => {
+    const rawScore = rule.drivers.reduce((sum, driver) => {
+      if (driver.source === "axis") return sum + consolidated[driver.key] * driver.weight;
+      if (driver.source === "factor") return sum + factors[driver.key] * driver.weight;
+      return sum + leadership[driver.key] * driver.weight;
+    }, rule.base);
+
+    return {
+      order: rule.order,
+      label: rule.label,
+      score: metric(rawScore),
+    };
+  });
 }
 
 export function getPredominantBehaviorAxes(results: BehaviorAxisResult[]) {

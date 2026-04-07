@@ -29,7 +29,7 @@ export async function GET() {
     .from("behavior_assessments")
     .select("id,created_at,user_id,collaborator_id,predominant_self,predominant_others,self_result,others_result")
     .order("created_at", { ascending: false })
-    .limit(80);
+    .limit(120);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
@@ -41,10 +41,16 @@ export async function GET() {
 
   const [profileRes, collaboratorRes] = await Promise.all([
     userIds.length
-      ? supabaseAdmin.from("profiles").select("id,full_name,email").in("id", userIds)
+      ? supabaseAdmin
+          .from("profiles")
+          .select("id,full_name,email,role,company_id,department_id")
+          .in("id", userIds)
       : Promise.resolve({ data: [], error: null }),
     collaboratorIds.length
-      ? supabaseAdmin.from("colaboradores").select("id,nome,email,user_id").in("id", collaboratorIds)
+      ? supabaseAdmin
+          .from("colaboradores")
+          .select("id,nome,email,user_id,cargo")
+          .in("id", collaboratorIds)
       : Promise.resolve({ data: [], error: null }),
   ]);
 
@@ -55,22 +61,55 @@ export async function GET() {
     return NextResponse.json({ error: collaboratorRes.error.message }, { status: 400 });
   }
 
-  const profileById = new Map(
-    ((profileRes.data ?? []) as Array<{ id: string; full_name: string | null; email: string | null }>).map((row) => [
-      row.id,
-      row,
-    ])
+  const profiles = (profileRes.data ?? []) as Array<{
+    id: string;
+    full_name: string | null;
+    email: string | null;
+    role: string | null;
+    company_id: string | null;
+    department_id: string | null;
+  }>;
+  const collaborators = (collaboratorRes.data ?? []) as Array<{
+    id: string;
+    nome: string | null;
+    email: string | null;
+    user_id: string | null;
+    cargo: string | null;
+  }>;
+
+  const companyIds = Array.from(new Set(profiles.map((item) => item.company_id).filter(Boolean))) as string[];
+  const departmentIds = Array.from(new Set(profiles.map((item) => item.department_id).filter(Boolean))) as string[];
+
+  const [companiesRes, departmentsRes] = await Promise.all([
+    companyIds.length
+      ? supabaseAdmin.from("companies").select("id,name").in("id", companyIds)
+      : Promise.resolve({ data: [], error: null }),
+    departmentIds.length
+      ? supabaseAdmin.from("departments").select("id,name").in("id", departmentIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+
+  if (companiesRes.error) {
+    return NextResponse.json({ error: companiesRes.error.message }, { status: 400 });
+  }
+  if (departmentsRes.error) {
+    return NextResponse.json({ error: departmentsRes.error.message }, { status: 400 });
+  }
+
+  const profileById = new Map(profiles.map((row) => [row.id, row]));
+  const collaboratorById = new Map(collaborators.map((row) => [row.id, row]));
+  const companyById = new Map(
+    ((companiesRes.data ?? []) as Array<{ id: string; name: string | null }>).map((row) => [row.id, row.name ?? row.id])
   );
-  const collaboratorById = new Map(
-    ((collaboratorRes.data ?? []) as Array<{ id: string; nome: string | null; email: string | null; user_id: string | null }>).map((row) => [
-      row.id,
-      row,
-    ])
+  const departmentById = new Map(
+    ((departmentsRes.data ?? []) as Array<{ id: string; name: string | null }>).map((row) => [row.id, row.name ?? row.id])
   );
 
   const axisCounts = new Map<string, number>();
   const demandCounts = new Map<string, number>();
   const gapCounts = new Map<string, number>();
+  const roleCounts = new Map<string, number>();
+  const departmentCounts = new Map<string, number>();
 
   const assessmentRows = rows.map((row) => {
     const collaborator = row.collaborator_id ? collaboratorById.get(row.collaborator_id) : null;
@@ -85,11 +124,16 @@ export async function GET() {
 
     const predominant = (row.predominant_self ?? []).join(" + ") || "Leitura sem predominância clara";
     const demand = (row.predominant_others ?? []).join(" + ") || "Ambiente sem predominância clara";
+    const roleLabel = (profile?.role ?? "").trim() || "Sem papel";
+    const companyName = profile?.company_id ? companyById.get(profile.company_id) ?? null : null;
+    const departmentName = profile?.department_id ? departmentById.get(profile.department_id) ?? null : null;
+    const jobTitle = (collaborator?.cargo ?? "").trim() || null;
 
     axisCounts.set(predominant, (axisCounts.get(predominant) ?? 0) + 1);
     demandCounts.set(demand, (demandCounts.get(demand) ?? 0) + 1);
+    roleCounts.set(roleLabel, (roleCounts.get(roleLabel) ?? 0) + 1);
+    if (departmentName) departmentCounts.set(departmentName, (departmentCounts.get(departmentName) ?? 0) + 1);
 
-    const currentByKey = new Map((row.self_result ?? []).map((item) => [item.key, item.percent]));
     const envByKey = new Map((row.others_result ?? []).map((item) => [item.key, item.percent]));
     let topGapLabel = "Sem gap relevante";
     let topGapValue = 0;
@@ -113,23 +157,30 @@ export async function GET() {
       demand,
       top_gap_label: topGapLabel,
       top_gap_value: Number(topGapValue.toFixed(2)),
-      self_result: row.self_result ?? [],
-      others_result: row.others_result ?? [],
+      role: roleLabel,
+      department_name: departmentName,
+      company_name: companyName,
+      job_title: jobTitle,
+      fit_summary:
+        topGapValue >= 18
+          ? "Aderência em atenção"
+          : topGapValue >= 10
+            ? "Aderência moderada"
+            : "Aderência consistente",
     };
   });
 
-  const topAxis = Array.from(axisCounts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([label, count]) => ({ label, count }));
-  const topDemand = Array.from(demandCounts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([label, count]) => ({ label, count }));
-  const topGaps = Array.from(gapCounts.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([label, count]) => ({ label, count }));
+  const sortTop = (input: Map<string, number>, limit = 5) =>
+    Array.from(input.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, limit)
+      .map(([label, count]) => ({ label, count }));
+
+  const topAxis = sortTop(axisCounts);
+  const topDemand = sortTop(demandCounts);
+  const topGaps = sortTop(gapCounts);
+  const topRoles = sortTop(roleCounts);
+  const topDepartments = sortTop(departmentCounts);
 
   return NextResponse.json({
     ok: true,
@@ -142,6 +193,8 @@ export async function GET() {
     top_axis: topAxis,
     top_demand: topDemand,
     top_gaps: topGaps,
+    top_roles: topRoles,
+    top_departments: topDepartments,
     rows: assessmentRows,
   });
 }
