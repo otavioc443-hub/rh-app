@@ -61,6 +61,22 @@ export type BehaviorCompetencyPoint = {
   score: number;
 };
 
+export type BehaviorWordThemeKey =
+  | "autonomia"
+  | "influencia"
+  | "acolhimento"
+  | "organizacao"
+  | "analise"
+  | "energia"
+  | "adaptacao";
+
+export type BehaviorWordThemeScore = {
+  key: BehaviorWordThemeKey;
+  label: string;
+  score: number;
+  matchedLabels: string[];
+};
+
 export type BehaviorCompetencyRule = {
   order: number;
   label: string;
@@ -70,6 +86,7 @@ export type BehaviorCompetencyRule = {
     | { source: "factor"; key: BehaviorAxisKey; weight: number }
     | { source: "leadership"; key: BehaviorLeadershipKey; weight: number }
   >;
+  themes?: Array<{ key: BehaviorWordThemeKey; weight: number }>;
 };
 
 export type BehaviorConfidenceLevel = "baixa" | "media" | "alta";
@@ -112,6 +129,40 @@ export const BEHAVIOR_AXIS_PERCENT_CALIBRATION: Record<
   comunicador: { slope: 1.044456859978481, intercept: -0.6661512478682913 },
   planejador: { slope: 0.9606286380407641, intercept: 0.8582422425603998 },
   analista: { slope: 1.0203836265656867, intercept: -0.5060688183401639 },
+};
+
+export const BEHAVIOR_WORD_THEME_META: Record<
+  BehaviorWordThemeKey,
+  { label: string; adjectiveIds: string[] }
+> = {
+  autonomia: {
+    label: "Autonomia e decisão",
+    adjectiveIds: ["auto_suficiente", "independente", "decidido", "resoluto", "lider", "audacioso", "corajoso"],
+  },
+  influencia: {
+    label: "Influência e visibilidade",
+    adjectiveIds: ["comunicativo", "extrovertido", "influenciador", "popular", "bem_quisto", "destacado", "contagiante", "estimulante", "empolgante"],
+  },
+  acolhimento: {
+    label: "Escuta e conexão",
+    adjectiveIds: ["compreensivo", "simpatico", "bom_companheiro", "sensivel", "leal", "paciente", "calmo", "bem_humorado"],
+  },
+  organizacao: {
+    label: "Organização e método",
+    adjectiveIds: ["auto_disciplinado", "metodico", "perfeccionista", "cumpridor", "dedicado", "minucioso", "pratico", "rotineiro", "conservador"],
+  },
+  analise: {
+    label: "Critério e análise",
+    adjectiveIds: ["racional", "calculista", "teorico", "critico", "discreto", "reservado", "minucioso", "perfeccionista"],
+  },
+  energia: {
+    label: "Ritmo e impulso",
+    adjectiveIds: ["ativo", "energetico", "entusiasta", "animado", "persistente", "audacioso", "empolgante", "estimulante"],
+  },
+  adaptacao: {
+    label: "Equilíbrio e adaptação",
+    adjectiveIds: ["equilibrado", "tranquilo", "idealista", "otimista", "firme", "habilidoso", "resoluto", "modesto"],
+  },
 };
 
 function weights(
@@ -296,6 +347,10 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
       { source: "axis", key: "planejador", weight: 0.5 },
       { source: "factor", key: "planejador", weight: 0.4 },
     ],
+    themes: [
+      { key: "acolhimento", weight: 0.55 },
+      { key: "adaptacao", weight: 0.45 },
+    ],
   },
   {
     order: 2,
@@ -304,6 +359,10 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
     drivers: [
       { source: "axis", key: "planejador", weight: 0.8 },
       { source: "leadership", key: "formal", weight: 0.3 },
+    ],
+    themes: [
+      { key: "organizacao", weight: 0.75 },
+      { key: "analise", weight: 0.25 },
     ],
   },
   {
@@ -315,6 +374,10 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
       { source: "axis", key: "planejador", weight: 0.3 },
       { source: "factor", key: "comunicador", weight: 0.3 },
     ],
+    themes: [
+      { key: "acolhimento", weight: 0.8 },
+      { key: "adaptacao", weight: 0.2 },
+    ],
   },
   {
     order: 4,
@@ -323,6 +386,10 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
     drivers: [
       { source: "axis", key: "planejador", weight: 0.4 },
       { source: "axis", key: "analista", weight: 0.4 },
+    ],
+    themes: [
+      { key: "acolhimento", weight: 0.5 },
+      { key: "analise", weight: 0.5 },
     ],
   },
   {
@@ -333,6 +400,10 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
       { source: "axis", key: "analista", weight: 0.7 },
       { source: "leadership", key: "formal", weight: 0.2 },
     ],
+    themes: [
+      { key: "analise", weight: 0.75 },
+      { key: "organizacao", weight: 0.25 },
+    ],
   },
   {
     order: 6,
@@ -341,6 +412,10 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
     drivers: [
       { source: "axis", key: "planejador", weight: 0.5 },
       { source: "leadership", key: "condescendente", weight: 0.5 },
+    ],
+    themes: [
+      { key: "acolhimento", weight: 0.65 },
+      { key: "adaptacao", weight: 0.35 },
     ],
   },
   {
@@ -351,6 +426,10 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
       { source: "axis", key: "analista", weight: 0.8 },
       { source: "factor", key: "analista", weight: 0.3 },
     ],
+    themes: [
+      { key: "analise", weight: 0.7 },
+      { key: "organizacao", weight: 0.3 },
+    ],
   },
   {
     order: 8,
@@ -360,12 +439,20 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
       { source: "axis", key: "analista", weight: 0.5 },
       { source: "axis", key: "planejador", weight: 0.5 },
     ],
+    themes: [
+      { key: "organizacao", weight: 0.75 },
+      { key: "analise", weight: 0.25 },
+    ],
   },
   {
     order: 9,
     label: "Detalhismo",
     base: 5,
     drivers: [{ source: "axis", key: "analista", weight: 0.8 }],
+    themes: [
+      { key: "analise", weight: 0.8 },
+      { key: "organizacao", weight: 0.2 },
+    ],
   },
   {
     order: 10,
@@ -374,6 +461,10 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
     drivers: [
       { source: "axis", key: "analista", weight: 0.7 },
       { source: "leadership", key: "formal", weight: 0.3 },
+    ],
+    themes: [
+      { key: "organizacao", weight: 0.45 },
+      { key: "analise", weight: 0.55 },
     ],
   },
   {
@@ -384,6 +475,10 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
       { source: "axis", key: "executor", weight: 0.8 },
       { source: "leadership", key: "dominante", weight: 0.2 },
     ],
+    themes: [
+      { key: "autonomia", weight: 0.5 },
+      { key: "energia", weight: 0.5 },
+    ],
   },
   {
     order: 12,
@@ -392,6 +487,10 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
     drivers: [
       { source: "axis", key: "executor", weight: 0.4 },
       { source: "axis", key: "comunicador", weight: 0.4 },
+    ],
+    themes: [
+      { key: "energia", weight: 0.65 },
+      { key: "adaptacao", weight: 0.35 },
     ],
   },
   {
@@ -402,6 +501,10 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
       { source: "axis", key: "executor", weight: 0.7 },
       { source: "factor", key: "executor", weight: 0.2 },
     ],
+    themes: [
+      { key: "autonomia", weight: 0.55 },
+      { key: "energia", weight: 0.45 },
+    ],
   },
   {
     order: 14,
@@ -410,6 +513,10 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
     drivers: [
       { source: "axis", key: "executor", weight: 0.7 },
       { source: "axis", key: "comunicador", weight: 0.2 },
+    ],
+    themes: [
+      { key: "energia", weight: 0.5 },
+      { key: "autonomia", weight: 0.5 },
     ],
   },
   {
@@ -420,6 +527,10 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
       { source: "axis", key: "executor", weight: 0.5 },
       { source: "axis", key: "comunicador", weight: 0.5 },
     ],
+    themes: [
+      { key: "energia", weight: 0.65 },
+      { key: "influencia", weight: 0.35 },
+    ],
   },
   {
     order: 16,
@@ -428,6 +539,10 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
     drivers: [
       { source: "leadership", key: "dominante", weight: 0.8 },
       { source: "axis", key: "executor", weight: 0.3 },
+    ],
+    themes: [
+      { key: "autonomia", weight: 0.65 },
+      { key: "influencia", weight: 0.35 },
     ],
   },
   {
@@ -438,6 +553,10 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
       { source: "axis", key: "comunicador", weight: 0.8 },
       { source: "leadership", key: "informal", weight: 0.2 },
     ],
+    themes: [
+      { key: "influencia", weight: 0.65 },
+      { key: "energia", weight: 0.35 },
+    ],
   },
   {
     order: 18,
@@ -446,6 +565,10 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
     drivers: [
       { source: "axis", key: "comunicador", weight: 0.6 },
       { source: "axis", key: "planejador", weight: 0.2 },
+    ],
+    themes: [
+      { key: "acolhimento", weight: 0.5 },
+      { key: "influencia", weight: 0.5 },
     ],
   },
   {
@@ -456,6 +579,10 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
       { source: "axis", key: "comunicador", weight: 0.8 },
       { source: "factor", key: "comunicador", weight: 0.2 },
     ],
+    themes: [
+      { key: "influencia", weight: 0.7 },
+      { key: "acolhimento", weight: 0.3 },
+    ],
   },
   {
     order: 20,
@@ -465,8 +592,34 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
       { source: "axis", key: "comunicador", weight: 0.5 },
       { source: "axis", key: "planejador", weight: 0.4 },
     ],
+    themes: [
+      { key: "acolhimento", weight: 0.55 },
+      { key: "influencia", weight: 0.45 },
+    ],
   },
 ];
+
+export function calculateBehaviorWordThemeScores(selectedIds: string[]): BehaviorWordThemeScore[] {
+  const selected = BEHAVIOR_ADJECTIVES.filter((item) => selectedIds.includes(item.id));
+  const totalSelected = Math.max(selected.length, 1);
+
+  return (Object.keys(BEHAVIOR_WORD_THEME_META) as BehaviorWordThemeKey[]).map((key) => {
+    const adjectiveIds = new Set(BEHAVIOR_WORD_THEME_META[key].adjectiveIds);
+    const matched = selected.filter((item) => adjectiveIds.has(item.id));
+    const weightedMatch = matched.reduce((sum, item) => {
+      const emphasis = Math.max(item.weights.executor, item.weights.comunicador, item.weights.planejador, item.weights.analista);
+      return sum + emphasis;
+    }, 0);
+    const score = Number(Math.min(1, weightedMatch / Math.max(6, totalSelected * 1.2)).toFixed(4));
+
+    return {
+      key,
+      label: BEHAVIOR_WORD_THEME_META[key].label,
+      score,
+      matchedLabels: matched.map((item) => item.label),
+    };
+  });
+}
 
 export function calculateBehaviorAxisResults(selectedIds: string[]): BehaviorAxisResult[] {
   const found = BEHAVIOR_ADJECTIVES.filter((item) => selectedIds.includes(item.id));
@@ -636,7 +789,8 @@ export function calculateBehaviorLeadershipProfile(
 export function calculateBehaviorCompetencies(
   consolidatedResults: BehaviorAxisResult[],
   factorResults: BehaviorFactorResult[],
-  leadershipResults: BehaviorLeadershipPoint[]
+  leadershipResults: BehaviorLeadershipPoint[],
+  selectedIds: string[] = []
 ): BehaviorCompetencyPoint[] {
   const consolidated = Object.fromEntries(
     consolidatedResults.map((item) => [item.key, item.percent / 10])
@@ -647,20 +801,40 @@ export function calculateBehaviorCompetencies(
   const leadership = Object.fromEntries(
     leadershipResults.map((item) => [item.key, item.adaptationStrength / 10])
   ) as Record<BehaviorLeadershipKey, number>;
+  const themeScores = Object.fromEntries(
+    calculateBehaviorWordThemeScores(selectedIds).map((item) => [item.key, item.score])
+  ) as Record<BehaviorWordThemeKey, number>;
 
   const metric = (value: number) => Number(Math.max(2.5, Math.min(9.5, value)).toFixed(2));
 
-  return BEHAVIOR_COMPETENCY_RULES.map((rule) => {
+  const rawScores = BEHAVIOR_COMPETENCY_RULES.map((rule) => {
     const rawScore = rule.drivers.reduce((sum, driver) => {
       if (driver.source === "axis") return sum + consolidated[driver.key] * driver.weight;
       if (driver.source === "factor") return sum + factors[driver.key] * driver.weight;
       return sum + leadership[driver.key] * driver.weight;
     }, rule.base);
+    const themedScore =
+      rawScore +
+      (rule.themes ?? []).reduce((sum, theme) => sum + (themeScores[theme.key] ?? 0) * theme.weight * 2.2, 0);
 
     return {
       order: rule.order,
       label: rule.label,
-      score: metric(rawScore),
+      rawScore: themedScore,
+    };
+  });
+
+  const rawValues = rawScores.map((item) => item.rawScore);
+  const minRaw = Math.min(...rawValues);
+  const maxRaw = Math.max(...rawValues);
+  const spread = Math.max(0.0001, maxRaw - minRaw);
+
+  return rawScores.map((rule) => {
+    const normalized = 4.1 + ((rule.rawScore - minRaw) / spread) * 5.2;
+    return {
+      order: rule.order,
+      label: rule.label,
+      score: metric(normalized),
     };
   });
 }

@@ -20,6 +20,7 @@ import {
   calculateBehaviorFactorResults,
   calculateBehaviorIsolatedProfile,
   calculateBehaviorLeadershipProfile,
+  calculateBehaviorWordThemeScores,
   combineBehaviorAxisResults,
   getBehaviorClassificationLabel,
   getBehaviorConfidence,
@@ -30,6 +31,7 @@ import {
   type BehaviorFactorResult,
   type BehaviorIsolatedProfilePoint,
   type BehaviorLeadershipPoint,
+  type BehaviorWordThemeScore,
 } from "@/lib/behaviorProfile";
 
 type Step = 2 | 3;
@@ -514,9 +516,11 @@ function buildAxisWordDrivers(selectedIds: string[]) {
 
 function buildCompetencyDriversSummary(
   competencies: BehaviorCompetencyPoint[],
-  consolidatedResults: BehaviorAxisResult[]
+  consolidatedResults: BehaviorAxisResult[],
+  themeScores: BehaviorWordThemeScore[]
 ) {
   const axisByKey = new Map(consolidatedResults.map((item) => [item.key, item.label]));
+  const themeByKey = new Map(themeScores.map((item) => [item.key, item]));
   const toLabel = (source: (typeof BEHAVIOR_COMPETENCY_RULES)[number]["drivers"][number]) => {
     if (source.source === "axis") return `${axisByKey.get(source.key) ?? source.key} (${Math.round(source.weight * 100)}%)`;
     if (source.source === "factor") return `fatores de ${axisByKey.get(source.key) ?? source.key} (${Math.round(source.weight * 100)}%)`;
@@ -526,14 +530,54 @@ function buildCompetencyDriversSummary(
   return competencies.slice(0, 6).map((item) => {
     const rule = BEHAVIOR_COMPETENCY_RULES.find((candidate) => candidate.label === item.label);
     const primaryDrivers = (rule?.drivers ?? []).slice(0, 3).map(toLabel);
+    const themeDrivers = (rule?.themes ?? [])
+      .map((theme) => themeByKey.get(theme.key))
+      .filter((theme): theme is BehaviorWordThemeScore => !!theme && theme.score > 0.05)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 2)
+      .map((theme) => theme.label.toLowerCase());
     return {
       label: item.label,
       score: item.score,
-      explanation: primaryDrivers.length
-        ? `Leitura derivada da combinação entre ${primaryDrivers.join(", ")}.`
-        : "Leitura derivada da combinação entre eixos, fatores de atenção e estilo de liderança.",
+      explanation:
+        primaryDrivers.length || themeDrivers.length
+          ? `Leitura derivada da combinação entre ${[...primaryDrivers, ...themeDrivers].join(", ")}.`
+          : "Leitura derivada da combinação entre eixos, fatores de atenção, estilo de liderança e temas das palavras marcadas.",
     };
   });
+}
+
+function buildUniqueProfileSignature(
+  personName: string,
+  predominantSelf: BehaviorAxisResult[],
+  predominantOthers: BehaviorAxisResult[],
+  themeScores: BehaviorWordThemeScore[],
+  competencies: BehaviorCompetencyPoint[]
+) {
+  const primary = predominantSelf[0]?.label ?? "perfil equilibrado";
+  const support = predominantSelf[1]?.label ?? null;
+  const context = predominantOthers[0]?.label ?? null;
+  const strongestThemes = [...themeScores]
+    .sort((a, b) => b.score - a.score)
+    .filter((item) => item.score > 0.06)
+    .slice(0, 2)
+    .map((item) => item.label.toLowerCase());
+  const strongestCompetencies = competencies.slice(0, 2).map((item) => item.label.toLowerCase());
+
+  const themeText = strongestThemes.length
+    ? `As palavras escolhidas puxaram especialmente ${strongestThemes.join(" e ")}.`
+    : "As palavras escolhidas criaram uma leitura relativamente equilibrada entre ritmo, organização e relacionamento.";
+  const profileText = support
+    ? `${personName} aparece com predominância em ${primary.toLowerCase()}, mas com apoio consistente de ${support.toLowerCase()}, o que torna o estilo menos linear e mais combinado.`
+    : `${personName} aparece com um traço principal mais concentrado em ${primary.toLowerCase()}, deixando a forma de atuar mais reconhecível.`;
+  const contextText = context
+    ? `Ao mesmo tempo, o ambiente atual parece solicitar mais ${context.toLowerCase()}, o que ajuda a explicar os ajustes percebidos na leitura.`
+    : "";
+  const competencyText = strongestCompetencies.length
+    ? `Isso ajuda a entender por que ${strongestCompetencies.join(" e ")} aparecem com mais evidência nesta composição.`
+    : "";
+
+  return `${themeText} ${profileText} ${contextText} ${competencyText}`.replace(/\s+/g, " ").trim();
 }
 
 function buildEditableDevelopmentPlan(
@@ -610,8 +654,12 @@ export default function MapaComportamentalPage() {
     [reportSelfResults, reportOthersResults]
   );
   const competencies = useMemo(
-    () => calculateBehaviorCompetencies(consolidatedResults, selfFactors, leadershipProfile),
-    [consolidatedResults, selfFactors, leadershipProfile]
+    () => calculateBehaviorCompetencies(consolidatedResults, selfFactors, leadershipProfile, reportSelfSelectedIds),
+    [consolidatedResults, selfFactors, leadershipProfile, reportSelfSelectedIds]
+  );
+  const selfWordThemes = useMemo(
+    () => calculateBehaviorWordThemeScores(reportSelfSelectedIds),
+    [reportSelfSelectedIds]
   );
   const selfConfidence = useMemo(
     () => getBehaviorConfidence(reportSelfSelectedIds.length),
@@ -708,8 +756,19 @@ export default function MapaComportamentalPage() {
     [reportSelfSelectedIds]
   );
   const competencyDrivers = useMemo(
-    () => buildCompetencyDriversSummary(mainCompetencies, consolidatedResults),
-    [mainCompetencies, consolidatedResults]
+    () => buildCompetencyDriversSummary(mainCompetencies, consolidatedResults, selfWordThemes),
+    [mainCompetencies, consolidatedResults, selfWordThemes]
+  );
+  const uniqueProfileSignature = useMemo(
+    () =>
+      buildUniqueProfileSignature(
+        personName,
+        reportPredominantSelf,
+        reportPredominantOthers,
+        selfWordThemes,
+        mainCompetencies
+      ),
+    [personName, reportPredominantSelf, reportPredominantOthers, selfWordThemes, mainCompetencies]
   );
   const managerActionMatrix = useMemo(
     () =>
@@ -1068,6 +1127,14 @@ export default function MapaComportamentalPage() {
                   <p className="mx-auto mt-4 max-w-4xl text-center text-sm leading-7 text-slate-500">
                     {combinationNarrative}
                   </p>
+                  <div className="mx-auto mt-6 max-w-4xl rounded-[24px] border border-sky-100 bg-gradient-to-r from-sky-50 to-cyan-50 px-6 py-5 text-left shadow-sm">
+                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">
+                      O que torna esta leitura particular
+                    </div>
+                    <p className="mt-3 text-base leading-8 text-slate-700">
+                      {uniqueProfileSignature}
+                    </p>
+                  </div>
                 </div>
               </section>
 
