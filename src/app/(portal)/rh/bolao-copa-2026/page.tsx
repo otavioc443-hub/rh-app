@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, ImageOff, RefreshCcw, Save, Trash2, Upload } from "lucide-react";
+import { Download, Eye, ImageOff, RefreshCcw, Save, Trash2, Upload, X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserRole } from "@/hooks/useUserRole";
 import {
@@ -55,6 +55,23 @@ function manualPlayersText(bet: BolaoBet) {
   return (bet.jogadores_manuais ?? []).map((item) => `${item.nome}${item.clube ? ` - ${item.clube}` : ""}`).join("; ");
 }
 
+function betAllPlayers(bet: BolaoBet) {
+  return [
+    ...(bet.jogadores ?? []).map((item) => ({
+      id: item.id,
+      nome: item.nome,
+      clube: item.clube,
+      origem: "Lista" as const,
+    })),
+    ...(bet.jogadores_manuais ?? []).map((item) => ({
+      id: item.id,
+      nome: item.nome,
+      clube: item.clube ?? "",
+      origem: "Manual" as const,
+    })),
+  ];
+}
+
 function sectorLabel(value: string | null | undefined) {
   return value?.trim() || "Setor não informado";
 }
@@ -95,6 +112,7 @@ export default function RhBolaoCopa2026Page() {
   const [confirmedManualText, setConfirmedManualText] = useState("");
   const [resultadoConfirmadoAt, setResultadoConfirmadoAt] = useState<string | null>(null);
   const [bets, setBets] = useState<BolaoBet[]>([]);
+  const [selectedBet, setSelectedBet] = useState<BolaoBet | null>(null);
 
   const paidBets = useMemo(() => bets.filter(isBolaoPaid), [bets]);
   const totalPrize = useMemo(() => paidBets.length * (Number(valor.replace(",", ".")) || BOLAO_DEFAULT_VALUE), [paidBets.length, valor]);
@@ -498,33 +516,43 @@ export default function RhBolaoCopa2026Page() {
           </div>
         </div>
 
-        <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200">
-          <table className="min-w-[1100px] w-full text-left text-sm">
+        <div className="mt-4 rounded-2xl border border-slate-200">
+          <table className="w-full table-fixed text-left text-xs md:text-sm">
+            <colgroup>
+              <col className="w-[13%]" />
+              <col className="w-[16%]" />
+              <col className="w-[10%]" />
+              <col className="w-[13%]" />
+              <col className="w-[9%]" />
+              <col className="w-[11%]" />
+              <col className="w-[6%]" />
+              <col className="w-[11%]" />
+              <col className="w-[11%]" />
+            </colgroup>
             <thead className="bg-slate-50 text-xs uppercase text-slate-500">
               <tr>
-                <th className="px-4 py-3">Nome</th>
-                <th className="px-4 py-3">E-mail</th>
-                <th className="px-4 py-3">Setor</th>
-                <th className="px-4 py-3">Pagamento</th>
-                <th className="px-4 py-3">Comprovante</th>
-                <th className="px-4 py-3">Envio</th>
-                <th className="px-4 py-3">Qtd.</th>
-                <th className="px-4 py-3">Lista enviada</th>
-                <th className="px-4 py-3">Manuais</th>
-                <th className="px-4 py-3">Status</th>
+                <th className="px-2 py-3 md:px-3">Nome</th>
+                <th className="px-2 py-3 md:px-3">E-mail</th>
+                <th className="px-2 py-3 md:px-3">Setor</th>
+                <th className="px-2 py-3 md:px-3">Pagamento</th>
+                <th className="px-2 py-3 md:px-3">Comprov.</th>
+                <th className="px-2 py-3 md:px-3">Envio</th>
+                <th className="px-2 py-3 md:px-3">Qtd.</th>
+                <th className="px-2 py-3 md:px-3">Lista enviada</th>
+                <th className="px-2 py-3 md:px-3">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {bets.map((bet) => (
                 <tr key={bet.id} className="align-top">
-                  <td className="px-4 py-3 font-semibold text-slate-900">{bet.nome}</td>
-                  <td className="px-4 py-3 text-slate-600">{bet.email}</td>
-                  <td className="px-4 py-3 text-slate-600">{sectorLabel(bet.setor)}</td>
-                  <td className="px-4 py-3">
+                  <td className="break-words px-2 py-3 font-semibold text-slate-900 md:px-3">{bet.nome}</td>
+                  <td className="break-words px-2 py-3 text-slate-600 md:px-3">{bet.email}</td>
+                  <td className="break-words px-2 py-3 text-slate-600 md:px-3">{sectorLabel(bet.setor)}</td>
+                  <td className="px-2 py-3 md:px-3">
                     <select
                       value={bet.payment_status ?? "pendente"}
                       onChange={(event) => void updatePaymentStatus(bet.id, event.target.value as BolaoPaymentStatus)}
-                      className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700"
+                      className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700"
                     >
                       {Object.entries(BOLAO_PAYMENT_STATUS_LABELS).map(([value, label]) => (
                         <option key={value} value={value}>
@@ -533,7 +561,7 @@ export default function RhBolaoCopa2026Page() {
                       ))}
                     </select>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-2 py-3 md:px-3">
                     {bet.comprovante_url ? (
                       <a href={bet.comprovante_url} target="_blank" rel="noreferrer" className="text-xs font-semibold text-[#0a66c2] hover:underline">
                         Abrir
@@ -542,24 +570,86 @@ export default function RhBolaoCopa2026Page() {
                       <span className="text-xs text-slate-400">Pendente</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{formatBolaoDateTime(bet.created_at)}</td>
-                  <td className="px-4 py-3 font-semibold text-slate-900">{bet.total_jogadores}</td>
-                  <td className="max-w-md px-4 py-3 text-slate-600">{betPlayersText(bet)}</td>
-                  <td className="max-w-xs px-4 py-3 text-slate-600">{manualPlayersText(bet) || "-"}</td>
-                  <td className="px-4 py-3">
-                    <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{bet.status}</span>
+                  <td className="break-words px-2 py-3 text-slate-600 md:px-3">{formatBolaoDateTime(bet.created_at)}</td>
+                  <td className="px-2 py-3 font-semibold text-slate-900 md:px-3">{bet.total_jogadores}</td>
+                  <td className="px-2 py-3 md:px-3">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedBet(bet)}
+                      className="inline-flex w-full items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-2 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-50"
+                    >
+                      <Eye size={14} />
+                      Ver lista
+                    </button>
+                    {(bet.jogadores_manuais ?? []).length ? (
+                      <p className="mt-1 text-center text-[11px] font-semibold text-amber-700">
+                        +{(bet.jogadores_manuais ?? []).length} manual
+                      </p>
+                    ) : null}
+                  </td>
+                  <td className="px-2 py-3 md:px-3">
+                    <span className="inline-flex rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 md:px-3 md:text-xs">{bet.status}</span>
                   </td>
                 </tr>
               ))}
               {!bets.length ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-8 text-center text-sm text-slate-500">Nenhuma aposta enviada até agora.</td>
+                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-slate-500">Nenhuma aposta enviada até agora.</td>
                 </tr>
               ) : null}
             </tbody>
           </table>
         </div>
       </section>
+
+      {selectedBet ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="max-h-[88vh] w-full max-w-3xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Lista enviada</p>
+                <h3 className="mt-1 text-lg font-semibold text-slate-950">{selectedBet.nome ?? "Colaborador"}</h3>
+                <p className="text-sm text-slate-600">
+                  {selectedBet.email ?? "-"} | {selectedBet.total_jogadores} jogadores
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedBet(null)}
+                className="rounded-2xl border border-slate-200 bg-white p-2 text-slate-700 hover:bg-slate-50"
+                aria-label="Fechar lista enviada"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="max-h-[62vh] overflow-y-auto p-5">
+              <div className="grid gap-3 sm:grid-cols-2">
+                {betAllPlayers(selectedBet).map((player, index) => (
+                  <div key={`${player.id}-${index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-950">
+                          {index + 1}. {player.nome}
+                        </p>
+                        <p className="text-xs text-slate-600">{player.clube || "Clube não informado"}</p>
+                      </div>
+                      <span
+                        className={[
+                          "rounded-full px-2 py-1 text-[11px] font-semibold",
+                          player.origem === "Manual" ? "bg-amber-100 text-amber-800" : "bg-emerald-50 text-emerald-700",
+                        ].join(" ")}
+                      >
+                        {player.origem}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

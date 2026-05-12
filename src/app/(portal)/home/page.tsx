@@ -1,14 +1,91 @@
-﻿"use client";
+"use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, Gift, Megaphone, ArrowRight } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
+type Announcement = {
+  id: string;
+  label: string;
+  title: string;
+  body: string;
+  cta_label: string | null;
+  cta_href: string | null;
+  display_order: number | null;
+  created_at: string | null;
+};
+
+type InstitutionalEvent = {
+  id: string;
+  title: string;
+  description: string | null;
+  event_date: string;
+};
+
+type CollaboratorBirthday = {
+  id: string;
+  nome: string | null;
+  data_nascimento: string | null;
+  departamento: string | null;
+  cargo: string | null;
+};
+
+type BirthdayPreview = {
+  id: string;
+  nome: string;
+  cargo: string;
+  departamento: string;
+  nextDate: Date;
+  daysLeft: number;
+};
+
+const FALLBACK_ANNOUNCEMENT: Announcement = {
+  id: "fallback",
+  label: "Aviso institucional",
+  title: "Comunicados institucionais",
+  body: "Acompanhe os avisos oficiais, campanhas internas e novidades da organização.",
+  cta_label: "Ver comunicados",
+  cta_href: "/institucional/rede-social",
+  display_order: 0,
+  created_at: null,
+};
+
+function parseDateOnly(iso: string) {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+function nextBirthdayDate(birthIso: string, now = new Date()) {
+  const birth = parseDateOnly(birthIso);
+  const currentYear = now.getFullYear();
+  let next = new Date(currentYear, birth.getMonth(), birth.getDate());
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (next < today) next = new Date(currentYear + 1, birth.getMonth(), birth.getDate());
+  return next;
+}
+
+function diffInDays(a: Date, b: Date) {
+  const x = new Date(a.getFullYear(), a.getMonth(), a.getDate()).getTime();
+  const y = new Date(b.getFullYear(), b.getMonth(), b.getDate()).getTime();
+  return Math.max(0, Math.round((x - y) / 86400000));
+}
+
+function formatDate(iso: string) {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+  });
+}
+
 export default function HomePage() {
   const [displayName, setDisplayName] = useState<string | null>(null);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([FALLBACK_ANNOUNCEMENT]);
+  const [announcementIndex, setAnnouncementIndex] = useState(0);
+  const [events, setEvents] = useState<InstitutionalEvent[]>([]);
+  const [birthdays, setBirthdays] = useState<BirthdayPreview[]>([]);
 
   useEffect(() => {
-    async function loadName() {
+    async function loadHomeData() {
       const { data: authData } = await supabase.auth.getUser();
       const user = authData.user;
       if (!user) return;
@@ -20,10 +97,8 @@ export default function HomePage() {
         .maybeSingle<{ full_name: string | null }>();
 
       const email = user.email ?? null;
-
       let resolved = profile?.full_name?.trim() ?? "";
 
-      // Se o full_name não existe ou parece e-mail, tenta puxar o "nome" do cadastro de colaboradores.
       if ((!resolved || resolved.includes("@")) && email) {
         const { data: colab } = await supabase
           .from("colaboradores")
@@ -34,12 +109,74 @@ export default function HomePage() {
         if (colab?.nome?.trim()) resolved = colab.nome.trim();
       }
 
-      // Fallback final: nunca exibir email no titulo.
       setDisplayName(resolved || "Usuário");
+
+      const todayIso = new Date().toISOString().slice(0, 10);
+      const [announcementRes, eventsRes, birthdayRes] = await Promise.all([
+        supabase
+          .from("pulsehub_home_announcements")
+          .select("id,label,title,body,cta_label,cta_href,display_order,created_at")
+          .eq("active", true)
+          .order("display_order", { ascending: true })
+          .order("created_at", { ascending: false })
+          .limit(8),
+        supabase
+          .from("institutional_events")
+          .select("id,title,description,event_date")
+          .gte("event_date", todayIso)
+          .order("event_date", { ascending: true })
+          .limit(3),
+        supabase
+          .from("colaboradores")
+          .select("id,nome,data_nascimento,departamento,cargo")
+          .eq("is_active", true)
+          .not("data_nascimento", "is", null),
+      ]);
+
+      if (!announcementRes.error && announcementRes.data?.length) {
+        setAnnouncements(announcementRes.data as Announcement[]);
+        setAnnouncementIndex(0);
+      }
+
+      if (!eventsRes.error) {
+        setEvents((eventsRes.data ?? []) as InstitutionalEvent[]);
+      }
+
+      if (!birthdayRes.error) {
+        const now = new Date();
+        const normalized = ((birthdayRes.data ?? []) as CollaboratorBirthday[])
+          .filter((row) => Boolean(row.data_nascimento))
+          .map((row) => {
+            const next = nextBirthdayDate(String(row.data_nascimento), now);
+            return {
+              id: row.id,
+              nome: row.nome ?? "Sem nome",
+              cargo: row.cargo ?? "-",
+              departamento: row.departamento ?? "-",
+              nextDate: next,
+              daysLeft: diffInDays(next, now),
+            };
+          })
+          .sort((a, b) => a.nextDate.getTime() - b.nextDate.getTime())
+          .slice(0, 3);
+        setBirthdays(normalized);
+      }
     }
 
-    void loadName();
+    void loadHomeData();
   }, []);
+
+  useEffect(() => {
+    if (announcements.length <= 1) return;
+    const timer = window.setInterval(() => {
+      setAnnouncementIndex((current) => (current + 1) % announcements.length);
+    }, 6500);
+    return () => window.clearInterval(timer);
+  }, [announcements.length]);
+
+  const activeAnnouncement = announcements[announcementIndex] ?? FALLBACK_ANNOUNCEMENT;
+  const todayBirthdays = useMemo(() => birthdays.filter((item) => item.daysLeft === 0), [birthdays]);
+  const birthdayPreview = todayBirthdays.length ? todayBirthdays : birthdays.slice(0, 2);
 
   return (
     <div className="space-y-6">
@@ -54,22 +191,37 @@ export default function HomePage() {
         </p>
       </div>
 
-      <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 p-6 text-white">
-        <div className="max-w-[720px] space-y-2">
+      <div className="relative min-h-[236px] overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 p-6 text-white">
+        <div className="relative z-10 max-w-[760px] space-y-2">
           <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs">
-            <Megaphone size={14} /> Aviso institucional
+            <Megaphone size={14} /> {activeAnnouncement.label || "Comunicado"}
           </div>
-          <h2 className="text-xl font-semibold">Diagnóstico de cultura organizacional</h2>
-          <p className="text-sm text-white/80">
-            Participe do diagnóstico e ajude a fortalecer cultura, processos e bem-estar.
-          </p>
+          <h2 className="text-xl font-semibold">{activeAnnouncement.title}</h2>
+          <p className="max-w-2xl text-sm text-white/80">{activeAnnouncement.body}</p>
 
           <a
-            href="/institucional"
+            href={activeAnnouncement.cta_href || "/institucional/rede-social"}
             className="mt-2 inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-semibold text-slate-900"
           >
-            Ver comunicados <ArrowRight size={16} />
+            {activeAnnouncement.cta_label || "Ver comunicados"} <ArrowRight size={16} />
           </a>
+
+          {announcements.length > 1 ? (
+            <div className="flex gap-2 pt-3">
+              {announcements.map((item, index) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-label={`Comunicado ${index + 1}`}
+                  onClick={() => setAnnouncementIndex(index)}
+                  className={[
+                    "h-2.5 rounded-full transition-all",
+                    index === announcementIndex ? "w-8 bg-white" : "w-2.5 bg-white/35 hover:bg-white/60",
+                  ].join(" ")}
+                />
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/10" />
@@ -112,11 +264,20 @@ export default function HomePage() {
           </div>
 
           <div className="mt-4 space-y-3">
-            <div className="rounded-xl border border-slate-200 p-3">
-              <div className="text-xs text-slate-500">Em breve</div>
-              <div className="text-sm font-medium text-slate-900">Reunião geral</div>
-              <div className="text-sm text-slate-600">Horário a confirmar</div>
-            </div>
+            {events.length ? (
+              events.slice(0, 2).map((event) => (
+                <div key={event.id} className="rounded-xl border border-slate-200 p-3">
+                  <div className="text-xs text-slate-500">{formatDate(event.event_date)}</div>
+                  <div className="text-sm font-medium text-slate-900">{event.title}</div>
+                  <div className="text-sm text-slate-600">{event.description || "Sem descrição"}</div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-xl border border-slate-200 p-3">
+                <div className="text-sm font-medium text-slate-900">Nenhum evento futuro</div>
+                <div className="text-sm text-slate-600">A agenda será exibida assim que houver cadastro.</div>
+              </div>
+            )}
 
             <a href="/agenda/agenda-institucional" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900 hover:underline">
               Ver agenda completa <ArrowRight size={16} />
@@ -136,10 +297,21 @@ export default function HomePage() {
           </div>
 
           <div className="mt-4 space-y-3">
-            <div className="rounded-xl border border-slate-200 p-3">
-              <div className="text-sm font-medium text-slate-900">Nenhum hoje</div>
-              <div className="text-sm text-slate-600">Confira os próximos aniversários.</div>
-            </div>
+            {birthdayPreview.length ? (
+              birthdayPreview.map((item) => (
+                <div key={item.id} className="rounded-xl border border-slate-200 p-3">
+                  <div className="text-sm font-medium text-slate-900">{item.nome}</div>
+                  <div className="text-sm text-slate-600">
+                    {item.daysLeft === 0 ? "Hoje" : `${item.nextDate.toLocaleDateString("pt-BR")} - em ${item.daysLeft} dia(s)`}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-xl border border-slate-200 p-3">
+                <div className="text-sm font-medium text-slate-900">Nenhum hoje</div>
+                <div className="text-sm text-slate-600">Confira os próximos aniversários.</div>
+              </div>
+            )}
 
             <a href="/agenda/aniversariantes" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-900 hover:underline">
               Ver aniversariantes <ArrowRight size={16} />
@@ -150,4 +322,3 @@ export default function HomePage() {
     </div>
   );
 }
-

@@ -71,16 +71,27 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     const { error: deleteErr } = await supabaseAdmin.from("colaboradores").delete().eq("id", id);
     if (deleteErr) return NextResponse.json({ error: deleteErr.message }, { status: 400 });
 
+    let accessRemoved = false;
     if (colab.user_id) {
-      await supabaseAdmin
+      const nowIso = new Date().toISOString();
+      const profileRes = await supabaseAdmin
         .from("profiles")
-        .update({ active: false, updated_at: new Date().toISOString() })
+        .update({ active: false, updated_at: nowIso })
         .eq("id", colab.user_id);
+
+      if (profileRes.error) return NextResponse.json({ error: profileRes.error.message }, { status: 400 });
+
+      const banRes = await supabaseAdmin.auth.admin.updateUserById(colab.user_id, {
+        ban_duration: "876000h",
+      });
+      if (banRes.error) return NextResponse.json({ error: banRes.error.message }, { status: 400 });
+      accessRemoved = true;
     }
 
     return NextResponse.json({
       ok: true,
-      message: `Colaborador ${colab.nome || colab.email || "selecionado"} excluido com sucesso.`,
+      accessRemoved,
+      message: `Colaborador ${colab.nome || colab.email || "selecionado"} excluido com sucesso. Acesso ao portal removido.`,
     });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro inesperado";

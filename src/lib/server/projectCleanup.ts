@@ -12,6 +12,15 @@ export type ProjectPulseHubCleanupResult = {
   notifications_deleted: number;
 };
 
+export type CompanyProjectCleanupResult = {
+  ok: true;
+  company_id: string;
+  projects_deleted: number;
+  pd_projects_deleted: number;
+  project_notifications_deleted: number;
+  pulsehub: ProjectPulseHubCleanupResult;
+};
+
 function isMissingRelation(message: string) {
   const normalized = message.toLowerCase();
   return (
@@ -45,6 +54,59 @@ async function deleteByChunks(
   }
 
   return { deleted, skipped: false };
+}
+
+async function selectIdsByChunks(table: string, selectColumn: string, filterColumn: string, ids: string[]) {
+  const found = new Set<string>();
+  const chunkSize = 500;
+
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    const res = await supabaseAdmin.from(table).select(selectColumn).in(filterColumn, chunk);
+    if (res.error) {
+      if (isMissingRelation(res.error.message)) return { ids: found, skipped: true };
+      throw new Error(res.error.message);
+    }
+
+    for (const row of res.data ?? []) {
+      const value = (row as unknown as Record<string, unknown>)[selectColumn];
+      if (typeof value === "string" && value.trim()) found.add(value);
+    }
+  }
+
+  return { ids: found, skipped: false };
+}
+
+async function selectIdsByEq(table: string, selectColumn: string, filterColumn: string, value: string) {
+  const found = new Set<string>();
+  const res = await supabaseAdmin.from(table).select(selectColumn).eq(filterColumn, value);
+  if (res.error) {
+    if (isMissingRelation(res.error.message)) return { ids: found, skipped: true };
+    throw new Error(res.error.message);
+  }
+
+  for (const row of res.data ?? []) {
+    const id = (row as unknown as Record<string, unknown>)[selectColumn];
+    if (typeof id === "string" && id.trim()) found.add(id);
+  }
+
+  return { ids: found, skipped: false };
+}
+
+async function deleteProjectNotifications(projectIds: string[]) {
+  let deleted = 0;
+  for (const projectId of projectIds) {
+    const res = await supabaseAdmin
+      .from("notifications")
+      .delete({ count: "exact" })
+      .ilike("link", `%${projectId}%`);
+    if (res.error) {
+      if (isMissingRelation(res.error.message)) return deleted;
+      throw new Error(res.error.message);
+    }
+    deleted += res.count ?? 0;
+  }
+  return deleted;
 }
 
 export async function cleanupPulseHubProjectData(projectIds: string[]): Promise<ProjectPulseHubCleanupResult> {
@@ -90,5 +152,58 @@ export async function cleanupPulseHubProjectData(projectIds: string[]): Promise<
     posts_deleted: posts.deleted,
     project_boards_deleted: boards.deleted,
     notifications_deleted: notificationsDeleted,
+  };
+}
+
+export async function findCompanyProjectIds(companyId: string) {
+  const regularProjectIds = new Set<string>();
+  const pdProjectIds = new Set<string>();
+
+  const companyUsersRes = await supabaseAdmin.from("profiles").select("id").eq("company_id", companyId);
+  if (companyUsersRes.error) throw new Error(companyUsersRes.error.message);
+  const companyUserIds = (companyUsersRes.data ?? []).map((row) => String((row as { id: string }).id)).filter(Boolean);
+
+  const byCompany = await selectIdsByEq("projects", "id", "company_id", companyId);
+  for (const id of byCompany.ids) regularProjectIds.add(id);
+
+  if (companyUserIds.length > 0) {
+    const ownedRegular = await selectIdsByChunks("projects", "id", "owner_user_id", companyUserIds);
+    const memberRegular = await selectIdsByChunks("project_members", "project_id", "user_id", companyUserIds);
+    const ownedPd = await selectIdsByChunks("pd_projects", "id", "owner_user_id", companyUserIds);
+    const memberPd = await selectIdsByChunks("pd_project_members", "project_id", "user_id", companyUserIds);
+
+    for (const id of ownedRegular.ids) regularProjectIds.add(id);
+    for (const id of memberRegular.ids) regularProjectIds.add(id);
+    for (const id of ownedPd.ids) pdProjectIds.add(id);
+    for (const id of memberPd.ids) pdProjectIds.add(id);
+  }
+
+  return {
+    projectIds: Array.from(regularProjectIds),
+    pdProjectIds: Array.from(pdProjectIds),
+  };
+}
+
+export async function cleanupCompanyProjectData(companyId: string): Promise<CompanyProjectCleanupResult> {
+  const { projectIds, pdProjectIds } = await findCompanyProjectIds(companyId);
+  const pulsehub = await cleanupPulseHubProjectData(projectIds);
+  const projectNotificationsDeleted = await deleteProjectNotifications([...projectIds, ...pdProjectIds]);
+
+  const regularDelete =
+    projectIds.length > 0
+      ? await deleteByChunks("projects", "id", projectIds)
+      : { deleted: 0, skipped: false };
+  const pdDelete =
+    pdProjectIds.length > 0
+      ? await deleteByChunks("pd_projects", "id", pdProjectIds)
+      : { deleted: 0, skipped: false };
+
+  return {
+    ok: true,
+    company_id: companyId,
+    projects_deleted: regularDelete.deleted,
+    pd_projects_deleted: pdDelete.deleted,
+    project_notifications_deleted: projectNotificationsDeleted,
+    pulsehub,
   };
 }

@@ -87,13 +87,17 @@ function summarizeCleanupResult(result: Record<string, unknown>): CleanupSummary
   if (companyProjects) {
     items.push({
       label: "Projetos removidos",
-      value: String(Number(companyProjects.projects_deleted ?? 0) || 0),
+      value: [
+        `operacionais: ${Number(companyProjects.projects_deleted ?? 0) || 0}`,
+        `P&D: ${Number(companyProjects.pd_projects_deleted ?? 0) || 0}`,
+        `notificacoes: ${Number(companyProjects.project_notifications_deleted ?? 0) || 0}`,
+      ].join(" | "),
     });
   }
 
   const pulseHub =
-    result.company_project_pulsehub && typeof result.company_project_pulsehub === "object"
-      ? (result.company_project_pulsehub as Record<string, unknown>)
+    companyProjects?.pulsehub && typeof companyProjects.pulsehub === "object"
+      ? (companyProjects.pulsehub as Record<string, unknown>)
       : null;
   if (pulseHub) {
     items.push({
