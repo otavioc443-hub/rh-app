@@ -48,6 +48,11 @@ function cleanCpf(value?: string) {
   return digits.length < 11 ? digits.padStart(11, "0") : digits.slice(0, 11);
 }
 
+function isDateLike(value?: string) {
+  const v = String(value ?? "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(v) || /^\d{2}\/\d{2}\/\d{4}$/.test(v);
+}
+
 function toISODate(value?: string) {
   if (!value) return "";
   const v = String(value).trim();
@@ -55,7 +60,12 @@ function toISODate(value?: string) {
   if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
   const m = v.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (m) return `${m[3]}-${m[2]}-${m[1]}`;
-  return v;
+  return "";
+}
+
+function looksLikeSalary(value?: string) {
+  const v = String(value ?? "").trim();
+  return /^r\$/i.test(v) || /^\d{1,3}(\.\d{3})*,\d{2}$/.test(v) || /^\d+,\d{2}$/.test(v);
 }
 
 function toBoolSimNao(value: unknown) {
@@ -102,6 +112,28 @@ export default function EmployeesImport({ onImport }: Props) {
   }
 
   function mapRow(r: CsvRow): ColaboradorPayload {
+    const rawCbo = cell(r, "CBO");
+    const rawSalario = cell(r, "Salário", "Salario");
+    const rawTurno = cell(r, "Turno");
+    const rawMoeda = cell(r, "Moeda");
+    const rawTipoContrato = cell(r, "Tipo de contrato");
+    const rawDataContrato = cell(r, "Data do contrato");
+    const rawEscolaridade = cell(r, "Escolaridade");
+    const rawSuperiorDireto = cell(r, "Superior direto");
+    const rawEmailSuperiorDireto = cell(r, "Email superior direto", "E-mail superior direto");
+    const rawGrauHierarquico = cell(r, "Grau hierárquico", "Grau hierarquico");
+    const rawDuracaoContrato = cell(r, "Duração do contrato", "Duracao do contrato");
+    const rawVencimentoContrato = cell(r, "Vencimento do contrato");
+    const rawDepartamento = cell(r, "Departamento");
+    const rawEmail = cell(r, "E-mail", "Email");
+    const rawCpf = cell(r, "CPF");
+    const shiftedAfterCargo =
+      looksLikeSalary(rawCbo) &&
+      !String(rawSalario ?? "").trim() &&
+      !isDateLike(rawDataContrato) &&
+      Boolean(String(rawVencimentoContrato ?? "").trim()) &&
+      Boolean(String(rawDepartamento ?? "").includes("@"));
+
     return {
       nome: cell(r, "Nome"),
       matricula: cell(r, "Matrícula", "Matricula"),
@@ -131,21 +163,21 @@ export default function EmployeesImport({ onImport }: Props) {
       email_pessoal: cell(r, "Email pessoal", "E-mail pessoal"),
       email_empresarial: cell(r, "Email empresarial", "E-mail empresarial"),
       cargo: cell(r, "Cargo"),
-      cbo: cell(r, "CBO"),
-      salario: cell(r, "Salário", "Salario"),
-      turno: cell(r, "Turno"),
-      moeda: cell(r, "Moeda"),
-      tipo_contrato: cell(r, "Tipo de contrato"),
-      data_contrato: toISODate(cell(r, "Data do contrato")),
-      escolaridade: cell(r, "Escolaridade"),
-      superior_direto: cell(r, "Superior direto"),
-      email_superior_direto: cell(r, "Email superior direto", "E-mail superior direto"),
-      grau_hierarquico: cell(r, "Grau hierárquico", "Grau hierarquico"),
-      duracao_contrato: cell(r, "Duração do contrato", "Duracao do contrato"),
-      vencimento_contrato: toISODate(cell(r, "Vencimento do contrato")),
-      departamento: cell(r, "Departamento"),
-      email: cell(r, "E-mail", "Email"),
-      cpf: cleanCpf(cell(r, "CPF")),
+      cbo: shiftedAfterCargo ? "" : rawCbo,
+      salario: shiftedAfterCargo ? rawCbo : rawSalario,
+      turno: shiftedAfterCargo ? rawSalario : rawTurno,
+      moeda: shiftedAfterCargo ? rawTurno : rawMoeda,
+      tipo_contrato: shiftedAfterCargo ? rawMoeda : rawTipoContrato,
+      data_contrato: toISODate(shiftedAfterCargo ? rawTipoContrato : rawDataContrato),
+      escolaridade: shiftedAfterCargo ? rawDataContrato : rawEscolaridade,
+      superior_direto: shiftedAfterCargo ? rawEscolaridade : rawSuperiorDireto,
+      email_superior_direto: shiftedAfterCargo ? rawSuperiorDireto : rawEmailSuperiorDireto,
+      grau_hierarquico: shiftedAfterCargo ? rawEmailSuperiorDireto : rawGrauHierarquico,
+      duracao_contrato: shiftedAfterCargo ? rawGrauHierarquico : rawDuracaoContrato,
+      vencimento_contrato: toISODate(shiftedAfterCargo ? rawDuracaoContrato : rawVencimentoContrato),
+      departamento: shiftedAfterCargo ? rawVencimentoContrato : rawDepartamento,
+      email: shiftedAfterCargo ? rawDepartamento : rawEmail,
+      cpf: cleanCpf(shiftedAfterCargo ? rawEmail : rawCpf),
       rg: cell(r, "RG"),
       titulo_eleitor: cell(r, "Título de eleitor", "Titulo de eleitor"),
       zona_eleitoral: cell(r, "Zona Eleitoral"),

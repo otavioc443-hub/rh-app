@@ -35,6 +35,14 @@ function toDb(payload: ColaboradorPayload) {
     const x = Number(s);
     return Number.isFinite(x) ? x : null;
   };
+  const dateOnly = (v: unknown) => {
+    const s = n(v);
+    if (!s) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    return null;
+  };
 
   const base: Record<string, unknown> = { ...payload };
   delete base.company_id;
@@ -52,12 +60,21 @@ function toDb(payload: ColaboradorPayload) {
       ? null
       : payload.pne === true || String(payload.pne).toLowerCase() === "sim";
 
-  base.data_admissao = n(payload.data_admissao) || null;
-  base.data_demissao = n(payload.data_demissao) || null;
+  base.data_nascimento = dateOnly(payload.data_nascimento);
+  base.data_admissao = dateOnly(payload.data_admissao);
+  base.data_demissao = dateOnly(payload.data_demissao);
+  base.data_contrato = dateOnly(payload.data_contrato);
+  base.vencimento_contrato = dateOnly(payload.vencimento_contrato);
 
   base.celular = n(payload.celular) || null;
   base.salario = num(payload.salario);
   base.valor_rescisao = num(payload.valor_rescisao);
+
+  for (const [key, value] of Object.entries(base)) {
+    if (value === undefined || (typeof value === "string" && value.trim() === "")) {
+      base[key] = null;
+    }
+  }
 
   return base;
 }
