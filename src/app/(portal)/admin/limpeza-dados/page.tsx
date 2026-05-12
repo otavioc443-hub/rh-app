@@ -80,6 +80,32 @@ function summarizeCleanupResult(result: Record<string, unknown>): CleanupSummary
     });
   }
 
+  const companyProjects =
+    result.company_projects && typeof result.company_projects === "object"
+      ? (result.company_projects as Record<string, unknown>)
+      : null;
+  if (companyProjects) {
+    items.push({
+      label: "Projetos removidos",
+      value: String(Number(companyProjects.projects_deleted ?? 0) || 0),
+    });
+  }
+
+  const pulseHub =
+    result.company_project_pulsehub && typeof result.company_project_pulsehub === "object"
+      ? (result.company_project_pulsehub as Record<string, unknown>)
+      : null;
+  if (pulseHub) {
+    items.push({
+      label: "PulseHub do projeto",
+      value: [
+        `posts: ${Number(pulseHub.posts_deleted ?? 0) || 0}`,
+        `quadros: ${Number(pulseHub.project_boards_deleted ?? 0) || 0}`,
+        `notificacoes: ${Number(pulseHub.notifications_deleted ?? 0) || 0}`,
+      ].join(" | "),
+    });
+  }
+
   if (typeof result.company_id === "string" && result.company_id.trim()) {
     items.push({
       label: "Empresa",

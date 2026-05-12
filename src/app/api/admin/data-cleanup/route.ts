@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { cleanupPulseHubProjectData } from "@/lib/server/projectCleanup";
 
 type Role = "colaborador" | "rh" | "admin";
 
@@ -358,6 +359,50 @@ export async function POST(req: NextRequest) {
     }
 
     if (clearCompanyProjects) {
+      const { data: companyProjects, error: companyProjectsErr } = await supabaseAdmin
+        .from("projects")
+        .select("id")
+        .eq("company_id", scopeCompanyId);
+
+      if (companyProjectsErr) {
+        await insertCleanupAudit({
+          executionId,
+          actorUserId: guard.userId,
+          actorRole: guard.role,
+          companyId: scopeCompanyId,
+          operationKey: "clear_company_projects",
+          status: "failed",
+          operationPayload: {},
+          errorMessage: companyProjectsErr.message,
+        });
+        return NextResponse.json(
+          { error: `Falha ao listar projetos da empresa: ${companyProjectsErr.message}` },
+          { status: 400 }
+        );
+      }
+
+      const projectIds = (companyProjects ?? []).map((project) => String((project as { id: string }).id)).filter(Boolean);
+      let pulseHubCleanup: Awaited<ReturnType<typeof cleanupPulseHubProjectData>> | null = null;
+      try {
+        pulseHubCleanup = await cleanupPulseHubProjectData(projectIds);
+      } catch (cleanupErr: unknown) {
+        const message = cleanupErr instanceof Error ? cleanupErr.message : "Falha ao limpar dados do PulseHub.";
+        await insertCleanupAudit({
+          executionId,
+          actorUserId: guard.userId,
+          actorRole: guard.role,
+          companyId: scopeCompanyId,
+          operationKey: "clear_company_projects",
+          status: "failed",
+          operationPayload: { project_count: projectIds.length },
+          errorMessage: message,
+        });
+        return NextResponse.json(
+          { error: `Falha ao limpar dados de projetos no PulseHub: ${message}` },
+          { status: 400 }
+        );
+      }
+
       const { data: clearRes, error: clearErr } = await supabaseAdmin.rpc("clear_company_project_data", {
         p_company_id: scopeCompanyId,
       });
@@ -377,6 +422,7 @@ export async function POST(req: NextRequest) {
       }
 
       result.company_projects = clearRes ?? null;
+      result.company_project_pulsehub = pulseHubCleanup;
       await insertCleanupAudit({
         executionId,
         actorUserId: guard.userId,
@@ -385,7 +431,7 @@ export async function POST(req: NextRequest) {
         operationKey: "clear_company_projects",
         status: "success",
         operationPayload: {},
-        operationResult: { response: clearRes ?? null },
+        operationResult: { response: clearRes ?? null, pulsehub: pulseHubCleanup },
       });
     }
 

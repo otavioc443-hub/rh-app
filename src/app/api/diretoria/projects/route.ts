@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { cleanupPulseHubProjectData } from "@/lib/server/projectCleanup";
 
 type Role = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "financeiro" | "pd" | "admin";
 type ProjectLine = "eolica" | "solar" | "bess";
@@ -237,18 +238,26 @@ export async function DELETE(req: NextRequest) {
     const projectId = String(body.project_id ?? "").trim();
     if (!projectId) return NextResponse.json({ error: "project_id obrigatorio." }, { status: 400 });
 
+    let pulseHubCleanup = null;
+    try {
+      pulseHubCleanup = await cleanupPulseHubProjectData([projectId]);
+    } catch (cleanupErr: unknown) {
+      const message = cleanupErr instanceof Error ? cleanupErr.message : "Falha ao limpar dados do PulseHub.";
+      return NextResponse.json({ error: `Falha ao limpar dados vinculados do PulseHub: ${message}` }, { status: 400 });
+    }
+
     const deleteRes = await supabaseAdmin.from("projects").delete().eq("id", projectId);
     if (deleteRes.error) {
       return NextResponse.json(
         {
           error:
-            "Nao foi possivel excluir o projeto. Verifique se ele possui dados vinculados (medicoes, membros, entregaveis ou financeiros) e remova essas dependencias antes de excluir.",
+            `Nao foi possivel excluir o projeto e seus dados vinculados: ${deleteRes.error.message}`,
         },
         { status: 400 }
       );
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, pulsehub: pulseHubCleanup });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro inesperado ao excluir projeto.";
     return NextResponse.json({ error: message }, { status: 500 });

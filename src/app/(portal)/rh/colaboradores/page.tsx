@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { Pencil, Send, TrendingUp } from "lucide-react";
+import { Pencil, Send, Trash2, TrendingUp } from "lucide-react";
 import CollaboratorEditWizard from "@/components/rh/CollaboratorEditWizard";
 
 type Row = {
@@ -37,6 +37,8 @@ export default function Page() {
 
   const [editing, setEditing] = useState<{ row: Row; startWithPromotion: boolean } | null>(null);
   const [sendingId, setSendingId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<Row | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   async function load() {
@@ -155,6 +157,39 @@ export default function Page() {
     }
   }
 
+  async function deleteCollaborator(row: Row) {
+    setDeletingId(row.id);
+    setToast(null);
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const res = await fetch(`/api/rh/colaboradores/${row.id}`, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        credentials: "include",
+      });
+
+      const text = await res.text();
+      let payload: { error?: string; message?: string } | null = null;
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        throw new Error(text || "Resposta invalida do servidor.");
+      }
+
+      if (!res.ok) throw new Error(payload?.error || "Falha ao excluir colaborador.");
+
+      setRows((current) => current.filter((item) => item.id !== row.id));
+      setDeleting(null);
+      setToast(payload?.message ?? "Colaborador excluido com sucesso.");
+    } catch (e: unknown) {
+      setToast(e instanceof Error ? e.message : "Erro ao excluir colaborador.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <header className="rounded-3xl border border-slate-200 bg-white p-6">
@@ -270,6 +305,18 @@ export default function Page() {
                           <Pencil size={16} />
                           Editar
                         </button>
+
+                        <button
+                          onClick={() => setDeleting(r)}
+                          disabled={deletingId === r.id}
+                          className={cx(
+                            "inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100",
+                            deletingId === r.id && "opacity-70"
+                          )}
+                        >
+                          <Trash2 size={16} />
+                          {deletingId === r.id ? "Excluindo..." : "Excluir"}
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -295,6 +342,42 @@ export default function Page() {
             setToast("Alterações salvas com sucesso.");
           }}
         />
+      )}
+
+      {deleting && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
+            <div className="flex items-start gap-3">
+              <div className="rounded-2xl bg-rose-50 p-3 text-rose-700">
+                <Trash2 size={20} />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Excluir colaborador</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Esta acao removera <b>{deleting.nome ?? "este colaborador"}</b> da lista de colaboradores. Se houver
+                  usuario vinculado, o perfil tambem sera desativado.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setDeleting(null)}
+                disabled={deletingId === deleting.id}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => deleteCollaborator(deleting)}
+                disabled={deletingId === deleting.id}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-70"
+              >
+                {deletingId === deleting.id ? "Excluindo..." : "Confirmar exclusao"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
