@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Clock, CreditCard, Eye, Pencil, Plus, Trash2, Trophy, Users } from "lucide-react";
+import { Check, Clock, CreditCard, Eye, Pencil, Plus, Search, Trash2, Trophy, Upload, Users } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserRole } from "@/hooks/useUserRole";
 import {
@@ -13,11 +13,13 @@ import {
   BOLAO_POSITIONS,
   BOLAO_REQUIRED_PLAYERS,
   BOLAO_RULES,
+  BOLAO_PAYMENT_STATUS_LABELS,
   countBolaoHits,
   formatBolaoCurrency,
   formatBolaoDateTime,
   getBolaoBetPlayers,
   isBolaoClosed,
+  isBolaoPaid,
   type BolaoBet,
   type BolaoConfig,
   type BolaoManualPlayer,
@@ -78,6 +80,7 @@ export default function BolaoCopa2026Page() {
   const { loading: roleLoading, isRH } = useUserRole();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingProof, setUploadingProof] = useState(false);
   const [message, setMessage] = useState("");
   const [view, setView] = useState<ActiveView>("aposta");
   const [userId, setUserId] = useState("");
@@ -90,6 +93,9 @@ export default function BolaoCopa2026Page() {
   const [manualPlayers, setManualPlayers] = useState<BolaoManualPlayer[]>([]);
   const [manualName, setManualName] = useState("");
   const [manualClub, setManualClub] = useState("");
+  const [playerSearch, setPlayerSearch] = useState("");
+  const [positionFilter, setPositionFilter] = useState<"Todas" | (typeof BOLAO_POSITIONS)[number]>("Todas");
+  const [showReview, setShowReview] = useState(false);
 
   const closed = useMemo(() => isBolaoClosed(config), [config]);
   const totalSelected = selectedIds.size + manualPlayers.length;
@@ -104,6 +110,33 @@ export default function BolaoCopa2026Page() {
     return custom.length ? custom : BOLAO_RULES;
   }, [config.regulamento]);
 
+  const positionCounts = useMemo(() => {
+    return BOLAO_POSITIONS.map((position) => ({
+      position,
+      count: BOLAO_PLAYERS.filter((player) => player.position === position && selectedIds.has(player.id)).length,
+    }));
+  }, [selectedIds]);
+
+  const visiblePositions = useMemo(() => {
+    return positionFilter === "Todas" ? BOLAO_POSITIONS : BOLAO_POSITIONS.filter((position) => position === positionFilter);
+  }, [positionFilter]);
+
+  const normalizedPlayerSearch = playerSearch.trim().toLowerCase();
+  const currentPlayerSelection = useMemo(() => selectedPayload(selectedIds), [selectedIds]);
+  const reviewPlayers = useMemo(
+    () => [
+      ...currentPlayerSelection,
+      ...manualPlayers.map((player) => ({
+        id: player.id,
+        nome: player.nome,
+        clube: player.clube ?? "",
+        posicao: "Manual" as const,
+        manual: true,
+      })),
+    ],
+    [currentPlayerSelection, manualPlayers],
+  );
+
   const groupedBets = useMemo(() => {
     const groups = new Map<string, BolaoBet[]>();
     for (const bet of allBets) {
@@ -116,6 +149,7 @@ export default function BolaoCopa2026Page() {
   const ranking = useMemo(() => {
     if (!hasResult) return [];
     return allBets
+      .filter(isBolaoPaid)
       .map((bet) => ({ bet, hits: countBolaoHits(bet, config.jogadores_convocados) ?? 0 }))
       .sort((a, b) => b.hits - a.hits || (a.bet.nome ?? "").localeCompare(b.bet.nome ?? "", "pt-BR"));
   }, [allBets, config.jogadores_convocados, hasResult]);
@@ -154,12 +188,12 @@ export default function BolaoCopa2026Page() {
           .maybeSingle<BolaoConfig>(),
         supabase
           .from("pulsehub_bolao_copa_2026")
-          .select("id,user_id,nome,email,setor,jogadores,jogadores_manuais,total_jogadores,status,created_at,updated_at")
+          .select("id,user_id,nome,email,setor,payment_status,comprovante_url,comprovante_path,jogadores,jogadores_manuais,total_jogadores,status,created_at,updated_at")
           .eq("user_id", user.id)
           .maybeSingle<BolaoBet>(),
         supabase
           .from("pulsehub_bolao_copa_2026")
-          .select("id,user_id,nome,email,setor,jogadores,jogadores_manuais,total_jogadores,status,created_at,updated_at")
+          .select("id,user_id,nome,email,setor,payment_status,comprovante_url,comprovante_path,jogadores,jogadores_manuais,total_jogadores,status,created_at,updated_at")
           .order("created_at", { ascending: true }),
       ]);
 
@@ -235,10 +269,11 @@ export default function BolaoCopa2026Page() {
         nome: profile?.full_name ?? "Colaborador",
         email: profile?.email ?? "",
         setor: setor ?? "Setor não informado",
-        jogadores: selectedPayload(selectedIds),
+        jogadores: currentPlayerSelection,
         jogadores_manuais: manualPlayers,
         total_jogadores: totalSelected,
         status: "enviado",
+        payment_status: existingBet?.payment_status ?? "pendente",
       };
 
       const query = existingBet
@@ -246,7 +281,7 @@ export default function BolaoCopa2026Page() {
         : supabase.from("pulsehub_bolao_copa_2026").insert(payload);
 
       const { data, error } = await query
-        .select("id,user_id,nome,email,setor,jogadores,jogadores_manuais,total_jogadores,status,created_at,updated_at")
+        .select("id,user_id,nome,email,setor,payment_status,comprovante_url,comprovante_path,jogadores,jogadores_manuais,total_jogadores,status,created_at,updated_at")
         .single<BolaoBet>();
 
       if (error) throw error;
@@ -256,11 +291,55 @@ export default function BolaoCopa2026Page() {
         return [...others, data].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
       });
       setMessage(existingBet ? "Palpite atualizado com sucesso." : "Aposta registrada com sucesso.");
+      setShowReview(false);
     } catch (err) {
       const raw = err instanceof Error ? err.message : "Erro ao registrar aposta.";
       setMessage(schemaMessage(raw));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function uploadPaymentProof(file: File) {
+    if (!existingBet) return;
+    setUploadingProof(true);
+    setMessage("");
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token ?? null;
+      const form = new FormData();
+      form.append("file", file);
+      form.append("betId", existingBet.id);
+      const res = await fetch("/api/pulsehub/bolao-copa-2026/payment-proof", {
+        method: "POST",
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: form,
+      });
+      const json = (await res.json()) as { publicUrl?: string; path?: string; paymentStatus?: string; error?: string };
+      if (!res.ok || !json.publicUrl) throw new Error(json.error || "Erro ao enviar comprovante.");
+      setExistingBet((prev) =>
+        prev
+          ? {
+              ...prev,
+              comprovante_url: json.publicUrl ?? prev.comprovante_url,
+              comprovante_path: json.path ?? prev.comprovante_path,
+              payment_status: "aguardando_validacao",
+            }
+          : prev,
+      );
+      setAllBets((prev) =>
+        prev.map((bet) =>
+          bet.id === existingBet.id
+            ? { ...bet, comprovante_url: json.publicUrl ?? bet.comprovante_url, comprovante_path: json.path ?? bet.comprovante_path, payment_status: "aguardando_validacao" }
+            : bet,
+        ),
+      );
+      setMessage("Comprovante enviado para validação do RH.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Erro ao enviar comprovante.");
+    } finally {
+      setUploadingProof(false);
     }
   }
 
@@ -377,7 +456,8 @@ export default function BolaoCopa2026Page() {
 
           {existingBet ? (
             <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-6">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
                 <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-600 text-white">
                   <Check size={20} />
                 </span>
@@ -389,6 +469,33 @@ export default function BolaoCopa2026Page() {
                       : `Você pode editar este palpite até ${deadlineLabel}.`}
                   </p>
                 </div>
+                </div>
+                <span className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800">
+                  Pagamento: {BOLAO_PAYMENT_STATUS_LABELS[(existingBet.payment_status ?? "pendente") as keyof typeof BOLAO_PAYMENT_STATUS_LABELS] ?? "Pendente"}
+                </span>
+              </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-emerald-100 pt-4">
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800">
+                  <Upload size={16} /> {uploadingProof ? "Enviando..." : "Enviar comprovante Pix"}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,application/pdf"
+                    className="hidden"
+                    disabled={uploadingProof}
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void uploadPaymentProof(file);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+                {existingBet.comprovante_url ? (
+                  <a href={existingBet.comprovante_url} target="_blank" rel="noreferrer" className="text-sm font-semibold text-emerald-800 hover:underline">
+                    Ver comprovante enviado
+                  </a>
+                ) : (
+                  <p className="text-sm text-emerald-800">Envie o comprovante para o RH validar sua participação.</p>
+                )}
               </div>
             </section>
           ) : null}
@@ -405,12 +512,53 @@ export default function BolaoCopa2026Page() {
                 </div>
               </div>
 
+              <div className="grid gap-3 md:grid-cols-[1fr_auto]">
+                <label className="relative block">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <input
+                    value={playerSearch}
+                    onChange={(event) => setPlayerSearch(event.target.value)}
+                    placeholder="Buscar por nome ou clube"
+                    className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 text-sm"
+                  />
+                </label>
+                <select
+                  value={positionFilter}
+                  onChange={(event) => setPositionFilter(event.target.value as "Todas" | (typeof BOLAO_POSITIONS)[number])}
+                  className="h-11 rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-700"
+                >
+                  <option value="Todas">Todas as posições</option>
+                  {BOLAO_POSITIONS.map((position) => (
+                    <option key={position} value={position}>
+                      {position}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                {positionCounts.map((item) => (
+                  <div key={item.position} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-semibold text-slate-500">{item.position}</p>
+                    <p className="mt-1 text-lg font-semibold text-slate-950">{item.count}</p>
+                  </div>
+                ))}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-semibold text-slate-500">Manuais</p>
+                  <p className="mt-1 text-lg font-semibold text-slate-950">{manualPlayers.length}</p>
+                </div>
+              </div>
+
               <div className="grid gap-4 xl:grid-cols-2">
-                {BOLAO_POSITIONS.map((position) => (
+                {visiblePositions.map((position) => (
                   <div key={position} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                     <h3 className="text-sm font-semibold text-slate-950">{position}</h3>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      {BOLAO_PLAYERS.filter((player) => player.position === position).map((player) => (
+                      {BOLAO_PLAYERS.filter((player) => {
+                        if (player.position !== position) return false;
+                        if (!normalizedPlayerSearch) return true;
+                        return `${player.name} ${player.club}`.toLowerCase().includes(normalizedPlayerSearch);
+                      }).map((player) => (
                         <label
                           key={player.id}
                           className="flex min-h-14 cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm transition hover:border-slate-300"
@@ -484,11 +632,18 @@ export default function BolaoCopa2026Page() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => void submitBet()}
+                  onClick={() => {
+                    setMessage("");
+                    if (!validTotal) {
+                      setMessage("Sua lista precisa conter exatamente 26 jogadores para ser válida.");
+                      return;
+                    }
+                    setShowReview(true);
+                  }}
                   disabled={saving || !validTotal}
                   className="rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {saving ? "Salvando..." : existingBet ? "Atualizar palpite" : "Enviar aposta"}
+                  {existingBet ? "Revisar atualização" : "Revisar aposta"}
                 </button>
               </div>
             </section>
@@ -522,7 +677,7 @@ export default function BolaoCopa2026Page() {
             </div>
           ) : (
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-              O ranking será exibido após o RH/Admin confirmar os jogadores convocados.
+              O ranking será exibido após o RH/Admin confirmar os jogadores convocados e validar os pagamentos.
             </div>
           )}
 
@@ -564,6 +719,52 @@ export default function BolaoCopa2026Page() {
 
       {message && view === "palpites" ? (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">{message}</div>
+      ) : null}
+
+      {showReview ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4">
+          <div className="max-h-[88vh] w-full max-w-3xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+            <div className="border-b border-slate-100 p-5">
+              <h2 className="text-lg font-semibold text-slate-950">Revisar palpite</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Confira os 26 nomes antes de {existingBet ? "atualizar" : "enviar"} sua aposta.
+              </p>
+            </div>
+            <div className="max-h-[58vh] overflow-y-auto p-5">
+              <div className="grid gap-2 sm:grid-cols-2">
+                {reviewPlayers.map((player, index) => (
+                  <div key={player.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="text-xs font-semibold text-slate-500">#{index + 1} · {player.posicao}</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-950">{player.nome}</p>
+                    {player.clube ? <p className="text-xs text-slate-500">{player.clube}</p> : null}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 p-5">
+              <p className={`text-sm font-semibold ${reviewPlayers.length === 26 ? "text-emerald-700" : "text-rose-700"}`}>
+                Selecionados: {reviewPlayers.length}/26
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowReview(false)}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Voltar e editar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void submitBet()}
+                  disabled={saving || reviewPlayers.length !== 26}
+                  className="rounded-2xl bg-emerald-600 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {saving ? "Salvando..." : existingBet ? "Confirmar atualização" : "Confirmar envio"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : null}
     </div>
   );

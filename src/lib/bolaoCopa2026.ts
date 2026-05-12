@@ -27,6 +27,9 @@ export type BolaoBet = {
   nome: string | null;
   email: string | null;
   setor?: string | null;
+  payment_status?: BolaoPaymentStatus | null;
+  comprovante_url?: string | null;
+  comprovante_path?: string | null;
   jogadores: BolaoSelectedPlayer[];
   jogadores_manuais: BolaoManualPlayer[] | null;
   total_jogadores: number;
@@ -57,6 +60,8 @@ export type BolaoConfirmedPlayer = {
   posicao?: BolaoPlayerPosition | "Manual";
   manual?: boolean;
 };
+
+export type BolaoPaymentStatus = "pendente" | "aguardando_validacao" | "pago" | "recusado";
 
 export const BOLAO_REQUIRED_PLAYERS = 26;
 export const BOLAO_DEFAULT_TITLE = "Bolão Copa do Mundo 2026";
@@ -132,6 +137,17 @@ export const BOLAO_PLAYERS: BolaoPlayer[] = [
 ];
 
 export const BOLAO_POSITIONS: BolaoPlayerPosition[] = ["Goleiros", "Defensores", "Meio-campistas", "Atacantes"];
+
+export const BOLAO_PAYMENT_STATUS_LABELS: Record<BolaoPaymentStatus, string> = {
+  pendente: "Pendente",
+  aguardando_validacao: "Aguardando validação",
+  pago: "Pago",
+  recusado: "Recusado",
+};
+
+export function isBolaoPaid(bet: Pick<BolaoBet, "payment_status">) {
+  return bet.payment_status === "pago";
+}
 
 export function formatBolaoCurrency(value: number | null | undefined) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value ?? BOLAO_DEFAULT_VALUE);

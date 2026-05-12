@@ -9,13 +9,16 @@ import {
   BOLAO_DEFAULT_REGULATION,
   BOLAO_DEFAULT_TITLE,
   BOLAO_DEFAULT_VALUE,
+  BOLAO_PAYMENT_STATUS_LABELS,
   BOLAO_PLAYERS,
   BOLAO_POSITIONS,
   type BolaoBet,
   type BolaoConfirmedPlayer,
   type BolaoConfig,
+  type BolaoPaymentStatus,
   formatBolaoCurrency,
   formatBolaoDateTime,
+  isBolaoPaid,
 } from "@/lib/bolaoCopa2026";
 
 function toLocalInputValue(value: string | null | undefined) {
@@ -93,7 +96,8 @@ export default function RhBolaoCopa2026Page() {
   const [resultadoConfirmadoAt, setResultadoConfirmadoAt] = useState<string | null>(null);
   const [bets, setBets] = useState<BolaoBet[]>([]);
 
-  const totalPrize = useMemo(() => bets.length * (Number(valor.replace(",", ".")) || BOLAO_DEFAULT_VALUE), [bets.length, valor]);
+  const paidBets = useMemo(() => bets.filter(isBolaoPaid), [bets]);
+  const totalPrize = useMemo(() => paidBets.length * (Number(valor.replace(",", ".")) || BOLAO_DEFAULT_VALUE), [paidBets.length, valor]);
 
   const applyConfig = useCallback((row: BolaoConfig | null) => {
     setConfigId(row?.id ?? null);
@@ -124,7 +128,7 @@ export default function RhBolaoCopa2026Page() {
           .maybeSingle<BolaoConfig>(),
         supabase
           .from("pulsehub_bolao_copa_2026")
-          .select("id,user_id,nome,email,setor,jogadores,jogadores_manuais,total_jogadores,status,created_at,updated_at")
+          .select("id,user_id,nome,email,setor,payment_status,comprovante_url,comprovante_path,jogadores,jogadores_manuais,total_jogadores,status,created_at,updated_at")
           .order("created_at", { ascending: false }),
       ]);
       if (configRes.error) throw configRes.error;
@@ -244,13 +248,29 @@ export default function RhBolaoCopa2026Page() {
     }
   }
 
+  async function updatePaymentStatus(betId: string, paymentStatus: BolaoPaymentStatus) {
+    setMessage("");
+    try {
+      const { error } = await supabase
+        .from("pulsehub_bolao_copa_2026")
+        .update({ payment_status: paymentStatus })
+        .eq("id", betId);
+      if (error) throw error;
+      setBets((prev) => prev.map((bet) => (bet.id === betId ? { ...bet, payment_status: paymentStatus } : bet)));
+      setMessage("Status de pagamento atualizado.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Erro ao atualizar pagamento.");
+    }
+  }
+
   function exportCsv() {
     const rows = [
-      ["Nome", "E-mail", "Setor", "Data/hora de envio", "Quantidade", "Lista enviada", "Jogadores manuais", "Status"],
+      ["Nome", "E-mail", "Setor", "Pagamento", "Data/hora de envio", "Quantidade", "Lista enviada", "Jogadores manuais", "Status"],
       ...bets.map((bet) => [
         bet.nome ?? "",
         bet.email ?? "",
         sectorLabel(bet.setor),
+        BOLAO_PAYMENT_STATUS_LABELS[(bet.payment_status ?? "pendente") as BolaoPaymentStatus],
         formatBolaoDateTime(bet.created_at),
         String(bet.total_jogadores),
         betPlayersText(bet),
@@ -267,6 +287,7 @@ export default function RhBolaoCopa2026Page() {
         <td>${bet.nome ?? ""}</td>
         <td>${bet.email ?? ""}</td>
         <td>${sectorLabel(bet.setor)}</td>
+        <td>${BOLAO_PAYMENT_STATUS_LABELS[(bet.payment_status ?? "pendente") as BolaoPaymentStatus]}</td>
         <td>${formatBolaoDateTime(bet.created_at)}</td>
         <td>${bet.total_jogadores}</td>
         <td>${betPlayersText(bet)}</td>
@@ -274,7 +295,7 @@ export default function RhBolaoCopa2026Page() {
         <td>${bet.status ?? ""}</td>
       </tr>
     `).join("");
-    const html = `<table><thead><tr><th>Nome</th><th>E-mail</th><th>Setor</th><th>Data/hora de envio</th><th>Quantidade</th><th>Lista enviada</th><th>Jogadores manuais</th><th>Status</th></tr></thead><tbody>${htmlRows}</tbody></table>`;
+    const html = `<table><thead><tr><th>Nome</th><th>E-mail</th><th>Setor</th><th>Pagamento</th><th>Data/hora de envio</th><th>Quantidade</th><th>Lista enviada</th><th>Jogadores manuais</th><th>Status</th></tr></thead><tbody>${htmlRows}</tbody></table>`;
     downloadBlob("bolao-copa-2026-apostas.xls", html, "application/vnd.ms-excel;charset=utf-8");
   }
 
@@ -307,10 +328,14 @@ export default function RhBolaoCopa2026Page() {
           </button>
         </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
+        <div className="mt-5 grid gap-3 md:grid-cols-4">
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-semibold uppercase text-slate-500">Apostas enviadas</p>
             <p className="mt-1 text-2xl font-semibold text-slate-950">{bets.length}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase text-slate-500">Pagamentos confirmados</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-950">{paidBets.length}</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-semibold uppercase text-slate-500">Valor estimado</p>
@@ -480,6 +505,8 @@ export default function RhBolaoCopa2026Page() {
                 <th className="px-4 py-3">Nome</th>
                 <th className="px-4 py-3">E-mail</th>
                 <th className="px-4 py-3">Setor</th>
+                <th className="px-4 py-3">Pagamento</th>
+                <th className="px-4 py-3">Comprovante</th>
                 <th className="px-4 py-3">Envio</th>
                 <th className="px-4 py-3">Qtd.</th>
                 <th className="px-4 py-3">Lista enviada</th>
@@ -493,6 +520,28 @@ export default function RhBolaoCopa2026Page() {
                   <td className="px-4 py-3 font-semibold text-slate-900">{bet.nome}</td>
                   <td className="px-4 py-3 text-slate-600">{bet.email}</td>
                   <td className="px-4 py-3 text-slate-600">{sectorLabel(bet.setor)}</td>
+                  <td className="px-4 py-3">
+                    <select
+                      value={bet.payment_status ?? "pendente"}
+                      onChange={(event) => void updatePaymentStatus(bet.id, event.target.value as BolaoPaymentStatus)}
+                      className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700"
+                    >
+                      {Object.entries(BOLAO_PAYMENT_STATUS_LABELS).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-4 py-3">
+                    {bet.comprovante_url ? (
+                      <a href={bet.comprovante_url} target="_blank" rel="noreferrer" className="text-xs font-semibold text-[#0a66c2] hover:underline">
+                        Abrir
+                      </a>
+                    ) : (
+                      <span className="text-xs text-slate-400">Pendente</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-slate-600">{formatBolaoDateTime(bet.created_at)}</td>
                   <td className="px-4 py-3 font-semibold text-slate-900">{bet.total_jogadores}</td>
                   <td className="max-w-md px-4 py-3 text-slate-600">{betPlayersText(bet)}</td>
@@ -504,7 +553,7 @@ export default function RhBolaoCopa2026Page() {
               ))}
               {!bets.length ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-500">Nenhuma aposta enviada até agora.</td>
+                  <td colSpan={10} className="px-4 py-8 text-center text-sm text-slate-500">Nenhuma aposta enviada até agora.</td>
                 </tr>
               ) : null}
             </tbody>
