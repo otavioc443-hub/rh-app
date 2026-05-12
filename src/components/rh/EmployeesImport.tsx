@@ -20,12 +20,20 @@ function normalizeHeader(value: string) {
     .toLowerCase();
 }
 
+function compactHeader(value: string) {
+  return normalizeHeader(value).replace(/[^a-z0-9]/g, "");
+}
+
 function cell(row: CsvRow, ...headers: string[]) {
-  const wanted = headers.map(normalizeHeader);
+  const wanted = new Set(headers.flatMap((h) => [normalizeHeader(h), compactHeader(h)]));
   for (const [key, value] of Object.entries(row)) {
-    if (wanted.includes(normalizeHeader(key))) return value ?? "";
+    if (wanted.has(normalizeHeader(key)) || wanted.has(compactHeader(key))) return value ?? "";
   }
   return "";
+}
+
+function hasContent(row: CsvRow) {
+  return Object.values(row).some((value) => String(value ?? "").trim());
 }
 
 function maskCpf(value?: string) {
@@ -77,10 +85,21 @@ export default function EmployeesImport({ onImport }: Props) {
   function validate(rows: CsvRow[]) {
     const errs: string[] = [];
     if (!rows.length) errs.push("A planilha veio vazia.");
-    const headers = Object.keys(rows[0] ?? {}).map(normalizeHeader);
-    const missing = required.filter((h) => !headers.includes(normalizeHeader(h)));
+    const headerKeys = Object.keys(rows[0] ?? {});
+    const headers = new Set(headerKeys.flatMap((h) => [normalizeHeader(h), compactHeader(h)]));
+    const missing = required.filter((h) => !headers.has(normalizeHeader(h)) && !headers.has(compactHeader(h)));
     if (missing.length) errs.push(`Faltando colunas obrigatórias: ${missing.join(", ")}`);
     return errs;
+  }
+
+  function missingRequiredValues(row: ColaboradorPayload) {
+    const missing: string[] = [];
+    if (!String(row.nome ?? "").trim()) missing.push("Nome");
+    if (!String(row.email ?? "").trim()) missing.push("E-mail");
+    if (!String(row.cpf ?? "").trim()) missing.push("CPF");
+    if (!String(row.cargo ?? "").trim()) missing.push("Cargo");
+    if (!String(row.departamento ?? "").trim()) missing.push("Departamento");
+    return missing;
   }
 
   function mapRow(r: CsvRow): ColaboradorPayload {
@@ -168,11 +187,11 @@ export default function EmployeesImport({ onImport }: Props) {
       });
 
     try {
-      let rows = await parseWith();
+      let rows = (await parseWith()).filter(hasContent);
       const headers = Object.keys(rows[0] ?? {});
       const looksBroken = headers.length === 1 && headers[0]?.includes(";");
 
-      if (looksBroken) rows = await parseWith(";");
+      if (looksBroken) rows = (await parseWith(";")).filter(hasContent);
 
       const errs = validate(rows);
       if (errs.length) {
@@ -180,8 +199,24 @@ export default function EmployeesImport({ onImport }: Props) {
         return;
       }
 
+      const mappedRows = rows.map(mapRow);
+      const rowErrors = mappedRows
+        .map((row, index) => ({ index, missing: missingRequiredValues(row) }))
+        .filter((row) => row.missing.length)
+        .slice(0, 10);
+
+      if (rowErrors.length) {
+        setPreview(mappedRows.slice(0, 6));
+        setErrors(
+          rowErrors.map(
+            (row) => `Linha ${row.index + 2}: preencha ${row.missing.join(", ")} para importar este colaborador.`
+          )
+        );
+        return;
+      }
+
       setAllRows(rows);
-      setPreview(rows.slice(0, 6).map(mapRow));
+      setPreview(mappedRows.slice(0, 6));
     } catch (e: unknown) {
       setErrors([e instanceof Error ? e.message : "Falha ao ler o arquivo."]);
     }

@@ -128,7 +128,31 @@ export default function Page() {
     setSaving(true);
 
     try {
-      const mapped = rows.map(toDb).filter((r) => Boolean(r.cpf) && Boolean(r.email) && Boolean(r.nome));
+      const normalized = rows.map(toDb);
+      const invalidRows = normalized
+        .map((row, index) => ({
+          index,
+          missing: [
+            !row.nome ? "Nome" : "",
+            !row.cpf ? "CPF" : "",
+            !row.email ? "E-mail" : "",
+          ].filter(Boolean),
+        }))
+        .filter((row) => row.missing.length);
+      const mapped = normalized.filter((r) => Boolean(r.cpf) && Boolean(r.email) && Boolean(r.nome));
+
+      if (!mapped.length) {
+        throw new Error("Nenhum colaborador valido encontrado. Verifique se o CSV possui Nome, CPF e E-mail preenchidos.");
+      }
+
+      if (invalidRows.length) {
+        const firstRows = invalidRows
+          .slice(0, 5)
+          .map((row) => `linha ${row.index + 2}: ${row.missing.join(", ")}`)
+          .join("; ");
+        throw new Error(`Existem colaboradores sem dados obrigatorios (${firstRows}). Corrija o arquivo e tente novamente.`);
+      }
+
       const { error } = await supabase
         .from("colaboradores")
         .upsert(mapped as Record<string, unknown>[], { onConflict: "cpf" });
