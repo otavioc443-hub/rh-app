@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, Clock, CreditCard, Eye, Pencil, Plus, Trash2, Trophy, Users } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { useUserRole } from "@/hooks/useUserRole";
 import {
   BOLAO_DEFAULT_DEADLINE,
   BOLAO_DEFAULT_REGULATION,
@@ -74,6 +75,7 @@ function sectorLabel(value: string | null | undefined) {
 }
 
 export default function BolaoCopa2026Page() {
+  const { loading: roleLoading, isRH } = useUserRole();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -95,6 +97,7 @@ export default function BolaoCopa2026Page() {
   const valorLabel = formatBolaoCurrency(config.valor);
   const deadlineLabel = formatBolaoDateTime(config.prazo);
   const hasResult = !!config.resultado_confirmado_at && !!config.jogadores_convocados?.length;
+  const canViewTeamBets = !roleLoading && isRH;
 
   const rules = useMemo(() => {
     const custom = (config.regulamento ?? "").split("\n").map((item) => item.trim()).filter(Boolean);
@@ -116,6 +119,10 @@ export default function BolaoCopa2026Page() {
       .map((bet) => ({ bet, hits: countBolaoHits(bet, config.jogadores_convocados) ?? 0 }))
       .sort((a, b) => b.hits - a.hits || (a.bet.nome ?? "").localeCompare(b.bet.nome ?? "", "pt-BR"));
   }, [allBets, config.jogadores_convocados, hasResult]);
+
+  useEffect(() => {
+    if (!canViewTeamBets && view === "palpites") setView("aposta");
+  }, [canViewTeamBets, view]);
 
   const applyBetToForm = useCallback((bet: BolaoBet | null) => {
     if (!bet) {
@@ -305,15 +312,17 @@ export default function BolaoCopa2026Page() {
               >
                 <Pencil size={16} /> Meu palpite
               </button>
-              <button
-                type="button"
-                onClick={() => setView("palpites")}
-                className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold ${
-                  view === "palpites" ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-700"
-                }`}
-              >
-                <Eye size={16} /> Palpites e ranking
-              </button>
+              {canViewTeamBets ? (
+                <button
+                  type="button"
+                  onClick={() => setView("palpites")}
+                  className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold ${
+                    view === "palpites" ? "bg-slate-900 text-white" : "border border-slate-200 bg-white text-slate-700"
+                  }`}
+                >
+                  <Eye size={16} /> Palpites e ranking
+                </button>
+              ) : null}
             </div>
           </div>
 
@@ -345,7 +354,7 @@ export default function BolaoCopa2026Page() {
         </div>
       </section>
 
-      {view === "aposta" ? (
+      {view === "aposta" || !canViewTeamBets ? (
         <>
           <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {rules.map((rule, index) => (
