@@ -70,7 +70,7 @@ export default function EmployeesImport({ onImport }: Props) {
   const [loading, setLoading] = useState(false);
 
   const required = useMemo(
-    () => ["Nome", "Data de Nascimento", "Sexo", "Data de admissão", "Departamento", "E-mail", "CPF", "Cargo"],
+    () => ["Nome", "E-mail", "CPF", "Cargo", "Departamento"],
     []
   );
 
