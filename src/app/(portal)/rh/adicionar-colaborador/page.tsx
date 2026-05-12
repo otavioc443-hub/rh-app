@@ -132,7 +132,18 @@ export default function Page() {
       const { error } = await supabase
         .from("colaboradores")
         .upsert(mapped as Record<string, unknown>[], { onConflict: "cpf" });
-      if (error) throw error;
+      if (error) {
+        const message = normalizeError(error, "");
+        const missingCpfConstraint =
+          message.toLowerCase().includes("no unique") ||
+          message.toLowerCase().includes("matching the on conflict") ||
+          message.toLowerCase().includes("42p10");
+
+        if (!missingCpfConstraint) throw error;
+
+        const insertRes = await supabase.from("colaboradores").insert(mapped as Record<string, unknown>[]);
+        if (insertRes.error) throw insertRes.error;
+      }
 
       setMsg(`Importacao concluida: ${mapped.length} colaborador(es).`);
       await loadStats();

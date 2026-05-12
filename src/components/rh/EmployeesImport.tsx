@@ -9,10 +9,35 @@ import { Card, CardBody } from "@/components/ui/PageShell";
 type Props = { onImport: (rows: ColaboradorPayload[]) => Promise<void> };
 type CsvRow = Record<string, string | undefined>;
 
+function normalizeHeader(value: string) {
+  return String(value ?? "")
+    .replace(/^\uFEFF/, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\*/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function cell(row: CsvRow, ...headers: string[]) {
+  const wanted = headers.map(normalizeHeader);
+  for (const [key, value] of Object.entries(row)) {
+    if (wanted.includes(normalizeHeader(key))) return value ?? "";
+  }
+  return "";
+}
+
 function maskCpf(value?: string) {
   const digits = String(value ?? "").replace(/\D/g, "");
   if (digits.length !== 11) return value ?? "";
   return `${digits.slice(0, 3)}.***.***-${digits.slice(9)}`;
+}
+
+function cleanCpf(value?: string) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  if (!digits) return "";
+  return digits.length < 11 ? digits.padStart(11, "0") : digits.slice(0, 11);
 }
 
 function toISODate(value?: string) {
@@ -24,11 +49,16 @@ function toISODate(value?: string) {
   if (m) return `${m[3]}-${m[2]}-${m[1]}`;
   return v;
 }
+
 function toBoolSimNao(value: unknown) {
-  const v = String(value ?? "").trim().toLowerCase();
+  const v = String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
   if (!v) return undefined;
   if (v === "sim" || v === "true" || v === "1") return true;
-  if (v === "não" || v === "nao" || v === "false" || v === "0") return false;
+  if (v === "nao" || v === "false" || v === "0") return false;
   return undefined;
 }
 
@@ -40,82 +70,82 @@ export default function EmployeesImport({ onImport }: Props) {
   const [loading, setLoading] = useState(false);
 
   const required = useMemo(
-    () => ["Nome*", "Data de Nascimento*", "Sexo*", "Data de admissão*", "Departamento*", "E-mail*", "CPF*", "Cargo*"],
+    () => ["Nome", "Data de Nascimento", "Sexo", "Data de admissão", "Departamento", "E-mail", "CPF", "Cargo"],
     []
   );
 
   function validate(rows: CsvRow[]) {
     const errs: string[] = [];
     if (!rows.length) errs.push("A planilha veio vazia.");
-    const headers = Object.keys(rows[0] ?? {});
-    const missing = required.filter((h) => !headers.includes(h));
+    const headers = Object.keys(rows[0] ?? {}).map(normalizeHeader);
+    const missing = required.filter((h) => !headers.includes(normalizeHeader(h)));
     if (missing.length) errs.push(`Faltando colunas obrigatórias: ${missing.join(", ")}`);
     return errs;
   }
 
   function mapRow(r: CsvRow): ColaboradorPayload {
     return {
-      nome: r["Nome*"] ?? "",
-      matricula: r["Matrícula"] ?? "",
-      data_nascimento: toISODate(r["Data de Nascimento*"]),
-      sexo: r["Sexo*"] ?? "",
-      estado_civil: r["Estado Civil"] ?? "",
-      saudacao: r["Saudação"] ?? "",
-      nacionalidade: r["Nacionalidade"] ?? "",
-      naturalidade: r["Naturalidade"] ?? "",
-      etnia: r["Etnia"] ?? "",
-      nome_pai: r["Nome do Pai"] ?? "",
-      nome_mae: r["Nome da mãe"] ?? "",
-      pne: toBoolSimNao(r["PNE"]),
-      data_admissao: toISODate(r["Data de admissão*"]),
-      data_demissao: toISODate(r["Data de demissão"]),
-      motivo_demissao: r["Motivo da demissão"] ?? "",
-      valor_rescisao: r["Valor da Rescisão"] ?? "",
-      cep: r["Cep"] ?? "",
-      logradouro: r["Logradouro"] ?? "",
-      numero: r["Número"] ?? "",
-      complemento: r["Complemento"] ?? "",
-      bairro: r["Bairro"] ?? "",
-      cidade: r["Cidade"] ?? "",
-      telefone: r["Telefone"] ?? "",
-      celular: r["Celular"] ?? "",
-      telefone_emergencia: r["Telefone de emergência"] ?? "",
-      email_pessoal: r["Email pessoal"] ?? "",
-      email_empresarial: r["Email empresarial"] ?? "",
-      cargo: r["Cargo*"] ?? "",
-      cbo: r["CBO"] ?? "",
-      salario: r["Salário"] ?? "",
-      turno: r["Turno"] ?? "",
-      moeda: r["Moeda"] ?? "",
-      tipo_contrato: r["Tipo de contrato"] ?? "",
-      data_contrato: toISODate(r["Data do contrato"]),
-      escolaridade: r["Escolaridade"] ?? "",
-      superior_direto: r["Superior direto"] ?? "",
-      email_superior_direto: r["Email superior direto"] ?? "",
-      grau_hierarquico: r["Grau hierárquico"] ?? "",
-      duracao_contrato: r["Duração do contrato"] ?? "",
-      vencimento_contrato: toISODate(r["Vencimento do contrato"]),
-      departamento: r["Departamento*"] ?? "",
-      email: r["E-mail*"] ?? "",
-      cpf: r["CPF*"] ?? "",
-      rg: r["RG"] ?? "",
-      titulo_eleitor: r["Título de eleitor"] ?? "",
-      zona_eleitoral: r["Zona Eleitoral"] ?? "",
-      secao_eleitoral: r["Seção Eleitoral"] ?? "",
-      ctps_num: r["CTPS NUM"] ?? "",
-      ctps_serie: r["CTPS Série"] ?? "",
-      reservista: r["Reservista"] ?? "",
-      cnh: r["CNH"] ?? "",
-      banco: r["Banco"] ?? "",
-      agencia: r["Agência"] ?? "",
-      conta_corrente: r["Conta Corrente"] ?? "",
-      pis: r["PIS"] ?? "",
-      sistema: r["Sistema"] ?? "",
-      id_colaborador_externo: r["ID Colaborador"] ?? "",
-      id_departamento_externo: r["ID Departamento"] ?? "",
-      id_cargo_externo: r["ID Cargo"] ?? "",
-      unidade: r["Unidade"] ?? "",
-      id_unidade_externo: r["ID Unidade"] ?? "",
+      nome: cell(r, "Nome"),
+      matricula: cell(r, "Matrícula", "Matricula"),
+      data_nascimento: toISODate(cell(r, "Data de Nascimento")),
+      sexo: cell(r, "Sexo"),
+      estado_civil: cell(r, "Estado Civil"),
+      saudacao: cell(r, "Saudação", "Saudacao"),
+      nacionalidade: cell(r, "Nacionalidade"),
+      naturalidade: cell(r, "Naturalidade"),
+      etnia: cell(r, "Etnia"),
+      nome_pai: cell(r, "Nome do Pai"),
+      nome_mae: cell(r, "Nome da mãe", "Nome da mae"),
+      pne: toBoolSimNao(cell(r, "PNE")),
+      data_admissao: toISODate(cell(r, "Data de admissão", "Data de admissao")),
+      data_demissao: toISODate(cell(r, "Data de demissão", "Data de demissao")),
+      motivo_demissao: cell(r, "Motivo da demissão", "Motivo da demissao"),
+      valor_rescisao: cell(r, "Valor da Rescisão", "Valor da Rescisao"),
+      cep: cell(r, "Cep", "CEP"),
+      logradouro: cell(r, "Logradouro"),
+      numero: cell(r, "Número", "Numero"),
+      complemento: cell(r, "Complemento"),
+      bairro: cell(r, "Bairro"),
+      cidade: cell(r, "Cidade"),
+      telefone: cell(r, "Telefone"),
+      celular: cell(r, "Celular"),
+      telefone_emergencia: cell(r, "Telefone de emergência", "Telefone de emergencia"),
+      email_pessoal: cell(r, "Email pessoal", "E-mail pessoal"),
+      email_empresarial: cell(r, "Email empresarial", "E-mail empresarial"),
+      cargo: cell(r, "Cargo"),
+      cbo: cell(r, "CBO"),
+      salario: cell(r, "Salário", "Salario"),
+      turno: cell(r, "Turno"),
+      moeda: cell(r, "Moeda"),
+      tipo_contrato: cell(r, "Tipo de contrato"),
+      data_contrato: toISODate(cell(r, "Data do contrato")),
+      escolaridade: cell(r, "Escolaridade"),
+      superior_direto: cell(r, "Superior direto"),
+      email_superior_direto: cell(r, "Email superior direto", "E-mail superior direto"),
+      grau_hierarquico: cell(r, "Grau hierárquico", "Grau hierarquico"),
+      duracao_contrato: cell(r, "Duração do contrato", "Duracao do contrato"),
+      vencimento_contrato: toISODate(cell(r, "Vencimento do contrato")),
+      departamento: cell(r, "Departamento"),
+      email: cell(r, "E-mail", "Email"),
+      cpf: cleanCpf(cell(r, "CPF")),
+      rg: cell(r, "RG"),
+      titulo_eleitor: cell(r, "Título de eleitor", "Titulo de eleitor"),
+      zona_eleitoral: cell(r, "Zona Eleitoral"),
+      secao_eleitoral: cell(r, "Seção Eleitoral", "Secao Eleitoral"),
+      ctps_num: cell(r, "CTPS NUM"),
+      ctps_serie: cell(r, "CTPS Série", "CTPS Serie"),
+      reservista: cell(r, "Reservista"),
+      cnh: cell(r, "CNH"),
+      banco: cell(r, "Banco"),
+      agencia: cell(r, "Agência", "Agencia"),
+      conta_corrente: cell(r, "Conta Corrente"),
+      pis: cell(r, "PIS"),
+      sistema: cell(r, "Sistema"),
+      id_colaborador_externo: cell(r, "ID Colaborador"),
+      id_departamento_externo: cell(r, "ID Departamento"),
+      id_cargo_externo: cell(r, "ID Cargo"),
+      unidade: cell(r, "Unidade"),
+      id_unidade_externo: cell(r, "ID Unidade"),
     };
   }
 
@@ -184,7 +214,7 @@ export default function EmployeesImport({ onImport }: Props) {
           <div className="flex-1">
             <div className="text-lg font-bold text-slate-900">Adicionar colaboradores em massa</div>
             <div className="text-sm text-slate-600">
-              Envie um CSV no padrão da planilha (separador <b>;</b>).
+              Envie um CSV no padrão da planilha (separador <b>;</b>). Cabeçalhos com ou sem <b>*</b> são aceitos.
             </div>
 
             <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -195,7 +225,6 @@ export default function EmployeesImport({ onImport }: Props) {
                 className="block w-full text-sm text-slate-700 file:mr-4 file:rounded-xl file:border-0 file:bg-slate-100 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-slate-800 hover:file:bg-slate-200"
               />
 
-              {/* ✅ botão discreto (ícone + texto) */}
               <button
                 onClick={handleImport}
                 disabled={loading || allRows.length === 0}
