@@ -71,8 +71,8 @@ export async function POST(req: Request) {
     if (!colab.email) return NextResponse.json({ error: "Colaborador sem e-mail" }, { status: 400 });
 
     // 3) envia convite
-    const redirectTo =
-      process.env.NEXT_PUBLIC_AUTH_REDIRECT_TO || "http://localhost:3000/auth/callback";
+    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://rh-app-seven.vercel.app").replace(/\/$/, "");
+    const redirectTo = process.env.NEXT_PUBLIC_AUTH_REDIRECT_TO || `${siteUrl}/auth/callback`;
 
     const { data: inviteData, error: inviteErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(
       colab.email,

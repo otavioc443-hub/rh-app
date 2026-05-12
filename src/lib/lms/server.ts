@@ -2277,7 +2277,7 @@ export async function ensureCertificateForUser(access: Access, course: LmsCourse
   if (!progress || progress.status !== "completed") throw new Error("Curso ainda nao elegivel para certificado.");
 
   const validationCode = `LMS-${course.id.slice(0, 4).toUpperCase()}-${randomUUID().slice(0, 8).toUpperCase()}`;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "http://localhost:3000";
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://rh-app-seven.vercel.app";
   const validationUrl = `${siteUrl.replace(/\/$/, "")}/certificados/${validationCode}`;
   const pdf = buildCertificatePdf({
     validationCode,
