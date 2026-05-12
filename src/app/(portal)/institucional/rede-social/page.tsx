@@ -35,6 +35,12 @@ type Project = {
   name: string;
 };
 
+type CompanyBrand = {
+  id: string;
+  name: string | null;
+  logo_url: string | null;
+};
+
 type Group = {
   id: string;
   name: string;
@@ -854,6 +860,7 @@ export default function InternalSocialPage() {
   const [error, setError] = useState("");
   const [me, setMe] = useState<Profile | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [companies, setCompanies] = useState<CompanyBrand[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [groupMembers, setGroupMembers] = useState<GroupMemberRow[]>([]);
@@ -1079,8 +1086,9 @@ export default function InternalSocialPage() {
       if (auth.error || !auth.data.user) throw new Error("Sessao invalida.");
       const userId = auth.data.user.id;
 
-      const [profilesRes, memberRes, msgRes, messageGroupsRes, messageGroupMembersRes, groupMessagesRes] = await Promise.all([
+      const [profilesRes, companiesRes, memberRes, msgRes, messageGroupsRes, messageGroupMembersRes, groupMessagesRes] = await Promise.all([
         supabase.from("profiles").select("id,full_name,email,company_id,role,avatar_url").order("full_name", { ascending: true }),
+        supabase.from("companies").select("id,name,logo_url").order("name", { ascending: true }),
         supabase.from("project_members").select("project_id").eq("user_id", userId),
         supabase
           .from("internal_social_direct_messages")
@@ -1123,6 +1131,7 @@ export default function InternalSocialPage() {
       }
 
       if (profilesRes.error) throw new Error(profilesRes.error.message);
+      setCompanies(companiesRes.error ? [] : ((companiesRes.data ?? []) as CompanyBrand[]));
       if (memberRes.error) throw new Error(memberRes.error.message);
       if (postsError) throw new Error(postsError.message);
       if (msgRes.error) throw new Error(msgRes.error.message);
@@ -1606,12 +1615,37 @@ export default function InternalSocialPage() {
     for (const profile of profiles) map.set(profile.id, profile);
     return map;
   }, [profiles]);
+  const companyById = useMemo(() => {
+    const map = new Map<string, CompanyBrand>();
+    for (const company of companies) map.set(company.id, company);
+    return map;
+  }, [companies]);
   const mentionDirectory = useMemo(() => buildMentionDirectory(profiles), [profiles]);
   const sameCompanyProfiles = useMemo(
     () => profiles.filter((item) => item.id !== me?.id && item.company_id && item.company_id === me?.company_id),
     [me?.company_id, me?.id, profiles]
   );
   const canPublishOfficial = me?.role === "admin" || me?.role === "diretoria" || me?.role === "rh";
+  const postPublisherByBrand = useCallback(
+    (post: PostRow) => {
+      const authorProfile = profileById.get(post.author_user_id);
+      const company = authorProfile?.company_id ? companyById.get(authorProfile.company_id) : null;
+      const companyName = (company?.name ?? "").trim();
+      const companyLogoUrl = (company?.logo_url ?? "").trim();
+      const isOfficial = isOfficialPostType(post.post_type);
+      const fallbackName = post.author_name || displayName(authorProfile);
+
+      return {
+        name: isOfficial && companyName ? companyName : fallbackName,
+        avatarUrl:
+          isOfficial && canRenderImageUrl(companyLogoUrl)
+            ? companyLogoUrl
+            : resolvePortalAvatarUrl(post.author_avatar_url) || authorProfile?.avatar_url || null,
+        isCompanyBrand: isOfficial,
+      };
+    },
+    [companyById, profileById]
+  );
   const composerMentionOptions = useMemo(() => {
     const term = mentionQuery.trim().toLowerCase();
     return sameCompanyProfiles
@@ -2350,7 +2384,8 @@ export default function InternalSocialPage() {
     try {
       const normalizedPostType = canPublishOfficial ? postType : "social";
       const isOfficial = isOfficialPostType(normalizedPostType);
-      const postAuthorName = isOfficial ? officialAuthorName(me.role) || currentName : currentName;
+      const publisherCompanyName = me.company_id ? (companyById.get(me.company_id)?.name ?? "").trim() : "";
+      const postAuthorName = isOfficial ? publisherCompanyName || officialAuthorName(me.role) || currentName : currentName;
       const postAuthorAvatarUrl = isOfficial ? null : resolvePortalAvatarUrl(me.avatar_url ?? null);
       let res = await supabase
         .from("internal_social_posts")
@@ -2961,6 +2996,7 @@ export default function InternalSocialPage() {
   }
 
   const currentName = displayName(me);
+  const visiblePinnedPostPublisher = visiblePinnedPost ? postPublisherByBrand(visiblePinnedPost) : null;
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#f8fbff_0%,_#eef4ff_22%,_#f4f2ee_58%,_#f1ede6_100%)]">
@@ -3348,7 +3384,7 @@ export default function InternalSocialPage() {
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">Post em destaque</p>
-                    <p className="mt-1 text-sm font-semibold text-slate-900">{highlightMatch(visiblePinnedPost.author_name, searchTerm)}</p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">{highlightMatch(visiblePinnedPostPublisher?.name ?? visiblePinnedPost.author_name, searchTerm)}</p>
                   </div>
                   <button
                     type="button"
@@ -3383,8 +3419,9 @@ export default function InternalSocialPage() {
             ) : visibleFeedPosts.length ? (
                 <section className="space-y-4">
                   {visibleFeedPosts.map((post) => {
-                    const authorName = post.author_name || displayName(profileById.get(post.author_user_id));
-                    const authorAvatar = resolvePortalAvatarUrl(post.author_avatar_url) || profileById.get(post.author_user_id)?.avatar_url || null;
+                    const publisher = postPublisherByBrand(post);
+                    const authorName = publisher.name;
+                    const authorAvatar = publisher.avatarUrl;
                     const canManagePost = post.author_user_id === me?.id || canModeratePosts;
                     return (
                       <article key={post.id} className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_70px_-44px_rgba(15,23,42,0.32)] backdrop-blur">
@@ -3396,18 +3433,18 @@ export default function InternalSocialPage() {
                         ) : null}
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3">
-                            <div className="relative h-12 w-12 rounded-full">
+                            <div className={`relative h-12 w-12 overflow-hidden ${publisher.isCompanyBrand ? "rounded-xl border border-slate-200 bg-white" : "rounded-full"}`}>
                               {authorAvatar ? (
                                 <div
-                                  className="h-full w-full rounded-full bg-cover bg-center"
+                                  className={`h-full w-full bg-center ${publisher.isCompanyBrand ? "bg-contain bg-no-repeat" : "rounded-full bg-cover"}`}
                                   style={{ backgroundImage: `url(${authorAvatar})` }}
                                 />
                               ) : (
-                                <div className="flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-slate-900 to-blue-700 text-sm font-semibold text-white">
+                                <div className={`flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-900 to-blue-700 text-sm font-semibold text-white ${publisher.isCompanyBrand ? "rounded-xl" : "rounded-full"}`}>
                                   {initials(authorName)}
                                 </div>
                               )}
-                              {onlineUserIds.has(post.author_user_id) ? (
+                              {!publisher.isCompanyBrand && onlineUserIds.has(post.author_user_id) ? (
                                 <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white bg-emerald-500" />
                               ) : null}
                             </div>
@@ -4180,26 +4217,40 @@ export default function InternalSocialPage() {
                 </div>
                 <div className="mt-4 space-y-2.5">
                   {officialPosts.length ? (
-                    officialPosts.map((post) => (
-                      <div key={`official-${post.id}`} className="rounded-2xl bg-slate-50 px-3 py-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-slate-900">{post.author_name}</p>
-                            <p className="text-xs text-slate-500">{when(post.created_at)}</p>
+                    officialPosts.map((post) => {
+                      const publisher = postPublisherByBrand(post);
+                      return (
+                        <div key={`official-${post.id}`} className="rounded-2xl bg-slate-50 px-3 py-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex min-w-0 items-center gap-2.5">
+                              <div className="h-9 w-9 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
+                                {publisher.avatarUrl ? (
+                                  <div className="h-full w-full bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url(${publisher.avatarUrl})` }} />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center bg-slate-900 text-[11px] font-semibold text-white">
+                                    {initials(publisher.name)}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-semibold text-slate-900">{publisher.name}</p>
+                                <p className="text-xs text-slate-500">{when(post.created_at)}</p>
+                              </div>
+                            </div>
+                            <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                              {postTypeLabel(post.post_type)}
+                            </span>
                           </div>
-                          <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
-                            {postTypeLabel(post.post_type)}
-                          </span>
+                          {post.text ? (
+                            <RichText
+                              className="mt-2 line-clamp-3 text-sm text-slate-700 [&_p]:whitespace-pre-wrap"
+                              value={post.text}
+                              mentionDirectory={mentionDirectory.byHandle}
+                            />
+                          ) : null}
                         </div>
-                        {post.text ? (
-                          <RichText
-                            className="mt-2 line-clamp-3 text-sm text-slate-700 [&_p]:whitespace-pre-wrap"
-                            value={post.text}
-                            mentionDirectory={mentionDirectory.byHandle}
-                          />
-                        ) : null}
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <p className="text-sm text-slate-500">Nenhum comunicado recente no feed.</p>
                   )}
