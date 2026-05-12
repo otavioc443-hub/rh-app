@@ -62,6 +62,32 @@ function toDb(payload: ColaboradorPayload) {
   return base;
 }
 
+async function saveCollaboratorRows(rows: Record<string, unknown>[]) {
+  const withCpf = rows.filter((row) => Boolean(row.cpf));
+  const withoutCpf = rows.filter((row) => !row.cpf);
+
+  if (withCpf.length) {
+    const { error } = await supabase.from("colaboradores").upsert(withCpf, { onConflict: "cpf" });
+    if (error) {
+      const message = normalizeError(error, "");
+      const missingCpfConstraint =
+        message.toLowerCase().includes("no unique") ||
+        message.toLowerCase().includes("matching the on conflict") ||
+        message.toLowerCase().includes("42p10");
+
+      if (!missingCpfConstraint) throw error;
+
+      const insertRes = await supabase.from("colaboradores").insert(withCpf);
+      if (insertRes.error) throw insertRes.error;
+    }
+  }
+
+  if (withoutCpf.length) {
+    const { error } = await supabase.from("colaboradores").insert(withoutCpf);
+    if (error) throw error;
+  }
+}
+
 export default function Page() {
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
@@ -104,15 +130,12 @@ export default function Page() {
     setSaving(true);
 
     try {
-      if (!payload.nome || !payload.cpf || !payload.email || !payload.departamento || !payload.cargo) {
-        throw new Error("Preencha: Nome, CPF, E-mail, Departamento e Cargo.");
+      if (!payload.nome || !payload.email || !payload.departamento || !payload.cargo) {
+        throw new Error("Preencha: Nome, E-mail, Departamento e Cargo.");
       }
 
       const row = toDb(payload);
-      const { error } = await supabase
-        .from("colaboradores")
-        .upsert(row as Record<string, unknown>, { onConflict: "cpf" });
-      if (error) throw error;
+      await saveCollaboratorRows([row]);
 
       setMsg("Colaborador salvo com sucesso.");
       await loadStats();
@@ -134,15 +157,14 @@ export default function Page() {
           index,
           missing: [
             !row.nome ? "Nome" : "",
-            !row.cpf ? "CPF" : "",
             !row.email ? "E-mail" : "",
           ].filter(Boolean),
         }))
         .filter((row) => row.missing.length);
-      const mapped = normalized.filter((r) => Boolean(r.cpf) && Boolean(r.email) && Boolean(r.nome));
+      const mapped = normalized.filter((r) => Boolean(r.email) && Boolean(r.nome));
 
       if (!mapped.length) {
-        throw new Error("Nenhum colaborador valido encontrado. Verifique se o CSV possui Nome, CPF e E-mail preenchidos.");
+        throw new Error("Nenhum colaborador valido encontrado. Verifique se o CSV possui Nome e E-mail preenchidos.");
       }
 
       if (invalidRows.length) {
@@ -153,21 +175,7 @@ export default function Page() {
         throw new Error(`Existem colaboradores sem dados obrigatorios (${firstRows}). Corrija o arquivo e tente novamente.`);
       }
 
-      const { error } = await supabase
-        .from("colaboradores")
-        .upsert(mapped as Record<string, unknown>[], { onConflict: "cpf" });
-      if (error) {
-        const message = normalizeError(error, "");
-        const missingCpfConstraint =
-          message.toLowerCase().includes("no unique") ||
-          message.toLowerCase().includes("matching the on conflict") ||
-          message.toLowerCase().includes("42p10");
-
-        if (!missingCpfConstraint) throw error;
-
-        const insertRes = await supabase.from("colaboradores").insert(mapped as Record<string, unknown>[]);
-        if (insertRes.error) throw insertRes.error;
-      }
+      await saveCollaboratorRows(mapped as Record<string, unknown>[]);
 
       setMsg(`Importacao concluida: ${mapped.length} colaborador(es).`);
       await loadStats();

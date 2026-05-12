@@ -78,7 +78,7 @@ export default function EmployeesImport({ onImport }: Props) {
   const [loading, setLoading] = useState(false);
 
   const required = useMemo(
-    () => ["Nome", "E-mail", "CPF", "Cargo", "Departamento"],
+    () => ["Nome", "E-mail", "Cargo", "Departamento"],
     []
   );
 
@@ -96,7 +96,6 @@ export default function EmployeesImport({ onImport }: Props) {
     const missing: string[] = [];
     if (!String(row.nome ?? "").trim()) missing.push("Nome");
     if (!String(row.email ?? "").trim()) missing.push("E-mail");
-    if (!String(row.cpf ?? "").trim()) missing.push("CPF");
     if (!String(row.cargo ?? "").trim()) missing.push("Cargo");
     if (!String(row.departamento ?? "").trim()) missing.push("Departamento");
     return missing;

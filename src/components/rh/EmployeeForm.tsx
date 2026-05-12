@@ -889,8 +889,8 @@ export default function EmployeeForm({
       {/* DOCUMENTOS */}
       <Section title="Documentos">
         <div className="grid gap-4 md:grid-cols-3">
-          <Field label="CPF" required>
-            <input value={cpf} onChange={(e) => setCpf(e.target.value)} className={inputCls} placeholder="CPF*" />
+          <Field label="CPF">
+            <input value={cpf} onChange={(e) => setCpf(e.target.value)} className={inputCls} placeholder="CPF" />
           </Field>
           <Field label="RG">
             <input value={rg} onChange={(e) => setRg(e.target.value)} className={inputCls} />
