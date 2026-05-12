@@ -40,6 +40,13 @@ async function requireAdminOrRH(req: Request) {
   return { ok: true as const, requesterRole: profile.role };
 }
 
+function getAuthRedirectTo() {
+  const fallback = "https://rh-app-seven.vercel.app/auth/callback";
+  const configured = process.env.NEXT_PUBLIC_AUTH_REDIRECT_TO?.trim();
+  if (!configured || configured.includes("localhost")) return fallback;
+  return configured;
+}
+
 export async function POST(req: Request) {
   const guard = await requireAdminOrRH(req);
   if (!guard.ok) {
@@ -68,8 +75,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://rh-app-seven.vercel.app").replace(/\/$/, "");
-    const redirectTo = process.env.NEXT_PUBLIC_AUTH_REDIRECT_TO || `${siteUrl}/auth/callback`;
+    const redirectTo = getAuthRedirectTo();
 
     const { data: inviteData, error: inviteErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(
       email,

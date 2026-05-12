@@ -35,6 +35,13 @@ async function getRequesterUser(req: Request) {
   return { user: data?.user ?? null, status: data?.user ? (200 as const) : (401 as const) };
 }
 
+function getAuthRedirectTo() {
+  const fallback = "https://rh-app-seven.vercel.app/auth/callback";
+  const configured = process.env.NEXT_PUBLIC_AUTH_REDIRECT_TO?.trim();
+  if (!configured || configured.includes("localhost")) return fallback;
+  return configured;
+}
+
 export async function POST(req: Request) {
   try {
     const { collaboratorId } = await req.json();
@@ -71,8 +78,7 @@ export async function POST(req: Request) {
     if (!colab.email) return NextResponse.json({ error: "Colaborador sem e-mail" }, { status: 400 });
 
     // 3) envia convite
-    const siteUrl = (process.env.NEXT_PUBLIC_SITE_URL || "https://rh-app-seven.vercel.app").replace(/\/$/, "");
-    const redirectTo = process.env.NEXT_PUBLIC_AUTH_REDIRECT_TO || `${siteUrl}/auth/callback`;
+    const redirectTo = getAuthRedirectTo();
 
     const { data: inviteData, error: inviteErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(
       colab.email,
