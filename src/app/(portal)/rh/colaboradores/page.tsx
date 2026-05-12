@@ -8,6 +8,8 @@ import CollaboratorEditWizard from "@/components/rh/CollaboratorEditWizard";
 type Row = {
   id: string;
   nome: string | null;
+  email: string | null;
+  user_id: string | null;
   cargo_id: string | null;
   department_id: string | null;
   is_active: boolean;
@@ -61,6 +63,8 @@ export default function Page() {
     const normalized = rows.map((r) => {
       const id = String(r.id ?? "");
       const nome = typeof r.nome === "string" ? r.nome : null;
+      const email = typeof r.email === "string" ? r.email : null;
+      const userId = typeof r.user_id === "string" ? r.user_id : null;
       const cargoId = typeof r.cargo_id === "string" ? r.cargo_id : null;
       const departmentId = typeof r.department_id === "string" ? r.department_id : null;
       const cargoText = typeof r.cargo === "string" ? r.cargo : null;
@@ -77,6 +81,8 @@ export default function Page() {
       return {
         id,
         nome,
+        email,
+        user_id: userId,
         cargo_id: cargoId,
         department_id: departmentId,
         cargo_text: cargoText,
@@ -106,6 +112,8 @@ export default function Page() {
     const mapped: Row[] = normalized.map((r) => ({
       id: r.id,
       nome: r.nome,
+      email: r.email,
+      user_id: r.user_id,
       cargo_id: r.cargo_id,
       department_id: r.department_id,
       is_active: !!r.is_active,
@@ -128,15 +136,21 @@ export default function Page() {
     return { total, ativos, inativos };
   }, [rows]);
 
-  async function sendAccess(collaboratorId: string) {
-    setSendingId(collaboratorId);
+  async function sendAccess(row: Row) {
+    setSendingId(row.id);
     setToast(null);
 
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
       const res = await fetch("/api/rh/enviar-acesso", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ collaboratorId }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ collaboratorId: row.id }),
       });
 
       // ✅ evita “Unexpected token <”
@@ -149,7 +163,7 @@ export default function Page() {
       }
 
       if (!res.ok) throw new Error(payload?.error || "Falha ao enviar acesso.");
-      setToast(payload?.message ?? "Convite enviado com sucesso.");
+      setToast(payload?.message ?? (row.user_id ? "Convite reenviado com sucesso." : "Convite enviado com sucesso."));
     } catch (e: unknown) {
       setToast(e instanceof Error ? e.message : "Erro ao enviar acesso.");
     } finally {
@@ -276,18 +290,19 @@ export default function Page() {
                     <td className="px-4 py-4">
                       <div className="flex justify-end gap-2">
                         <button
-                          onClick={() => sendAccess(r.id)}
-                          disabled={!r.is_active || sendingId === r.id}
+                          onClick={() => sendAccess(r)}
+                          disabled={!r.is_active || !r.email || sendingId === r.id}
+                          title={r.email ? undefined : "Colaborador sem e-mail cadastrado"}
                           className={cx(
                             "inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold",
-                            !r.is_active
+                            !r.is_active || !r.email
                               ? "border border-slate-200 text-slate-400"
                               : "bg-slate-900 text-white hover:opacity-95",
                             sendingId === r.id && "opacity-70"
                           )}
                         >
                           <Send size={16} />
-                          {sendingId === r.id ? "Enviando..." : "Enviar acesso"}
+                          {sendingId === r.id ? "Enviando..." : r.user_id ? "Reenviar convite" : "Enviar convite"}
                         </button>
 
                         <button

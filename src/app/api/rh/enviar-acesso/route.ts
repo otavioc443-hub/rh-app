@@ -98,7 +98,10 @@ export async function POST(req: Request) {
       await supabaseAdmin.from("colaboradores").update({ user_id: invitedUserId }).eq("id", colab.id);
     }
 
-    return NextResponse.json({ ok: true, message: `Convite enviado para ${colab.email}` });
+    return NextResponse.json({
+      ok: true,
+      message: `${colab.user_id ? "Convite reenviado" : "Convite enviado"} para ${colab.email}`,
+    });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro inesperado";
     return NextResponse.json({ error: message }, { status: 500 });
