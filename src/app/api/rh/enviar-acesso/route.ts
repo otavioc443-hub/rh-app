@@ -36,10 +36,7 @@ async function getRequesterUser(req: Request) {
 }
 
 function getAuthRedirectTo() {
-  const fallback = "https://rh-app-seven.vercel.app/auth/callback";
-  const configured = process.env.NEXT_PUBLIC_AUTH_REDIRECT_TO?.trim();
-  if (!configured || configured.includes("localhost")) return fallback;
-  return configured;
+  return "https://rh-app-seven.vercel.app/auth/callback";
 }
 
 export async function POST(req: Request) {
@@ -69,7 +66,7 @@ export async function POST(req: Request) {
     // 2) busca colaborador
     const { data: colab, error: colabErr } = await supabaseAdmin
       .from("colaboradores")
-      .select("id, nome, email, user_id, is_active")
+      .select("id, nome, email, user_id, company_id, department_id, is_active")
       .eq("id", collaboratorId)
       .single();
 
@@ -88,20 +85,22 @@ export async function POST(req: Request) {
     if (inviteErr) return NextResponse.json({ error: inviteErr.message }, { status: 400 });
 
     // 4) garante profiles + vincula colaboradores.user_id
-    const invitedUserId = inviteData?.user?.id ?? null;
-    if (invitedUserId) {
+    const profileUserId = inviteData?.user?.id ?? colab.user_id ?? null;
+    if (profileUserId) {
       await supabaseAdmin.from("profiles").upsert(
         {
-          id: invitedUserId,
+          id: profileUserId,
           email: colab.email,
           full_name: colab.nome ?? null,
           role: "colaborador",
           active: true,
+          company_id: colab.company_id ?? null,
+          department_id: colab.department_id ?? null,
         },
         { onConflict: "id" }
       );
 
-      await supabaseAdmin.from("colaboradores").update({ user_id: invitedUserId }).eq("id", colab.id);
+      await supabaseAdmin.from("colaboradores").update({ user_id: profileUserId }).eq("id", colab.id);
     }
 
     return NextResponse.json({

@@ -41,10 +41,7 @@ async function requireAdminOrRH(req: Request) {
 }
 
 function getAuthRedirectTo() {
-  const fallback = "https://rh-app-seven.vercel.app/auth/callback";
-  const configured = process.env.NEXT_PUBLIC_AUTH_REDIRECT_TO?.trim();
-  if (!configured || configured.includes("localhost")) return fallback;
-  return configured;
+  return "https://rh-app-seven.vercel.app/auth/callback";
 }
 
 export async function POST(req: Request) {
