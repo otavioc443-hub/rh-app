@@ -77,6 +77,11 @@ export type BehaviorWordThemeScore = {
   matchedLabels: string[];
 };
 
+type BehaviorWordThemeOptions = {
+  attentionOnly?: boolean;
+  positiveOnly?: boolean;
+};
+
 export type BehaviorCompetencyRule = {
   order: number;
   label: string;
@@ -599,8 +604,16 @@ export const BEHAVIOR_COMPETENCY_RULES: BehaviorCompetencyRule[] = [
   },
 ];
 
-export function calculateBehaviorWordThemeScores(selectedIds: string[]): BehaviorWordThemeScore[] {
-  const selected = BEHAVIOR_ADJECTIVES.filter((item) => selectedIds.includes(item.id));
+export function calculateBehaviorWordThemeScores(
+  selectedIds: string[],
+  options: BehaviorWordThemeOptions = {}
+): BehaviorWordThemeScore[] {
+  const selected = BEHAVIOR_ADJECTIVES.filter((item) => {
+    if (!selectedIds.includes(item.id)) return false;
+    if (options.attentionOnly) return Boolean(item.attention);
+    if (options.positiveOnly) return !item.attention;
+    return true;
+  });
   const totalSelected = Math.max(selected.length, 1);
 
   return (Object.keys(BEHAVIOR_WORD_THEME_META) as BehaviorWordThemeKey[]).map((key) => {

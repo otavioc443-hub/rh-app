@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { BrainCircuit, RefreshCcw, ShieldAlert, TrendingUp, Users } from "lucide-react";
@@ -30,6 +30,8 @@ type OverviewResponse = {
   top_gaps: Array<{ label: string; count: number }>;
   top_roles: Array<{ label: string; count: number }>;
   top_departments: Array<{ label: string; count: number }>;
+  top_job_titles: Array<{ label: string; count: number }>;
+  fit_buckets: Array<{ label: string; count: number }>;
   rows: OverviewRow[];
 };
 
@@ -37,6 +39,9 @@ export default function RhMapaComportamentalAnalisesPage() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
   const [data, setData] = useState<OverviewResponse | null>(null);
+  const [selectedRole, setSelectedRole] = useState("all");
+  const [selectedDepartment, setSelectedDepartment] = useState("all");
+  const [selectedFit, setSelectedFit] = useState("all");
 
   async function load() {
     setLoading(true);
@@ -61,7 +66,54 @@ export default function RhMapaComportamentalAnalisesPage() {
     void load();
   }, []);
 
-  const recentRows = useMemo(() => data?.rows.slice(0, 12) ?? [], [data]);
+  const filteredRows = useMemo(() => {
+    return (data?.rows ?? []).filter((row) => {
+      if (selectedRole !== "all" && row.role !== selectedRole) return false;
+      if (selectedDepartment !== "all" && (row.department_name ?? "Sem área") !== selectedDepartment) return false;
+      if (selectedFit !== "all" && row.fit_summary !== selectedFit) return false;
+      return true;
+    });
+  }, [data, selectedRole, selectedDepartment, selectedFit]);
+
+  const recentRows = useMemo(() => filteredRows.slice(0, 12), [filteredRows]);
+  const executiveHighlights = useMemo(() => {
+    if (!filteredRows.length) return [];
+
+    const fitCounts = new Map<string, number>();
+    const gapCounts = new Map<string, number>();
+    const roleCounts = new Map<string, number>();
+
+    for (const row of filteredRows) {
+      fitCounts.set(row.fit_summary, (fitCounts.get(row.fit_summary) ?? 0) + 1);
+      gapCounts.set(row.top_gap_label, (gapCounts.get(row.top_gap_label) ?? 0) + 1);
+      roleCounts.set(row.role, (roleCounts.get(row.role) ?? 0) + 1);
+    }
+
+    const topFit = [...fitCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+    const topGap = [...gapCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+    const topRole = [...roleCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+
+    return [
+      {
+        title: "Recorte que mais exige atenção",
+        text: topFit
+          ? `A leitura mais recorrente neste recorte é ${topFit[0].toLowerCase()}. Isso sugere observar aderência, clareza de contexto e expectativa de entrega com mais proximidade.`
+          : "Ainda não há volume suficiente para consolidar um padrão de aderência.",
+      },
+      {
+        title: "Onde vale concentrar feedback e PDI",
+        text: topGap
+          ? `O gap mais recorrente aparece em ${topGap[0].toLowerCase()}, então esse eixo tende a gerar mais retorno quando vira pauta de feedback, PDI e combinados de gestão.`
+          : "Ainda não há gaps recorrentes suficientes para eleger um eixo prioritário.",
+      },
+      {
+        title: "Público dominante neste recorte",
+        text: topRole
+          ? `O papel mais frequente neste grupo é ${topRole[0].toLowerCase()}. Vale cruzar essa leitura com contexto, senioridade e distribuição de responsabilidade.`
+          : "Ainda não há concentração suficiente em um papel específico.",
+      },
+    ];
+  }, [filteredRows]);
 
   return (
     <div className="space-y-6">
@@ -103,6 +155,54 @@ export default function RhMapaComportamentalAnalisesPage() {
         <RankingCard title="Papéis mais mapeados" items={data?.top_roles ?? []} />
         <RankingCard title="Áreas com mais leituras" items={data?.top_departments ?? []} />
       </div>
+
+      <div className="grid gap-4 xl:grid-cols-3">
+        <RankingCard title="Cargos mais mapeados" items={data?.top_job_titles ?? []} />
+        <RankingCard title="Aderência ao contexto" items={data?.fit_buckets ?? []} />
+        <div className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-sm font-semibold text-slate-950">Filtros gerenciais</div>
+          <div className="mt-4 space-y-3">
+            <label className="block space-y-1.5">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Papel</span>
+              <select value={selectedRole} onChange={(e) => setSelectedRole(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-slate-300">
+                <option value="all">Todos</option>
+                {(data?.top_roles ?? []).map((item) => <option key={item.label} value={item.label}>{item.label}</option>)}
+              </select>
+            </label>
+            <label className="block space-y-1.5">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Área</span>
+              <select value={selectedDepartment} onChange={(e) => setSelectedDepartment(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-slate-300">
+                <option value="all">Todas</option>
+                {(data?.top_departments ?? []).map((item) => <option key={item.label} value={item.label}>{item.label}</option>)}
+              </select>
+            </label>
+            <label className="block space-y-1.5">
+              <span className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Aderência</span>
+              <select value={selectedFit} onChange={(e) => setSelectedFit(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-slate-300">
+                <option value="all">Todas</option>
+                {(data?.fit_buckets ?? []).map((item) => <option key={item.label} value={item.label}>{item.label}</option>)}
+              </select>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      {executiveHighlights.length ? (
+        <div className="grid gap-4 xl:grid-cols-3">
+          {executiveHighlights.map((item, index) => (
+            <div
+              key={item.title}
+              className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5 shadow-sm"
+            >
+              <div className="inline-flex rounded-full bg-slate-900 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-white">
+                Insight {index + 1}
+              </div>
+              <div className="mt-4 text-base font-semibold text-slate-950">{item.title}</div>
+              <p className="mt-2 text-sm leading-7 text-slate-600">{item.text}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       <div className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
         <div>

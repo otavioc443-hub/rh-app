@@ -1,15 +1,15 @@
 {
-  "generated_at": "2026-03-12T04:16:00.586Z",
+  "generated_at": "2026-04-07T19:37:11.604Z",
   "source_file": "scripts\\behavior-calibration-cases.json",
   "matrix_mode": "atual",
   "blend_alpha": null,
   "summary": {
-    "comparisons": 14,
-    "mae_mean": 0.81,
-    "rmse_mean": 0.98,
+    "comparisons": 11,
+    "mae_mean": 0.72,
+    "rmse_mean": 0.88,
     "critical_cases": 0,
     "high_cases": 0,
-    "medium_cases": 3
+    "medium_cases": 1
   },
   "ranking": [
     {
@@ -36,84 +36,6 @@
         "comunicador": -2.47,
         "planejador": 0.24,
         "analista": 3.09
-      }
-    },
-    {
-      "id": "afonso-nonato-andrade-pontes-2026-03-06-v1",
-      "mae": 1.24,
-      "rmse": 1.52,
-      "risk": "medio",
-      "selfCount": 18,
-      "othersCount": 15,
-      "actual": {
-        "executor": 15.69,
-        "comunicador": 13.73,
-        "planejador": 35.29,
-        "analista": 35.29
-      },
-      "expected": {
-        "executor": 13.21,
-        "comunicador": 14.64,
-        "planejador": 35.36,
-        "analista": 36.79
-      },
-      "diff": {
-        "executor": 2.48,
-        "comunicador": -0.91,
-        "planejador": -0.07,
-        "analista": -1.5
-      }
-    },
-    {
-      "id": "isabella-fernandes-da-silva-2026-03-06-v1",
-      "mae": 1.12,
-      "rmse": 1.41,
-      "risk": "medio",
-      "selfCount": 17,
-      "othersCount": 17,
-      "actual": {
-        "executor": 14.29,
-        "comunicador": 25,
-        "planejador": 30.36,
-        "analista": 30.36
-      },
-      "expected": {
-        "executor": 14.13,
-        "comunicador": 26.86,
-        "planejador": 28.27,
-        "analista": 30.74
-      },
-      "diff": {
-        "executor": 0.16,
-        "comunicador": -1.86,
-        "planejador": 2.09,
-        "analista": -0.38
-      }
-    },
-    {
-      "id": "adriano-ighor-moura-soares-2026-03-06-v1",
-      "mae": 0.99,
-      "rmse": 1.16,
-      "risk": "baixo",
-      "selfCount": 36,
-      "othersCount": 27,
-      "actual": {
-        "executor": 26.36,
-        "comunicador": 20.91,
-        "planejador": 24.55,
-        "analista": 28.18
-      },
-      "expected": {
-        "executor": 26.74,
-        "comunicador": 18.92,
-        "planejador": 25.35,
-        "analista": 28.99
-      },
-      "diff": {
-        "executor": -0.38,
-        "comunicador": 1.99,
-        "planejador": -0.8,
-        "analista": -0.81
       }
     },
     {

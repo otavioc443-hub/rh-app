@@ -61,6 +61,8 @@ type EditableDevelopmentItem = {
   title: string;
   text: string;
   target_date: string | null;
+  priority: "alta" | "media" | "baixa";
+  support: string;
 };
 
 function cx(...classes: Array<string | false | undefined>) {
@@ -158,21 +160,25 @@ function buildBehaviorRecommendations(
   predominantSelf: BehaviorAxisResult[],
   predominantOthers: BehaviorAxisResult[],
   dominantGaps: BehaviorIsolatedProfilePoint[],
-  mainCompetencies: BehaviorCompetencyPoint[]
+  mainCompetencies: BehaviorCompetencyPoint[],
+  positiveThemes: BehaviorWordThemeScore[],
+  attentionThemes: BehaviorWordThemeScore[]
 ) {
   const topSelf = predominantSelf[0]?.label ?? "Perfil equilibrado";
   const topEnvironment = predominantOthers[0]?.label ?? "ambiente equilibrado";
   const gap = dominantGaps[0];
   const competenciesText = mainCompetencies.slice(0, 3).map((item) => item.label).join(", ");
+  const topPositiveTheme = positiveThemes[0]?.label?.toLowerCase();
+  const topAttentionTheme = attentionThemes[0]?.label?.toLowerCase();
 
   return [
     {
       title: "Usar a predominância natural com intenção",
-      text: `${personName} tende a operar com maior naturalidade em ${topSelf}. Vale priorizar contextos e entregas em que esse estilo apareça como força principal, sem perder abertura para ajuste situacional.`,
+      text: `${personName} tende a operar com maior naturalidade em ${topSelf}.${topPositiveTheme ? ` O tema ${topPositiveTheme} aparece como um reforço importante dessa leitura, então vale priorizar contextos em que isso possa ser usado de forma visível e útil.` : ""}`,
     },
     {
       title: "Adaptação ao contexto atual",
-      text: `O ambiente hoje puxa mais para ${topEnvironment}. Isso sugere calibrar comunicação, ritmo e forma de decisão para reduzir desgaste sem descaracterizar o perfil natural.`,
+      text: `O ambiente hoje puxa mais para ${topEnvironment}. Isso sugere calibrar comunicação, ritmo e forma de decisão para reduzir desgaste sem descaracterizar o perfil natural.${topAttentionTheme ? ` A principal atenção aparece em ${topAttentionTheme}, o que ajuda a escolher onde ajustar com mais cuidado.` : ""}`,
     },
     {
       title: "Foco de desenvolvimento",
@@ -192,17 +198,19 @@ function buildManagerGuidance(
   predominantSelf: BehaviorAxisResult[],
   predominantOthers: BehaviorAxisResult[],
   competencies: BehaviorCompetencyPoint[],
-  dominantGaps: BehaviorIsolatedProfilePoint[]
+  dominantGaps: BehaviorIsolatedProfilePoint[],
+  personContext: PersonContext
 ) {
   const primary = predominantSelf[0]?.label ?? "Perfil equilibrado";
   const environment = predominantOthers[0]?.label ?? "um contexto mais equilibrado";
   const topCompetencies = competencies.slice(0, 3).map((item) => item.label);
   const mainGap = dominantGaps[0]?.label ?? null;
+  const jobContext = personContext.jobTitle ?? personContext.role ?? "o papel atual";
 
   return [
     {
       title: "Como essa pessoa tende a render melhor",
-      text: `${personName} tende a responder melhor quando pode usar ${primary.toLowerCase()} com clareza de expectativa, espaço de decisão e contexto bem sinalizado.`,
+      text: `${personName} tende a responder melhor quando pode usar ${primary.toLowerCase()} com clareza de expectativa, espaço de decisão e contexto bem sinalizado no exercício de ${jobContext.toLowerCase()}.`,
     },
     {
       title: "Como alinhar com o ambiente atual",
@@ -322,11 +330,15 @@ function buildProfileCombinationNarrative(
 function buildPredominanceOpeningSummary(
   personName: string,
   selfResults: BehaviorAxisResult[],
-  othersResults: BehaviorAxisResult[]
+  othersResults: BehaviorAxisResult[],
+  positiveThemes: BehaviorWordThemeScore[],
+  attentionThemes: BehaviorWordThemeScore[]
 ) {
   const [primary, secondary] = selfResults;
   const lowest = [...selfResults].sort((a, b) => a.percent - b.percent)[0];
   const environmentLead = othersResults[0];
+  const strongestTheme = positiveThemes[0];
+  const strongestAttention = attentionThemes[0];
 
   if (!primary) {
     return `${personName} apresenta uma leitura equilibrada neste momento, sem um eixo isolado dominando de forma clara.`;
@@ -345,7 +357,17 @@ function buildPredominanceOpeningSummary(
     ? ` No contexto atual, o ambiente parece demandar mais ${environmentLead.label.toLowerCase()}, o que orienta melhor os ajustes esperados nas relações e entregas.`
     : "";
 
-  return `${personName} tende a atuar com maior naturalidade em ${primary.label.toLowerCase()}${secondaryText}.${lowestText}${environmentText}`;
+  const strongestThemeText =
+    strongestTheme && strongestTheme.score > 0.1
+      ? ` Entre as palavras escolhidas, aparece com mais força o tema ${strongestTheme.label.toLowerCase()}, o que ajuda a explicar a forma como esse perfil se manifesta na prática.`
+      : "";
+
+  const strongestAttentionText =
+    strongestAttention && strongestAttention.score > 0.08
+      ? ` O principal ponto de calibragem aparece em ${strongestAttention.label.toLowerCase()}, sugerindo atenção à forma como essa energia é canalizada no contexto atual.`
+      : "";
+
+  return `${personName} tende a atuar com maior naturalidade em ${primary.label.toLowerCase()}${secondaryText}.${lowestText}${strongestThemeText}${environmentText}${strongestAttentionText}`;
 }
 
 function buildSituationalIndicators(
@@ -432,6 +454,8 @@ function buildDevelopmentPlan(
       horizon: "30 dias",
       title: "Consolidar força principal",
       text: `${personName} pode focar em usar ${primary.toLowerCase()} com mais intenção em reuniões, decisões e rotina, registrando exemplos concretos de onde isso mais gera resultado.`,
+      priority: "alta" as const,
+      support: "Autogestão com alinhamento do gestor",
     },
     {
       horizon: "60 dias",
@@ -439,11 +463,15 @@ function buildDevelopmentPlan(
       text: topCompetencies.length
         ? `Vale escolher uma atividade do dia a dia para exercitar ${topCompetencies.join(" e ")} de forma observável, com feedback simples do gestor ou do time.`
         : "Vale escolher uma atividade do dia a dia para transformar esta leitura em comportamento observável e passível de feedback.",
+      priority: "media" as const,
+      support: "Feedback breve de gestor ou pares",
     },
     {
       horizon: "90 dias",
       title: "Calibrar o principal ponto de ajuste",
       text: `O próximo ciclo pode mirar ${mainGap.toLowerCase()}, testando pequenas mudanças de ritmo, organização ou comunicação para reduzir desgaste e ampliar aderência ao contexto.`,
+      priority: "alta" as const,
+      support: "Acompanhamento em one-on-one e revisão de contexto",
     },
   ];
 }
@@ -474,6 +502,33 @@ function buildManagerActionMatrix(
       text: `${topCompetency} aparece como um bom ponto de alavanca. O melhor uso gerencial é transformar essa força em responsabilidade prática, projeto real e critério objetivo de evolução.`,
     },
   ];
+}
+
+function buildBehaviorThemeHighlights(
+  positiveThemes: BehaviorWordThemeScore[],
+  attentionThemes: BehaviorWordThemeScore[]
+) {
+  const strongestPositive = positiveThemes.filter((item) => item.score > 0.08).slice(0, 2);
+  const strongestAttention = attentionThemes.filter((item) => item.score > 0.08).slice(0, 2);
+
+  return [
+    strongestPositive.length
+      ? {
+          title: "Temas que mais fortalecem a leitura",
+          text: strongestPositive
+            .map((item) => `${item.label}: ${item.matchedLabels.slice(0, 4).join(", ")}`)
+            .join(". "),
+        }
+      : null,
+    strongestAttention.length
+      ? {
+          title: "Temas que pedem mais calibragem",
+          text: strongestAttention
+            .map((item) => `${item.label}: ${item.matchedLabels.slice(0, 4).join(", ")}`)
+            .join(". "),
+        }
+      : null,
+  ].filter(Boolean) as Array<{ title: string; text: string }>;
 }
 
 function formatHistoryWindowLabel(window: HistoryWindow) {
@@ -580,8 +635,58 @@ function buildUniqueProfileSignature(
   return `${themeText} ${profileText} ${contextText} ${competencyText}`.replace(/\s+/g, " ").trim();
 }
 
+function buildBehaviorWordNuance(
+  personName: string,
+  axisDrivers: Array<{
+    key: string;
+    label: string;
+    positiveWords: Array<{ label: string; weight: number }>;
+    negativeWords: Array<{ label: string; weight: number }>;
+  }>
+) {
+  const mostPositive = [...axisDrivers]
+    .map((axis) => ({ axis: axis.label, words: axis.positiveWords.slice(0, 2).map((item) => item.label) }))
+    .filter((item) => item.words.length)
+    .slice(0, 2);
+  const mostTension = [...axisDrivers]
+    .map((axis) => ({ axis: axis.label, words: axis.negativeWords.slice(0, 2).map((item) => item.label) }))
+    .filter((item) => item.words.length)
+    .slice(0, 2);
+
+  const positiveText = mostPositive.length
+    ? `${personName} mostrou traços mais fortes de ${mostPositive
+        .map((item) => `${item.axis.toLowerCase()} (${item.words.join(", ")})`)
+        .join(" e ")}.`
+    : `${personName} apresentou uma combinação mais equilibrada de palavras positivas nesta leitura.`;
+  const tensionText = mostTension.length
+    ? `Os principais pontos de tensão apareceram em ${mostTension
+        .map((item) => `${item.axis.toLowerCase()} (${item.words.join(", ")})`)
+        .join(" e ")}.`
+    : "Não surgiram palavras de atenção com peso suficiente para criar um ponto de tensão dominante.";
+
+  return `${positiveText} ${tensionText}`.trim();
+}
+
+function buildCompetencyContextComparison(
+  currentCompetencies: BehaviorCompetencyPoint[],
+  contextCompetencies: BehaviorCompetencyPoint[]
+) {
+  const contextByLabel = new Map(contextCompetencies.map((item) => [item.label, item]));
+  return currentCompetencies.map((item) => {
+    const context = contextByLabel.get(item.label);
+    const delta = Number((item.score - (context?.score ?? item.score)).toFixed(2));
+    return {
+      label: item.label,
+      current: item.score,
+      context: context?.score ?? item.score,
+      delta,
+      status: delta > 0.35 ? "Acima do contexto" : delta < -0.35 ? "Abaixo do contexto" : "Alinhado ao contexto",
+    };
+  });
+}
+
 function buildEditableDevelopmentPlan(
-  plan: Array<{ horizon: string; title: string; text: string }>
+  plan: Array<{ horizon: string; title: string; text: string; priority: "alta" | "media" | "baixa"; support: string }>
 ): EditableDevelopmentItem[] {
   const defaults = [30, 60, 90];
   return plan.map((item, index) => ({
@@ -657,8 +762,20 @@ export default function MapaComportamentalPage() {
     () => calculateBehaviorCompetencies(consolidatedResults, selfFactors, leadershipProfile, reportSelfSelectedIds),
     [consolidatedResults, selfFactors, leadershipProfile, reportSelfSelectedIds]
   );
+  const contextCompetencies = useMemo(
+    () => calculateBehaviorCompetencies(reportOthersResults, othersFactors, leadershipProfile, reportOthersSelectedIds),
+    [reportOthersResults, othersFactors, leadershipProfile, reportOthersSelectedIds]
+  );
   const selfWordThemes = useMemo(
     () => calculateBehaviorWordThemeScores(reportSelfSelectedIds),
+    [reportSelfSelectedIds]
+  );
+  const selfPositiveWordThemes = useMemo(
+    () => calculateBehaviorWordThemeScores(reportSelfSelectedIds, { positiveOnly: true }),
+    [reportSelfSelectedIds]
+  );
+  const selfAttentionWordThemes = useMemo(
+    () => calculateBehaviorWordThemeScores(reportSelfSelectedIds, { attentionOnly: true }),
     [reportSelfSelectedIds]
   );
   const selfConfidence = useMemo(
@@ -687,9 +804,11 @@ export default function MapaComportamentalPage() {
         reportPredominantSelf,
         reportPredominantOthers,
         dominantGaps,
-        mainCompetencies
+        mainCompetencies,
+        selfPositiveWordThemes,
+        selfAttentionWordThemes
       ),
-    [personName, reportPredominantSelf, reportPredominantOthers, dominantGaps, mainCompetencies]
+    [personName, reportPredominantSelf, reportPredominantOthers, dominantGaps, mainCompetencies, selfPositiveWordThemes, selfAttentionWordThemes]
   );
   const teamHighlights = useMemo(
     () => buildTeamContributionHighlights(personName, reportPredominantSelf, mainCompetencies),
@@ -702,13 +821,21 @@ export default function MapaComportamentalPage() {
         reportPredominantSelf,
         reportPredominantOthers,
         mainCompetencies,
-        dominantGaps
+        dominantGaps,
+        personContext
       ),
-    [personName, reportPredominantSelf, reportPredominantOthers, mainCompetencies, dominantGaps]
+    [personName, reportPredominantSelf, reportPredominantOthers, mainCompetencies, dominantGaps, personContext]
   );
   const openingSummary = useMemo(
-    () => buildPredominanceOpeningSummary(personName, reportSelfResults, reportOthersResults),
-    [personName, reportSelfResults, reportOthersResults]
+    () =>
+      buildPredominanceOpeningSummary(
+        personName,
+        reportSelfResults,
+        reportOthersResults,
+        selfPositiveWordThemes,
+        selfAttentionWordThemes
+      ),
+    [personName, reportSelfResults, reportOthersResults, selfPositiveWordThemes, selfAttentionWordThemes]
   );
   const executiveNarrative = useMemo(
     () => buildExecutiveBehaviorNarrative(personName, reportPredominantSelf, mainCompetencies),
@@ -759,6 +886,18 @@ export default function MapaComportamentalPage() {
     () => buildCompetencyDriversSummary(mainCompetencies, consolidatedResults, selfWordThemes),
     [mainCompetencies, consolidatedResults, selfWordThemes]
   );
+  const behaviorWordNuance = useMemo(
+    () => buildBehaviorWordNuance(personName, selfAxisWordDrivers),
+    [personName, selfAxisWordDrivers]
+  );
+  const behaviorThemeHighlights = useMemo(
+    () => buildBehaviorThemeHighlights(selfPositiveWordThemes, selfAttentionWordThemes),
+    [selfPositiveWordThemes, selfAttentionWordThemes]
+  );
+  const competencyContextComparison = useMemo(
+    () => buildCompetencyContextComparison(mainCompetencies, contextCompetencies),
+    [mainCompetencies, contextCompetencies]
+  );
   const uniqueProfileSignature = useMemo(
     () =>
       buildUniqueProfileSignature(
@@ -806,7 +945,7 @@ export default function MapaComportamentalPage() {
       return;
     }
 
-    const reportHtml = reportRef.current.innerHTML;
+    const reportHtml = reportRef.current.outerHTML;
     const title = `Relatório comportamental - ${fullName || "Colaborador"}`;
     const exportDate = new Date().toLocaleDateString("pt-BR");
     const sectionTitles = Array.from(reportRef.current.querySelectorAll("section[id] h2, section[id] h1"))
@@ -830,9 +969,10 @@ export default function MapaComportamentalPage() {
             * { box-sizing: border-box; }
             body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #0f172a; background: white; }
             .print-shell { padding: 0 0 18mm; }
-            .print-cover { border-bottom: 1px solid #dbe4f0; padding: 0 0 12px; margin: 0 0 16px; }
-            .print-cover h1 { margin: 0; font-size: 26px; line-height: 1.1; color: #0f172a; }
+            .print-cover { border: 1px solid #dbe4f0; border-radius: 20px; background: linear-gradient(135deg, #f8fafc, #eff6ff); padding: 16px 18px; margin: 0 0 16px; }
+            .print-cover h1 { margin: 0; font-size: 28px; line-height: 1.1; color: #0f172a; }
             .print-cover p { margin: 6px 0 0; font-size: 12px; color: #475569; }
+            .print-cover .eyebrow { margin: 0 0 10px; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #0369a1; }
             .print-index { page-break-inside: avoid; border: 1px solid #dbe4f0; border-radius: 16px; padding: 12px 16px; margin: 0 0 16px; }
             .print-index h2 { margin: 0 0 8px; font-size: 15px; color: #0f172a; }
             .print-index ol { margin: 0; padding-left: 18px; color: #334155; font-size: 12px; line-height: 1.7; }
@@ -868,11 +1008,12 @@ export default function MapaComportamentalPage() {
         <body>
           <div class="print-shell">
             <div class="print-cover">
+              <div class="eyebrow">Síntese de perfil</div>
               <h1>Relatório comportamental</h1>
               <p>${fullName || "Colaborador"} • ${exportDate} • ${personContext.companyName || "Portal RH"}</p>
             </div>
             ${indexHtml}
-            ${reportHtml}
+            <div class="print-report">${reportHtml}</div>
             <div class="print-footer">
               <span>${personContext.companyName || "Portal RH"} • Relatório comportamental</span>
               <span>${exportDate} • Página <span class="print-page-number"></span></span>
@@ -882,10 +1023,30 @@ export default function MapaComportamentalPage() {
       </html>
     `);
     printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => {
-      printWindow.print();
-    }, 350);
+
+    const triggerPrint = () => {
+      const fontsReady =
+        "fonts" in printWindow.document && printWindow.document.fonts?.ready
+          ? printWindow.document.fonts.ready
+          : Promise.resolve();
+
+      void fontsReady.then(() => {
+        printWindow.requestAnimationFrame(() => {
+          printWindow.requestAnimationFrame(() => {
+            setTimeout(() => {
+              printWindow.focus();
+              printWindow.print();
+            }, 500);
+          });
+        });
+      });
+    };
+
+    if (printWindow.document.readyState === "complete") {
+      triggerPrint();
+    } else {
+      printWindow.addEventListener("load", triggerPrint, { once: true });
+    }
   }
 
   async function load() {
@@ -1021,10 +1182,10 @@ export default function MapaComportamentalPage() {
           <button
             type="button"
             onClick={() => void exportReportAsPdf()}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95"
+            className="inline-flex items-center gap-2 rounded-xl border border-sky-700 bg-sky-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-800"
           >
-            <Download size={16} />
-            Exportar em PDF
+            <Download size={16} className="shrink-0 text-white" />
+            <span className="text-white">Exportar em PDF</span>
           </button>
           <button
             type="button"
@@ -1317,6 +1478,27 @@ export default function MapaComportamentalPage() {
                   title="Como as palavras influenciaram a leitura"
                   description="Os eixos e competências não são fixos: eles mudam conforme os adjetivos selecionados. Aqui estão os termos que mais puxaram cada eixo nesta leitura."
                 />
+                <div className="mt-5 rounded-[24px] border border-sky-100 bg-gradient-to-r from-sky-50 to-cyan-50 p-5 shadow-sm">
+                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">
+                    Forças e tensões percebidas pelas palavras
+                  </div>
+                  <p className="mt-3 text-sm leading-7 text-slate-700">
+                    {behaviorWordNuance}
+                  </p>
+                </div>
+                {behaviorThemeHighlights.length ? (
+                  <div className="mt-5 grid gap-4 xl:grid-cols-2">
+                    {behaviorThemeHighlights.map((item, index) => (
+                      <RecommendationCard
+                        key={item.title}
+                        title={item.title}
+                        text={item.text}
+                        index={index}
+                        highlighted={index === 0}
+                      />
+                    ))}
+                  </div>
+                ) : null}
                 <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   {selfAxisWordDrivers.map((axis) => (
                     <AxisDriverCard
@@ -1344,6 +1526,58 @@ export default function MapaComportamentalPage() {
                       index={index}
                       highlighted={index < 2}
                     />
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+                <SectionHeader
+                  title="Competências atuais x competências pedidas pelo contexto"
+                  description="Comparativo entre o que aparece com mais força no seu perfil atual e o que o ambiente de hoje parece solicitar com mais intensidade."
+                />
+                <div className="mt-5 grid gap-4 xl:grid-cols-2">
+                  {competencyContextComparison.slice(0, 8).map((item) => (
+                    <div key={item.label} className="rounded-[24px] border border-slate-200 bg-gradient-to-br from-white to-slate-50 p-5 shadow-sm">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="text-base font-semibold text-slate-950">{item.label}</div>
+                          <div className="mt-1 text-sm text-slate-500">{item.status}</div>
+                        </div>
+                        <span
+                          className={cx(
+                            "rounded-full px-2.5 py-1 text-xs font-semibold",
+                            item.delta > 0.35
+                              ? "bg-emerald-50 text-emerald-700"
+                              : item.delta < -0.35
+                                ? "bg-amber-50 text-amber-700"
+                                : "bg-slate-100 text-slate-700"
+                          )}
+                        >
+                          {item.delta > 0 ? "+" : ""}
+                          {item.delta.toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        <div>
+                          <div className="mb-1 flex items-center justify-between text-sm text-slate-600">
+                            <span>Perfil atual</span>
+                            <span className="font-semibold text-slate-900">{item.current.toFixed(2)}</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-slate-200">
+                            <div className="h-2 rounded-full bg-gradient-to-r from-cyan-600 to-blue-700" style={{ width: `${Math.min(100, (item.current / 10) * 100)}%` }} />
+                          </div>
+                        </div>
+                        <div>
+                          <div className="mb-1 flex items-center justify-between text-sm text-slate-600">
+                            <span>Contexto atual</span>
+                            <span className="font-semibold text-slate-900">{item.context.toFixed(2)}</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-slate-200">
+                            <div className="h-2 rounded-full bg-slate-900" style={{ width: `${Math.min(100, (item.context / 10) * 100)}%` }} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </section>
@@ -2162,6 +2396,31 @@ function HistoryAxisTrendChart({ history }: { history: BehaviorHistoryItem[] }) 
           </span>
         ))}
       </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {axisKeys.map((axisKey) => {
+          const first = getAxisPoint(axisKey, items[0]);
+          const last = getAxisPoint(axisKey, items[items.length - 1]);
+          const delta = Number((last - first).toFixed(2));
+          const tone =
+            delta > 0.15
+              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+              : delta < -0.15
+                ? "border-amber-200 bg-amber-50 text-amber-700"
+                : "border-slate-200 bg-slate-50 text-slate-700";
+          const label = delta > 0.15 ? "Ganhou força" : delta < -0.15 ? "Perdeu força" : "Estável";
+
+          return (
+            <div key={`${axisKey}-trend`} className={`rounded-[18px] border px-4 py-3 ${tone}`}>
+              <div className="text-xs font-semibold uppercase tracking-[0.12em]">{BEHAVIOR_AXIS_META[axisKey].label}</div>
+              <div className="mt-2 text-sm font-semibold">{label}</div>
+              <div className="mt-1 text-xs">
+                {delta > 0 ? "+" : ""}
+                {delta.toFixed(2)} p.p. no período
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -2273,6 +2532,32 @@ function EditableDevelopmentCard({
       </div>
       <div className="mt-4 text-base font-semibold text-slate-950">{item.horizon}</div>
       <div className="mt-4 space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Prioridade
+            </label>
+            <select
+              value={item.priority}
+              onChange={(e) => onChange({ priority: e.target.value as EditableDevelopmentItem["priority"] })}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-slate-300"
+            >
+              <option value="alta">Alta</option>
+              <option value="media">Média</option>
+              <option value="baixa">Baixa</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Apoio recomendado
+            </label>
+            <input
+              value={item.support}
+              onChange={(e) => onChange({ support: e.target.value })}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 outline-none focus:border-slate-300"
+            />
+          </div>
+        </div>
         <input
           value={item.title}
           onChange={(e) => onChange({ title: e.target.value })}

@@ -7,6 +7,8 @@ type InputPlanItem = {
   title?: string;
   text?: string;
   target_date?: string | null;
+  priority?: string;
+  support?: string;
 };
 
 function normalizeText(value: unknown) {
@@ -47,24 +49,32 @@ export async function POST(req: Request) {
         const horizon = normalizeText(item.horizon);
         const title = normalizeText(item.title);
         const text = normalizeText(item.text);
+        const priority = normalizeText(item.priority);
+        const support = normalizeText(item.support);
 
         if (!title) return null;
 
         return {
           user_id: user.id,
           title: horizon ? `${horizon} • ${title}` : title,
-          action: text || `Usar ${strength} como alavanca e acompanhar evolução em ${focus}.`,
+          action: [
+            text || `Usar ${strength} como alavanca e acompanhar evolução em ${focus}.`,
+            priority ? `Prioridade: ${priority}.` : "",
+            support ? `Apoio recomendado: ${support}.` : "",
+          ]
+            .filter(Boolean)
+            .join(" "),
           target_date: normalizeDate(item.target_date),
           status: "planejado" as const,
         };
       })
       .filter(Boolean) as Array<{
-        user_id: string;
-        title: string;
-        action: string;
-        target_date: string | null;
-        status: "planejado";
-      }>;
+      user_id: string;
+      title: string;
+      action: string;
+      target_date: string | null;
+      status: "planejado";
+    }>;
 
     if (!normalizedItems.length) {
       return NextResponse.json({ error: "Nenhum item válido para criar no PDI." }, { status: 400 });

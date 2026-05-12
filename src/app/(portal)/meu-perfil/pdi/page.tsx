@@ -58,7 +58,12 @@ export default function PdiPage() {
         `Usar ${suggestedStrength || "o principal ponto forte"} como base e acompanhar evolucao em ${suggestedFocus || "um eixo prioritario"} nas proximas semanas.`
       );
     }
-  }, [fromBehaviorMap, suggestedFocus, suggestedStrength, title, action]);
+    if (!targetDate) {
+      const date = new Date();
+      date.setDate(date.getDate() + 30);
+      setTargetDate(date.toISOString().slice(0, 10));
+    }
+  }, [fromBehaviorMap, suggestedFocus, suggestedStrength, title, action, targetDate]);
 
   async function load() {
     setLoading(true);
@@ -199,6 +204,9 @@ export default function PdiPage() {
           ) : (
             "."
           )}
+          <div className="mt-2 text-violet-800">
+            Ja deixamos um objetivo, uma acao inicial e um prazo sugerido para facilitar a transformacao da leitura em um item real de desenvolvimento.
+          </div>
         </div>
       ) : null}
 

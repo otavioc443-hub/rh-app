@@ -110,6 +110,8 @@ export async function GET() {
   const gapCounts = new Map<string, number>();
   const roleCounts = new Map<string, number>();
   const departmentCounts = new Map<string, number>();
+  const jobTitleCounts = new Map<string, number>();
+  const fitCounts = new Map<string, number>();
 
   const assessmentRows = rows.map((row) => {
     const collaborator = row.collaborator_id ? collaboratorById.get(row.collaborator_id) : null;
@@ -133,6 +135,7 @@ export async function GET() {
     demandCounts.set(demand, (demandCounts.get(demand) ?? 0) + 1);
     roleCounts.set(roleLabel, (roleCounts.get(roleLabel) ?? 0) + 1);
     if (departmentName) departmentCounts.set(departmentName, (departmentCounts.get(departmentName) ?? 0) + 1);
+    if (jobTitle) jobTitleCounts.set(jobTitle, (jobTitleCounts.get(jobTitle) ?? 0) + 1);
 
     const envByKey = new Map((row.others_result ?? []).map((item) => [item.key, item.percent]));
     let topGapLabel = "Sem gap relevante";
@@ -148,6 +151,13 @@ export async function GET() {
     }
 
     gapCounts.set(topGapLabel, (gapCounts.get(topGapLabel) ?? 0) + 1);
+    const fitSummary =
+      topGapValue >= 18
+        ? "Aderencia em atencao"
+        : topGapValue >= 10
+          ? "Aderencia moderada"
+          : "Aderencia consistente";
+    fitCounts.set(fitSummary, (fitCounts.get(fitSummary) ?? 0) + 1);
 
     return {
       id: row.id,
@@ -161,12 +171,7 @@ export async function GET() {
       department_name: departmentName,
       company_name: companyName,
       job_title: jobTitle,
-      fit_summary:
-        topGapValue >= 18
-          ? "Aderência em atenção"
-          : topGapValue >= 10
-            ? "Aderência moderada"
-            : "Aderência consistente",
+      fit_summary: fitSummary,
     };
   });
 
@@ -181,6 +186,8 @@ export async function GET() {
   const topGaps = sortTop(gapCounts);
   const topRoles = sortTop(roleCounts);
   const topDepartments = sortTop(departmentCounts);
+  const topJobTitles = sortTop(jobTitleCounts);
+  const fitBuckets = sortTop(fitCounts, 3);
 
   return NextResponse.json({
     ok: true,
@@ -195,6 +202,8 @@ export async function GET() {
     top_gaps: topGaps,
     top_roles: topRoles,
     top_departments: topDepartments,
+    top_job_titles: topJobTitles,
+    fit_buckets: fitBuckets,
     rows: assessmentRows,
   });
 }
