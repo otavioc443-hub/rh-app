@@ -8,6 +8,7 @@ export type PortalFeatureCatalogItem = {
 export const PORTAL_FEATURE_CATALOG: PortalFeatureCatalogItem[] = [
   { feature_key: "home", label: "Home", area: "Geral", route_path: "/home" },
   { feature_key: "institucional_visao_geral", label: "Institucional - Visao geral", area: "Institucional", route_path: "/institucional" },
+  { feature_key: "institucional_bolao_copa_2026", label: "Institucional - Bolao Copa 2026", area: "Institucional", route_path: "/institucional/bolao-copa-2026" },
   { feature_key: "institucional_organograma", label: "Institucional - Organograma", area: "Institucional", route_path: "/institucional/organograma" },
   { feature_key: "perfil_meus_dados", label: "Meu perfil - Meus dados", area: "Meu perfil", route_path: "/meu-perfil/meus-dados" },
   { feature_key: "perfil_chamados", label: "Meu perfil - Chamados", area: "Meu perfil", route_path: "/meu-perfil/chamados" },
@@ -48,6 +49,7 @@ export const PORTAL_FEATURE_CATALOG: PortalFeatureCatalogItem[] = [
   { feature_key: "rh_adicionar_colaborador", label: "RH - Adicionar colaborador", area: "RH", route_path: "/rh/adicionar-colaborador" },
   { feature_key: "rh_cargos", label: "RH - Inclusao cargos", area: "RH", route_path: "/rh/cargos" },
   { feature_key: "rh_institucional", label: "RH - Institucional", area: "RH", route_path: "/rh/institucional" },
+  { feature_key: "rh_bolao_copa_2026", label: "RH - Bolao Copa 2026", area: "RH", route_path: "/rh/bolao-copa-2026" },
   { feature_key: "rh_feedbacks", label: "RH - Governanca feedback", area: "RH", route_path: "/rh/feedbacks" },
   { feature_key: "rh_mapa_comportamental", label: "RH - Mapa comportamental", area: "RH", route_path: "/rh/mapa-comportamental" },
   { feature_key: "rh_ausencias", label: "RH - Ausencias", area: "RH", route_path: "/rh/ausencias" },
