@@ -9,7 +9,10 @@ import {
   BOLAO_DEFAULT_REGULATION,
   BOLAO_DEFAULT_TITLE,
   BOLAO_DEFAULT_VALUE,
+  BOLAO_PLAYERS,
+  BOLAO_POSITIONS,
   type BolaoBet,
+  type BolaoConfirmedPlayer,
   type BolaoConfig,
   formatBolaoCurrency,
   formatBolaoDateTime,
@@ -49,6 +52,10 @@ function manualPlayersText(bet: BolaoBet) {
   return (bet.jogadores_manuais ?? []).map((item) => `${item.nome}${item.clube ? ` - ${item.clube}` : ""}`).join("; ");
 }
 
+function sectorLabel(value: string | null | undefined) {
+  return value?.trim() || "Setor não informado";
+}
+
 function downloadBlob(filename: string, content: string, type: string) {
   const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
@@ -81,6 +88,9 @@ export default function RhBolaoCopa2026Page() {
   const [pixLink, setPixLink] = useState("");
   const [qrCodeUrl, setQrCodeUrl] = useState("");
   const [status, setStatus] = useState<"ativo" | "encerrado">("ativo");
+  const [confirmedIds, setConfirmedIds] = useState<Set<string>>(new Set());
+  const [confirmedManualText, setConfirmedManualText] = useState("");
+  const [resultadoConfirmadoAt, setResultadoConfirmadoAt] = useState<string | null>(null);
   const [bets, setBets] = useState<BolaoBet[]>([]);
 
   const totalPrize = useMemo(() => bets.length * (Number(valor.replace(",", ".")) || BOLAO_DEFAULT_VALUE), [bets.length, valor]);
@@ -94,6 +104,10 @@ export default function RhBolaoCopa2026Page() {
     setPixLink(row?.pix_link ?? "");
     setQrCodeUrl(row?.qr_code_url ?? "");
     setStatus(row?.status === "encerrado" ? "encerrado" : "ativo");
+    const confirmed = row?.jogadores_convocados ?? [];
+    setConfirmedIds(new Set(confirmed.filter((player) => !player.manual && player.id).map((player) => player.id)));
+    setConfirmedManualText(confirmed.filter((player) => player.manual).map((player) => `${player.nome}${player.clube ? ` - ${player.clube}` : ""}`).join("\n"));
+    setResultadoConfirmadoAt(row?.resultado_confirmado_at ?? null);
   }, []);
 
   const load = useCallback(async () => {
@@ -104,13 +118,13 @@ export default function RhBolaoCopa2026Page() {
       const [configRes, betsRes] = await Promise.all([
         supabase
           .from("pulsehub_bolao_config")
-          .select("id,titulo,valor,regulamento,prazo,pix_link,qr_code_url,status,updated_at")
+          .select("id,titulo,valor,regulamento,prazo,pix_link,qr_code_url,jogadores_convocados,resultado_confirmado_at,status,updated_at")
           .order("updated_at", { ascending: false })
           .limit(1)
           .maybeSingle<BolaoConfig>(),
         supabase
           .from("pulsehub_bolao_copa_2026")
-          .select("id,user_id,nome,email,jogadores,jogadores_manuais,total_jogadores,status,created_at")
+          .select("id,user_id,nome,email,setor,jogadores,jogadores_manuais,total_jogadores,status,created_at,updated_at")
           .order("created_at", { ascending: false }),
       ]);
       if (configRes.error) throw configRes.error;
@@ -129,10 +143,49 @@ export default function RhBolaoCopa2026Page() {
     if (!roleLoading) void load();
   }, [load, roleLoading]);
 
-  async function saveConfig(nextQrCodeUrl = qrCodeUrl) {
+  function buildConfirmedPlayers(): BolaoConfirmedPlayer[] {
+    const listed = BOLAO_PLAYERS.filter((player) => confirmedIds.has(player.id)).map((player) => ({
+      id: player.id,
+      nome: player.name,
+      clube: player.club,
+      posicao: player.position,
+      manual: false,
+    }));
+
+    const manual = confirmedManualText
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line, index) => {
+        const [nomeRaw, ...clubParts] = line.split(" - ");
+        const nome = nomeRaw.trim();
+        const clube = clubParts.join(" - ").trim();
+        return {
+          id: `convocado-manual-${index}-${nome.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+          nome,
+          clube: clube || undefined,
+          posicao: "Manual" as const,
+          manual: true,
+        };
+      });
+
+    return [...listed, ...manual];
+  }
+
+  function toggleConfirmedPlayer(id: string) {
+    setConfirmedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function saveConfig(nextQrCodeUrl = qrCodeUrl, confirmResult = false) {
     setSaving(true);
     setMessage("");
     try {
+      const jogadoresConvocados = buildConfirmedPlayers();
       const payload = {
         titulo: titulo.trim() || BOLAO_DEFAULT_TITLE,
         valor: Number(valor.replace(",", ".")) || BOLAO_DEFAULT_VALUE,
@@ -140,6 +193,12 @@ export default function RhBolaoCopa2026Page() {
         regulamento,
         pix_link: pixLink.trim(),
         qr_code_url: nextQrCodeUrl.trim(),
+        jogadores_convocados: jogadoresConvocados,
+        resultado_confirmado_at: jogadoresConvocados.length
+          ? confirmResult
+            ? new Date().toISOString()
+            : resultadoConfirmadoAt
+          : null,
         status,
         updated_at: new Date().toISOString(),
       };
@@ -147,7 +206,7 @@ export default function RhBolaoCopa2026Page() {
         ? supabase.from("pulsehub_bolao_config").update(payload).eq("id", configId)
         : supabase.from("pulsehub_bolao_config").insert(payload);
       const { data, error } = await query
-        .select("id,titulo,valor,regulamento,prazo,pix_link,qr_code_url,status,updated_at")
+        .select("id,titulo,valor,regulamento,prazo,pix_link,qr_code_url,jogadores_convocados,resultado_confirmado_at,status,updated_at")
         .single<BolaoConfig>();
       if (error) throw error;
       applyConfig(data);
@@ -187,10 +246,11 @@ export default function RhBolaoCopa2026Page() {
 
   function exportCsv() {
     const rows = [
-      ["Nome", "E-mail", "Data/hora de envio", "Quantidade", "Lista enviada", "Jogadores manuais", "Status"],
+      ["Nome", "E-mail", "Setor", "Data/hora de envio", "Quantidade", "Lista enviada", "Jogadores manuais", "Status"],
       ...bets.map((bet) => [
         bet.nome ?? "",
         bet.email ?? "",
+        sectorLabel(bet.setor),
         formatBolaoDateTime(bet.created_at),
         String(bet.total_jogadores),
         betPlayersText(bet),
@@ -206,6 +266,7 @@ export default function RhBolaoCopa2026Page() {
       <tr>
         <td>${bet.nome ?? ""}</td>
         <td>${bet.email ?? ""}</td>
+        <td>${sectorLabel(bet.setor)}</td>
         <td>${formatBolaoDateTime(bet.created_at)}</td>
         <td>${bet.total_jogadores}</td>
         <td>${betPlayersText(bet)}</td>
@@ -213,7 +274,7 @@ export default function RhBolaoCopa2026Page() {
         <td>${bet.status ?? ""}</td>
       </tr>
     `).join("");
-    const html = `<table><thead><tr><th>Nome</th><th>E-mail</th><th>Data/hora de envio</th><th>Quantidade</th><th>Lista enviada</th><th>Jogadores manuais</th><th>Status</th></tr></thead><tbody>${htmlRows}</tbody></table>`;
+    const html = `<table><thead><tr><th>Nome</th><th>E-mail</th><th>Setor</th><th>Data/hora de envio</th><th>Quantidade</th><th>Lista enviada</th><th>Jogadores manuais</th><th>Status</th></tr></thead><tbody>${htmlRows}</tbody></table>`;
     downloadBlob("bolao-copa-2026-apostas.xls", html, "application/vnd.ms-excel;charset=utf-8");
   }
 
@@ -329,6 +390,71 @@ export default function RhBolaoCopa2026Page() {
         </div>
       </section>
 
+      <section className="rounded-3xl border border-slate-200 bg-white p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">Convocados oficiais e ranking</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Após o prazo, marque os jogadores convocados de fato. O ranking público será calculado automaticamente.
+            </p>
+          </div>
+          <div className="rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700">
+            {buildConfirmedPlayers().length}/26 confirmados
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-2">
+          {BOLAO_POSITIONS.map((position) => (
+            <div key={position} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <h3 className="text-sm font-semibold text-slate-950">{position}</h3>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {BOLAO_PLAYERS.filter((player) => player.position === position).map((player) => (
+                  <label key={player.id} className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={confirmedIds.has(player.id)}
+                      onChange={() => toggleConfirmedPlayer(player.id)}
+                      className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600"
+                    />
+                    <span>
+                      <span className="block font-semibold text-slate-900">{player.name}</span>
+                      <span className="text-xs text-slate-500">{player.club}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <label className="mt-4 grid gap-1 text-xs font-semibold text-slate-700">
+          Convocados fora da lista
+          <textarea
+            value={confirmedManualText}
+            onChange={(event) => setConfirmedManualText(event.target.value)}
+            placeholder={"Um jogador por linha. Ex.: Nome - Clube"}
+            className="min-h-24 rounded-xl border border-slate-200 p-3 text-sm font-normal leading-6"
+          />
+        </label>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-slate-500">
+            {resultadoConfirmadoAt ? `Resultado confirmado em ${formatBolaoDateTime(resultadoConfirmadoAt)}.` : "Resultado ainda não confirmado."}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setResultadoConfirmadoAt(new Date().toISOString());
+              void saveConfig(qrCodeUrl, true);
+            }}
+            disabled={saving || buildConfirmedPlayers().length !== 26}
+            className="inline-flex items-center gap-2 rounded-2xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Save size={16} /> Confirmar convocados
+          </button>
+        </div>
+      </section>
+
       {message ? <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">{message}</div> : null}
 
       <section className="rounded-3xl border border-slate-200 bg-white p-6">
@@ -353,6 +479,7 @@ export default function RhBolaoCopa2026Page() {
               <tr>
                 <th className="px-4 py-3">Nome</th>
                 <th className="px-4 py-3">E-mail</th>
+                <th className="px-4 py-3">Setor</th>
                 <th className="px-4 py-3">Envio</th>
                 <th className="px-4 py-3">Qtd.</th>
                 <th className="px-4 py-3">Lista enviada</th>
@@ -365,6 +492,7 @@ export default function RhBolaoCopa2026Page() {
                 <tr key={bet.id} className="align-top">
                   <td className="px-4 py-3 font-semibold text-slate-900">{bet.nome}</td>
                   <td className="px-4 py-3 text-slate-600">{bet.email}</td>
+                  <td className="px-4 py-3 text-slate-600">{sectorLabel(bet.setor)}</td>
                   <td className="px-4 py-3 text-slate-600">{formatBolaoDateTime(bet.created_at)}</td>
                   <td className="px-4 py-3 font-semibold text-slate-900">{bet.total_jogadores}</td>
                   <td className="max-w-md px-4 py-3 text-slate-600">{betPlayersText(bet)}</td>

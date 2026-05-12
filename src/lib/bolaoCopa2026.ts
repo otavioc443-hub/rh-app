@@ -15,6 +15,8 @@ export type BolaoConfig = {
   prazo: string | null;
   pix_link: string | null;
   qr_code_url: string | null;
+  jogadores_convocados?: BolaoConfirmedPlayer[] | null;
+  resultado_confirmado_at?: string | null;
   status: "ativo" | "encerrado" | string | null;
   updated_at?: string | null;
 };
@@ -24,11 +26,13 @@ export type BolaoBet = {
   user_id: string;
   nome: string | null;
   email: string | null;
+  setor?: string | null;
   jogadores: BolaoSelectedPlayer[];
   jogadores_manuais: BolaoManualPlayer[] | null;
   total_jogadores: number;
   status: string | null;
   created_at: string;
+  updated_at?: string | null;
 };
 
 export type BolaoSelectedPlayer = {
@@ -44,6 +48,14 @@ export type BolaoManualPlayer = {
   nome: string;
   clube?: string;
   manual: true;
+};
+
+export type BolaoConfirmedPlayer = {
+  id: string;
+  nome: string;
+  clube?: string;
+  posicao?: BolaoPlayerPosition | "Manual";
+  manual?: boolean;
 };
 
 export const BOLAO_REQUIRED_PLAYERS = 26;
@@ -142,4 +154,27 @@ export function isBolaoClosed(config?: Pick<BolaoConfig, "prazo" | "status"> | n
   if (config?.status === "encerrado") return true;
   const deadline = new Date(config?.prazo || BOLAO_DEFAULT_DEADLINE);
   return Number.isFinite(deadline.getTime()) && Date.now() > deadline.getTime();
+}
+
+export function normalizeBolaoPlayerName(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function getBolaoBetPlayers(bet: Pick<BolaoBet, "jogadores" | "jogadores_manuais">) {
+  return [
+    ...(bet.jogadores ?? []).map((player) => ({ id: player.id, nome: player.nome, clube: player.clube, posicao: player.posicao, manual: false })),
+    ...(bet.jogadores_manuais ?? []).map((player) => ({ id: player.id, nome: player.nome, clube: player.clube, posicao: "Manual" as const, manual: true })),
+  ];
+}
+
+export function countBolaoHits(bet: Pick<BolaoBet, "jogadores" | "jogadores_manuais">, confirmed: BolaoConfirmedPlayer[] | null | undefined) {
+  const confirmedNames = new Set((confirmed ?? []).map((player) => normalizeBolaoPlayerName(player.nome)).filter(Boolean));
+  if (!confirmedNames.size) return null;
+  return getBolaoBetPlayers(bet).filter((player) => confirmedNames.has(normalizeBolaoPlayerName(player.nome))).length;
 }

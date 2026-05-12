@@ -9,7 +9,6 @@ import {
   ChevronDown,
   LogOut,
   MessageSquareText,
-  CircleDollarSign,
   LineChart,
   CalendarClock,
   BadgeCheck,
@@ -108,7 +107,6 @@ export default function Sidebar({
         children: [
           { label: "Visão Geral", icon: LayoutDashboard, href: "/institucional", exact: true },
           { label: "PulseHub", icon: MessageSquareText, href: "/institucional/rede-social" },
-          { label: "Bolão Copa 2026", icon: CircleDollarSign, href: "/institucional/bolao-copa-2026" },
           { label: "Organograma", icon: GitBranch, href: "/institucional/organograma", roles: ["gestor", "financeiro", "admin"] },
         ],
       },
@@ -253,7 +251,6 @@ export default function Sidebar({
           { label: "Adicionar Colaborador", icon: UserPlus, href: "/rh/adicionar-colaborador" },
           { label: "Inclusão Cargos", icon: Briefcase, href: "/rh/cargos" },
           { label: "Institucional", icon: Building2, href: "/rh/institucional" },
-          { label: "Bolão Copa 2026", icon: CircleDollarSign, href: "/rh/bolao-copa-2026" },
           { label: "Governança Feedback", icon: MessageSquareText, href: "/rh/feedbacks" },
           { label: "Mapa comportamental", icon: BadgeCheck, href: "/rh/mapa-comportamental", exact: true },
           { label: "Análises comportamentais", icon: LineChart, href: "/rh/mapa-comportamental/analises" },

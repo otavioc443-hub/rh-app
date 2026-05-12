@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Trophy } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 import { PulseSprintPage, PulseSprintWidget } from "@/components/engagement-game/PulseSprint";
@@ -4079,6 +4080,25 @@ export default function InternalSocialPage() {
               </section>
 
               <PulseSprintWidget />
+
+              <section className="overflow-hidden rounded-[2rem] border border-emerald-200 bg-emerald-950 p-5 text-white shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">Bolão</p>
+                    <p className="mt-1 text-lg font-semibold">Copa do Mundo 2026</p>
+                    <p className="mt-2 text-sm leading-6 text-emerald-50/85">
+                      Monte sua lista de 26 convocados, acompanhe os palpites por setor e veja o ranking após a confirmação do RH.
+                    </p>
+                  </div>
+                  <Trophy className="shrink-0 text-emerald-200" size={24} />
+                </div>
+                <Link
+                  href="/institucional/bolao-copa-2026"
+                  className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-emerald-300 px-4 py-3 text-sm font-semibold text-emerald-950 hover:bg-emerald-200"
+                >
+                  Bolão Copa 2026
+                </Link>
+              </section>
 
               <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)]">
                 <div className="flex items-center justify-between gap-3">
