@@ -67,25 +67,46 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const { data: colab, error: colabErr } = await supabaseAdmin
       .from("colaboradores")
-      .select("id,user_id")
+      .select("id,user_id,email,nome")
       .eq("id", id)
-      .maybeSingle<{ id: string; user_id: string | null }>();
+      .maybeSingle<{ id: string; user_id: string | null; email: string | null; nome: string | null }>();
 
     if (colabErr || !colab) return NextResponse.json({ error: "Colaborador nao encontrado" }, { status: 404 });
-    if (!colab.user_id) {
-      return NextResponse.json({ ok: true, synced: false, message: "Colaborador sem user_id vinculado." });
+
+    let profileUserId = colab.user_id;
+    if (!profileUserId && colab.email) {
+      const { data: profileByEmail } = await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .eq("email", colab.email)
+        .maybeSingle<{ id: string }>();
+      profileUserId = profileByEmail?.id ?? null;
+
+      if (profileUserId) {
+        await supabaseAdmin.from("colaboradores").update({ user_id: profileUserId }).eq("id", colab.id);
+      }
+    }
+
+    if (!profileUserId) {
+      return NextResponse.json({
+        ok: true,
+        synced: false,
+        message: "Colaborador sem usuario/perfil vinculado para sincronizar.",
+      });
     }
 
     const { error: upErr } = await supabaseAdmin
       .from("profiles")
       .update({
+        full_name: colab.nome,
+        email: colab.email,
         company_id: companyId,
         department_id: departmentId,
       })
-      .eq("id", colab.user_id);
+      .eq("id", profileUserId);
 
     if (upErr) return NextResponse.json({ error: upErr.message }, { status: 400 });
-    return NextResponse.json({ ok: true, synced: true });
+    return NextResponse.json({ ok: true, synced: true, user_id: profileUserId });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro inesperado";
     return NextResponse.json({ error: message }, { status: 500 });

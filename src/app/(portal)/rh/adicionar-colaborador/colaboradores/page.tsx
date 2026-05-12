@@ -96,6 +96,35 @@ export default function Page() {
     }
 
     setMsg("✅ Colaborador atualizado!");
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    const syncRes = await fetch(`/api/rh/colaboradores/${editing.id}/sync-profile`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        company_id: payload.company_id ?? null,
+        department_id: payload.department_id ?? null,
+      }),
+    });
+
+    if (!syncRes.ok) {
+      const text = await syncRes.text();
+      let message = "Falha ao sincronizar vinculo no perfil.";
+      try {
+        const json = JSON.parse(text) as { error?: string };
+        if (json.error) message = json.error;
+      } catch {
+        if (text) message = text;
+      }
+      setMsg(`âŒ ${message}`);
+      setSaving(false);
+      return;
+    }
+
     setEditing(null);
     setSaving(false);
     await load();

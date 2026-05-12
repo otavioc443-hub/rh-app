@@ -458,9 +458,14 @@ export default function CollaboratorEditWizard({
 
       const companyId = n(payload.company_id) || null;
       const departmentId = n(payload.department_id) || null;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
       const syncRes = await fetch(`/api/rh/colaboradores/${collaboratorId}/sync-profile`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         credentials: "include",
         body: JSON.stringify({
           company_id: companyId,
