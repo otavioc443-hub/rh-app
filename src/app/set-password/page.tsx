@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { clearPortalExitIntent, markRecentLogin, supabase } from "@/lib/supabaseClient";
 
 function sanitizeRedirect(path: string | null) {
-  const fallback = "/perfil";
+  const fallback = "/home";
   if (!path) return fallback;
   if (!path.startsWith("/")) return fallback;
 

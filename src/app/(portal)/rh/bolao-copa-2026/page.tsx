@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download, Eye, ImageOff, RefreshCcw, Save, Trash2, Upload, X } from "lucide-react";
+import { Download, ExternalLink, Eye, ImageOff, RefreshCcw, Save, Trash2, Upload, X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserRole } from "@/hooks/useUserRole";
 import {
@@ -72,6 +72,11 @@ function betAllPlayers(bet: BolaoBet) {
   ];
 }
 
+function isPdfProof(url: string, path: string | null | undefined) {
+  const source = (path || url).split("?")[0].toLowerCase();
+  return source.endsWith(".pdf");
+}
+
 function sectorLabel(value: string | null | undefined) {
   return value?.trim() || "Setor não informado";
 }
@@ -113,6 +118,8 @@ export default function RhBolaoCopa2026Page() {
   const [resultadoConfirmadoAt, setResultadoConfirmadoAt] = useState<string | null>(null);
   const [bets, setBets] = useState<BolaoBet[]>([]);
   const [selectedBet, setSelectedBet] = useState<BolaoBet | null>(null);
+  const [proofLoadingId, setProofLoadingId] = useState<string | null>(null);
+  const [proofPreview, setProofPreview] = useState<{ bet: BolaoBet; url: string; path: string | null; isPdf: boolean } | null>(null);
 
   const paidBets = useMemo(() => bets.filter(isBolaoPaid), [bets]);
   const totalPrize = useMemo(() => paidBets.length * (Number(valor.replace(",", ".")) || BOLAO_DEFAULT_VALUE), [paidBets.length, valor]);
@@ -278,6 +285,31 @@ export default function RhBolaoCopa2026Page() {
       setMessage("Status de pagamento atualizado.");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Erro ao atualizar pagamento.");
+    }
+  }
+
+  async function openPaymentProof(bet: BolaoBet) {
+    setMessage("");
+    setProofLoadingId(bet.id);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const res = await fetch(`/api/pulsehub/bolao-copa-2026/payment-proof?betId=${encodeURIComponent(bet.id)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        credentials: "include",
+      });
+      const json = (await res.json()) as { url?: string; path?: string | null; error?: string };
+      if (!res.ok || !json.url) throw new Error(json.error || "Erro ao abrir comprovante.");
+      setProofPreview({
+        bet,
+        url: json.url,
+        path: json.path ?? bet.comprovante_path ?? null,
+        isPdf: isPdfProof(json.url, json.path ?? bet.comprovante_path),
+      });
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Erro ao abrir comprovante.");
+    } finally {
+      setProofLoadingId(null);
     }
   }
 
@@ -562,10 +594,16 @@ export default function RhBolaoCopa2026Page() {
                     </select>
                   </td>
                   <td className="px-2 py-3 md:px-3">
-                    {bet.comprovante_url ? (
-                      <a href={bet.comprovante_url} target="_blank" rel="noreferrer" className="text-xs font-semibold text-[#0a66c2] hover:underline">
-                        Abrir
-                      </a>
+                    {bet.comprovante_url || bet.comprovante_path ? (
+                      <button
+                        type="button"
+                        onClick={() => void openPaymentProof(bet)}
+                        disabled={proofLoadingId === bet.id}
+                        className="inline-flex w-full items-center justify-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-60"
+                      >
+                        <Eye size={14} />
+                        {proofLoadingId === bet.id ? "Abrindo..." : "Visualizar"}
+                      </button>
                     ) : (
                       <span className="text-xs text-slate-400">Pendente</span>
                     )}
@@ -601,6 +639,57 @@ export default function RhBolaoCopa2026Page() {
           </table>
         </div>
       </section>
+
+      {proofPreview ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-4xl overflow-hidden rounded-3xl bg-white shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Comprovante de pagamento</p>
+                <h3 className="mt-1 text-lg font-semibold text-slate-950">{proofPreview.bet.nome ?? "Colaborador"}</h3>
+                <p className="text-sm text-slate-600">{proofPreview.bet.email ?? "-"}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={proofPreview.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  <ExternalLink size={16} />
+                  Abrir em nova aba
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setProofPreview(null)}
+                  className="rounded-2xl border border-slate-200 bg-white p-2 text-slate-700 hover:bg-slate-50"
+                  aria-label="Fechar comprovante"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            <div className="max-h-[70vh] overflow-auto bg-slate-100 p-4">
+              {proofPreview.isPdf ? (
+                <iframe
+                  src={proofPreview.url}
+                  title="Comprovante de pagamento"
+                  className="h-[70vh] w-full rounded-2xl border border-slate-200 bg-white"
+                />
+              ) : (
+                <div className="flex justify-center">
+                  <img
+                    src={proofPreview.url}
+                    alt="Comprovante de pagamento"
+                    className="max-h-[70vh] max-w-full rounded-2xl border border-slate-200 bg-white object-contain"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {selectedBet ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">

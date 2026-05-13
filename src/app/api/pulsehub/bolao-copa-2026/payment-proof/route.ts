@@ -11,6 +11,62 @@ function extFromMime(mime: string) {
   return null;
 }
 
+async function getAuthenticatedUser(req: Request) {
+  const auth = req.headers.get("authorization") || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+  if (!token) return { user: null, error: "Não autenticado" };
+
+  const { data, error } = await supabaseAdmin.auth.getUser(token);
+  const user = data?.user ?? null;
+  if (error || !user) return { user: null, error: "Não autenticado" };
+  return { user, error: null };
+}
+
+async function isRhOrAdmin(userId: string) {
+  const { data } = await supabaseAdmin
+    .from("profiles")
+    .select("role,active")
+    .eq("id", userId)
+    .maybeSingle<{ role: string | null; active: boolean | null }>();
+
+  return data?.active === true && (data.role === "rh" || data.role === "admin");
+}
+
+export async function GET(req: Request) {
+  try {
+    const { user, error } = await getAuthenticatedUser(req);
+    if (!user) return NextResponse.json({ error: error || "Não autenticado" }, { status: 401 });
+    if (!(await isRhOrAdmin(user.id))) return NextResponse.json({ error: "Acesso restrito ao RH/Admin" }, { status: 403 });
+
+    const url = new URL(req.url);
+    const betId = String(url.searchParams.get("betId") ?? "").trim();
+    if (!betId) return NextResponse.json({ error: "Aposta não informada" }, { status: 400 });
+
+    const { data: bet, error: betErr } = await supabaseAdmin
+      .from("pulsehub_bolao_copa_2026")
+      .select("id,comprovante_url,comprovante_path")
+      .eq("id", betId)
+      .maybeSingle<{ id: string; comprovante_url: string | null; comprovante_path: string | null }>();
+
+    if (betErr) return NextResponse.json({ error: betErr.message }, { status: 400 });
+    if (!bet?.comprovante_path && !bet?.comprovante_url) {
+      return NextResponse.json({ error: "Comprovante não encontrado" }, { status: 404 });
+    }
+
+    if (bet.comprovante_path) {
+      const signed = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(bet.comprovante_path, 60 * 10);
+      if (signed.error || !signed.data?.signedUrl) {
+        return NextResponse.json({ error: signed.error?.message || "Não foi possível abrir o comprovante" }, { status: 400 });
+      }
+      return NextResponse.json({ ok: true, url: signed.data.signedUrl, path: bet.comprovante_path });
+    }
+
+    return NextResponse.json({ ok: true, url: bet.comprovante_url, path: null });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : "Erro inesperado" }, { status: 500 });
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const auth = req.headers.get("authorization") || "";

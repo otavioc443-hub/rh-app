@@ -15,6 +15,7 @@ import {
 } from "@/lib/supabaseClient";
 
 const DEFAULT_AFTER_LOGIN = "/home";
+const PORTAL_ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://rh-app-seven.vercel.app").replace(/\/$/, "");
 
 export default function LoginPage() {
   const router = useRouter();
@@ -106,7 +107,7 @@ export default function LoginPage() {
     }
 
     setRecoveryLoading(true);
-    const redirectTo = `${window.location.origin}/auth/callback`;
+    const redirectTo = `${PORTAL_ORIGIN}/auth/callback`;
 
     const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo });
     setRecoveryLoading(false);
