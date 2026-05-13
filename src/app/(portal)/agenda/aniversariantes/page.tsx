@@ -86,47 +86,26 @@ export default function AniversariantesPage() {
       const user = authData.user;
       if (!user) throw new Error("Usuário não autenticado.");
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("id", user.id)
-        .maybeSingle<{ company_id: string | null }>();
-
-      const currentCompanyId = profile?.company_id ?? null;
-      let currentCompanyName: string | null = null;
-      if (currentCompanyId) {
-        const { data: company } = await supabase
-          .from("companies")
-          .select("name")
-          .eq("id", currentCompanyId)
-          .maybeSingle<{ name: string | null }>();
-        currentCompanyName = company?.name?.trim() || null;
-      }
-
-      if (!currentCompanyName && user.email) {
-        const { data: collaborator } = await supabase
-          .from("colaboradores")
-          .select("empresa")
-          .eq("email", user.email)
-          .maybeSingle<{ empresa: string | null }>();
-        currentCompanyName = collaborator?.empresa?.trim() || null;
-      }
-      setCompanyName(currentCompanyName);
-
-      const { data, error } = await supabase
-        .from("colaboradores")
-        .select("id,company_id,nome,data_nascimento,departamento,cargo,empresa,is_active")
-        .eq("is_active", true)
-        .not("data_nascimento", "is", null);
-      if (error) throw error;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const response = await fetch("/api/me/birthdays", {
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      const payload = (await response.json()) as {
+        companyName?: string | null;
+        birthdays?: ColaboradorBirthday[];
+        error?: string;
+      };
+      if (!response.ok) throw new Error(payload.error || "Erro ao carregar aniversariantes.");
+      setCompanyName(payload.companyName ?? null);
 
       const now = new Date();
-      const normalized = ((data ?? []) as ColaboradorBirthday[])
+      const normalized = (payload.birthdays ?? [])
         .filter(
           (r) =>
             Boolean(r.data_nascimento) &&
-            isCurrentMonthBirthday(String(r.data_nascimento), now) &&
-            belongsToCompany(r.company_id, r.empresa, currentCompanyId, currentCompanyName)
+            isCurrentMonthBirthday(String(r.data_nascimento), now)
         )
         .map((r) => {
           const next = birthdayDateThisYear(String(r.data_nascimento), now);

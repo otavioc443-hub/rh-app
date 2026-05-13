@@ -153,6 +153,8 @@ export default function HomePage() {
       setDisplayName(resolved || "Usuário");
 
       const todayIso = new Date().toISOString().slice(0, 10);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
       const [announcementRes, eventsRes, birthdayRes] = await Promise.all([
         supabase
           .from("pulsehub_home_announcements")
@@ -167,11 +169,10 @@ export default function HomePage() {
           .gte("event_date", todayIso)
           .order("event_date", { ascending: true })
           .limit(3),
-        supabase
-          .from("colaboradores")
-          .select("id,company_id,nome,data_nascimento,departamento,cargo,empresa")
-          .eq("is_active", true)
-          .not("data_nascimento", "is", null),
+        fetch("/api/me/birthdays", {
+          credentials: "include",
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        }),
       ]);
 
       if (!announcementRes.error && announcementRes.data?.length) {
@@ -183,14 +184,11 @@ export default function HomePage() {
         setEvents((eventsRes.data ?? []) as InstitutionalEvent[]);
       }
 
-      if (!birthdayRes.error) {
+      if (birthdayRes.ok) {
+        const birthdayJson = (await birthdayRes.json()) as { birthdays?: CollaboratorBirthday[] };
         const now = new Date();
-        const normalized = ((birthdayRes.data ?? []) as CollaboratorBirthday[])
-          .filter(
-            (row) =>
-              Boolean(row.data_nascimento) &&
-              belongsToCompany(row.company_id, row.empresa, currentCompanyId, currentCompanyName)
-          )
+        const normalized = (birthdayJson.birthdays ?? [])
+          .filter((row) => Boolean(row.data_nascimento))
           .map((row) => {
             const next = nextBirthdayDate(String(row.data_nascimento), now);
             return {
