@@ -39,6 +39,11 @@ function cleanEmail(value: string | null | undefined) {
   return (value ?? "").trim().toLowerCase();
 }
 
+function isMissingColumnError(message: string | null | undefined) {
+  const text = (message ?? "").toLowerCase();
+  return text.includes("schema cache") || text.includes("could not find") || text.includes("column") || text.includes("does not exist");
+}
+
 async function findAuthUserIdByEmail(email: string) {
   for (let page = 1; page <= 10; page += 1) {
     const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 100 });
@@ -177,7 +182,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       })
       .eq("id", colab.id);
 
-    if (colabUpdateErr) return NextResponse.json({ error: colabUpdateErr.message }, { status: 400 });
+    if (colabUpdateErr) {
+      if (!isMissingColumnError(colabUpdateErr.message)) {
+        return NextResponse.json({ error: colabUpdateErr.message }, { status: 400 });
+      }
+
+      const { error: userIdOnlyErr } = await supabaseAdmin
+        .from("colaboradores")
+        .update({ user_id: profileUserId })
+        .eq("id", colab.id);
+
+      if (userIdOnlyErr) return NextResponse.json({ error: userIdOnlyErr.message }, { status: 400 });
+    }
+
     return NextResponse.json({ ok: true, synced: true, user_id: profileUserId });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro inesperado";
