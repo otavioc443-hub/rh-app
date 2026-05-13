@@ -2,7 +2,13 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { clearPortalExitIntent, markPasswordRecoveryIntent, markRecentLogin, supabase } from "@/lib/supabaseClient";
+import {
+  clearPortalExitIntent,
+  hasPasswordRecoveryIntent,
+  markPasswordRecoveryIntent,
+  markRecentLogin,
+  supabase,
+} from "@/lib/supabaseClient";
 
 export default function AuthCallback() {
   const router = useRouter();
@@ -47,7 +53,7 @@ export default function AuthCallback() {
       }
 
       clearPortalExitIntent();
-      if (authType === "recovery") markPasswordRecoveryIntent();
+      if (authType === "recovery" || hasPasswordRecoveryIntent()) markPasswordRecoveryIntent();
       else markRecentLogin();
       router.replace("/set-password");
     }

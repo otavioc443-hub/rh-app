@@ -24,6 +24,7 @@ type InstitutionalEvent = {
 
 type CollaboratorBirthday = {
   id: string;
+  company_id?: string | null;
   nome: string | null;
   data_nascimento: string | null;
   departamento: string | null;
@@ -91,8 +92,14 @@ function normalizeCompanyName(value: string | null | undefined) {
     .toLowerCase();
 }
 
-function belongsToCompany(rowCompany: string | null | undefined, currentCompany: string | null) {
-  if (!currentCompany) return true;
+function belongsToCompany(
+  rowCompanyId: string | null | undefined,
+  rowCompany: string | null | undefined,
+  currentCompanyId: string | null | undefined,
+  currentCompany: string | null
+) {
+  if (currentCompanyId && rowCompanyId === currentCompanyId) return true;
+  if (!currentCompany) return !currentCompanyId;
   const current = normalizeCompanyName(currentCompany);
   const row = normalizeCompanyName(rowCompany);
   return Boolean(row) && (row === current || row.includes(current) || current.includes(row));
@@ -121,23 +128,24 @@ export default function HomePage() {
       let resolved = profile?.full_name?.trim() ?? "";
       let collaboratorCompany: string | null = null;
 
-      if ((!resolved || resolved.includes("@")) && email) {
+      if (email) {
         const { data: colab } = await supabase
           .from("colaboradores")
           .select("nome,empresa")
           .eq("email", email)
           .maybeSingle<{ nome: string | null; empresa: string | null }>();
 
-        if (colab?.nome?.trim()) resolved = colab.nome.trim();
+        if ((!resolved || resolved.includes("@")) && colab?.nome?.trim()) resolved = colab.nome.trim();
         collaboratorCompany = colab?.empresa?.trim() || null;
       }
 
+      const currentCompanyId = profile?.company_id ?? null;
       let currentCompanyName = collaboratorCompany;
-      if (profile?.company_id) {
+      if (currentCompanyId) {
         const { data: company } = await supabase
           .from("companies")
           .select("name")
-          .eq("id", profile.company_id)
+          .eq("id", currentCompanyId)
           .maybeSingle<{ name: string | null }>();
         currentCompanyName = company?.name?.trim() || currentCompanyName;
       }
@@ -161,7 +169,7 @@ export default function HomePage() {
           .limit(3),
         supabase
           .from("colaboradores")
-          .select("id,nome,data_nascimento,departamento,cargo,empresa")
+          .select("id,company_id,nome,data_nascimento,departamento,cargo,empresa")
           .eq("is_active", true)
           .not("data_nascimento", "is", null),
       ]);
@@ -178,7 +186,11 @@ export default function HomePage() {
       if (!birthdayRes.error) {
         const now = new Date();
         const normalized = ((birthdayRes.data ?? []) as CollaboratorBirthday[])
-          .filter((row) => Boolean(row.data_nascimento) && belongsToCompany(row.empresa, currentCompanyName))
+          .filter(
+            (row) =>
+              Boolean(row.data_nascimento) &&
+              belongsToCompany(row.company_id, row.empresa, currentCompanyId, currentCompanyName)
+          )
           .map((row) => {
             const next = nextBirthdayDate(String(row.data_nascimento), now);
             return {

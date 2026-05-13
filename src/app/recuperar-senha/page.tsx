@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, MailCheck } from "lucide-react";
-import { markPasswordRecoveryIntent, supabase } from "@/lib/supabaseClient";
+import { forceClientLogout, markPasswordRecoveryIntent, supabase } from "@/lib/supabaseClient";
 
 const PORTAL_ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://rh-app-seven.vercel.app").replace(/\/$/, "");
 const RATE_LIMIT_SECONDS = 60;
@@ -52,8 +52,9 @@ export default function RecuperarSenhaPage() {
     setSuccess(false);
     setMessage("");
 
+    await forceClientLogout();
     markPasswordRecoveryIntent();
-    const redirectTo = `${PORTAL_ORIGIN}/set-password`;
+    const redirectTo = `${PORTAL_ORIGIN}/auth/recovery`;
     const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo });
     setLoading(false);
 

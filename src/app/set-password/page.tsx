@@ -94,6 +94,7 @@ export default function SetPasswordPage() {
 
       const url = new URL(window.location.href);
       const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      if (url.searchParams.get("flow") === "recovery") markPasswordRecoveryIntent();
       const hasAuthParams = Boolean(
         url.searchParams.get("code") ||
           url.searchParams.get("token_hash") ||

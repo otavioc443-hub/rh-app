@@ -5,6 +5,7 @@ import { ChevronRight } from "lucide-react";
 import {
   clearRecentLoginMarker,
   forceClientLogout,
+  hasPasswordRecoveryIntent,
   hasRecentLoginMarker,
   supabase,
 } from "@/lib/supabaseClient";
@@ -381,6 +382,12 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       router.replace("/?redirectedFrom=%2Fhome");
     }
 
+    function redirectToPasswordRecoveryIfNeeded() {
+      if (!hasPasswordRecoveryIntent()) return false;
+      router.replace("/set-password?flow=recovery");
+      return true;
+    }
+
     async function boot({
       resetVisibilityState = true,
       silent = false,
@@ -398,6 +405,8 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       }
 
       try {
+        if (redirectToPasswordRecoveryIfNeeded()) return;
+
         let { data: sessRes, error: sessErr } = await withTimeout(supabase.auth.getSession(), 7000);
 
         if (!alive.current) return;
@@ -420,6 +429,8 @@ export default function PortalShell({ children }: { children: React.ReactNode })
           await safeRedirectToLogin();
           return;
         }
+
+        if (redirectToPasswordRecoveryIfNeeded()) return;
 
         clearRecentLoginMarker();
 

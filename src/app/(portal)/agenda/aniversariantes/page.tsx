@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabaseClient";
 
 type ColaboradorBirthday = {
   id: string;
+  company_id?: string | null;
   nome: string | null;
   data_nascimento: string | null;
   departamento: string | null;
@@ -58,8 +59,14 @@ function normalizeCompanyName(value: string | null | undefined) {
     .toLowerCase();
 }
 
-function belongsToCompany(rowCompany: string | null | undefined, currentCompany: string | null) {
-  if (!currentCompany) return true;
+function belongsToCompany(
+  rowCompanyId: string | null | undefined,
+  rowCompany: string | null | undefined,
+  currentCompanyId: string | null | undefined,
+  currentCompany: string | null
+) {
+  if (currentCompanyId && rowCompanyId === currentCompanyId) return true;
+  if (!currentCompany) return !currentCompanyId;
   const current = normalizeCompanyName(currentCompany);
   const row = normalizeCompanyName(rowCompany);
   return Boolean(row) && (row === current || row.includes(current) || current.includes(row));
@@ -85,12 +92,13 @@ export default function AniversariantesPage() {
         .eq("id", user.id)
         .maybeSingle<{ company_id: string | null }>();
 
+      const currentCompanyId = profile?.company_id ?? null;
       let currentCompanyName: string | null = null;
-      if (profile?.company_id) {
+      if (currentCompanyId) {
         const { data: company } = await supabase
           .from("companies")
           .select("name")
-          .eq("id", profile.company_id)
+          .eq("id", currentCompanyId)
           .maybeSingle<{ name: string | null }>();
         currentCompanyName = company?.name?.trim() || null;
       }
@@ -107,7 +115,7 @@ export default function AniversariantesPage() {
 
       const { data, error } = await supabase
         .from("colaboradores")
-        .select("id,nome,data_nascimento,departamento,cargo,empresa,is_active")
+        .select("id,company_id,nome,data_nascimento,departamento,cargo,empresa,is_active")
         .eq("is_active", true)
         .not("data_nascimento", "is", null);
       if (error) throw error;
@@ -118,7 +126,7 @@ export default function AniversariantesPage() {
           (r) =>
             Boolean(r.data_nascimento) &&
             isCurrentMonthBirthday(String(r.data_nascimento), now) &&
-            belongsToCompany(r.empresa, currentCompanyName)
+            belongsToCompany(r.company_id, r.empresa, currentCompanyId, currentCompanyName)
         )
         .map((r) => {
           const next = birthdayDateThisYear(String(r.data_nascimento), now);

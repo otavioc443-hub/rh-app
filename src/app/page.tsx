@@ -33,10 +33,10 @@ function hasAuthLinkParams() {
   );
 }
 
-function moveAuthLinkToCallback() {
+function moveAuthLinkToSetPassword() {
   if (typeof window === "undefined") return;
   markPasswordRecoveryIntent();
-  const target = `/auth/callback${window.location.search}${window.location.hash}`;
+  const target = `/set-password${window.location.search}${window.location.hash}`;
   window.location.replace(target);
 }
 
@@ -55,7 +55,7 @@ export default function LoginPage() {
     let alive = true;
 
     if (hasAuthLinkParams()) {
-      moveAuthLinkToCallback();
+      moveAuthLinkToSetPassword();
       return () => {
         alive = false;
       };
