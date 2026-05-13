@@ -55,13 +55,20 @@ function parseDateOnly(iso: string) {
   return new Date(y, m - 1, d);
 }
 
-function nextBirthdayDate(birthIso: string, now = new Date()) {
+function birthdayDateThisYear(birthIso: string, now = new Date()) {
   const birth = parseDateOnly(birthIso);
   const currentYear = now.getFullYear();
-  let next = new Date(currentYear, birth.getMonth(), birth.getDate());
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  if (next < today) next = new Date(currentYear + 1, birth.getMonth(), birth.getDate());
-  return next;
+  return new Date(currentYear, birth.getMonth(), birth.getDate());
+}
+
+function isCurrentMonthBirthday(birthIso: string, now = new Date()) {
+  return birthdayDateThisYear(birthIso, now).getMonth() === now.getMonth();
+}
+
+function isTodayOrUpcoming(date: Date, now = new Date()) {
+  const birthday = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  return birthday >= today;
 }
 
 function diffInDays(a: Date, b: Date) {
@@ -145,9 +152,13 @@ export default function HomePage() {
       if (!birthdayRes.error) {
         const now = new Date();
         const normalized = ((birthdayRes.data ?? []) as CollaboratorBirthday[])
-          .filter((row) => Boolean(row.data_nascimento))
+          .filter((row) => {
+            if (!row.data_nascimento) return false;
+            const birthday = birthdayDateThisYear(String(row.data_nascimento), now);
+            return isCurrentMonthBirthday(String(row.data_nascimento), now) && isTodayOrUpcoming(birthday, now);
+          })
           .map((row) => {
-            const next = nextBirthdayDate(String(row.data_nascimento), now);
+            const next = birthdayDateThisYear(String(row.data_nascimento), now);
             return {
               id: row.id,
               nome: row.nome ?? "Sem nome",
@@ -308,8 +319,8 @@ export default function HomePage() {
               ))
             ) : (
               <div className="rounded-xl border border-slate-200 p-3">
-                <div className="text-sm font-medium text-slate-900">Nenhum hoje</div>
-                <div className="text-sm text-slate-600">Confira os próximos aniversários.</div>
+                <div className="text-sm font-medium text-slate-900">Nenhum neste mês</div>
+                <div className="text-sm text-slate-600">Confira novamente quando houver aniversariantes no mês vigente.</div>
               </div>
             )}
 

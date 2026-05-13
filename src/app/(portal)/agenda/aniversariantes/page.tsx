@@ -28,23 +28,25 @@ function parseDateOnly(iso: string) {
   return new Date(y, m - 1, d);
 }
 
-function nextBirthdayDate(birthIso: string, now = new Date()) {
+function birthdayDateThisYear(birthIso: string, now = new Date()) {
   const birth = parseDateOnly(birthIso);
-  const month = birth.getMonth();
-  const day = birth.getDate();
+  return new Date(now.getFullYear(), birth.getMonth(), birth.getDate());
+}
 
-  const currentYear = now.getFullYear();
-  let next = new Date(currentYear, month, day);
-  if (next < new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
-    next = new Date(currentYear + 1, month, day);
-  }
-  return next;
+function isCurrentMonthBirthday(birthIso: string, now = new Date()) {
+  return birthdayDateThisYear(birthIso, now).getMonth() === now.getMonth();
 }
 
 function diffInDays(a: Date, b: Date) {
   const x = new Date(a.getFullYear(), a.getMonth(), a.getDate()).getTime();
   const y = new Date(b.getFullYear(), b.getMonth(), b.getDate()).getTime();
-  return Math.max(0, Math.round((x - y) / (1000 * 60 * 60 * 24)));
+  return Math.round((x - y) / (1000 * 60 * 60 * 24));
+}
+
+function formatBirthdayStatus(daysLeft: number) {
+  if (daysLeft === 0) return "Hoje";
+  if (daysLeft > 0) return `Em ${daysLeft} dia(s)`;
+  return "Ja passou";
 }
 
 export default function AniversariantesPage() {
@@ -65,9 +67,9 @@ export default function AniversariantesPage() {
 
       const now = new Date();
       const normalized = ((data ?? []) as ColaboradorBirthday[])
-        .filter((r) => Boolean(r.data_nascimento))
+        .filter((r) => Boolean(r.data_nascimento) && isCurrentMonthBirthday(String(r.data_nascimento), now))
         .map((r) => {
-          const next = nextBirthdayDate(String(r.data_nascimento), now);
+          const next = birthdayDateThisYear(String(r.data_nascimento), now);
           return {
             id: r.id,
             nome: r.nome ?? "Sem nome",
@@ -93,7 +95,7 @@ export default function AniversariantesPage() {
     void load();
   }, []);
 
-  const next30 = useMemo(() => rows.filter((r) => r.daysLeft <= 30), [rows]);
+  const upcomingThisMonth = useMemo(() => rows.filter((r) => r.daysLeft >= 0), [rows]);
 
   return (
     <div className="space-y-6">
@@ -102,7 +104,7 @@ export default function AniversariantesPage() {
           <div>
             <h1 className="text-xl font-semibold text-slate-900">Aniversariantes</h1>
             <p className="mt-1 text-sm text-slate-600">
-              Lista de aniversarios baseada nos colaboradores ativos com data de nascimento.
+              Lista de aniversariantes do mês vigente baseada nos colaboradores ativos com data de nascimento.
             </p>
           </div>
           <button
@@ -118,12 +120,12 @@ export default function AniversariantesPage() {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
-          <p className="text-sm text-slate-500">Total com aniversario</p>
+          <p className="text-sm text-slate-500">Aniversariantes no mês</p>
           <p className="mt-2 text-2xl font-semibold text-slate-900">{rows.length}</p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
-          <p className="text-sm text-slate-500">Proximos 30 dias</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">{next30.length}</p>
+          <p className="text-sm text-slate-500">A partir de hoje</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">{upcomingThisMonth.length}</p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
           <p className="text-sm text-slate-500">Hoje</p>
@@ -138,10 +140,10 @@ export default function AniversariantesPage() {
       ) : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <p className="text-sm font-semibold text-slate-900">Proximos 30 dias</p>
+        <p className="text-sm font-semibold text-slate-900">Aniversários deste mês</p>
         <div className="mt-4 space-y-3">
-          {next30.length ? (
-            next30.map((r) => (
+          {rows.length ? (
+            rows.map((r) => (
               <div key={r.id} className="flex flex-col gap-2 rounded-xl border border-slate-200 p-4 md:flex-row md:items-center md:justify-between">
                 <div>
                   <p className="font-medium text-slate-900">{r.nome}</p>
@@ -152,20 +154,20 @@ export default function AniversariantesPage() {
                     <Cake size={14} />
                     {r.nextDate.toLocaleDateString("pt-BR")}
                   </span>
-                  <span className="text-slate-500">{r.daysLeft === 0 ? "Hoje" : `Em ${r.daysLeft} dia(s)`}</span>
+                  <span className="text-slate-500">{formatBirthdayStatus(r.daysLeft)}</span>
                 </div>
               </div>
             ))
           ) : (
             <div className="rounded-xl border border-slate-200 p-4 text-sm text-slate-500">
-              Nenhum aniversario nos proximos 30 dias.
+              Nenhum aniversário no mês vigente.
             </div>
           )}
         </div>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <p className="text-sm font-semibold text-slate-900">Todos os aniversarios futuros</p>
+        <p className="text-sm font-semibold text-slate-900">Lista do mês vigente</p>
         <div className="mt-4 overflow-x-auto">
           <table className="w-full min-w-[700px] text-left text-sm">
             <thead className="bg-slate-50 text-slate-700">
@@ -173,8 +175,8 @@ export default function AniversariantesPage() {
                 <th className="p-3">Nome</th>
                 <th className="p-3">Cargo</th>
                 <th className="p-3">Departamento</th>
-                <th className="p-3">Proxima data</th>
-                <th className="p-3">Dias</th>
+                <th className="p-3">Data</th>
+                <th className="p-3">Status</th>
               </tr>
             </thead>
             <tbody>
@@ -185,7 +187,7 @@ export default function AniversariantesPage() {
                     <td className="p-3">{r.cargo}</td>
                     <td className="p-3">{r.departamento}</td>
                     <td className="p-3">{r.nextDate.toLocaleDateString("pt-BR")}</td>
-                    <td className="p-3">{r.daysLeft}</td>
+                    <td className="p-3">{formatBirthdayStatus(r.daysLeft)}</td>
                   </tr>
                 ))
               ) : (
