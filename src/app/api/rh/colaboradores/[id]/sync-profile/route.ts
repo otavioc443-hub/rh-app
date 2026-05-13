@@ -35,6 +35,21 @@ async function getRequesterUser(req: Request) {
   return { user: data?.user ?? null, status: data?.user ? (200 as const) : (401 as const) };
 }
 
+function cleanEmail(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+async function findAuthUserIdByEmail(email: string) {
+  for (let page = 1; page <= 10; page += 1) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 100 });
+    if (error) return null;
+    const user = data.users.find((item) => cleanEmail(item.email) === email);
+    if (user) return user.id;
+    if (data.users.length < 100) return null;
+  }
+  return null;
+}
+
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -67,45 +82,102 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const { data: colab, error: colabErr } = await supabaseAdmin
       .from("colaboradores")
-      .select("id,user_id,email,nome")
+      .select("id,user_id,email,email_empresarial,email_pessoal,nome")
       .eq("id", id)
-      .maybeSingle<{ id: string; user_id: string | null; email: string | null; nome: string | null }>();
+      .maybeSingle<{
+        id: string;
+        user_id: string | null;
+        email: string | null;
+        email_empresarial: string | null;
+        email_pessoal: string | null;
+        nome: string | null;
+      }>();
 
     if (colabErr || !colab) return NextResponse.json({ error: "Colaborador nao encontrado" }, { status: 404 });
 
+    const candidateEmails = Array.from(
+      new Set([cleanEmail(colab.email), cleanEmail(colab.email_empresarial), cleanEmail(colab.email_pessoal)].filter(Boolean))
+    );
     let profileUserId = colab.user_id;
-    if (!profileUserId && colab.email) {
-      const { data: profileByEmail } = await supabaseAdmin
-        .from("profiles")
-        .select("id")
-        .eq("email", colab.email)
-        .maybeSingle<{ id: string }>();
-      profileUserId = profileByEmail?.id ?? null;
 
-      if (profileUserId) {
-        await supabaseAdmin.from("colaboradores").update({ user_id: profileUserId }).eq("id", colab.id);
+    if (!profileUserId) {
+      for (const email of candidateEmails) {
+        const { data: profileByEmail } = await supabaseAdmin
+          .from("profiles")
+          .select("id")
+          .ilike("email", email)
+          .maybeSingle<{ id: string }>();
+        if (profileByEmail?.id) {
+          profileUserId = profileByEmail.id;
+          break;
+        }
+      }
+    }
+
+    if (!profileUserId) {
+      for (const email of candidateEmails) {
+        profileUserId = await findAuthUserIdByEmail(email);
+        if (profileUserId) break;
       }
     }
 
     if (!profileUserId) {
       return NextResponse.json({
-        ok: true,
+        error:
+          "Nao encontrei um perfil de acesso para este colaborador. Envie ou reenvie o convite de acesso antes de vincular a empresa ao perfil.",
         synced: false,
-        message: "Colaborador sem usuario/perfil vinculado para sincronizar.",
-      });
+      }, { status: 409 });
     }
 
-    const { error: upErr } = await supabaseAdmin
+    if (profileUserId !== colab.user_id) {
+      await supabaseAdmin.from("colaboradores").update({ user_id: profileUserId }).eq("id", colab.id);
+    }
+
+    const primaryEmail = candidateEmails[0] || null;
+    const { data: existingProfile, error: existingProfileErr } = await supabaseAdmin
       .from("profiles")
+      .select("id")
+      .eq("id", profileUserId)
+      .maybeSingle<{ id: string }>();
+    if (existingProfileErr) return NextResponse.json({ error: existingProfileErr.message }, { status: 400 });
+
+    const profilePayload = {
+      id: profileUserId,
+      full_name: colab.nome,
+      email: primaryEmail,
+      company_id: companyId,
+      department_id: departmentId,
+      active: true,
+    };
+
+    const profileRes = existingProfile
+      ? await supabaseAdmin
+          .from("profiles")
+          .update({
+            full_name: profilePayload.full_name,
+            email: profilePayload.email,
+            company_id: profilePayload.company_id,
+            department_id: profilePayload.department_id,
+            active: profilePayload.active,
+          })
+          .eq("id", profileUserId)
+      : await supabaseAdmin.from("profiles").insert({
+          ...profilePayload,
+          role: "colaborador",
+        });
+
+    if (profileRes.error) return NextResponse.json({ error: profileRes.error.message }, { status: 400 });
+
+    const { error: colabUpdateErr } = await supabaseAdmin
+      .from("colaboradores")
       .update({
-        full_name: colab.nome,
-        email: colab.email,
+        user_id: profileUserId,
         company_id: companyId,
         department_id: departmentId,
       })
-      .eq("id", profileUserId);
+      .eq("id", colab.id);
 
-    if (upErr) return NextResponse.json({ error: upErr.message }, { status: 400 });
+    if (colabUpdateErr) return NextResponse.json({ error: colabUpdateErr.message }, { status: 400 });
     return NextResponse.json({ ok: true, synced: true, user_id: profileUserId });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro inesperado";
