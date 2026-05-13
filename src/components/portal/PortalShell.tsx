@@ -63,6 +63,32 @@ type ColaboradorName = {
   empresa?: string | null;
 };
 
+async function findCollaboratorForPortal(userId: string, userEmail: string | null) {
+  const select = "nome,cargo,empresa";
+  const byUserId = await supabase
+    .from("colaboradores")
+    .select(select)
+    .eq("user_id", userId)
+    .limit(1)
+    .maybeSingle<ColaboradorName>();
+  if (!byUserId.error && byUserId.data) return byUserId.data;
+
+  const email = (userEmail ?? "").trim();
+  if (!email) return null;
+
+  for (const column of ["email", "email_empresarial", "email_pessoal"]) {
+    const byEmail = await supabase
+      .from("colaboradores")
+      .select(select)
+      .ilike(column, email)
+      .limit(1)
+      .maybeSingle<ColaboradorName>();
+    if (!byEmail.error && byEmail.data) return byEmail.data;
+  }
+
+  return null;
+}
+
 type PortalShellCache = {
   userId: string | null;
   role: Role | null;
@@ -492,20 +518,14 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         let resolvedJobTitle: string | null = null;
         let collaboratorRow: ColaboradorName | null = null;
 
-        if (userEmail) {
-          const { data: colab } = await supabase
-            .from("colaboradores")
-            .select("nome,cargo,empresa")
-            .or(`user_id.eq.${userId},email.ilike.${userEmail},email_empresarial.ilike.${userEmail},email_pessoal.ilike.${userEmail}`)
-            .limit(1)
-            .maybeSingle<ColaboradorName>();
-          collaboratorRow = colab ?? null;
+        collaboratorRow = await findCollaboratorForPortal(userId, userEmail);
 
-          if ((!resolvedFullName || resolvedFullName.includes("@")) && colab?.nome?.trim()) {
-            resolvedFullName = colab.nome.trim();
+        if (collaboratorRow) {
+          if ((!resolvedFullName || resolvedFullName.includes("@")) && collaboratorRow.nome?.trim()) {
+            resolvedFullName = collaboratorRow.nome.trim();
           }
-          if (colab?.cargo?.trim()) {
-            resolvedJobTitle = colab.cargo.trim();
+          if (collaboratorRow.cargo?.trim()) {
+            resolvedJobTitle = collaboratorRow.cargo.trim();
           }
         }
 
