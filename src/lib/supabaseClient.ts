@@ -8,6 +8,10 @@ export const supabase = createBrowserClient(
     auth: {
       // Sessao apenas por aba/janela: ao fechar o navegador, exige novo login.
       storage: typeof window !== "undefined" ? window.sessionStorage : undefined,
+      // O app processa links de invite/recovery manualmente em /auth/callback e /set-password.
+      // Se o Supabase consumir o code/hash automaticamente na pagina de login, ele cria sessao
+      // e o login redireciona para /home antes de abrir a tela de nova senha.
+      detectSessionInUrl: false,
     },
   }
 );
@@ -16,6 +20,7 @@ const PORTAL_EXIT_INTENT_KEY = "portal_exit_intent";
 const RECENT_LOGIN_KEY = "portal_recent_login_at";
 const PORTAL_LOGOUT_SIGNAL_KEY = "portal_logout_signal";
 const SESSION_AUDIT_ID_KEY = "portal_session_audit_id";
+const PASSWORD_RECOVERY_INTENT_KEY = "portal_password_recovery_intent";
 
 function clearSupabaseStorageBucket(storage: Storage | undefined) {
   if (!storage) return;
@@ -52,6 +57,7 @@ export function clearLocalSupabaseSession() {
     window.sessionStorage.removeItem(PORTAL_EXIT_INTENT_KEY);
     window.sessionStorage.removeItem(RECENT_LOGIN_KEY);
     window.sessionStorage.removeItem(SESSION_AUDIT_ID_KEY);
+    window.sessionStorage.removeItem(PASSWORD_RECOVERY_INTENT_KEY);
     clearSupabaseCookieBucket();
   } catch {
     // noop
@@ -153,6 +159,35 @@ export function clearRecentLoginMarker() {
   if (typeof window === "undefined") return;
   try {
     window.sessionStorage.removeItem(RECENT_LOGIN_KEY);
+  } catch {
+    // noop
+  }
+}
+
+export function markPasswordRecoveryIntent() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(PASSWORD_RECOVERY_INTENT_KEY, String(Date.now()));
+  } catch {
+    // noop
+  }
+}
+
+export function hasPasswordRecoveryIntent(maxAgeMs = 30 * 60 * 1000) {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = window.sessionStorage.getItem(PASSWORD_RECOVERY_INTENT_KEY);
+    const ts = Number(raw);
+    return Number.isFinite(ts) && ts > 0 && Date.now() - ts <= maxAgeMs;
+  } catch {
+    return false;
+  }
+}
+
+export function clearPasswordRecoveryIntent() {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.removeItem(PASSWORD_RECOVERY_INTENT_KEY);
   } catch {
     // noop
   }

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { isRouteHidden } from "@/lib/featureVisibility";
 
-const PUBLIC_PATHS = ["/", "/auth/callback", "/set-password", "/unauthorized"];
+const PUBLIC_PATHS = ["/", "/auth/callback", "/set-password", "/recuperar-senha", "/unauthorized"];
 type CookieOptions = Record<string, unknown>;
 
 function isPublicPath(pathname: string) {

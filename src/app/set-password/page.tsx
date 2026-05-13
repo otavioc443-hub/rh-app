@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { clearPortalExitIntent, markRecentLogin, supabase } from "@/lib/supabaseClient";
+import Link from "next/link";
+import {
+  clearPasswordRecoveryIntent,
+  clearPortalExitIntent,
+  markPasswordRecoveryIntent,
+  markRecentLogin,
+  supabase,
+} from "@/lib/supabaseClient";
 
 function sanitizeRedirect(path: string | null) {
   const fallback = "/home";
@@ -15,6 +22,15 @@ function sanitizeRedirect(path: string | null) {
 
   if (path.includes("http://") || path.includes("https://")) return fallback;
   return path;
+}
+
+function passwordValidationMessage(value: string) {
+  if (value.length < 8) return "A senha precisa ter pelo menos 8 caracteres.";
+  if (!/[A-Z]/.test(value)) return "Inclua pelo menos uma letra maiúscula.";
+  if (!/[a-z]/.test(value)) return "Inclua pelo menos uma letra minúscula.";
+  if (!/[0-9]/.test(value)) return "Inclua pelo menos um número.";
+  if (!/[^A-Za-z0-9]/.test(value)) return "Inclua pelo menos um caractere especial.";
+  return null;
 }
 
 export default function SetPasswordPage() {
@@ -50,12 +66,14 @@ export default function SetPasswordPage() {
         const refreshToken = hash.get("refresh_token");
 
         if (code) {
+          markPasswordRecoveryIntent();
           await supabase.auth.exchangeCodeForSession(code);
           window.history.replaceState({}, document.title, "/set-password");
           return;
         }
 
         if (tokenHash && type) {
+          markPasswordRecoveryIntent();
           await supabase.auth.verifyOtp({
             type: type as "recovery" | "email" | "signup" | "invite" | "magiclink" | "email_change",
             token_hash: tokenHash,
@@ -65,6 +83,7 @@ export default function SetPasswordPage() {
         }
 
         if (accessToken && refreshToken) {
+          markPasswordRecoveryIntent();
           await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
@@ -109,8 +128,9 @@ export default function SetPasswordPage() {
   async function save() {
     setMsg("");
 
-    if (pass1.length < 6) {
-      setMsg("A senha precisa ter pelo menos 6 caracteres.");
+    const validation = passwordValidationMessage(pass1);
+    if (validation) {
+      setMsg(validation);
       return;
     }
     if (pass1 !== pass2) {
@@ -129,6 +149,7 @@ export default function SetPasswordPage() {
 
     setMsg("Senha definida com sucesso! Redirecionando...");
     clearPortalExitIntent();
+    clearPasswordRecoveryIntent();
     markRecentLogin();
 
     // limpa o destino após usar (boa prática)
@@ -175,6 +196,10 @@ export default function SetPasswordPage() {
             disabled={saving}
           />
 
+          <div className="rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">
+            Use pelo menos 8 caracteres, com letra maiúscula, letra minúscula, número e caractere especial.
+          </div>
+
           <button
             onClick={save}
             disabled={saving}
@@ -184,6 +209,11 @@ export default function SetPasswordPage() {
           </button>
 
           {msg && <p className="text-sm text-slate-700 text-center">{msg}</p>}
+          {msg.toLowerCase().includes("expirado") || msg.toLowerCase().includes("invalido") ? (
+            <Link href="/recuperar-senha" className="block text-center text-sm font-semibold text-slate-900 underline underline-offset-2">
+              Solicitar novo link
+            </Link>
+          ) : null}
         </div>
       </div>
     </div>

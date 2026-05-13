@@ -7,9 +7,12 @@ import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 import {
   clearPortalExitIntent,
+  clearPasswordRecoveryIntent,
   clearRecentLoginMarker,
   forceClientLogout,
+  hasPasswordRecoveryIntent,
   hasPortalExitIntent,
+  markPasswordRecoveryIntent,
   markRecentLogin,
   supabase,
 } from "@/lib/supabaseClient";
@@ -32,6 +35,7 @@ function hasAuthLinkParams() {
 
 function moveAuthLinkToCallback() {
   if (typeof window === "undefined") return;
+  markPasswordRecoveryIntent();
   const target = `/auth/callback${window.location.search}${window.location.hash}`;
   window.location.replace(target);
 }
@@ -62,6 +66,10 @@ export default function LoginPage() {
       .then(async ({ data }) => {
         if (!alive) return;
         if (!data.session?.user) return;
+        if (hasPasswordRecoveryIntent()) {
+          router.replace("/set-password");
+          return;
+        }
         if (hasPortalExitIntent()) {
           clearPortalExitIntent();
           clearRecentLoginMarker();
@@ -78,11 +86,16 @@ export default function LoginPage() {
 
       if (event === "PASSWORD_RECOVERY") {
         clearPortalExitIntent();
+        markPasswordRecoveryIntent();
         router.replace("/set-password");
         return;
       }
 
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        if (hasPasswordRecoveryIntent()) {
+          router.replace("/set-password");
+          return;
+        }
         clearPortalExitIntent();
         markRecentLogin();
         router.replace(DEFAULT_AFTER_LOGIN);
@@ -117,6 +130,7 @@ export default function LoginPage() {
       }
 
       if (data.user) {
+        clearPasswordRecoveryIntent();
         markRecentLogin();
         router.replace(DEFAULT_AFTER_LOGIN);
       }
@@ -197,11 +211,11 @@ export default function LoginPage() {
               <div className="flex justify-end">
                 <button
                   type="button"
-                  onClick={sendPasswordRecovery}
+                  onClick={() => router.push(`/recuperar-senha${email.trim() ? `?email=${encodeURIComponent(email.trim().toLowerCase())}` : ""}`)}
                   disabled={loading || recoveryLoading}
                   className="text-xs font-medium text-slate-700 underline underline-offset-2 disabled:opacity-50"
                 >
-                  {recoveryLoading ? "Enviando..." : "Esqueci minha senha"}
+                  Esqueci minha senha
                 </button>
               </div>
 
