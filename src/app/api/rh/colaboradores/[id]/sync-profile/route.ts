@@ -103,19 +103,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const candidateEmails = Array.from(
       new Set([cleanEmail(colab.email), cleanEmail(colab.email_empresarial), cleanEmail(colab.email_pessoal)].filter(Boolean))
     );
-    let profileUserId = colab.user_id;
+    let profileUserId: string | null = null;
 
-    if (!profileUserId) {
-      for (const email of candidateEmails) {
-        const { data: profileByEmail } = await supabaseAdmin
-          .from("profiles")
-          .select("id")
-          .ilike("email", email)
-          .maybeSingle<{ id: string }>();
-        if (profileByEmail?.id) {
-          profileUserId = profileByEmail.id;
-          break;
-        }
+    for (const email of candidateEmails) {
+      const { data: profileByEmail } = await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .ilike("email", email)
+        .maybeSingle<{ id: string }>();
+      if (profileByEmail?.id) {
+        profileUserId = profileByEmail.id;
+        break;
       }
     }
 
@@ -125,6 +123,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         if (profileUserId) break;
       }
     }
+
+    profileUserId = profileUserId ?? colab.user_id;
 
     if (!profileUserId) {
       return NextResponse.json({
