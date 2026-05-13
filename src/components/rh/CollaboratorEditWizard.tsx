@@ -519,33 +519,41 @@ export default function CollaboratorEditWizard({
     setLinkingCompany(true);
     setMsg(null);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData.session?.access_token;
-      const syncRes = await fetch(`/api/rh/colaboradores/${collaboratorId}/sync-profile`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          company_id: companyId,
-          department_id: null,
-          profile_user_id: profileUserId,
-        }),
-      });
+      const direct = await supabase.from("profiles").update({ company_id: companyId }).eq("id", profileUserId);
+      let linkedUserId = profileUserId;
 
-      const text = await syncRes.text();
-      let payload: { error?: string; user_id?: string } | null = null;
-      try {
-        payload = JSON.parse(text);
-      } catch {
-        payload = null;
+      if (direct.error) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+        const syncRes = await fetch(`/api/rh/colaboradores/${collaboratorId}/sync-profile`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            company_id: companyId,
+            department_id: null,
+            profile_user_id: profileUserId,
+          }),
+        });
+
+        const text = await syncRes.text();
+        let payload: { error?: string; user_id?: string } | null = null;
+        try {
+          payload = JSON.parse(text);
+        } catch {
+          payload = null;
+        }
+        if (!syncRes.ok) throw new Error(payload?.error || text || direct.error.message || "Falha ao vincular perfil a empresa.");
+        linkedUserId = payload?.user_id ?? profileUserId;
+      } else {
+        await supabase.from("colaboradores").update({ user_id: profileUserId }).eq("id", collaboratorId);
       }
-      if (!syncRes.ok) throw new Error(payload?.error || text || "Falha ao vincular perfil a empresa.");
 
-      setCollaboratorUserId(payload?.user_id ?? profileUserId);
-      setSelectedProfileUserId(payload?.user_id ?? profileUserId);
+      setCollaboratorUserId(linkedUserId);
+      setSelectedProfileUserId(linkedUserId);
       setMsg("Perfil vinculado a empresa com sucesso.");
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao vincular perfil a empresa.");

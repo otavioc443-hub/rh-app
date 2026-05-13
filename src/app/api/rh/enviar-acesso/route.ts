@@ -39,6 +39,18 @@ function getAuthRedirectTo() {
   return "https://rh-app-seven.vercel.app/auth/callback";
 }
 
+function cleanEmail(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function normalizeCompanyName(value: string | null | undefined) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
 export async function POST(req: Request) {
   try {
     const { collaboratorId } = await req.json();
@@ -66,19 +78,46 @@ export async function POST(req: Request) {
     // 2) busca colaborador
     const { data: colab, error: colabErr } = await supabaseAdmin
       .from("colaboradores")
-      .select("id, nome, email, user_id, company_id, department_id, is_active")
+      .select("id, nome, email, email_empresarial, email_pessoal, user_id, empresa, departamento, is_active")
       .eq("id", collaboratorId)
-      .single();
+      .maybeSingle<{
+        id: string;
+        nome: string | null;
+        email: string | null;
+        email_empresarial: string | null;
+        email_pessoal: string | null;
+        user_id: string | null;
+        empresa: string | null;
+        departamento: string | null;
+        is_active: boolean | null;
+      }>();
 
     if (colabErr || !colab) return NextResponse.json({ error: "Colaborador nao encontrado" }, { status: 404 });
-    if (!colab.is_active) return NextResponse.json({ error: "Colaborador inativo" }, { status: 400 });
-    if (!colab.email) return NextResponse.json({ error: "Colaborador sem e-mail" }, { status: 400 });
+    if (colab.is_active === false) return NextResponse.json({ error: "Colaborador inativo" }, { status: 400 });
+
+    const inviteEmail = cleanEmail(colab.email) || cleanEmail(colab.email_empresarial) || cleanEmail(colab.email_pessoal);
+    if (!inviteEmail) return NextResponse.json({ error: "Colaborador sem e-mail" }, { status: 400 });
+
+    let companyId: string | null = null;
+    if (colab.empresa?.trim()) {
+      const { data: companies } = await supabaseAdmin
+        .from("companies")
+        .select("id,name")
+        .order("name", { ascending: true });
+      const normalizedEmpresa = normalizeCompanyName(colab.empresa);
+      const match = (companies ?? []).find((company) => normalizeCompanyName(company.name) === normalizedEmpresa) ??
+        (companies ?? []).find((company) => {
+          const name = normalizeCompanyName(company.name);
+          return name.includes(normalizedEmpresa) || normalizedEmpresa.includes(name);
+        });
+      companyId = match?.id ?? null;
+    }
 
     // 3) envia convite
     const redirectTo = getAuthRedirectTo();
 
     const { data: inviteData, error: inviteErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(
-      colab.email,
+      inviteEmail,
       { redirectTo }
     );
 
@@ -90,12 +129,11 @@ export async function POST(req: Request) {
       await supabaseAdmin.from("profiles").upsert(
         {
           id: profileUserId,
-          email: colab.email,
+          email: inviteEmail,
           full_name: colab.nome ?? null,
           role: "colaborador",
           active: true,
-          company_id: colab.company_id ?? null,
-          department_id: colab.department_id ?? null,
+          company_id: companyId,
         },
         { onConflict: "id" }
       );
@@ -105,7 +143,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       ok: true,
-      message: `${colab.user_id ? "Convite reenviado" : "Convite enviado"} para ${colab.email}`,
+      message: `${colab.user_id ? "Convite reenviado" : "Convite enviado"} para ${inviteEmail}`,
     });
   } catch (e: unknown) {
     const message = e instanceof Error ? e.message : "Erro inesperado";
