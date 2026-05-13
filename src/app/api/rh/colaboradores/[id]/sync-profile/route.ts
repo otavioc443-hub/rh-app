@@ -80,10 +80,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const body = (await req.json()) as {
       company_id?: string | null;
       department_id?: string | null;
+      profile_user_id?: string | null;
     };
     const companyId = typeof body.company_id === "string" && body.company_id.trim() ? body.company_id.trim() : null;
     const departmentId =
       typeof body.department_id === "string" && body.department_id.trim() ? body.department_id.trim() : null;
+    const explicitProfileUserId =
+      typeof body.profile_user_id === "string" && body.profile_user_id.trim() ? body.profile_user_id.trim() : null;
 
     const { data: colab, error: colabErr } = await supabaseAdmin
       .from("colaboradores")
@@ -103,17 +106,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const candidateEmails = Array.from(
       new Set([cleanEmail(colab.email), cleanEmail(colab.email_empresarial), cleanEmail(colab.email_pessoal)].filter(Boolean))
     );
-    let profileUserId: string | null = null;
+    let profileUserId: string | null = explicitProfileUserId;
 
-    for (const email of candidateEmails) {
-      const { data: profileByEmail } = await supabaseAdmin
-        .from("profiles")
-        .select("id")
-        .ilike("email", email)
-        .maybeSingle<{ id: string }>();
-      if (profileByEmail?.id) {
-        profileUserId = profileByEmail.id;
-        break;
+    if (!profileUserId) {
+      for (const email of candidateEmails) {
+        const { data: profileByEmail } = await supabaseAdmin
+          .from("profiles")
+          .select("id")
+          .ilike("email", email)
+          .maybeSingle<{ id: string }>();
+        if (profileByEmail?.id) {
+          profileUserId = profileByEmail.id;
+          break;
+        }
       }
     }
 

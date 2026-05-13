@@ -33,6 +33,13 @@ type HistorySummaryItem = {
   value: string;
 };
 
+type PortalProfileOption = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  company_id: string | null;
+};
+
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -236,6 +243,8 @@ export default function CollaboratorEditWizard({
   const [initial, setInitial] = useState<Partial<ColaboradorPayload>>({});
   const [isActive, setIsActive] = useState(true);
   const [rowColumns, setRowColumns] = useState<Set<string>>(new Set());
+  const [portalProfiles, setPortalProfiles] = useState<PortalProfileOption[]>([]);
+  const [selectedProfileUserId, setSelectedProfileUserId] = useState("");
 
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<AuditRow[]>([]);
@@ -293,7 +302,9 @@ export default function CollaboratorEditWizard({
       setInitial(mapRowToInitial(row));
       setIsActive(Boolean(row.is_active ?? true));
       setRowColumns(new Set(Object.keys(row)));
-      setCollaboratorUserId(typeof row.user_id === "string" ? row.user_id : null);
+      const rowUserId = typeof row.user_id === "string" ? row.user_id : null;
+      setCollaboratorUserId(rowUserId);
+      setSelectedProfileUserId(rowUserId ?? "");
       setCurrentCargo(typeof row.cargo === "string" ? row.cargo : "");
       setPromotionCargo(typeof row.cargo === "string" ? row.cargo : "");
       setPromotionManualCargo(false);
@@ -315,6 +326,22 @@ export default function CollaboratorEditWizard({
       alive = false;
     };
   }, [collaboratorId]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id,full_name,email,company_id")
+        .order("full_name", { ascending: true })
+        .limit(3000);
+      if (!alive) return;
+      setPortalProfiles(error ? [] : ((data ?? []) as PortalProfileOption[]));
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -470,6 +497,7 @@ export default function CollaboratorEditWizard({
         body: JSON.stringify({
           company_id: companyId,
           department_id: departmentId,
+          profile_user_id: n(selectedProfileUserId) || null,
         }),
       });
       if (!syncRes.ok) {
@@ -777,6 +805,29 @@ export default function CollaboratorEditWizard({
                         Colaborador ativo (desmarque para registrar desligamento)
                       </span>
                     </label>
+
+                    <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-4">
+                      <label className="grid gap-1 text-xs font-semibold text-blue-950">
+                        Perfil do Portal vinculado
+                        <select
+                          value={selectedProfileUserId}
+                          onChange={(e) => setSelectedProfileUserId(e.target.value)}
+                          className="mt-1 h-11 rounded-xl border border-blue-200 bg-white px-3 text-sm text-slate-900"
+                        >
+                          <option value="">Selecionar perfil do Portal</option>
+                          {portalProfiles.map((profile) => (
+                            <option key={profile.id} value={profile.id}>
+                              {(profile.full_name ?? "").trim() || profile.email || profile.id}
+                              {profile.email ? ` - ${profile.email}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <p className="mt-2 text-xs leading-5 text-blue-900">
+                        Use este campo quando o vínculo automático por e-mail não encontrar a pessoa certa. Ao salvar,
+                        a empresa escolhida no formulário será gravada diretamente no perfil selecionado.
+                      </p>
+                    </div>
 
                     <EmployeeForm
                       initial={initial}
