@@ -63,6 +63,13 @@ type ColaboradorName = {
   empresa?: string | null;
 };
 
+type PortalBrandPayload = {
+  company?: Company | null;
+  department?: Department | null;
+  fullName?: string | null;
+  jobTitle?: string | null;
+};
+
 async function findCollaboratorForPortal(userId: string, userEmail: string | null) {
   const select = "nome,cargo,empresa";
   const byUserId = await supabase
@@ -87,6 +94,19 @@ async function findCollaboratorForPortal(userId: string, userEmail: string | nul
   }
 
   return null;
+}
+
+async function fetchPortalBrand(token?: string | null): Promise<PortalBrandPayload | null> {
+  try {
+    const res = await fetch("/api/me/portal-brand", {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      credentials: "include",
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as PortalBrandPayload;
+  } catch {
+    return null;
+  }
 }
 
 type PortalShellCache = {
@@ -534,6 +554,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         setJobTitle(resolvedJobTitle);
         setAvatarUrl(resolvePortalAvatarUrl(profile.avatar_url));
 
+        const portalBrandReq = fetchPortalBrand(sessRes?.session?.access_token ?? null);
         const hiddenRoutesReq = supabase
           .from("portal_feature_visibility")
           .select("route_path,hidden")
@@ -555,11 +576,12 @@ export default function PortalShell({ children }: { children: React.ReactNode })
           ? supabase.from("departments").select("id, name").eq("id", profile.department_id).maybeSingle()
           : Promise.resolve({ data: null, error: null });
 
-        const [hiddenRoutesRes, companyRes, departmentRes, companiesFallbackRes] = await Promise.all([
+        const [hiddenRoutesRes, companyRes, departmentRes, companiesFallbackRes, portalBrand] = await Promise.all([
           hiddenRoutesReq,
           companyReq,
           departmentReq,
           companiesFallbackReq,
+          portalBrandReq,
         ]);
 
         if (!alive.current) return;
@@ -576,7 +598,14 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         }
         setHiddenRoutesLoaded(true);
 
-        let resolvedCompany = !companyRes.error && companyRes.data ? (companyRes.data as Company) : null;
+        if (portalBrand?.fullName && (!resolvedFullName || resolvedFullName.includes("@"))) {
+          setFullName(portalBrand.fullName);
+        }
+        if (portalBrand?.jobTitle) {
+          setJobTitle(portalBrand.jobTitle);
+        }
+
+        let resolvedCompany = portalBrand?.company ?? (!companyRes.error && companyRes.data ? (companyRes.data as Company) : null);
         if (!resolvedCompany && !companiesFallbackRes.error && collaboratorRow?.empresa?.trim()) {
           const collaboratorCompanyName = normalizeCompanyName(collaboratorRow.empresa);
           const companiesFallback = (companiesFallbackRes.data ?? []) as Company[];
@@ -590,7 +619,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         }
 
         setCompany(resolvedCompany);
-        setDepartment(!departmentRes.error && departmentRes.data ? (departmentRes.data as Department) : null);
+        setDepartment(portalBrand?.department ?? (!departmentRes.error && departmentRes.data ? (departmentRes.data as Department) : null));
       } catch (err: unknown) {
         if (!alive.current) return;
 
