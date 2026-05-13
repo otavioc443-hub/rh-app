@@ -42,17 +42,25 @@ export default function SetPasswordPage() {
     async function check() {
       async function tryRecoverSessionFromUrl() {
         const url = new URL(window.location.href);
+        const code = url.searchParams.get("code");
         const tokenHash = url.searchParams.get("token_hash");
         const type = url.searchParams.get("type");
         const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
         const accessToken = hash.get("access_token");
         const refreshToken = hash.get("refresh_token");
 
+        if (code) {
+          await supabase.auth.exchangeCodeForSession(code);
+          window.history.replaceState({}, document.title, "/set-password");
+          return;
+        }
+
         if (tokenHash && type) {
           await supabase.auth.verifyOtp({
             type: type as "recovery" | "email" | "signup" | "invite" | "magiclink" | "email_change",
             token_hash: tokenHash,
           });
+          window.history.replaceState({}, document.title, "/set-password");
           return;
         }
 
@@ -61,7 +69,20 @@ export default function SetPasswordPage() {
             access_token: accessToken,
             refresh_token: refreshToken,
           });
+          window.history.replaceState({}, document.title, "/set-password");
         }
+      }
+
+      const url = new URL(window.location.href);
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const hasAuthParams = Boolean(
+        url.searchParams.get("code") ||
+          url.searchParams.get("token_hash") ||
+          hash.get("access_token")
+      );
+
+      if (hasAuthParams) {
+        await tryRecoverSessionFromUrl();
       }
 
       let { data } = await supabase.auth.getUser();

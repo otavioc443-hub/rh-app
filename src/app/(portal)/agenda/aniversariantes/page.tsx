@@ -10,6 +10,7 @@ type ColaboradorBirthday = {
   data_nascimento: string | null;
   departamento: string | null;
   cargo: string | null;
+  empresa?: string | null;
   is_active: boolean | null;
 };
 
@@ -49,25 +50,76 @@ function formatBirthdayStatus(daysLeft: number) {
   return "Ja passou";
 }
 
+function normalizeCompanyName(value: string | null | undefined) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function belongsToCompany(rowCompany: string | null | undefined, currentCompany: string | null) {
+  if (!currentCompany) return true;
+  const current = normalizeCompanyName(currentCompany);
+  const row = normalizeCompanyName(rowCompany);
+  return Boolean(row) && (row === current || row.includes(current) || current.includes(row));
+}
+
 export default function AniversariantesPage() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
   const [rows, setRows] = useState<BirthdayRow[]>([]);
+  const [companyName, setCompanyName] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
     setMsg("");
     try {
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData.user;
+      if (!user) throw new Error("Usuário não autenticado.");
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("id", user.id)
+        .maybeSingle<{ company_id: string | null }>();
+
+      let currentCompanyName: string | null = null;
+      if (profile?.company_id) {
+        const { data: company } = await supabase
+          .from("companies")
+          .select("name")
+          .eq("id", profile.company_id)
+          .maybeSingle<{ name: string | null }>();
+        currentCompanyName = company?.name?.trim() || null;
+      }
+
+      if (!currentCompanyName && user.email) {
+        const { data: collaborator } = await supabase
+          .from("colaboradores")
+          .select("empresa")
+          .eq("email", user.email)
+          .maybeSingle<{ empresa: string | null }>();
+        currentCompanyName = collaborator?.empresa?.trim() || null;
+      }
+      setCompanyName(currentCompanyName);
+
       const { data, error } = await supabase
         .from("colaboradores")
-        .select("id,nome,data_nascimento,departamento,cargo,is_active")
+        .select("id,nome,data_nascimento,departamento,cargo,empresa,is_active")
         .eq("is_active", true)
         .not("data_nascimento", "is", null);
       if (error) throw error;
 
       const now = new Date();
       const normalized = ((data ?? []) as ColaboradorBirthday[])
-        .filter((r) => Boolean(r.data_nascimento) && isCurrentMonthBirthday(String(r.data_nascimento), now))
+        .filter(
+          (r) =>
+            Boolean(r.data_nascimento) &&
+            isCurrentMonthBirthday(String(r.data_nascimento), now) &&
+            belongsToCompany(r.empresa, currentCompanyName)
+        )
         .map((r) => {
           const next = birthdayDateThisYear(String(r.data_nascimento), now);
           return {
@@ -104,7 +156,7 @@ export default function AniversariantesPage() {
           <div>
             <h1 className="text-xl font-semibold text-slate-900">Aniversariantes</h1>
             <p className="mt-1 text-sm text-slate-600">
-              Lista de aniversariantes do mês vigente baseada nos colaboradores ativos com data de nascimento.
+              Lista de aniversariantes do mês vigente{companyName ? ` da empresa ${companyName}` : ""}.
             </p>
           </div>
           <button

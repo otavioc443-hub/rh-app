@@ -28,6 +28,7 @@ type CollaboratorBirthday = {
   data_nascimento: string | null;
   departamento: string | null;
   cargo: string | null;
+  empresa?: string | null;
 };
 
 type BirthdayPreview = {
@@ -61,14 +62,12 @@ function birthdayDateThisYear(birthIso: string, now = new Date()) {
   return new Date(currentYear, birth.getMonth(), birth.getDate());
 }
 
-function isCurrentMonthBirthday(birthIso: string, now = new Date()) {
-  return birthdayDateThisYear(birthIso, now).getMonth() === now.getMonth();
-}
-
-function isTodayOrUpcoming(date: Date, now = new Date()) {
-  const birthday = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+function nextBirthdayDate(birthIso: string, now = new Date()) {
+  const birthday = birthdayDateThisYear(birthIso, now);
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  return birthday >= today;
+  if (birthday.getTime() >= today) return birthday;
+  const birth = parseDateOnly(birthIso);
+  return new Date(now.getFullYear() + 1, birth.getMonth(), birth.getDate());
 }
 
 function diffInDays(a: Date, b: Date) {
@@ -82,6 +81,21 @@ function formatDate(iso: string) {
     day: "2-digit",
     month: "short",
   });
+}
+
+function normalizeCompanyName(value: string | null | undefined) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function belongsToCompany(rowCompany: string | null | undefined, currentCompany: string | null) {
+  if (!currentCompany) return true;
+  const current = normalizeCompanyName(currentCompany);
+  const row = normalizeCompanyName(rowCompany);
+  return Boolean(row) && (row === current || row.includes(current) || current.includes(row));
 }
 
 export default function HomePage() {
@@ -99,21 +113,33 @@ export default function HomePage() {
 
       const { data: profile } = await supabase
         .from("profiles")
-        .select("full_name")
+        .select("full_name,company_id")
         .eq("id", user.id)
-        .maybeSingle<{ full_name: string | null }>();
+        .maybeSingle<{ full_name: string | null; company_id: string | null }>();
 
       const email = user.email ?? null;
       let resolved = profile?.full_name?.trim() ?? "";
+      let collaboratorCompany: string | null = null;
 
       if ((!resolved || resolved.includes("@")) && email) {
         const { data: colab } = await supabase
           .from("colaboradores")
-          .select("nome")
+          .select("nome,empresa")
           .eq("email", email)
-          .maybeSingle<{ nome: string | null }>();
+          .maybeSingle<{ nome: string | null; empresa: string | null }>();
 
         if (colab?.nome?.trim()) resolved = colab.nome.trim();
+        collaboratorCompany = colab?.empresa?.trim() || null;
+      }
+
+      let currentCompanyName = collaboratorCompany;
+      if (profile?.company_id) {
+        const { data: company } = await supabase
+          .from("companies")
+          .select("name")
+          .eq("id", profile.company_id)
+          .maybeSingle<{ name: string | null }>();
+        currentCompanyName = company?.name?.trim() || currentCompanyName;
       }
 
       setDisplayName(resolved || "Usuário");
@@ -135,7 +161,7 @@ export default function HomePage() {
           .limit(3),
         supabase
           .from("colaboradores")
-          .select("id,nome,data_nascimento,departamento,cargo")
+          .select("id,nome,data_nascimento,departamento,cargo,empresa")
           .eq("is_active", true)
           .not("data_nascimento", "is", null),
       ]);
@@ -152,13 +178,9 @@ export default function HomePage() {
       if (!birthdayRes.error) {
         const now = new Date();
         const normalized = ((birthdayRes.data ?? []) as CollaboratorBirthday[])
-          .filter((row) => {
-            if (!row.data_nascimento) return false;
-            const birthday = birthdayDateThisYear(String(row.data_nascimento), now);
-            return isCurrentMonthBirthday(String(row.data_nascimento), now) && isTodayOrUpcoming(birthday, now);
-          })
+          .filter((row) => Boolean(row.data_nascimento) && belongsToCompany(row.empresa, currentCompanyName))
           .map((row) => {
-            const next = birthdayDateThisYear(String(row.data_nascimento), now);
+            const next = nextBirthdayDate(String(row.data_nascimento), now);
             return {
               id: row.id,
               nome: row.nome ?? "Sem nome",
@@ -169,7 +191,7 @@ export default function HomePage() {
             };
           })
           .sort((a, b) => a.nextDate.getTime() - b.nextDate.getTime())
-          .slice(0, 3);
+          .slice(0, 2);
         setBirthdays(normalized);
       }
     }
@@ -319,8 +341,8 @@ export default function HomePage() {
               ))
             ) : (
               <div className="rounded-xl border border-slate-200 p-3">
-                <div className="text-sm font-medium text-slate-900">Nenhum neste mês</div>
-                <div className="text-sm text-slate-600">Confira novamente quando houver aniversariantes no mês vigente.</div>
+                <div className="text-sm font-medium text-slate-900">Nenhum aniversário</div>
+                <div className="text-sm text-slate-600">Cadastre datas de nascimento para visualizar os próximos aniversariantes.</div>
               </div>
             )}
 
