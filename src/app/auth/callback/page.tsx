@@ -16,6 +16,8 @@ export default function AuthCallback() {
       const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
       const accessToken = hash.get("access_token");
       const refreshToken = hash.get("refresh_token");
+      const hashType = hash.get("type");
+      const authType = type || hashType;
 
       let errorMessage: string | null = null;
 
@@ -45,7 +47,7 @@ export default function AuthCallback() {
       }
 
       clearPortalExitIntent();
-      markRecentLogin();
+      if (authType !== "recovery") markRecentLogin();
       router.replace("/set-password");
     }
 

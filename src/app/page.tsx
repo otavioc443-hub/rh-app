@@ -17,6 +17,22 @@ import {
 const DEFAULT_AFTER_LOGIN = "/home";
 const PORTAL_ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://rh-app-seven.vercel.app").replace(/\/$/, "");
 
+function hasPasswordRecoveryParams() {
+  if (typeof window === "undefined") return false;
+  const url = new URL(window.location.href);
+  const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const type = url.searchParams.get("type") || hash.get("type");
+  const hasRecoveryType = type === "recovery";
+  const hasRecoveryTokens = Boolean(hash.get("access_token") && hash.get("refresh_token"));
+  return hasRecoveryType || hasRecoveryTokens;
+}
+
+function moveRecoveryLinkToCallback() {
+  if (typeof window === "undefined") return;
+  const target = `/auth/callback${window.location.search}${window.location.hash}`;
+  window.location.replace(target);
+}
+
 export default function LoginPage() {
   const router = useRouter();
 
@@ -30,6 +46,13 @@ export default function LoginPage() {
 
   useEffect(() => {
     let alive = true;
+
+    if (hasPasswordRecoveryParams()) {
+      moveRecoveryLinkToCallback();
+      return () => {
+        alive = false;
+      };
+    }
 
     supabase.auth
       .getSession()
@@ -49,6 +72,12 @@ export default function LoginPage() {
     const { data: sub } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!alive) return;
       if (!session?.user) return;
+
+      if (event === "PASSWORD_RECOVERY") {
+        clearPortalExitIntent();
+        router.replace("/set-password");
+        return;
+      }
 
       if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
         clearPortalExitIntent();
