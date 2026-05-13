@@ -23,6 +23,14 @@ function coerceRole(v: unknown): Role | null {
   return ROLE_SET.has(s) ? s : null;
 }
 
+function normalizeCompanyName(value: string | null | undefined) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
 type Company = {
   id: string;
   name: string;
@@ -52,6 +60,7 @@ type HiddenRouteRow = {
 type ColaboradorName = {
   nome: string | null;
   cargo: string | null;
+  empresa?: string | null;
 };
 
 type PortalShellCache = {
@@ -481,13 +490,16 @@ export default function PortalShell({ children }: { children: React.ReactNode })
 
         let resolvedFullName = profile.full_name?.trim() ?? "";
         let resolvedJobTitle: string | null = null;
+        let collaboratorRow: ColaboradorName | null = null;
 
         if (userEmail) {
           const { data: colab } = await supabase
             .from("colaboradores")
-            .select("nome,cargo")
-            .eq("email", userEmail)
+            .select("nome,cargo,empresa")
+            .or(`user_id.eq.${userId},email.ilike.${userEmail},email_empresarial.ilike.${userEmail},email_pessoal.ilike.${userEmail}`)
+            .limit(1)
             .maybeSingle<ColaboradorName>();
+          collaboratorRow = colab ?? null;
 
           if ((!resolvedFullName || resolvedFullName.includes("@")) && colab?.nome?.trim()) {
             resolvedFullName = colab.nome.trim();
@@ -507,6 +519,10 @@ export default function PortalShell({ children }: { children: React.ReactNode })
           .select("route_path,hidden")
           .eq("hidden", true);
 
+        const companiesFallbackReq = profile.company_id
+          ? Promise.resolve({ data: [], error: null })
+          : supabase.from("companies").select("id, name, logo_url, primary_color").order("name", { ascending: true });
+
         const companyReq = profile.company_id
           ? supabase
               .from("companies")
@@ -519,7 +535,12 @@ export default function PortalShell({ children }: { children: React.ReactNode })
           ? supabase.from("departments").select("id, name").eq("id", profile.department_id).maybeSingle()
           : Promise.resolve({ data: null, error: null });
 
-        const [hiddenRoutesRes, companyRes, departmentRes] = await Promise.all([hiddenRoutesReq, companyReq, departmentReq]);
+        const [hiddenRoutesRes, companyRes, departmentRes, companiesFallbackRes] = await Promise.all([
+          hiddenRoutesReq,
+          companyReq,
+          departmentReq,
+          companiesFallbackReq,
+        ]);
 
         if (!alive.current) return;
 
@@ -535,7 +556,20 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         }
         setHiddenRoutesLoaded(true);
 
-        setCompany(!companyRes.error && companyRes.data ? (companyRes.data as Company) : null);
+        let resolvedCompany = !companyRes.error && companyRes.data ? (companyRes.data as Company) : null;
+        if (!resolvedCompany && !companiesFallbackRes.error && collaboratorRow?.empresa?.trim()) {
+          const collaboratorCompanyName = normalizeCompanyName(collaboratorRow.empresa);
+          const companiesFallback = (companiesFallbackRes.data ?? []) as Company[];
+          resolvedCompany =
+            companiesFallback.find((item) => normalizeCompanyName(item.name) === collaboratorCompanyName) ??
+            companiesFallback.find((item) => normalizeCompanyName(item.name).includes(collaboratorCompanyName) || collaboratorCompanyName.includes(normalizeCompanyName(item.name))) ??
+            null;
+          if (resolvedCompany) {
+            void supabase.from("profiles").update({ company_id: resolvedCompany.id }).eq("id", userId);
+          }
+        }
+
+        setCompany(resolvedCompany);
         setDepartment(!departmentRes.error && departmentRes.data ? (departmentRes.data as Department) : null);
       } catch (err: unknown) {
         if (!alive.current) return;

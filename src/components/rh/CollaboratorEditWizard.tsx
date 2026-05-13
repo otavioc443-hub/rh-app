@@ -40,6 +40,11 @@ type PortalProfileOption = {
   company_id: string | null;
 };
 
+type CompanyOption = {
+  id: string;
+  name: string | null;
+};
+
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -245,6 +250,9 @@ export default function CollaboratorEditWizard({
   const [rowColumns, setRowColumns] = useState<Set<string>>(new Set());
   const [portalProfiles, setPortalProfiles] = useState<PortalProfileOption[]>([]);
   const [selectedProfileUserId, setSelectedProfileUserId] = useState("");
+  const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([]);
+  const [linkCompanyId, setLinkCompanyId] = useState("");
+  const [linkingCompany, setLinkingCompany] = useState(false);
 
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState<AuditRow[]>([]);
@@ -305,6 +313,7 @@ export default function CollaboratorEditWizard({
       const rowUserId = typeof row.user_id === "string" ? row.user_id : null;
       setCollaboratorUserId(rowUserId);
       setSelectedProfileUserId(rowUserId ?? "");
+      setLinkCompanyId(typeof row.company_id === "string" ? row.company_id : "");
       setCurrentCargo(typeof row.cargo === "string" ? row.cargo : "");
       setPromotionCargo(typeof row.cargo === "string" ? row.cargo : "");
       setPromotionManualCargo(false);
@@ -326,6 +335,36 @@ export default function CollaboratorEditWizard({
       alive = false;
     };
   }, [collaboratorId]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data, error } = await supabase.from("companies").select("id,name").order("name", { ascending: true });
+      if (!alive) return;
+      setCompanyOptions(error ? [] : ((data ?? []) as CompanyOption[]));
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (linkCompanyId || !companyOptions.length) return;
+    const empresa = n(initial.empresa);
+    if (!empresa) return;
+    const normalizedEmpresa = empresa
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+    const match = companyOptions.find((company) => {
+      const name = n(company.name)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase();
+      return name === normalizedEmpresa || name.includes(normalizedEmpresa) || normalizedEmpresa.includes(name);
+    });
+    if (match) setLinkCompanyId(match.id);
+  }, [companyOptions, initial.empresa, linkCompanyId]);
 
   useEffect(() => {
     let alive = true;
@@ -462,6 +501,56 @@ export default function CollaboratorEditWizard({
       setMsg(e instanceof Error ? e.message : "Erro ao salvar absenteismo.");
     } finally {
       setAbsenceSaving(false);
+    }
+  }
+
+  async function linkSelectedProfileToCompany() {
+    const profileUserId = n(selectedProfileUserId);
+    const companyId = n(linkCompanyId);
+    if (!profileUserId) {
+      setMsg("Selecione o Perfil do Portal do colaborador.");
+      return;
+    }
+    if (!companyId) {
+      setMsg("Selecione a empresa que sera vinculada ao perfil.");
+      return;
+    }
+
+    setLinkingCompany(true);
+    setMsg(null);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const syncRes = await fetch(`/api/rh/colaboradores/${collaboratorId}/sync-profile`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          company_id: companyId,
+          department_id: null,
+          profile_user_id: profileUserId,
+        }),
+      });
+
+      const text = await syncRes.text();
+      let payload: { error?: string; user_id?: string } | null = null;
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        payload = null;
+      }
+      if (!syncRes.ok) throw new Error(payload?.error || text || "Falha ao vincular perfil a empresa.");
+
+      setCollaboratorUserId(payload?.user_id ?? profileUserId);
+      setSelectedProfileUserId(payload?.user_id ?? profileUserId);
+      setMsg("Perfil vinculado a empresa com sucesso.");
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao vincular perfil a empresa.");
+    } finally {
+      setLinkingCompany(false);
     }
   }
 
@@ -807,25 +896,50 @@ export default function CollaboratorEditWizard({
                     </label>
 
                     <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-4">
-                      <label className="grid gap-1 text-xs font-semibold text-blue-950">
-                        Perfil do Portal vinculado
-                        <select
-                          value={selectedProfileUserId}
-                          onChange={(e) => setSelectedProfileUserId(e.target.value)}
-                          className="mt-1 h-11 rounded-xl border border-blue-200 bg-white px-3 text-sm text-slate-900"
+                      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
+                        <label className="grid gap-1 text-xs font-semibold text-blue-950">
+                          Perfil do Portal vinculado
+                          <select
+                            value={selectedProfileUserId}
+                            onChange={(e) => setSelectedProfileUserId(e.target.value)}
+                            className="mt-1 h-11 rounded-xl border border-blue-200 bg-white px-3 text-sm text-slate-900"
+                          >
+                            <option value="">Selecionar perfil do Portal</option>
+                            {portalProfiles.map((profile) => (
+                              <option key={profile.id} value={profile.id}>
+                                {(profile.full_name ?? "").trim() || profile.email || profile.id}
+                                {profile.email ? ` - ${profile.email}` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="grid gap-1 text-xs font-semibold text-blue-950">
+                          Empresa para vincular
+                          <select
+                            value={linkCompanyId}
+                            onChange={(e) => setLinkCompanyId(e.target.value)}
+                            className="mt-1 h-11 rounded-xl border border-blue-200 bg-white px-3 text-sm text-slate-900"
+                          >
+                            <option value="">Selecionar empresa</option>
+                            {companyOptions.map((company) => (
+                              <option key={company.id} value={company.id}>
+                                {company.name || company.id}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => void linkSelectedProfileToCompany()}
+                          disabled={linkingCompany || !selectedProfileUserId || !linkCompanyId}
+                          className="h-11 rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
                         >
-                          <option value="">Selecionar perfil do Portal</option>
-                          {portalProfiles.map((profile) => (
-                            <option key={profile.id} value={profile.id}>
-                              {(profile.full_name ?? "").trim() || profile.email || profile.id}
-                              {profile.email ? ` - ${profile.email}` : ""}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                          {linkingCompany ? "Vinculando..." : "Vincular perfil a empresa"}
+                        </button>
+                      </div>
                       <p className="mt-2 text-xs leading-5 text-blue-900">
-                        Use este campo quando o vínculo automático por e-mail não encontrar a pessoa certa. Ao salvar,
-                        a empresa escolhida no formulário será gravada diretamente no perfil selecionado.
+                        Use este campo quando o vínculo automático por e-mail não encontrar a pessoa certa. O botão
+                        grava diretamente a empresa no perfil selecionado, como em Vincular ao meu perfil.
                       </p>
                     </div>
 

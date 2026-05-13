@@ -143,7 +143,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       await supabaseAdmin.from("colaboradores").update({ user_id: profileUserId }).eq("id", colab.id);
     }
 
-    const primaryEmail = candidateEmails[0] || null;
     const { data: existingProfile, error: existingProfileErr } = await supabaseAdmin
       .from("profiles")
       .select("id")
@@ -154,7 +153,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const profilePayload = {
       id: profileUserId,
       full_name: colab.nome,
-      email: primaryEmail,
       company_id: companyId,
       department_id: departmentId,
       active: true,
@@ -165,7 +163,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           .from("profiles")
           .update({
             full_name: profilePayload.full_name,
-            email: profilePayload.email,
             company_id: profilePayload.company_id,
             department_id: profilePayload.department_id,
             active: profilePayload.active,
@@ -173,6 +170,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           .eq("id", profileUserId)
       : await supabaseAdmin.from("profiles").insert({
           ...profilePayload,
+          email: candidateEmails[0] || null,
           role: "colaborador",
         });
 
