@@ -23,6 +23,8 @@ type Profile = {
 type CollaboratorDirectoryRow = {
   user_id: string | null;
   nome: string | null;
+  email?: string | null;
+  empresa?: string | null;
   cargo: string | null;
   setor: string | null;
   data_nascimento?: string | null;
@@ -352,6 +354,26 @@ function displayName(profile?: Profile | null) {
   const full = (profile?.full_name ?? "").trim();
   if (full && !full.includes("@")) return full;
   return (profile?.email ?? "Colaborador").trim() || "Colaborador";
+}
+
+function normalizeAuthorName(value: string | null | undefined) {
+  return (value ?? "")
+    .trim()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function normalizeCompanyName(value: string | null | undefined) {
+  return normalizeAuthorName(value).replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function resolveCommentAuthorName(authorName: string | null | undefined, profile?: Profile | null) {
+  const cleaned = (authorName ?? "").trim();
+  const normalized = normalizeAuthorName(cleaned);
+  const genericNames = new Set(["colaborador", "admin", "rh", "gestor", "coordenador", "gerente"]);
+  if (cleaned && !genericNames.has(normalized)) return cleaned;
+  return displayName(profile);
 }
 
 function profileRoleLine(profile?: Profile | null) {
@@ -917,6 +939,7 @@ export default function InternalSocialPage() {
   const [readThreadAt, setReadThreadAt] = useState<Record<string, string>>({});
   const [savedPostIds, setSavedPostIds] = useState<string[]>([]);
   const [openPostActionsId, setOpenPostActionsId] = useState("");
+  const [openCommentActionsId, setOpenCommentActionsId] = useState("");
   const [birthdayHighlights, setBirthdayHighlights] = useState<SocialHighlightRow[]>([]);
   const [newHireHighlights, setNewHireHighlights] = useState<SocialHighlightRow[]>([]);
   const [mentionQuery, setMentionQuery] = useState("");
@@ -928,6 +951,7 @@ export default function InternalSocialPage() {
   const [selectedCommunityId, setSelectedCommunityId] = useState("");
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const postActionsRef = useRef<HTMLDivElement | null>(null);
+  const commentActionsRef = useRef<HTMLDivElement | null>(null);
   const threadEndRef = useRef<HTMLDivElement | null>(null);
   const messageFileInputRef = useRef<HTMLInputElement | null>(null);
   const commentFileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1055,7 +1079,7 @@ export default function InternalSocialPage() {
       },
       body: JSON.stringify({
         items: deduped.map((item) => ({
-          kind: "message",
+          kind: "comment",
           ownerId: item.ownerId,
           path: item.path,
         })),
@@ -1131,7 +1155,8 @@ export default function InternalSocialPage() {
       }
 
       if (profilesRes.error) throw new Error(profilesRes.error.message);
-      setCompanies(companiesRes.error ? [] : ((companiesRes.data ?? []) as CompanyBrand[]));
+      const companyRows = companiesRes.error ? [] : ((companiesRes.data ?? []) as CompanyBrand[]);
+      setCompanies(companyRows);
       if (memberRes.error) throw new Error(memberRes.error.message);
       if (postsError) throw new Error(postsError.message);
       if (msgRes.error) throw new Error(msgRes.error.message);
@@ -1139,6 +1164,11 @@ export default function InternalSocialPage() {
       if (messageGroupMembersRes.error && !isSchemaCompatError(messageGroupMembersRes.error.message)) throw new Error(messageGroupMembersRes.error.message);
       if (groupMessagesRes.error && !isSchemaCompatError(groupMessagesRes.error.message)) throw new Error(groupMessagesRes.error.message);
 
+      const companyIdByName = new Map(
+        companyRows
+          .map((company) => [normalizeCompanyName(company.name), company.id] as const)
+          .filter(([name]) => Boolean(name))
+      );
       const baseProfiles = (profilesRes.data ?? []) as Profile[];
       let nextProfiles = baseProfiles.map((profile) => ({
         ...profile,
@@ -1148,7 +1178,7 @@ export default function InternalSocialPage() {
       if (baseProfiles.length) {
         const collaboratorRes = await supabase
           .from("colaboradores")
-          .select("user_id,nome,cargo,setor,data_nascimento,data_admissao,is_active")
+          .select("user_id,nome,email,empresa,cargo,setor,data_nascimento,data_admissao,is_active")
           .in(
             "user_id",
             baseProfiles.map((item) => item.id)
@@ -1163,6 +1193,7 @@ export default function InternalSocialPage() {
             const collaborator = collaboratorByUserId.get(profile.id);
             const fallbackName = (collaborator?.nome ?? "").trim();
             const currentFullName = (profile.full_name ?? "").trim();
+            const collaboratorCompanyId = companyIdByName.get(normalizeCompanyName(collaborator?.empresa)) ?? null;
             const safeFullName =
               currentFullName && !currentFullName.includes("@")
                 ? currentFullName
@@ -1171,6 +1202,7 @@ export default function InternalSocialPage() {
                   : currentFullName || fallbackName || null;
             return {
               ...profile,
+              company_id: profile.company_id ?? collaboratorCompanyId,
               full_name: safeFullName,
               cargo: (collaborator?.cargo ?? "").trim() || null,
               setor: (collaborator?.setor ?? "").trim() || null,
@@ -1684,7 +1716,15 @@ export default function InternalSocialPage() {
     if (activeTab === "messages") return "Pesquisar conversas";
     return "Pesquisar publicações na rede";
   }, [activeTab]);
-  const contacts = useMemo(() => profiles.filter((item) => item.id !== me?.id), [profiles, me?.id]);
+  const contacts = useMemo(
+    () =>
+      profiles.filter((item) => {
+        if (item.id === me?.id) return false;
+        if (!me?.company_id) return false;
+        return item.company_id === me.company_id;
+      }),
+    [me?.company_id, me?.id, profiles]
+  );
   const myMessageGroupIds = useMemo(
     () => new Set(messageGroupMembers.filter((item) => item.user_id === me?.id).map((item) => item.group_id)),
     [me?.id, messageGroupMembers]
@@ -2094,6 +2134,9 @@ export default function InternalSocialPage() {
       if (postActionsRef.current && !postActionsRef.current.contains(event.target as Node)) {
         setOpenPostActionsId("");
       }
+      if (commentActionsRef.current && !commentActionsRef.current.contains(event.target as Node)) {
+        setOpenCommentActionsId("");
+      }
     }
     document.addEventListener("mousedown", handleDocumentPointerDown);
     return () => document.removeEventListener("mousedown", handleDocumentPointerDown);
@@ -2290,7 +2333,7 @@ export default function InternalSocialPage() {
       const token = sessionRes.data.session?.access_token;
       const form = new FormData();
       form.append("file", file);
-      form.append("context", "message");
+      form.append("context", "comment");
       const res = await fetch("/api/institucional/rede-social/upload", {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
@@ -2530,7 +2573,7 @@ export default function InternalSocialPage() {
         .insert({
         post_id: postId,
         author_user_id: me.id,
-        author_name: currentName,
+        author_name: resolveCommentAuthorName(currentName, profileById.get(me.id)),
         text: composedText,
       })
         .select("id")
@@ -2677,8 +2720,10 @@ export default function InternalSocialPage() {
   }
 
   function startEditComment(comment: CommentRow) {
+    const parsed = splitMessageContent(comment.text);
     setEditingCommentId(comment.id);
-    setEditingCommentText(comment.text);
+    setEditingCommentText(parsed.body);
+    setOpenCommentActionsId("");
   }
 
   function cancelEditComment() {
@@ -2687,18 +2732,26 @@ export default function InternalSocialPage() {
   }
 
   async function saveEditedComment(commentId: string) {
+    const comment = posts.flatMap((item) => item.comments).find((item) => item.id === commentId);
+    const parsed = splitMessageContent(comment?.text ?? "");
+    const body = editingCommentText.trim();
+    const attachmentLines = parsed.attachmentRefs.map((ref) => `Anexo: ${ref}`);
+    const nextText = [body, ...attachmentLines].filter(Boolean).join("\n");
+    if (!nextText) {
+      setError("Informe um texto ou mantenha um anexo para salvar o comentario.");
+      return;
+    }
     setBusy(true);
     setError("");
     try {
-      const res = await supabase.from("internal_social_post_comments").update({ text: editingCommentText.trim() }).eq("id", commentId);
+      const res = await supabase.from("internal_social_post_comments").update({ text: nextText }).eq("id", commentId);
       if (res.error) throw new Error(res.error.message);
-      const comment = posts.flatMap((item) => item.comments).find((item) => item.id === commentId);
       if (comment) {
         await syncPulseHubEvent({
           type: "comment_sync",
           postId: comment.post_id,
           commentId,
-          text: editingCommentText.trim(),
+          text: body || "Anexo compartilhado.",
           notifyPostAuthor: false,
         });
       }
@@ -3677,27 +3730,42 @@ export default function InternalSocialPage() {
                                 <>
                             <div className="flex items-center justify-between gap-3">
                               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                {comment.author_name || displayName(profileById.get(comment.author_user_id))}
+                                {resolveCommentAuthorName(comment.author_name, profileById.get(comment.author_user_id))}
                               </p>
                               <div className="flex items-center gap-2">
                                 <p className="text-xs text-slate-400">{when(comment.created_at)}</p>
                                 {comment.author_user_id === me?.id || canModeratePosts ? (
-                                  <>
+                                  <div ref={openCommentActionsId === comment.id ? commentActionsRef : null} className="relative">
                                     <button
                                       type="button"
-                                      onClick={() => startEditComment(comment)}
-                                      className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 hover:text-slate-700"
+                                      onClick={() => setOpenCommentActionsId((current) => (current === comment.id ? "" : comment.id))}
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-semibold text-slate-500 hover:bg-slate-50"
+                                      aria-label="Abrir opções do comentário"
                                     >
-                                      Editar
+                                      ...
                                     </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => void deleteComment(comment)}
-                                      className="text-[11px] font-semibold uppercase tracking-wide text-rose-600 hover:text-rose-700"
-                                    >
-                                      Excluir
-                                    </button>
-                                  </>
+                                    {openCommentActionsId === comment.id ? (
+                                      <div className="absolute right-0 top-9 z-20 min-w-[160px] rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.35)]">
+                                        <button
+                                          type="button"
+                                          onClick={() => startEditComment(comment)}
+                                          className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                                        >
+                                          <span>Editar comentário</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setOpenCommentActionsId("");
+                                            void deleteComment(comment);
+                                          }}
+                                          className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold text-rose-700 hover:bg-rose-50"
+                                        >
+                                          <span>Excluir comentário</span>
+                                        </button>
+                                      </div>
+                                    ) : null}
+                                  </div>
                                 ) : null}
                               </div>
                             </div>

@@ -79,11 +79,12 @@ export default function Page() {
     if (!editing) return;
     setSaving(true);
     setMsg("");
+    const { company_id: _companyId, department_id: _departmentId, ...collaboratorPayload } = payload;
 
     const { error } = await supabase
       .from("colaboradores")
       .update({
-        ...payload,
+        ...collaboratorPayload,
         salario: cleanNumber(payload.salario),
         valor_rescisao: cleanNumber(payload.valor_rescisao),
       })

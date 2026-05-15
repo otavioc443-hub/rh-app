@@ -7,10 +7,12 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 const BUCKET = "internal-social-media";
 
 type MediaRequestItem = {
-  kind: "post" | "message";
+  kind: "post" | "message" | "comment";
   ownerId: string;
   path: string;
 };
+
+type MediaKind = MediaRequestItem["kind"];
 
 async function getServerSupabase() {
   const cookieStore = await cookies();
@@ -68,7 +70,7 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => null)) as { items?: MediaRequestItem[] } | null;
     const items = (body?.items ?? [])
       .map((item) => ({
-        kind: (item?.kind === "message" ? "message" : "post") as "message" | "post",
+        kind: (item?.kind === "message" || item?.kind === "comment" ? item.kind : "post") as MediaKind,
         ownerId: String(item?.ownerId ?? "").trim(),
         path: String(item?.path ?? "").trim(),
       }))
@@ -81,13 +83,17 @@ export async function POST(req: Request) {
 
     const postIds = Array.from(new Set(items.filter((item) => item.kind === "post").map((item) => item.ownerId)));
     const messageIds = Array.from(new Set(items.filter((item) => item.kind === "message").map((item) => item.ownerId)));
+    const commentIds = Array.from(new Set(items.filter((item) => item.kind === "comment").map((item) => item.ownerId)));
 
-    const [visiblePostsRes, visibleMessagesRes] = await Promise.all([
+    const [visiblePostsRes, visibleMessagesRes, visibleCommentsRes] = await Promise.all([
       postIds.length
         ? supabaseUser.from("internal_social_posts").select("id").in("id", postIds)
         : Promise.resolve({ data: [], error: null }),
       messageIds.length
         ? supabaseUser.from("internal_social_direct_messages").select("id").in("id", messageIds)
+        : Promise.resolve({ data: [], error: null }),
+      commentIds.length
+        ? supabaseUser.from("internal_social_post_comments").select("id").in("id", commentIds)
         : Promise.resolve({ data: [], error: null }),
     ]);
 
@@ -97,11 +103,16 @@ export async function POST(req: Request) {
     if (visibleMessagesRes.error) {
       return NextResponse.json({ error: visibleMessagesRes.error.message }, { status: 400 });
     }
+    if (visibleCommentsRes.error) {
+      return NextResponse.json({ error: visibleCommentsRes.error.message }, { status: 400 });
+    }
 
     const visiblePostIds = new Set(((visiblePostsRes.data ?? []) as Array<{ id: string }>).map((item) => item.id));
     const visibleMessageIds = new Set(((visibleMessagesRes.data ?? []) as Array<{ id: string }>).map((item) => item.id));
+    const visibleCommentIds = new Set(((visibleCommentsRes.data ?? []) as Array<{ id: string }>).map((item) => item.id));
     const allowedItems = items.filter((item) => {
       if (item.kind === "post") return visiblePostIds.has(item.ownerId);
+      if (item.kind === "comment") return visibleCommentIds.has(item.ownerId);
       return visibleMessageIds.has(item.ownerId);
     });
 

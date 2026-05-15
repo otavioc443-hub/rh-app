@@ -212,7 +212,6 @@ export default function AniversariantesPage() {
             <thead className="bg-slate-50 text-slate-700">
               <tr>
                 <th className="p-3">Nome</th>
-                <th className="p-3">Cargo</th>
                 <th className="p-3">Departamento</th>
                 <th className="p-3">Data</th>
                 <th className="p-3">Status</th>
@@ -223,7 +222,6 @@ export default function AniversariantesPage() {
                 rows.map((r) => (
                   <tr key={r.id} className="border-t">
                     <td className="p-3">{r.nome}</td>
-                    <td className="p-3">{r.cargo}</td>
                     <td className="p-3">{r.departamento}</td>
                     <td className="p-3">{r.nextDate.toLocaleDateString("pt-BR")}</td>
                     <td className="p-3">{formatBirthdayStatus(r.daysLeft)}</td>
@@ -231,7 +229,7 @@ export default function AniversariantesPage() {
                 ))
               ) : (
                 <tr>
-                  <td className="p-3 text-slate-500" colSpan={5}>
+                  <td className="p-3 text-slate-500" colSpan={4}>
                     Nenhum registro encontrado.
                   </td>
                 </tr>
