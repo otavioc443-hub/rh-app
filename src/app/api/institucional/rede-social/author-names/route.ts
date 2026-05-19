@@ -14,6 +14,8 @@ type CollaboratorRow = {
   user_id: string | null;
   nome: string | null;
   email: string | null;
+  email_empresarial?: string | null;
+  email_pessoal?: string | null;
 };
 
 async function getServerSupabase() {
@@ -33,6 +35,10 @@ function cleanName(value: string | null | undefined) {
   const name = (value ?? "").trim();
   if (!name || name.includes("@")) return "";
   return name;
+}
+
+function cleanEmail(value: string | null | undefined) {
+  return (value ?? "").trim().toLowerCase();
 }
 
 export async function POST(req: Request) {
@@ -67,19 +73,53 @@ export async function POST(req: Request) {
 
     const [profilesRes, collaboratorsRes] = await Promise.all([
       supabaseAdmin.from("profiles").select("id,full_name,email,active").in("id", userIds),
-      supabaseAdmin.from("colaboradores").select("user_id,nome,email").in("user_id", userIds),
+      supabaseAdmin.from("colaboradores").select("user_id,nome,email,email_empresarial,email_pessoal").in("user_id", userIds),
     ]);
 
     if (profilesRes.error) return NextResponse.json({ error: profilesRes.error.message }, { status: 400 });
     if (collaboratorsRes.error) return NextResponse.json({ error: collaboratorsRes.error.message }, { status: 400 });
 
     const names: Record<string, string> = {};
+    const profiles = (profilesRes.data ?? []) as ProfileRow[];
     for (const row of (collaboratorsRes.data ?? []) as CollaboratorRow[]) {
       const name = cleanName(row.nome);
       if (row.user_id && name) names[row.user_id] = name;
     }
 
-    for (const row of (profilesRes.data ?? []) as ProfileRow[]) {
+    const unresolvedProfileEmails = profiles
+      .filter((row) => !names[row.id])
+      .map((row) => cleanEmail(row.email))
+      .filter(Boolean);
+    if (unresolvedProfileEmails.length) {
+      const emailCollaboratorsRes = await supabaseAdmin
+        .from("colaboradores")
+        .select("user_id,nome,email,email_empresarial,email_pessoal")
+        .or(
+          [
+            `email.in.(${unresolvedProfileEmails.join(",")})`,
+            `email_empresarial.in.(${unresolvedProfileEmails.join(",")})`,
+            `email_pessoal.in.(${unresolvedProfileEmails.join(",")})`,
+          ].join(",")
+        );
+
+      if (!emailCollaboratorsRes.error) {
+        const collaboratorByEmail = new Map<string, string>();
+        for (const collaborator of (emailCollaboratorsRes.data ?? []) as CollaboratorRow[]) {
+          const name = cleanName(collaborator.nome);
+          if (!name) continue;
+          for (const email of [collaborator.email, collaborator.email_empresarial, collaborator.email_pessoal]) {
+            const normalizedEmail = cleanEmail(email);
+            if (normalizedEmail) collaboratorByEmail.set(normalizedEmail, name);
+          }
+        }
+        for (const profile of profiles) {
+          const name = collaboratorByEmail.get(cleanEmail(profile.email));
+          if (name) names[profile.id] = name;
+        }
+      }
+    }
+
+    for (const row of profiles) {
       const profileName = cleanName(row.full_name);
       if (profileName && !names[row.id]) names[row.id] = profileName;
     }
