@@ -1160,6 +1160,23 @@ export default function InternalSocialPage() {
     }
   }
 
+  async function loadPulseHubDirectory() {
+    try {
+      const sessionRes = await supabase.auth.getSession();
+      const token = sessionRes.data.session?.access_token;
+      const res = await fetch("/api/institucional/rede-social/directory", {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      const json = (await res.json().catch(() => ({}))) as { profiles?: Profile[] };
+      if (!res.ok || !Array.isArray(json.profiles)) return null;
+      return json.profiles;
+    } catch {
+      return null;
+    }
+  }
+
   async function load() {
     setLoading(true);
     setError("");
@@ -1239,6 +1256,13 @@ export default function InternalSocialPage() {
         ...profile,
         avatar_url: resolvePortalAvatarUrl(profile.avatar_url ?? null),
       }));
+      const directoryProfiles = await loadPulseHubDirectory();
+      if (directoryProfiles?.length) {
+        nextProfiles = directoryProfiles.map((profile) => ({
+          ...profile,
+          avatar_url: resolvePortalAvatarUrl(profile.avatar_url ?? null),
+        }));
+      }
       let nextCollaboratorNameByUserId: Record<string, string> = {};
 
       const initialAuthorUserIds = Array.from(
