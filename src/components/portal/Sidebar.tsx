@@ -116,7 +116,7 @@ export default function Sidebar({
       {
         label: "Meu perfil",
         icon: UserRound,
-        roles: ["colaborador", "coordenador", "gestor", "rh", "admin", "compliance"],
+        roles: ["colaborador", "coordenador", "gestor", "rh", "financeiro", "admin", "compliance"],
         children: [
           { label: "Meus dados", icon: UserRound, href: "/meu-perfil/meus-dados" },
           { label: "Chamados", icon: ClipboardList, href: "/meu-perfil/chamados" },
