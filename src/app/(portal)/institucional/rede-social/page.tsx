@@ -49,6 +49,11 @@ type Group = {
   slug: string;
   description: string;
   cover_color: string;
+  cover_image_url?: string | null;
+  category?: string | null;
+  rules?: string | null;
+  modalities?: string[] | null;
+  allow_member_posts?: boolean | null;
   is_private: boolean;
 };
 
@@ -56,6 +61,12 @@ type GroupMemberRow = {
   group_id: string;
   user_id: string;
   role: "owner" | "moderator" | "member";
+};
+
+type CommunityCreatorPermissionRow = {
+  user_id: string;
+  granted_by: string | null;
+  created_at: string;
 };
 
 type PostType = "social" | "announcement" | "campaign" | "event" | "recognition";
@@ -368,12 +379,20 @@ function normalizeCompanyName(value: string | null | undefined) {
   return normalizeAuthorName(value).replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function resolveCommentAuthorName(authorName: string | null | undefined, profile?: Profile | null) {
+function resolveCommentAuthorName(
+  authorName: string | null | undefined,
+  profile?: Profile | null,
+  collaboratorName?: string | null
+) {
   const cleaned = (authorName ?? "").trim();
   const normalized = normalizeAuthorName(cleaned);
   const genericNames = new Set(["colaborador", "admin", "rh", "gestor", "coordenador", "gerente"]);
   if (cleaned && !genericNames.has(normalized)) return cleaned;
-  return displayName(profile);
+  const profileName = displayName(profile);
+  if (profileName && !profileName.includes("@") && normalizeAuthorName(profileName) !== "colaborador") return profileName;
+  const fallbackName = (collaboratorName ?? "").trim();
+  if (fallbackName && !fallbackName.includes("@")) return fallbackName;
+  return profileName;
 }
 
 function profileRoleLine(profile?: Profile | null) {
@@ -882,10 +901,12 @@ export default function InternalSocialPage() {
   const [error, setError] = useState("");
   const [me, setMe] = useState<Profile | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [collaboratorNameByUserId, setCollaboratorNameByUserId] = useState<Record<string, string>>({});
   const [companies, setCompanies] = useState<CompanyBrand[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [groupMembers, setGroupMembers] = useState<GroupMemberRow[]>([]);
+  const [communityCreatorPermissions, setCommunityCreatorPermissions] = useState<CommunityCreatorPermissionRow[]>([]);
   const [messageGroups, setMessageGroups] = useState<MessageGroupRow[]>([]);
   const [messageGroupMembers, setMessageGroupMembers] = useState<MessageGroupMemberRow[]>([]);
   const [posts, setPosts] = useState<FeedPost[]>([]);
@@ -899,6 +920,7 @@ export default function InternalSocialPage() {
   const [projectId, setProjectId] = useState("");
   const [groupId, setGroupId] = useState("");
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
+  const [expandedCommentPostIds, setExpandedCommentPostIds] = useState<string[]>([]);
   const [commentAttachments, setCommentAttachments] = useState<Record<string, DraftAttachment[]>>({});
   const [commentMediaUrls, setCommentMediaUrls] = useState<Record<string, string>>({});
   const [activeCommentUploadPostId, setActiveCommentUploadPostId] = useState("");
@@ -950,6 +972,18 @@ export default function InternalSocialPage() {
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const [communityFilter, setCommunityFilter] = useState<"all" | "joined" | "discover">("all");
   const [selectedCommunityId, setSelectedCommunityId] = useState("");
+  const [showCommunityEditor, setShowCommunityEditor] = useState(false);
+  const [editingCommunityId, setEditingCommunityId] = useState("");
+  const [communityName, setCommunityName] = useState("");
+  const [communityDescription, setCommunityDescription] = useState("");
+  const [communityCoverColor, setCommunityCoverColor] = useState("#0f172a");
+  const [communityCoverImageUrl, setCommunityCoverImageUrl] = useState("");
+  const [communityCategory, setCommunityCategory] = useState("");
+  const [communityRules, setCommunityRules] = useState("");
+  const [communityModalities, setCommunityModalities] = useState<string[]>(["posts", "polls", "campaigns"]);
+  const [communityPrivate, setCommunityPrivate] = useState(false);
+  const [communityAllowMemberPosts, setCommunityAllowMemberPosts] = useState(true);
+  const [communityCreatorUserId, setCommunityCreatorUserId] = useState("");
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const postActionsRef = useRef<HTMLDivElement | null>(null);
   const commentActionsRef = useRef<HTMLDivElement | null>(null);
@@ -1182,6 +1216,7 @@ export default function InternalSocialPage() {
         ...profile,
         avatar_url: resolvePortalAvatarUrl(profile.avatar_url ?? null),
       }));
+      let nextCollaboratorNameByUserId: Record<string, string> = {};
 
       if (baseProfiles.length) {
         const collaboratorRes = await supabase
@@ -1195,6 +1230,10 @@ export default function InternalSocialPage() {
           const collaboratorByUserId = new Map<string, CollaboratorDirectoryRow>();
           for (const item of (collaboratorRes.data ?? []) as CollaboratorDirectoryRow[]) {
             if (item.user_id) collaboratorByUserId.set(item.user_id, item);
+            const fallbackName = (item.nome ?? "").trim();
+            if (item.user_id && fallbackName && !fallbackName.includes("@")) {
+              nextCollaboratorNameByUserId[item.user_id] = fallbackName;
+            }
           }
 
           nextProfiles = nextProfiles.map((profile) => {
@@ -1294,6 +1333,7 @@ export default function InternalSocialPage() {
         setBirthdayHighlights([]);
         setNewHireHighlights([]);
       }
+      setCollaboratorNameByUserId(nextCollaboratorNameByUserId);
       setProfiles(nextProfiles);
       setMe(nextProfiles.find((item) => item.id === userId) ?? null);
       try {
@@ -1362,22 +1402,35 @@ export default function InternalSocialPage() {
       }
 
       try {
-        const [groupsRes, groupMembersRes] = await Promise.all([
+        const [groupsRes, groupMembersRes, creatorPermissionsRes] = await Promise.all([
           supabase
             .from("internal_social_groups")
-            .select("id,name,slug,description,cover_color,is_private")
+            .select("id,name,slug,description,cover_color,cover_image_url,category,rules,modalities,allow_member_posts,is_private")
             .order("name", { ascending: true }),
           supabase
             .from("internal_social_group_members")
             .select("group_id,user_id,role"),
+          supabase
+            .from("internal_social_community_creator_permissions")
+            .select("user_id,granted_by,created_at"),
         ]);
         if (!groupsRes.error) {
           const nextGroups = (groupsRes.data ?? []) as Group[];
           setGroups(nextGroups);
           setSelectedCommunityId((prev) => prev || nextGroups[0]?.id || "");
         } else if (isSchemaCompatError(groupsRes.error.message)) {
-          setGroups([]);
-          setSelectedCommunityId("");
+          const legacyGroupsRes = await supabase
+            .from("internal_social_groups")
+            .select("id,name,slug,description,cover_color,is_private")
+            .order("name", { ascending: true });
+          if (!legacyGroupsRes.error) {
+            const nextGroups = (legacyGroupsRes.data ?? []) as Group[];
+            setGroups(nextGroups);
+            setSelectedCommunityId((prev) => prev || nextGroups[0]?.id || "");
+          } else {
+            setGroups([]);
+            setSelectedCommunityId("");
+          }
         } else {
           throw new Error(groupsRes.error.message);
         }
@@ -1388,10 +1441,18 @@ export default function InternalSocialPage() {
         } else {
           throw new Error(groupMembersRes.error.message);
         }
+        if (!creatorPermissionsRes.error) {
+          setCommunityCreatorPermissions((creatorPermissionsRes.data ?? []) as CommunityCreatorPermissionRow[]);
+        } else if (isSchemaCompatError(creatorPermissionsRes.error.message)) {
+          setCommunityCreatorPermissions([]);
+        } else {
+          throw new Error(creatorPermissionsRes.error.message);
+        }
       } catch (groupsErr) {
         if (!isSchemaCompatError(groupsErr instanceof Error ? groupsErr.message : "")) throw groupsErr;
         setGroups([]);
         setGroupMembers([]);
+        setCommunityCreatorPermissions([]);
         setSelectedCommunityId("");
       }
 
@@ -1507,7 +1568,11 @@ export default function InternalSocialPage() {
       setPosts(
         postRows.map((item) => ({
           ...item,
-          author_name: resolveCommentAuthorName(item.author_name, nextProfileById.get(item.author_user_id)),
+          author_name: resolveCommentAuthorName(
+            item.author_name,
+            nextProfileById.get(item.author_user_id),
+            nextCollaboratorNameByUserId[item.author_user_id]
+          ),
           attachments: attachmentMap.get(item.id) ?? [],
           comments: commentMap.get(item.id) ?? [],
           reactions: reactionMap.get(item.id) ?? [],
@@ -1672,7 +1737,10 @@ export default function InternalSocialPage() {
       }),
     [me?.company_id, me?.id, me?.role, profiles]
   );
-  const canPublishOfficial = me?.role === "admin" || me?.role === "diretoria" || me?.role === "rh";
+  const canPublishOfficial = me?.role === "admin" || me?.role === "rh";
+  const canManageCommunities = me?.role === "admin" || me?.role === "rh";
+  const canCreateCommunities =
+    canManageCommunities || communityCreatorPermissions.some((item) => item.user_id === me?.id);
   const postPublisherByBrand = useCallback(
     (post: PostRow) => {
       const authorProfile = profileById.get(post.author_user_id);
@@ -1680,7 +1748,7 @@ export default function InternalSocialPage() {
       const companyName = (company?.name ?? "").trim();
       const companyLogoUrl = (company?.logo_url ?? "").trim();
       const isOfficial = isOfficialPostType(post.post_type);
-      const fallbackName = resolveCommentAuthorName(post.author_name, authorProfile);
+      const fallbackName = resolveCommentAuthorName(post.author_name, authorProfile, collaboratorNameByUserId[post.author_user_id]);
 
       return {
         name: isOfficial && companyName ? companyName : fallbackName,
@@ -1691,7 +1759,7 @@ export default function InternalSocialPage() {
         isCompanyBrand: isOfficial,
       };
     },
-    [companyById, profileById]
+    [collaboratorNameByUserId, companyById, profileById]
   );
   const composerMentionOptions = useMemo(() => {
     const term = mentionQuery.trim().toLowerCase();
@@ -1785,6 +1853,12 @@ export default function InternalSocialPage() {
     () => groups.find((item) => item.id === selectedCommunityId) ?? null,
     [groups, selectedCommunityId]
   );
+  const selectedCommunityMembership = useMemo(
+    () => groupMembers.find((item) => item.group_id === selectedCommunityId && item.user_id === me?.id) ?? null,
+    [groupMembers, me?.id, selectedCommunityId]
+  );
+  const canEditSelectedCommunity =
+    canManageCommunities || selectedCommunityMembership?.role === "owner" || selectedCommunityMembership?.role === "moderator";
   const joinedGroupIds = useMemo(
     () =>
       new Set(
@@ -2443,7 +2517,7 @@ export default function InternalSocialPage() {
       const normalizedPostType = canPublishOfficial ? postType : "social";
       const isOfficial = isOfficialPostType(normalizedPostType);
       const publisherCompanyName = me.company_id ? (companyById.get(me.company_id)?.name ?? "").trim() : "";
-      const personalAuthorName = resolveCommentAuthorName(currentName, me);
+      const personalAuthorName = resolveCommentAuthorName(currentName, me, collaboratorNameByUserId[me.id]);
       const postAuthorName = isOfficial ? publisherCompanyName || officialAuthorName(me.role) || personalAuthorName : personalAuthorName;
       const postAuthorAvatarUrl = isOfficial ? null : resolvePortalAvatarUrl(me.avatar_url ?? null);
       let res = await supabase
@@ -2589,7 +2663,7 @@ export default function InternalSocialPage() {
         .insert({
         post_id: postId,
         author_user_id: me.id,
-        author_name: resolveCommentAuthorName(currentName, profileById.get(me.id)),
+        author_name: resolveCommentAuthorName(currentName, profileById.get(me.id), collaboratorNameByUserId[me.id]),
         text: composedText,
       })
         .select("id")
@@ -2920,6 +2994,121 @@ export default function InternalSocialPage() {
       await load();
     } catch (err) {
       setError(normalizeError(err instanceof Error ? err.message : "Erro ao atualizar comunidade."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function resetCommunityForm() {
+    setEditingCommunityId("");
+    setCommunityName("");
+    setCommunityDescription("");
+    setCommunityCoverColor("#0f172a");
+    setCommunityCoverImageUrl("");
+    setCommunityCategory("");
+    setCommunityRules("");
+    setCommunityModalities(["posts", "polls", "campaigns"]);
+    setCommunityPrivate(false);
+    setCommunityAllowMemberPosts(true);
+  }
+
+  function openCommunityEditor(group?: Group) {
+    if (group) {
+      setEditingCommunityId(group.id);
+      setCommunityName(group.name ?? "");
+      setCommunityDescription(group.description ?? "");
+      setCommunityCoverColor(group.cover_color || "#0f172a");
+      setCommunityCoverImageUrl(group.cover_image_url ?? "");
+      setCommunityCategory(group.category ?? "");
+      setCommunityRules(group.rules ?? "");
+      setCommunityModalities(Array.isArray(group.modalities) && group.modalities.length ? group.modalities : ["posts", "polls", "campaigns"]);
+      setCommunityPrivate(Boolean(group.is_private));
+      setCommunityAllowMemberPosts(group.allow_member_posts !== false);
+    } else {
+      resetCommunityForm();
+    }
+    setShowCommunityEditor(true);
+  }
+
+  async function saveCommunity() {
+    if (!canCreateCommunities && !editingCommunityId) return;
+    if (!canEditSelectedCommunity && editingCommunityId) return;
+    const name = communityName.trim();
+    if (!name) {
+      setError("Informe o nome da comunidade.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const payload = {
+        name,
+        slug: slugifyHandle(name) || `comunidade-${Date.now()}`,
+        description: communityDescription.trim(),
+        cover_color: communityCoverColor.trim() || "#0f172a",
+        cover_image_url: communityCoverImageUrl.trim() || null,
+        category: communityCategory.trim() || null,
+        rules: communityRules.trim() || null,
+        modalities: communityModalities,
+        allow_member_posts: communityAllowMemberPosts,
+        is_private: communityPrivate,
+        created_by: me?.id ?? null,
+      };
+      const query = editingCommunityId
+        ? supabase.from("internal_social_groups").update(payload).eq("id", editingCommunityId)
+        : supabase.from("internal_social_groups").insert(payload);
+      const { data, error: saveErr } = await query.select("id").single<{ id: string }>();
+      if (saveErr) throw new Error(saveErr.message);
+      if (!editingCommunityId && data?.id && me?.id) {
+        await supabase.from("internal_social_group_members").insert({
+          group_id: data.id,
+          user_id: me.id,
+          role: "owner",
+        });
+        setSelectedCommunityId(data.id);
+      }
+      setShowCommunityEditor(false);
+      resetCommunityForm();
+      await load();
+    } catch (err) {
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao salvar comunidade."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleCommunityCreatorPermission(userId: string) {
+    if (!canManageCommunities || !me?.id || !userId) return;
+    setBusy(true);
+    setError("");
+    try {
+      const exists = communityCreatorPermissions.some((item) => item.user_id === userId);
+      const res = exists
+        ? await supabase.from("internal_social_community_creator_permissions").delete().eq("user_id", userId)
+        : await supabase.from("internal_social_community_creator_permissions").insert({ user_id: userId, granted_by: me.id });
+      if (res.error) throw new Error(res.error.message);
+      await load();
+    } catch (err) {
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao atualizar permissao de comunidade."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function updateCommunityMemberRole(userId: string, role: "owner" | "moderator" | "member") {
+    if (!selectedCommunity || !canEditSelectedCommunity) return;
+    setBusy(true);
+    setError("");
+    try {
+      const res = await supabase
+        .from("internal_social_group_members")
+        .update({ role })
+        .eq("group_id", selectedCommunity.id)
+        .eq("user_id", userId);
+      if (res.error) throw new Error(res.error.message);
+      await load();
+    } catch (err) {
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao atualizar papel na comunidade."));
     } finally {
       setBusy(false);
     }
@@ -3641,9 +3830,9 @@ export default function InternalSocialPage() {
                         />
                       ) : null}
                       {post.attachments.length ? (
-                        <div className="mt-4 space-y-3">
+                        <div className="mt-4 grid gap-3">
                           {post.attachments.map((attachment) => (
-                            <div key={attachment.id} className="inline-block max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                            <div key={attachment.id} className="inline-flex max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
                               {(() => {
                                 const mediaUrl = attachment.resolvedUrl || attachment.url;
                                 const imageReady = canRenderImageUrl(mediaUrl);
@@ -3654,12 +3843,12 @@ export default function InternalSocialPage() {
                                     width={1200}
                                     height={900}
                                     unoptimized
-                                    className="max-h-[320px] w-full max-w-[520px] bg-white object-contain"
+                                    className="h-auto max-h-[420px] w-auto max-w-full bg-white object-contain sm:max-w-[560px]"
                                   />
                                 ) : attachment.type === "video" && imageReady ? (
                                   <video
                                     controls
-                                    className="max-h-[320px] w-full max-w-[520px] bg-slate-950"
+                                    className="h-auto max-h-[420px] w-auto max-w-full bg-slate-950 sm:max-w-[560px]"
                                     src={mediaUrl}
                                   />
                                 ) : (
@@ -3738,7 +3927,7 @@ export default function InternalSocialPage() {
                       </div>
 
                       <div className="mt-3 space-y-3 border-t border-slate-100 pt-4">
-                        {post.comments.map((comment) => (
+                        {(expandedCommentPostIds.includes(post.id) ? post.comments : post.comments.slice(0, 1)).map((comment) => (
                           <div key={comment.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                             {(() => {
                               const parsedComment = splitMessageContent(comment.text);
@@ -3746,7 +3935,11 @@ export default function InternalSocialPage() {
                                 <>
                             <div className="flex items-center justify-between gap-3">
                               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                {resolveCommentAuthorName(comment.author_name, profileById.get(comment.author_user_id))}
+                                {resolveCommentAuthorName(
+                                  comment.author_name,
+                                  profileById.get(comment.author_user_id),
+                                  collaboratorNameByUserId[comment.author_user_id]
+                                )}
                               </p>
                               <div className="flex items-center gap-2">
                                 <p className="text-xs text-slate-400">{when(comment.created_at)}</p>
@@ -3863,6 +4056,21 @@ export default function InternalSocialPage() {
                             })()}
                           </div>
                         ))}
+                        {post.comments.length > 1 ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedCommentPostIds((current) =>
+                                current.includes(post.id) ? current.filter((id) => id !== post.id) : [...current, post.id]
+                              )
+                            }
+                            className="text-sm font-semibold text-[#0a66c2] hover:underline"
+                          >
+                            {expandedCommentPostIds.includes(post.id)
+                              ? "Ver menos comentarios"
+                              : `Ver mais ${post.comments.length - 1} comentario(s)`}
+                          </button>
+                        ) : null}
                         <input
                           ref={commentFileInputRef}
                           type="file"
@@ -4478,6 +4686,15 @@ export default function InternalSocialPage() {
                   <p className="mt-1 text-lg font-semibold text-slate-900">Grupos internos por tema, area ou iniciativa</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {canCreateCommunities ? (
+                    <button
+                      type="button"
+                      onClick={() => openCommunityEditor()}
+                      className="rounded-full bg-slate-950 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-800"
+                    >
+                      Nova comunidade
+                    </button>
+                  ) : null}
                   {[
                     { id: "all", label: "Todas" },
                     { id: "joined", label: "Minhas" },
@@ -4514,11 +4731,23 @@ export default function InternalSocialPage() {
                             active ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-slate-50 hover:bg-white"
                           }`}
                         >
-                          <div
-                            className="mb-3 h-2 rounded-full"
-                            style={{ backgroundColor: group.cover_color || "#0f172a" }}
-                          />
+                          {group.cover_image_url ? (
+                            <div
+                              className="mb-3 h-24 rounded-2xl bg-cover bg-center"
+                              style={{ backgroundImage: `url(${group.cover_image_url})` }}
+                            />
+                          ) : (
+                            <div
+                              className="mb-3 h-2 rounded-full"
+                              style={{ backgroundColor: group.cover_color || "#0f172a" }}
+                            />
+                          )}
                           <p className={`text-sm font-semibold ${active ? "text-white" : "text-slate-900"}`}>{group.name}</p>
+                          {group.category ? (
+                            <p className={`mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] ${active ? "text-slate-200" : "text-[#0a66c2]"}`}>
+                              {group.category}
+                            </p>
+                          ) : null}
                           <p className={`mt-1 text-xs ${active ? "text-slate-200" : "text-slate-500"}`}>{group.description}</p>
                           <div className="mt-3 flex items-center justify-between gap-2">
                             <span className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${active ? "text-slate-200" : "text-slate-400"}`}>
@@ -4543,25 +4772,53 @@ export default function InternalSocialPage() {
                     <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                          <div
-                            className="mb-3 h-2 w-32 rounded-full"
-                            style={{ backgroundColor: selectedCommunity.cover_color || "#0f172a" }}
-                          />
+                          {selectedCommunity.cover_image_url ? (
+                            <div
+                              className="mb-4 h-44 rounded-3xl bg-cover bg-center"
+                              style={{ backgroundImage: `linear-gradient(90deg, rgba(15,23,42,0.58), rgba(15,23,42,0.18)), url(${selectedCommunity.cover_image_url})` }}
+                            />
+                          ) : (
+                            <div
+                              className="mb-3 h-2 w-32 rounded-full"
+                              style={{ backgroundColor: selectedCommunity.cover_color || "#0f172a" }}
+                            />
+                          )}
                           <p className="text-xl font-semibold text-slate-900">{selectedCommunity.name}</p>
+                          {selectedCommunity.category ? <p className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#0a66c2]">{selectedCommunity.category}</p> : null}
                           <p className="mt-2 max-w-2xl text-sm text-slate-600">{selectedCommunity.description}</p>
+                          {selectedCommunity.modalities?.length ? (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              {selectedCommunity.modalities.map((item) => (
+                                <span key={item} className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                                  {item}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => void toggleGroupMembership(selectedCommunity)}
-                          className={`rounded-2xl px-4 py-2 text-sm font-semibold ${
-                            joinedGroupIds.has(selectedCommunity.id)
-                              ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
-                              : "bg-[#0a66c2] text-white hover:bg-[#004182]"
-                          }`}
-                        >
-                          {joinedGroupIds.has(selectedCommunity.id) ? "Sair da comunidade" : "Entrar na comunidade"}
-                        </button>
+                        <div className="flex flex-wrap gap-2">
+                          {canEditSelectedCommunity ? (
+                            <button
+                              type="button"
+                              onClick={() => openCommunityEditor(selectedCommunity)}
+                              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                            >
+                              Editar comunidade
+                            </button>
+                          ) : null}
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => void toggleGroupMembership(selectedCommunity)}
+                            className={`rounded-2xl px-4 py-2 text-sm font-semibold ${
+                              joinedGroupIds.has(selectedCommunity.id)
+                                ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
+                                : "bg-[#0a66c2] text-white hover:bg-[#004182]"
+                            }`}
+                          >
+                            {joinedGroupIds.has(selectedCommunity.id) ? "Sair da comunidade" : "Entrar na comunidade"}
+                          </button>
+                        </div>
                       </div>
                       <div className="mt-4 grid gap-3 sm:grid-cols-3">
                         <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -4577,10 +4834,93 @@ export default function InternalSocialPage() {
                           </p>
                         </div>
                         <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Privacidade</p>
-                          <p className="mt-2 text-2xl font-semibold text-slate-900">{selectedCommunity.is_private ? "Privada" : "Aberta"}</p>
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Modalidades</p>
+                          <p className="mt-2 text-2xl font-semibold text-slate-900">{selectedCommunity.modalities?.length ?? 0}</p>
                         </div>
                       </div>
+
+                      {selectedCommunity.rules ? (
+                        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+                          <p className="text-sm font-semibold text-slate-900">Regras e informações</p>
+                          <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-600">{selectedCommunity.rules}</p>
+                        </div>
+                      ) : null}
+
+                      {canManageCommunities ? (
+                        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+                          <div className="flex flex-wrap items-end gap-3">
+                            <label className="grid min-w-[260px] flex-1 gap-1 text-xs font-semibold text-slate-700">
+                              Liberar colaborador para criar comunidades
+                              <select
+                                value={communityCreatorUserId}
+                                onChange={(event) => setCommunityCreatorUserId(event.target.value)}
+                                className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-normal"
+                              >
+                                <option value="">Selecione</option>
+                                {contacts.map((contact) => (
+                                  <option key={`community-creator-${contact.id}`} value={contact.id}>
+                                    {displayName(contact)}
+                                  </option>
+                                ))}
+                              </select>
+                            </label>
+                            <button
+                              type="button"
+                              disabled={!communityCreatorUserId || busy}
+                              onClick={() => void toggleCommunityCreatorPermission(communityCreatorUserId)}
+                              className="h-11 rounded-2xl bg-slate-950 px-4 text-sm font-semibold text-white disabled:opacity-50"
+                            >
+                              {communityCreatorPermissions.some((item) => item.user_id === communityCreatorUserId) ? "Remover liberação" : "Liberar"}
+                            </button>
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {communityCreatorPermissions.length ? (
+                              communityCreatorPermissions.map((permission) => {
+                                const profile = profileById.get(permission.user_id);
+                                return (
+                                  <button
+                                    key={permission.user_id}
+                                    type="button"
+                                    onClick={() => void toggleCommunityCreatorPermission(permission.user_id)}
+                                    className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100"
+                                  >
+                                    {displayName(profile)} ×
+                                  </button>
+                                );
+                              })
+                            ) : (
+                              <p className="text-sm text-slate-500">Nenhum colaborador liberado ainda.</p>
+                            )}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {canEditSelectedCommunity ? (
+                        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+                          <p className="text-sm font-semibold text-slate-900">Gestão de membros</p>
+                          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                            {groupMembers
+                              .filter((item) => item.group_id === selectedCommunity.id)
+                              .map((member) => {
+                                const profile = profileById.get(member.user_id);
+                                return (
+                                  <div key={`${member.group_id}-${member.user_id}`} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2">
+                                    <span className="truncate text-sm font-semibold text-slate-700">{displayName(profile)}</span>
+                                    <select
+                                      value={member.role}
+                                      onChange={(event) => void updateCommunityMemberRole(member.user_id, event.target.value as "owner" | "moderator" | "member")}
+                                      className="h-9 rounded-xl border border-slate-200 bg-white px-2 text-xs font-semibold"
+                                    >
+                                      <option value="member">Membro</option>
+                                      <option value="moderator">Editor</option>
+                                      <option value="owner">Dono</option>
+                                    </select>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        </div>
+                      ) : null}
 
                       <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
                         <p className="text-sm font-semibold text-slate-900">Feed da comunidade</p>
@@ -5165,6 +5505,112 @@ export default function InternalSocialPage() {
         ) : null}
       </div>
 
+      {showCommunityEditor ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm">
+          <div className="max-h-[92vh] w-full max-w-3xl overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_40px_120px_-36px_rgba(15,23,42,0.55)]">
+            <div className="flex items-center justify-between gap-4 border-b border-slate-100 px-5 py-4">
+              <div>
+                <p className="text-lg font-semibold text-slate-900">{editingCommunityId ? "Editar comunidade" : "Nova comunidade"}</p>
+                <p className="mt-1 text-sm text-slate-500">Configure capa, regras, modalidades e permissões de publicação.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCommunityEditor(false)}
+                className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Fechar comunidade"
+              >
+                <span className="text-2xl leading-none">×</span>
+              </button>
+            </div>
+            <div className="max-h-[70vh] space-y-4 overflow-y-auto px-5 py-5">
+              <div
+                className="flex min-h-36 items-end rounded-3xl border border-slate-200 bg-cover bg-center p-4"
+                style={{
+                  backgroundColor: communityCoverColor || "#0f172a",
+                  backgroundImage: communityCoverImageUrl
+                    ? `linear-gradient(90deg, rgba(15,23,42,0.7), rgba(15,23,42,0.18)), url(${communityCoverImageUrl})`
+                    : undefined,
+                }}
+              >
+                <div className="text-white">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] opacity-80">{communityCategory || "Comunidade"}</p>
+                  <p className="mt-1 text-2xl font-semibold">{communityName || "Nome da comunidade"}</p>
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="grid gap-1 text-xs font-semibold text-slate-700">
+                  Nome
+                  <input value={communityName} onChange={(event) => setCommunityName(event.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-normal" />
+                </label>
+                <label className="grid gap-1 text-xs font-semibold text-slate-700">
+                  Categoria
+                  <input value={communityCategory} onChange={(event) => setCommunityCategory(event.target.value)} placeholder="Ex.: Bem-estar, campanha, squad" className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-normal" />
+                </label>
+                <label className="grid gap-1 text-xs font-semibold text-slate-700">
+                  Cor de apoio
+                  <input type="color" value={communityCoverColor} onChange={(event) => setCommunityCoverColor(event.target.value)} className="h-11 rounded-xl border border-slate-200 px-3" />
+                </label>
+                <label className="grid gap-1 text-xs font-semibold text-slate-700">
+                  URL da capa
+                  <input value={communityCoverImageUrl} onChange={(event) => setCommunityCoverImageUrl(event.target.value)} placeholder="https://..." className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-normal" />
+                </label>
+                <label className="grid gap-1 text-xs font-semibold text-slate-700 md:col-span-2">
+                  Descrição
+                  <textarea value={communityDescription} onChange={(event) => setCommunityDescription(event.target.value)} className="min-h-24 rounded-xl border border-slate-200 p-3 text-sm font-normal" />
+                </label>
+                <label className="grid gap-1 text-xs font-semibold text-slate-700 md:col-span-2">
+                  Regras e informações
+                  <textarea value={communityRules} onChange={(event) => setCommunityRules(event.target.value)} className="min-h-24 rounded-xl border border-slate-200 p-3 text-sm font-normal" />
+                </label>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-900">Modalidades disponíveis</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 md:grid-cols-3">
+                  {[
+                    ["posts", "Posts"],
+                    ["polls", "Enquetes"],
+                    ["campaigns", "Campanhas"],
+                    ["events", "Eventos"],
+                    ["recognition", "Reconhecimento"],
+                    ["competitions", "Competições"],
+                  ].map(([id, label]) => (
+                    <label key={id} className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={communityModalities.includes(id)}
+                        onChange={() =>
+                          setCommunityModalities((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]))
+                        }
+                        className="h-4 w-4 rounded border-slate-300"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700">
+                  <input type="checkbox" checked={communityPrivate} onChange={(event) => setCommunityPrivate(event.target.checked)} className="h-4 w-4 rounded border-slate-300" />
+                  Comunidade privada
+                </label>
+                <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700">
+                  <input type="checkbox" checked={communityAllowMemberPosts} onChange={(event) => setCommunityAllowMemberPosts(event.target.checked)} className="h-4 w-4 rounded border-slate-300" />
+                  Permitir posts dos membros
+                </label>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 border-t border-slate-100 px-5 py-4">
+              <button type="button" onClick={() => setShowCommunityEditor(false)} className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Cancelar
+              </button>
+              <button type="button" disabled={busy} onClick={() => void saveCommunity()} className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-60">
+                {busy ? "Salvando..." : "Salvar comunidade"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {showCreateMessageGroup ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-6 backdrop-blur-sm">
           <div className="w-full max-w-2xl rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_40px_120px_-36px_rgba(15,23,42,0.55)]">
@@ -5442,7 +5888,12 @@ export default function InternalSocialPage() {
                             >
                               <option value="">Selecione a comunidade</option>
                               {groups
-                                .filter((item) => joinedGroupIds.has(item.id))
+                                .filter((item) => {
+                                  if (!joinedGroupIds.has(item.id)) return false;
+                                  if (item.allow_member_posts !== false) return true;
+                                  const membership = groupMembers.find((member) => member.group_id === item.id && member.user_id === me?.id);
+                                  return canManageCommunities || membership?.role === "owner" || membership?.role === "moderator";
+                                })
                                 .map((group) => (
                                   <option key={group.id} value={group.id}>
                                     {group.name}
@@ -5606,13 +6057,13 @@ export default function InternalSocialPage() {
                           width={1200}
                           height={900}
                           unoptimized
-                          className={`${draftAttachments.length === 1 ? "max-h-[360px]" : "h-56"} w-full object-cover`}
+                          className={`${draftAttachments.length === 1 ? "max-h-[360px]" : "h-56"} w-full bg-white object-contain`}
                         />
                       ) : item.type === "video" ? (
                         <video
                           src={item.url}
                           controls
-                          className={`${draftAttachments.length === 1 ? "max-h-[360px]" : "h-56"} w-full bg-slate-950 object-cover`}
+                          className={`${draftAttachments.length === 1 ? "max-h-[360px]" : "h-56"} w-full bg-slate-950 object-contain`}
                         />
                       ) : null}
                       <div className="flex items-center justify-end gap-3 px-3 py-2 text-xs font-semibold text-slate-600">
