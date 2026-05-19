@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCcw, Save } from "lucide-react";
+import type { ReactNode } from "react";
+import { Eye, RefreshCcw, Save, X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserRole } from "@/hooks/useUserRole";
 
@@ -65,6 +66,15 @@ function providerLabel(provider: InvoiceRow["integration_provider"]) {
   return "Outro portal";
 }
 
+function fieldLabel(label: string, value: ReactNode) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+      <div className="mt-1 text-sm text-slate-900">{value}</div>
+    </div>
+  );
+}
+
 export default function FinanceiroNotasFiscaisPage() {
   const { role, loading: roleLoading } = useUserRole();
   const canReview = role === "financeiro" || role === "admin" || role === "rh";
@@ -78,14 +88,14 @@ export default function FinanceiroNotasFiscaisPage() {
   const [statusFilter, setStatusFilter] = useState<"all" | InvoiceStatus>("all");
   const [reviewComment, setReviewComment] = useState<Record<string, string>>({});
   const [reviewerUserId, setReviewerUserId] = useState<string | null>(null);
-  const [runningBatch, setRunningBatch] = useState(false);
+  const [previewFile, setPreviewFile] = useState<{ name: string; kind: InvoiceFileRow["file_kind"]; url: string } | null>(null);
 
   async function load() {
     setLoading(true);
     setMsg("");
     try {
       const { data: authData, error: authErr } = await supabase.auth.getUser();
-      if (authErr || !authData.user) throw new Error("Sessão inválida.");
+      if (authErr || !authData.user) throw new Error("Sessao invalida.");
       setReviewerUserId(authData.user.id);
 
       const { data, error } = await supabase
@@ -98,48 +108,61 @@ export default function FinanceiroNotasFiscaisPage() {
       const invoices = (data ?? []) as InvoiceRow[];
       setRows(invoices);
 
-      const invoiceIds = invoices.map((x) => x.id);
+      const invoiceIds = invoices.map((item) => item.id);
       if (invoiceIds.length) {
         const filesRes = await supabase
           .from("collaborator_invoice_files")
           .select("id,invoice_id,file_kind,file_name,created_at")
           .in("invoice_id", invoiceIds)
           .order("created_at", { ascending: false });
+        const map: Record<string, InvoiceFileRow[]> = {};
         if (!filesRes.error) {
-          const map: Record<string, InvoiceFileRow[]> = {};
-          for (const f of (filesRes.data ?? []) as InvoiceFileRow[]) {
-            (map[f.invoice_id] ??= []).push(f);
+          for (const file of (filesRes.data ?? []) as InvoiceFileRow[]) {
+            (map[file.invoice_id] ??= []).push(file);
           }
-          setFilesByInvoiceId(map);
-        } else {
-          setFilesByInvoiceId({});
         }
+        setFilesByInvoiceId(map);
       } else {
         setFilesByInvoiceId({});
       }
 
-      const userIds = Array.from(new Set(invoices.map((x) => x.user_id)));
+      const userIds = Array.from(new Set(invoices.map((item) => item.user_id).filter(Boolean)));
       if (userIds.length) {
-        const { data: collabRows, error: collabErr } = await supabase
-          .from("colaboradores")
-          .select("user_id,nome,email")
-          .in("user_id", userIds);
-        if (!collabErr) {
-          const map: Record<string, string> = {};
-          for (const c of (collabRows ?? []) as CollaboratorRow[]) {
-            if (!c.user_id) continue;
-            map[c.user_id] = c.nome?.trim() || c.email?.trim() || c.user_id;
+        const { data: sess } = await supabase.auth.getSession();
+        const token = sess.session?.access_token ?? null;
+        const namesRes = await fetch("/api/institucional/rede-social/author-names", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ userIds }),
+        });
+        const namesJson = (await namesRes.json().catch(() => ({}))) as { names?: Record<string, string> };
+        if (namesRes.ok && namesJson.names) {
+          setNameByUserId(namesJson.names);
+        } else {
+          const { data: collabRows, error: collabErr } = await supabase
+            .from("colaboradores")
+            .select("user_id,nome,email")
+            .in("user_id", userIds);
+          if (!collabErr) {
+            const map: Record<string, string> = {};
+            for (const collaborator of (collabRows ?? []) as CollaboratorRow[]) {
+              if (!collaborator.user_id) continue;
+              map[collaborator.user_id] = collaborator.nome?.trim() || collaborator.email?.trim() || collaborator.user_id;
+            }
+            setNameByUserId(map);
           }
-          setNameByUserId(map);
         }
       } else {
         setNameByUserId({});
       }
-    } catch (e: unknown) {
+    } catch (error: unknown) {
       setRows([]);
       setFilesByInvoiceId({});
       setNameByUserId({});
-      setMsg(e instanceof Error ? e.message : "Erro ao carregar notas fiscais.");
+      setMsg(error instanceof Error ? error.message : "Erro ao carregar notas fiscais.");
     } finally {
       setLoading(false);
     }
@@ -152,97 +175,64 @@ export default function FinanceiroNotasFiscaisPage() {
 
   const filtered = useMemo(() => {
     if (statusFilter === "all") return rows;
-    return rows.filter((r) => r.status === statusFilter);
+    return rows.filter((row) => row.status === statusFilter);
   }, [rows, statusFilter]);
 
   async function updateStatus(row: InvoiceRow, status: InvoiceStatus) {
     if (!reviewerUserId) return;
     if (status === "approved") {
       const files = filesByInvoiceId[row.id] ?? [];
-      if (!row.invoice_number?.trim()) return setMsg("Para aprovar, a nota precisa ter número.");
-      if (!row.reference_month) return setMsg("Para aprovar, a nota precisa ter competência.");
+      if (!row.invoice_number?.trim()) return setMsg("Para aprovar, a nota precisa ter numero.");
+      if (!row.reference_month) return setMsg("Para aprovar, a nota precisa ter competencia.");
       if (!row.gross_amount || row.gross_amount <= 0) return setMsg("Para aprovar, a nota precisa ter valor bruto maior que zero.");
-      const hasPdf = files.some((f) => f.file_kind === "pdf");
-      const hasXml = files.some((f) => f.file_kind === "xml");
+      const hasPdf = files.some((file) => file.file_kind === "pdf");
+      const hasXml = files.some((file) => file.file_kind === "xml");
       if (!hasPdf && !hasXml) return setMsg("Para aprovar, anexe ao menos um XML ou PDF da nota.");
     }
 
     setSavingId(row.id);
     setMsg("");
     try {
-      const payload = {
-        status,
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: reviewerUserId,
-        review_comment: (reviewComment[row.id] ?? "").trim() || null,
-      };
-      const { error } = await supabase.from("collaborator_invoices").update(payload).eq("id", row.id);
+      const { error } = await supabase
+        .from("collaborator_invoices")
+        .update({
+          status,
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: reviewerUserId,
+          review_comment: (reviewComment[row.id] ?? "").trim() || null,
+        })
+        .eq("id", row.id);
       if (error) throw new Error(error.message);
       setMsg("Status atualizado.");
       await load();
-    } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao atualizar status.");
+    } catch (error: unknown) {
+      setMsg(error instanceof Error ? error.message : "Erro ao atualizar status.");
     } finally {
       setSavingId(null);
     }
   }
 
-  async function openInvoiceFile(fileId: string) {
+  async function openInvoiceFile(file: InvoiceFileRow) {
     try {
       const { data: sess } = await supabase.auth.getSession();
       const token = sess.session?.access_token ?? null;
-
-      const res = await fetch(`/api/invoices/files/url?file_id=${encodeURIComponent(fileId)}`, {
+      const res = await fetch(`/api/invoices/files/url?file_id=${encodeURIComponent(file.id)}`, {
         method: "GET",
         credentials: "include",
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       const json = (await res.json()) as { ok?: boolean; signedUrl?: string; error?: string };
       if (!res.ok || !json.signedUrl) throw new Error(json.error || `Erro ao abrir arquivo (status ${res.status})`);
-      window.open(json.signedUrl, "_blank", "noreferrer");
-    } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao abrir arquivo.");
-    }
-  }
-
-  async function runAutomationBatch(limit = 10) {
-    setRunningBatch(true);
-    setMsg("");
-    try {
-      const { data: sess } = await supabase.auth.getSession();
-      const token = sess.session?.access_token ?? null;
-      if (!token) throw new Error("Sessao invalida para executar automacao.");
-
-      const res = await fetch("/api/invoices/automation/run-batch", {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ limit }),
-      });
-      const json = (await res.json()) as {
-        ok?: boolean;
-        processed_count?: number;
-        requested_limit?: number;
-        error?: string;
-      };
-      if (!res.ok || !json.ok) throw new Error(json.error || `Falha ao processar fila (status ${res.status})`);
-
-      setMsg(`Fila processada. Jobs executados: ${json.processed_count ?? 0} de ${json.requested_limit ?? limit}.`);
-      await load();
-    } catch (e: unknown) {
-      setMsg(e instanceof Error ? e.message : "Erro ao processar fila automatica.");
-    } finally {
-      setRunningBatch(false);
+      setPreviewFile({ name: file.file_name ?? "Nota fiscal", kind: file.file_kind, url: json.signedUrl });
+    } catch (error: unknown) {
+      setMsg(error instanceof Error ? error.message : "Erro ao abrir arquivo.");
     }
   }
 
   if (roleLoading) {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <p className="text-sm text-slate-600">Carregando permissões...</p>
+        <p className="text-sm text-slate-600">Carregando permissoes...</p>
       </div>
     );
   }
@@ -251,7 +241,7 @@ export default function FinanceiroNotasFiscaisPage() {
     return (
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <h1 className="text-lg font-semibold text-slate-900">Notas fiscais</h1>
-        <p className="mt-2 text-sm text-slate-700">Você não tem permissão para acessar esta tela.</p>
+        <p className="mt-2 text-sm text-slate-700">Voce nao tem permissao para acessar esta tela.</p>
       </div>
     );
   }
@@ -262,27 +252,16 @@ export default function FinanceiroNotasFiscaisPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-xl font-semibold text-slate-900">Notas fiscais dos colaboradores</h1>
-            <p className="mt-1 text-sm text-slate-600">
-              Analise, aprove ou reprove notas enviadas no Meu Perfil.
-            </p>
+            <p className="mt-1 text-sm text-slate-600">Analise, aprove ou reprove notas enviadas no Meu Perfil.</p>
           </div>
           <button
             type="button"
             onClick={() => void load()}
-            disabled={loading || runningBatch}
+            disabled={loading}
             className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
           >
             <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
             Atualizar
-          </button>
-          <button
-            type="button"
-            onClick={() => void runAutomationBatch(10)}
-            disabled={loading || runningBatch}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60"
-          >
-            <RefreshCcw size={16} className={runningBatch ? "animate-spin" : ""} />
-            {runningBatch ? "Processando fila..." : "Processar fila automatica"}
           </button>
         </div>
       </div>
@@ -295,7 +274,7 @@ export default function FinanceiroNotasFiscaisPage() {
             Status
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as "all" | InvoiceStatus)}
+              onChange={(event) => setStatusFilter(event.target.value as "all" | InvoiceStatus)}
               className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
             >
               <option value="all">Todos</option>
@@ -308,116 +287,122 @@ export default function FinanceiroNotasFiscaisPage() {
           </label>
         </div>
 
-        <div className="overflow-hidden">
-          <table className="w-full table-fixed text-left text-sm">
-            <thead className="bg-slate-50 text-slate-700">
-              <tr>
-                <th className="p-3">Colaborador</th>
-                <th className="p-3">Competência</th>
-                <th className="p-3">Número NF</th>
-                <th className="p-3">Valor</th>
-                <th className="p-3">Plataforma</th>
-                <th className="p-3">Status</th>
-                <th className="p-3">Anexos</th>
-                <th className="p-3">Comentário</th>
-                <th className="p-3">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={9} className="p-3 text-slate-500">Carregando...</td>
-                </tr>
-              ) : filtered.length ? (
-                filtered.map((row) => {
-                  const busy = savingId === row.id;
-                  const files = filesByInvoiceId[row.id] ?? [];
-                  return (
-                    <tr key={row.id} className="border-t">
-                      <td className="p-3 break-words">{nameByUserId[row.user_id] ?? row.user_id}</td>
-                      <td className="p-3">{new Date(row.reference_month).toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" })}</td>
-                      <td className="p-3 break-words">{row.invoice_number ?? "-"}</td>
-                      <td className="p-3">{money(row.gross_amount)}</td>
-                      <td className="p-3">
-                        <div>{providerLabel(row.integration_provider)}</div>
-                        {row.integration_url ? (
-                          <a className="text-xs text-sky-700 underline" href={row.integration_url} target="_blank" rel="noreferrer">
-                            Abrir portal
-                          </a>
-                        ) : null}
-                      </td>
-                      <td className="p-3">
-                        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusClass(row.status)}`}>
-                          {statusLabel(row.status)}
-                        </span>
-                      </td>
-                      <td className="p-3">
-                        <div className="space-y-1">
-                          {files.length ? (
-                            files.slice(0, 3).map((f) => (
-                              <button
-                                key={f.id}
-                                type="button"
-                                onClick={() => void openInvoiceFile(f.id)}
-                                className="block w-full truncate rounded-lg border border-slate-200 bg-white px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                              >
-                                {f.file_kind.toUpperCase()} - {f.file_name ?? "arquivo"}
-                              </button>
-                            ))
-                          ) : (
-                            <span className="text-xs text-slate-500">Sem anexo</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="p-3">
-                        <textarea
-                          value={reviewComment[row.id] ?? row.review_comment ?? ""}
-                          onChange={(e) => setReviewComment((prev) => ({ ...prev, [row.id]: e.target.value }))}
-                          className="min-h-[64px] w-full rounded-xl border border-slate-200 bg-white p-2 text-xs text-slate-900"
-                          placeholder="Comentário da análise"
-                        />
-                      </td>
-                      <td className="p-3">
-                        <div className="flex flex-col gap-2 xl:flex-row">
+        <div className="space-y-3">
+          {loading ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Carregando...</div>
+          ) : filtered.length ? (
+            filtered.map((row) => {
+              const busy = savingId === row.id;
+              const files = filesByInvoiceId[row.id] ?? [];
+              return (
+                <div key={row.id} className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 lg:grid-cols-12">
+                  <div className="lg:col-span-2">
+                    {fieldLabel("Colaborador", <p className="break-words font-semibold">{nameByUserId[row.user_id] ?? row.user_id}</p>)}
+                  </div>
+                  {fieldLabel("Competencia", new Date(row.reference_month).toLocaleDateString("pt-BR", { month: "2-digit", year: "numeric" }))}
+                  {fieldLabel("Numero NF", <span className="break-words">{row.invoice_number ?? "-"}</span>)}
+                  {fieldLabel("Valor", <span className="whitespace-nowrap">{money(row.gross_amount)}</span>)}
+                  {fieldLabel(
+                    "Plataforma",
+                    <>
+                      <p>{providerLabel(row.integration_provider)}</p>
+                      {row.integration_url ? (
+                        <a className="text-xs text-sky-700 underline" href={row.integration_url} target="_blank" rel="noreferrer">
+                          Abrir portal
+                        </a>
+                      ) : null}
+                    </>
+                  )}
+                  {fieldLabel(
+                    "Status",
+                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusClass(row.status)}`}>
+                      {statusLabel(row.status)}
+                    </span>
+                  )}
+                  <div className="lg:col-span-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Anexos</p>
+                    <div className="mt-1 space-y-1">
+                      {files.length ? (
+                        files.slice(0, 3).map((file) => (
                           <button
+                            key={file.id}
                             type="button"
-                            onClick={() => void updateStatus(row, "approved")}
-                            disabled={busy}
-                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                            onClick={() => void openInvoiceFile(file)}
+                            className="inline-flex max-w-full items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
                           >
-                            <Save size={14} />
-                            Aprovar
+                            <Eye size={14} />
+                            <span className="truncate">{file.file_kind.toUpperCase()} - {file.file_name ?? "arquivo"}</span>
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => void updateStatus(row, "rejected")}
-                            disabled={busy}
-                            className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
-                          >
-                            Reprovar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void updateStatus(row, "cancelled")}
-                            disabled={busy}
-                            className="rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan={9} className="p-3 text-slate-500">Nenhuma nota fiscal encontrada.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                        ))
+                      ) : (
+                        <span className="text-xs text-slate-500">Sem anexo</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="lg:col-span-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Comentario</p>
+                    <textarea
+                      value={reviewComment[row.id] ?? row.review_comment ?? ""}
+                      onChange={(event) => setReviewComment((prev) => ({ ...prev, [row.id]: event.target.value }))}
+                      className="mt-1 min-h-[64px] w-full rounded-xl border border-slate-200 bg-white p-2 text-xs text-slate-900"
+                      placeholder="Comentario da analise"
+                    />
+                  </div>
+                  <div className="lg:col-span-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Acoes</p>
+                    <div className="mt-1 grid gap-2 sm:grid-cols-3 lg:grid-cols-1">
+                      <button
+                        type="button"
+                        onClick={() => void updateStatus(row, "approved")}
+                        disabled={busy}
+                        className="inline-flex items-center justify-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                      >
+                        <Save size={14} />
+                        Aprovar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void updateStatus(row, "rejected")}
+                        disabled={busy}
+                        className="rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                      >
+                        Reprovar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void updateStatus(row, "cancelled")}
+                        disabled={busy}
+                        className="rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Nenhuma nota fiscal encontrada.</div>
+          )}
         </div>
       </div>
+
+      {previewFile ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div className="flex h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-slate-900">{previewFile.name}</p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">{previewFile.kind}</p>
+              </div>
+              <button type="button" onClick={() => setPreviewFile(null)} className="rounded-full p-2 text-slate-500 hover:bg-slate-100" aria-label="Fechar visualizacao">
+                <X size={18} />
+              </button>
+            </div>
+            <iframe title="Visualizacao da nota fiscal" src={previewFile.url} className="h-full w-full bg-slate-50" />
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

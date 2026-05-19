@@ -1137,6 +1137,29 @@ export default function InternalSocialPage() {
     setCommentMediaUrls(nextMap);
   }
 
+  async function resolveAuthorNames(userIds: string[]) {
+    const uniqueUserIds = Array.from(new Set(userIds.filter(Boolean))).slice(0, 200);
+    if (!uniqueUserIds.length) return {};
+
+    try {
+      const sessionRes = await supabase.auth.getSession();
+      const token = sessionRes.data.session?.access_token;
+      const res = await fetch("/api/institucional/rede-social/author-names", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ userIds: uniqueUserIds }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { names?: Record<string, string> };
+      if (!res.ok) return {};
+      return json.names ?? {};
+    } catch {
+      return {};
+    }
+  }
+
   async function load() {
     setLoading(true);
     setError("");
@@ -1513,6 +1536,11 @@ export default function InternalSocialPage() {
       }
 
       const commentRows = (commentsRes.data ?? []) as CommentRow[];
+      const serverAuthorNames = await resolveAuthorNames([
+        ...postRows.map((item) => item.author_user_id),
+        ...commentRows.map((item) => item.author_user_id),
+      ]);
+      nextCollaboratorNameByUserId = { ...nextCollaboratorNameByUserId, ...serverAuthorNames };
       const missingCommentAuthorIds = Array.from(
         new Set(
           commentRows

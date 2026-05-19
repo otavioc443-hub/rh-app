@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCcw, Upload, X } from "lucide-react";
+import { Eye, RefreshCcw, Trash2, Upload, X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
 type InvoiceStatus = "draft" | "submitted" | "approved" | "rejected" | "cancelled";
@@ -48,6 +48,14 @@ type InvoiceJobRow = {
   updated_at: string;
 };
 
+type InvoiceFileRow = {
+  id: string;
+  invoice_id: string;
+  file_kind: "xml" | "pdf" | "other";
+  file_name: string | null;
+  created_at: string;
+};
+
 const PROVIDER_LABEL: Record<IntegrationProvider, string> = {
   sougov: "SouGov",
   portal_estadual: "Portal estadual",
@@ -92,6 +100,19 @@ function money(value: number | null) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 }
 
+function formatCurrencyInput(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return "";
+  const amount = Number(digits) / 100;
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(amount);
+}
+
+function parseCurrencyInput(value: string) {
+  const digits = value.replace(/\D/g, "");
+  if (!digits) return Number.NaN;
+  return Number(digits) / 100;
+}
+
 function monthToDate(month: string) {
   return `${month}-01`;
 }
@@ -103,6 +124,7 @@ export default function MeuPerfilNotaFiscalPage() {
   const [userId, setUserId] = useState<string | null>(null);
 
   const [invoices, setInvoices] = useState<InvoiceRow[]>([]);
+  const [filesByInvoiceId, setFilesByInvoiceId] = useState<Record<string, InvoiceFileRow[]>>({});
   const [latestJobByInvoiceId, setLatestJobByInvoiceId] = useState<Record<string, InvoiceJobRow>>({});
   const [allocations, setAllocations] = useState<Array<{ project_name: string; allocation_pct: number }>>([]);
   const [profile, setProfile] = useState<ProfileRow | null>(null);
@@ -129,6 +151,8 @@ export default function MeuPerfilNotaFiscalPage() {
   const [uploadInvoiceNumber, setUploadInvoiceNumber] = useState("");
   const [uploadValue, setUploadValue] = useState("");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [previewFile, setPreviewFile] = useState<{ name: string; kind: InvoiceFileRow["file_kind"]; url: string } | null>(null);
+  const [deletingInvoiceId, setDeletingInvoiceId] = useState<string | null>(null);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
   const [enqueuingId, setEnqueuingId] = useState<string | null>(null);
 
@@ -176,14 +200,19 @@ export default function MeuPerfilNotaFiscalPage() {
       setProfile(profileRes.data ?? null);
 
       if (invoiceRows.length) {
-        const jobRes = await supabase
-          .from("collaborator_invoice_jobs")
-          .select("id,invoice_id,status,attempts,max_attempts,last_error,updated_at,created_at")
-          .in(
-            "invoice_id",
-            invoiceRows.map((x) => x.id)
-          )
-          .order("created_at", { ascending: false });
+        const invoiceIds = invoiceRows.map((x) => x.id);
+        const [jobRes, filesRes] = await Promise.all([
+          supabase
+            .from("collaborator_invoice_jobs")
+            .select("id,invoice_id,status,attempts,max_attempts,last_error,updated_at,created_at")
+            .in("invoice_id", invoiceIds)
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("collaborator_invoice_files")
+            .select("id,invoice_id,file_kind,file_name,created_at")
+            .in("invoice_id", invoiceIds)
+            .order("created_at", { ascending: false }),
+        ]);
         if (!jobRes.error) {
           const map: Record<string, InvoiceJobRow> = {};
           for (const job of (jobRes.data ?? []) as Array<InvoiceJobRow & { created_at?: string }>) {
@@ -194,8 +223,18 @@ export default function MeuPerfilNotaFiscalPage() {
           // Nao quebra a tela caso migration ainda nao tenha sido aplicada.
           setLatestJobByInvoiceId({});
         }
+        if (!filesRes.error) {
+          const map: Record<string, InvoiceFileRow[]> = {};
+          for (const file of (filesRes.data ?? []) as InvoiceFileRow[]) {
+            (map[file.invoice_id] ??= []).push(file);
+          }
+          setFilesByInvoiceId(map);
+        } else {
+          setFilesByInvoiceId({});
+        }
       } else {
         setLatestJobByInvoiceId({});
+        setFilesByInvoiceId({});
       }
 
       const allocationData = ((allocationRes.data ?? []) as AllocationRow[]).map((row) => ({
@@ -217,6 +256,7 @@ export default function MeuPerfilNotaFiscalPage() {
       }
     } catch (e: unknown) {
       setInvoices([]);
+      setFilesByInvoiceId({});
       setLatestJobByInvoiceId({});
       setAllocations([]);
       setProfile(null);
@@ -308,7 +348,7 @@ export default function MeuPerfilNotaFiscalPage() {
     setBusy(true);
     setMsg("");
     try {
-      const valueNum = Number(emitValue.replace(",", "."));
+      const valueNum = parseCurrencyInput(emitValue);
       if (!Number.isFinite(valueNum)) throw new Error("Valor invalido.");
       const finalNotes = [emitNotes.trim(), emitIssWithheld ? "ISS retido na fonte: sim." : "ISS retido na fonte: nao."]
         .filter(Boolean)
@@ -354,7 +394,7 @@ export default function MeuPerfilNotaFiscalPage() {
     setBusy(true);
     setMsg("");
     try {
-      const valueNum = Number(uploadValue.replace(",", "."));
+      const valueNum = parseCurrencyInput(uploadValue);
       if (!Number.isFinite(valueNum)) throw new Error("Valor invalido.");
 
       const insertRes = await supabase
@@ -401,6 +441,50 @@ export default function MeuPerfilNotaFiscalPage() {
       setMsg(e instanceof Error ? e.message : "Erro ao cadastrar upload de nota.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function openInvoiceFile(file: InvoiceFileRow) {
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token ?? null;
+      const res = await fetch(`/api/invoices/files/url?file_id=${encodeURIComponent(file.id)}`, {
+        method: "GET",
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      const json = (await res.json()) as { ok?: boolean; signedUrl?: string; error?: string };
+      if (!res.ok || !json.signedUrl) throw new Error(json.error || `Erro ao abrir arquivo (status ${res.status})`);
+      setPreviewFile({ name: file.file_name ?? "Nota fiscal", kind: file.file_kind, url: json.signedUrl });
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao abrir nota.");
+    }
+  }
+
+  async function deleteInvoice(row: InvoiceRow) {
+    if (!userId) return;
+    if (row.status !== "draft" && row.status !== "submitted") {
+      setMsg("Apenas notas ainda nao aprovadas ou reprovadas podem ser excluidas.");
+      return;
+    }
+    const confirmed = window.confirm("Deseja excluir esta nota fiscal enviada?");
+    if (!confirmed) return;
+    setDeletingInvoiceId(row.id);
+    setMsg("");
+    try {
+      const { error } = await supabase
+        .from("collaborator_invoices")
+        .delete()
+        .eq("id", row.id)
+        .eq("user_id", userId)
+        .in("status", ["draft", "submitted"]);
+      if (error) throw new Error(error.message);
+      setMsg("Nota excluida com sucesso.");
+      await load();
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao excluir nota.");
+    } finally {
+      setDeletingInvoiceId(null);
     }
   }
 
@@ -505,29 +589,64 @@ export default function MeuPerfilNotaFiscalPage() {
                   <th className="p-3">Data</th>
                   <th className="p-3">Valor</th>
                   <th className="p-3">Status</th>
+                  <th className="p-3">Anexo</th>
                   <th className="p-3">Envio</th>
+                  <th className="p-3">Acoes</th>
                 </tr>
               </thead>
               <tbody>
-                {invoices.map((row) => (
-                  <tr key={row.id} className="border-t border-slate-200">
-                    <td className="p-3">{row.issue_date ? new Date(row.issue_date).toLocaleDateString("pt-BR") : "-"}</td>
-                    <td className="p-3">{money(row.gross_amount)}</td>
-                    <td className="p-3">
-                      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusClass(row.status)}`}>
-                        {statusLabel(row.status)}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                        Enviada para analise
-                      </span>
-                    </td>
-                  </tr>
-                ))}
+                {invoices.map((row) => {
+                  const files = filesByInvoiceId[row.id] ?? [];
+                  const canDelete = row.status === "draft" || row.status === "submitted";
+                  return (
+                    <tr key={row.id} className="border-t border-slate-200">
+                      <td className="p-3">{row.issue_date ? new Date(row.issue_date).toLocaleDateString("pt-BR") : "-"}</td>
+                      <td className="p-3">{money(row.gross_amount)}</td>
+                      <td className="p-3">
+                        <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusClass(row.status)}`}>
+                          {statusLabel(row.status)}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        {files.length ? (
+                          <button
+                            type="button"
+                            onClick={() => void openInvoiceFile(files[0])}
+                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                          >
+                            <Eye size={14} />
+                            Ver nota
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-500">Sem anexo</span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                          Enviada para analise
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        {canDelete ? (
+                          <button
+                            type="button"
+                            onClick={() => void deleteInvoice(row)}
+                            disabled={deletingInvoiceId === row.id}
+                            className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-60"
+                          >
+                            <Trash2 size={14} />
+                            {deletingInvoiceId === row.id ? "Excluindo..." : "Excluir"}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-500">Bloqueado</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
                 {loading ? (
                   <tr>
-                    <td colSpan={4} className="p-3 text-slate-500">
+                    <td colSpan={6} className="p-3 text-slate-500">
                       Carregando...
                     </td>
                   </tr>
@@ -643,7 +762,7 @@ export default function MeuPerfilNotaFiscalPage() {
               <label className="grid gap-1 text-sm font-semibold text-slate-700">Data<input type="date" value={emitDate} onChange={(e) => setEmitDate(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm text-slate-900" /></label>
               <label className="grid gap-1 text-sm font-semibold text-slate-700">Competencia<input type="month" value={emitReferenceMonth} onChange={(e) => setEmitReferenceMonth(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm text-slate-900" /></label>
               <label className="grid gap-1 text-sm font-semibold text-slate-700">Numero da nota<input value={emitInvoiceNumber} onChange={(e) => setEmitInvoiceNumber(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm text-slate-900" /></label>
-              <label className="grid gap-1 text-sm font-semibold text-slate-700">Valor do servico<input value={emitValue} onChange={(e) => setEmitValue(e.target.value)} placeholder="0,00" className="h-11 rounded-xl border border-slate-200 px-3 text-sm text-slate-900" /></label>
+              <label className="grid gap-1 text-sm font-semibold text-slate-700">Valor do servico<input value={emitValue} onChange={(e) => setEmitValue(formatCurrencyInput(e.target.value))} inputMode="numeric" placeholder="R$ 0,00" className="h-11 rounded-xl border border-slate-200 px-3 text-sm text-slate-900" /></label>
             </div>
             <div className="mt-3 grid gap-2 md:grid-cols-2">
               <div className="rounded-xl border border-slate-200 p-3">
@@ -681,7 +800,7 @@ export default function MeuPerfilNotaFiscalPage() {
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <label className="grid gap-1 text-sm font-semibold text-slate-700">Numero da nota<input value={uploadInvoiceNumber} onChange={(e) => setUploadInvoiceNumber(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm text-slate-900" /></label>
-              <label className="grid gap-1 text-sm font-semibold text-slate-700">Valor da nota<input value={uploadValue} onChange={(e) => setUploadValue(e.target.value)} placeholder="0,00" className="h-11 rounded-xl border border-slate-200 px-3 text-sm text-slate-900" /></label>
+              <label className="grid gap-1 text-sm font-semibold text-slate-700">Valor da nota<input value={uploadValue} onChange={(e) => setUploadValue(formatCurrencyInput(e.target.value))} inputMode="numeric" placeholder="R$ 0,00" className="h-11 rounded-xl border border-slate-200 px-3 text-sm text-slate-900" /></label>
               <label className="grid gap-1 text-sm font-semibold text-slate-700">Data de emissao<input type="date" value={uploadDate} onChange={(e) => setUploadDate(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm text-slate-900" /></label>
               <label className="grid gap-1 text-sm font-semibold text-slate-700">Competencia<input type="month" value={uploadReferenceMonth} onChange={(e) => setUploadReferenceMonth(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm text-slate-900" /></label>
             </div>
@@ -692,6 +811,23 @@ export default function MeuPerfilNotaFiscalPage() {
             <div className="mt-4 flex justify-end">
               <button type="button" onClick={() => void createInvoiceWithUpload()} disabled={busy} className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60">Confirmar</button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {previewFile ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
+          <div className="flex h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-slate-900">{previewFile.name}</p>
+                <p className="text-xs uppercase tracking-wide text-slate-500">{previewFile.kind}</p>
+              </div>
+              <button type="button" onClick={() => setPreviewFile(null)} className="rounded-full p-2 text-slate-500 hover:bg-slate-100" aria-label="Fechar visualizacao">
+                <X size={18} />
+              </button>
+            </div>
+            <iframe title="Visualizacao da nota fiscal" src={previewFile.url} className="h-full w-full bg-slate-50" />
           </div>
         </div>
       ) : null}
