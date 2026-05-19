@@ -100,10 +100,12 @@ function resolveCollaboratorForProfile(
   collaboratorsByEmail: Map<string, CollaboratorRow>,
   authEmailByUserId: Map<string, string>
 ) {
+  const authEmail = cleanEmail(authEmailByUserId.get(profile.id));
+  const profileEmail = cleanEmail(profile.email);
   return (
+    collaboratorsByEmail.get(authEmail) ??
+    collaboratorsByEmail.get(profileEmail) ??
     collaboratorsByUserId.get(profile.id) ??
-    collaboratorsByEmail.get(cleanEmail(profile.email)) ??
-    collaboratorsByEmail.get(cleanEmail(authEmailByUserId.get(profile.id))) ??
     null
   );
 }
