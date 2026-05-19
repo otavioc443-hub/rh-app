@@ -210,7 +210,7 @@ export default function RhBolaoCopa2026Page() {
     });
   }
 
-  async function saveConfig(nextQrCodeUrl = qrCodeUrl, confirmResult = false) {
+  async function saveConfig(nextQrCodeUrl = qrCodeUrl, confirmResult = false, statusOverride: "ativo" | "encerrado" = status) {
     setSaving(true);
     setMessage("");
     try {
@@ -228,7 +228,7 @@ export default function RhBolaoCopa2026Page() {
             ? new Date().toISOString()
             : resultadoConfirmadoAt
           : null,
-        status,
+        status: statusOverride,
         updated_at: new Date().toISOString(),
       };
       const query = configId
@@ -246,6 +246,12 @@ export default function RhBolaoCopa2026Page() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function togglePulseHubCardVisibility() {
+    const nextStatus = status === "ativo" ? "encerrado" : "ativo";
+    setStatus(nextStatus);
+    await saveConfig(qrCodeUrl, false, nextStatus);
   }
 
   async function uploadQrCode(file: File) {
@@ -369,13 +375,27 @@ export default function RhBolaoCopa2026Page() {
             <h1 className="text-2xl font-semibold text-slate-950">Bolão Copa do Mundo 2026</h1>
             <p className="mt-1 text-sm text-slate-600">Configurações, Pix e acompanhamento das apostas do PulseHub.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => void load()}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            <RefreshCcw size={16} /> Atualizar
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => void togglePulseHubCardVisibility()}
+              disabled={saving}
+              className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold disabled:opacity-50 ${
+                status === "ativo"
+                  ? "border border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                  : "border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+              }`}
+            >
+              {status === "ativo" ? "Ocultar no PulseHub" : "Exibir no PulseHub"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void load()}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              <RefreshCcw size={16} /> Atualizar
+            </button>
+          </div>
         </div>
 
         <div className="mt-5 grid gap-3 md:grid-cols-4">

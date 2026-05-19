@@ -891,6 +891,7 @@ export default function InternalSocialPage() {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [reports, setReports] = useState<ReportRow[]>([]);
   const [messages, setMessages] = useState<MessageRow[]>([]);
+  const [showBolaoPulseHubCard, setShowBolaoPulseHubCard] = useState(true);
   const [postText, setPostText] = useState("");
   const [postType, setPostType] = useState<PostType>("social");
   const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>([]);
@@ -1110,7 +1111,7 @@ export default function InternalSocialPage() {
       if (auth.error || !auth.data.user) throw new Error("Sessao invalida.");
       const userId = auth.data.user.id;
 
-      const [profilesRes, companiesRes, memberRes, msgRes, messageGroupsRes, messageGroupMembersRes, groupMessagesRes] = await Promise.all([
+      const [profilesRes, companiesRes, memberRes, msgRes, messageGroupsRes, messageGroupMembersRes, groupMessagesRes, bolaoConfigRes] = await Promise.all([
         supabase.from("profiles").select("id,full_name,email,company_id,role,avatar_url").order("full_name", { ascending: true }),
         supabase.from("companies").select("id,name,logo_url").order("name", { ascending: true }),
         supabase.from("project_members").select("project_id").eq("user_id", userId),
@@ -1128,6 +1129,12 @@ export default function InternalSocialPage() {
           .from("internal_social_group_messages")
           .select("id,group_id,from_user_id,from_name,text,created_at")
           .order("created_at", { ascending: true }),
+        supabase
+          .from("pulsehub_bolao_config")
+          .select("status")
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle<{ status: string | null }>(),
       ]);
 
       const postsResWithQuickWins = await supabase
@@ -1163,6 +1170,7 @@ export default function InternalSocialPage() {
       if (messageGroupsRes.error && !isSchemaCompatError(messageGroupsRes.error.message)) throw new Error(messageGroupsRes.error.message);
       if (messageGroupMembersRes.error && !isSchemaCompatError(messageGroupMembersRes.error.message)) throw new Error(messageGroupMembersRes.error.message);
       if (groupMessagesRes.error && !isSchemaCompatError(groupMessagesRes.error.message)) throw new Error(groupMessagesRes.error.message);
+      setShowBolaoPulseHubCard(bolaoConfigRes.error ? true : bolaoConfigRes.data?.status !== "encerrado");
 
       const companyIdByName = new Map(
         companyRows
@@ -1495,9 +1503,11 @@ export default function InternalSocialPage() {
         reportsByPostId.set(report.post_id, list);
       }
 
+      const nextProfileById = new Map(nextProfiles.map((profile) => [profile.id, profile]));
       setPosts(
         postRows.map((item) => ({
           ...item,
+          author_name: resolveCommentAuthorName(item.author_name, nextProfileById.get(item.author_user_id)),
           attachments: attachmentMap.get(item.id) ?? [],
           comments: commentMap.get(item.id) ?? [],
           reactions: reactionMap.get(item.id) ?? [],
@@ -1654,8 +1664,13 @@ export default function InternalSocialPage() {
   }, [companies]);
   const mentionDirectory = useMemo(() => buildMentionDirectory(profiles), [profiles]);
   const sameCompanyProfiles = useMemo(
-    () => profiles.filter((item) => item.id !== me?.id && item.company_id && item.company_id === me?.company_id),
-    [me?.company_id, me?.id, profiles]
+    () =>
+      profiles.filter((item) => {
+        if (item.id === me?.id) return false;
+        if (me?.role === "admin") return true;
+        return Boolean(me?.company_id && item.company_id === me.company_id);
+      }),
+    [me?.company_id, me?.id, me?.role, profiles]
   );
   const canPublishOfficial = me?.role === "admin" || me?.role === "diretoria" || me?.role === "rh";
   const postPublisherByBrand = useCallback(
@@ -1665,7 +1680,7 @@ export default function InternalSocialPage() {
       const companyName = (company?.name ?? "").trim();
       const companyLogoUrl = (company?.logo_url ?? "").trim();
       const isOfficial = isOfficialPostType(post.post_type);
-      const fallbackName = post.author_name || displayName(authorProfile);
+      const fallbackName = resolveCommentAuthorName(post.author_name, authorProfile);
 
       return {
         name: isOfficial && companyName ? companyName : fallbackName,
@@ -1720,10 +1735,10 @@ export default function InternalSocialPage() {
     () =>
       profiles.filter((item) => {
         if (item.id === me?.id) return false;
-        if (!me?.company_id) return false;
-        return item.company_id === me.company_id;
+        if (me?.role === "admin") return true;
+        return Boolean(me?.company_id && item.company_id === me.company_id);
       }),
-    [me?.company_id, me?.id, profiles]
+    [me?.company_id, me?.id, me?.role, profiles]
   );
   const myMessageGroupIds = useMemo(
     () => new Set(messageGroupMembers.filter((item) => item.user_id === me?.id).map((item) => item.group_id)),
@@ -2428,7 +2443,8 @@ export default function InternalSocialPage() {
       const normalizedPostType = canPublishOfficial ? postType : "social";
       const isOfficial = isOfficialPostType(normalizedPostType);
       const publisherCompanyName = me.company_id ? (companyById.get(me.company_id)?.name ?? "").trim() : "";
-      const postAuthorName = isOfficial ? publisherCompanyName || officialAuthorName(me.role) || currentName : currentName;
+      const personalAuthorName = resolveCommentAuthorName(currentName, me);
+      const postAuthorName = isOfficial ? publisherCompanyName || officialAuthorName(me.role) || personalAuthorName : personalAuthorName;
       const postAuthorAvatarUrl = isOfficial ? null : resolvePortalAvatarUrl(me.avatar_url ?? null);
       let res = await supabase
         .from("internal_social_posts")
@@ -3627,7 +3643,7 @@ export default function InternalSocialPage() {
                       {post.attachments.length ? (
                         <div className="mt-4 space-y-3">
                           {post.attachments.map((attachment) => (
-                            <div key={attachment.id} className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                            <div key={attachment.id} className="inline-block max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
                               {(() => {
                                 const mediaUrl = attachment.resolvedUrl || attachment.url;
                                 const imageReady = canRenderImageUrl(mediaUrl);
@@ -3638,12 +3654,12 @@ export default function InternalSocialPage() {
                                     width={1200}
                                     height={900}
                                     unoptimized
-                                    className="max-h-[280px] w-full object-cover"
+                                    className="max-h-[320px] w-full max-w-[520px] bg-white object-contain"
                                   />
                                 ) : attachment.type === "video" && imageReady ? (
                                   <video
                                     controls
-                                    className="max-h-[280px] w-full bg-slate-950"
+                                    className="max-h-[320px] w-full max-w-[520px] bg-slate-950"
                                     src={mediaUrl}
                                   />
                                 ) : (
@@ -3813,7 +3829,7 @@ export default function InternalSocialPage() {
                                         (isAbsoluteUrl(attachmentRef) ? attachmentRef : attachmentRef);
                                       const attachmentType = inferAttachmentTypeFromUrl(attachmentRef);
                                       return (
-                                        <div key={`${comment.id}-${attachmentRef}`} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                                        <div key={`${comment.id}-${attachmentRef}`} className="inline-block max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white">
                                           {attachmentType === "image" ? (
                                             <Image
                                               src={attachmentUrl}
@@ -3821,10 +3837,10 @@ export default function InternalSocialPage() {
                                               width={900}
                                               height={700}
                                               unoptimized
-                                              className="max-h-[280px] w-full object-cover"
+                                              className="max-h-[260px] w-full max-w-[460px] object-contain"
                                             />
                                           ) : attachmentType === "video" ? (
-                                            <video src={attachmentUrl} controls className="max-h-[280px] w-full bg-slate-950" />
+                                            <video src={attachmentUrl} controls className="max-h-[260px] w-full max-w-[460px] bg-slate-950" />
                                           ) : (
                                             <a
                                               href={attachmentUrl}
@@ -4186,24 +4202,26 @@ export default function InternalSocialPage() {
 
               <PulseSprintWidget />
 
-              <section className="overflow-hidden rounded-[2rem] border border-emerald-200 bg-emerald-950 p-5 text-white shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)]">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">Bolão</p>
-                    <p className="mt-1 text-lg font-semibold">Copa do Mundo 2026</p>
-                    <p className="mt-2 text-sm leading-6 text-emerald-50/85">
-                      Monte sua lista de 26 convocados, acompanhe os palpites por setor e veja o ranking após a confirmação do RH.
-                    </p>
+              {showBolaoPulseHubCard ? (
+                <section className="overflow-hidden rounded-[2rem] border border-emerald-200 bg-emerald-950 p-5 text-white shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">Bolão</p>
+                      <p className="mt-1 text-lg font-semibold">Copa do Mundo 2026</p>
+                      <p className="mt-2 text-sm leading-6 text-emerald-50/85">
+                        Monte sua lista de 26 convocados, acompanhe os palpites por setor e veja o ranking após a confirmação do RH.
+                      </p>
+                    </div>
+                    <Trophy className="shrink-0 text-emerald-200" size={24} />
                   </div>
-                  <Trophy className="shrink-0 text-emerald-200" size={24} />
-                </div>
-                <Link
-                  href="/institucional/bolao-copa-2026"
-                  className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-emerald-300 px-4 py-3 text-sm font-semibold text-emerald-950 hover:bg-emerald-200"
-                >
-                  Bolão Copa 2026
-                </Link>
-              </section>
+                  <Link
+                    href="/institucional/bolao-copa-2026"
+                    className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-emerald-300 px-4 py-3 text-sm font-semibold text-emerald-950 hover:bg-emerald-200"
+                  >
+                    Bolão Copa 2026
+                  </Link>
+                </section>
+              ) : null}
 
               <section className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)]">
                 <div className="flex items-center justify-between gap-3">

@@ -289,6 +289,7 @@ export default function Sidebar({
           { label: "Notificações", icon: MessageSquareText, href: "/admin/notificacoes", roles: ["admin"] },
           { label: "Visibilidade", icon: Layers, href: "/admin/funcionalidades", roles: ["admin"] },
           { label: "Limpeza de dados", icon: Trash2, href: "/admin/limpeza-dados", roles: ["admin"] },
+          { label: "Auditoria mensagens", icon: MessageSquareText, href: "/admin/auditoria/mensagens", roles: ["admin"] },
           { label: "Sessões", icon: MonitorCheck, href: "/admin/sessoes", roles: ["admin", "rh"] },
           { label: "Permissões", icon: UserCog, href: "/admin/permissoes", roles: ["admin", "rh"] },
         ],
