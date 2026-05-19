@@ -912,7 +912,7 @@ export default function InternalSocialPage() {
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [reports, setReports] = useState<ReportRow[]>([]);
   const [messages, setMessages] = useState<MessageRow[]>([]);
-  const [showBolaoPulseHubCard, setShowBolaoPulseHubCard] = useState(true);
+  const [showBolaoPulseHubCard, setShowBolaoPulseHubCard] = useState<boolean | null>(null);
   const [postText, setPostText] = useState("");
   const [postType, setPostType] = useState<PostType>("social");
   const [draftAttachments, setDraftAttachments] = useState<DraftAttachment[]>([]);
@@ -1204,7 +1204,7 @@ export default function InternalSocialPage() {
       if (messageGroupsRes.error && !isSchemaCompatError(messageGroupsRes.error.message)) throw new Error(messageGroupsRes.error.message);
       if (messageGroupMembersRes.error && !isSchemaCompatError(messageGroupMembersRes.error.message)) throw new Error(messageGroupMembersRes.error.message);
       if (groupMessagesRes.error && !isSchemaCompatError(groupMessagesRes.error.message)) throw new Error(groupMessagesRes.error.message);
-      setShowBolaoPulseHubCard(bolaoConfigRes.error ? true : bolaoConfigRes.data?.status !== "encerrado");
+      setShowBolaoPulseHubCard(bolaoConfigRes.error ? false : bolaoConfigRes.data?.status !== "encerrado");
 
       const companyIdByName = new Map(
         companyRows
@@ -1218,14 +1218,20 @@ export default function InternalSocialPage() {
       }));
       let nextCollaboratorNameByUserId: Record<string, string> = {};
 
-      if (baseProfiles.length) {
+      const initialAuthorUserIds = Array.from(
+        new Set(
+          [
+            ...baseProfiles.map((item) => item.id),
+            ...postRowsSource.map((item) => item.author_user_id),
+          ].filter(Boolean)
+        )
+      );
+
+      if (initialAuthorUserIds.length) {
         const collaboratorRes = await supabase
           .from("colaboradores")
           .select("user_id,nome,email,empresa,cargo,setor,data_nascimento,data_admissao,is_active")
-          .in(
-            "user_id",
-            baseProfiles.map((item) => item.id)
-          );
+          .in("user_id", initialAuthorUserIds);
         if (!collaboratorRes.error) {
           const collaboratorByUserId = new Map<string, CollaboratorDirectoryRow>();
           for (const item of (collaboratorRes.data ?? []) as CollaboratorDirectoryRow[]) {
@@ -1333,7 +1339,6 @@ export default function InternalSocialPage() {
         setBirthdayHighlights([]);
         setNewHireHighlights([]);
       }
-      setCollaboratorNameByUserId(nextCollaboratorNameByUserId);
       setProfiles(nextProfiles);
       setMe(nextProfiles.find((item) => item.id === userId) ?? null);
       try {
@@ -1507,8 +1512,32 @@ export default function InternalSocialPage() {
         attachmentMap.set(item.post_id, list);
       }
 
+      const commentRows = (commentsRes.data ?? []) as CommentRow[];
+      const missingCommentAuthorIds = Array.from(
+        new Set(
+          commentRows
+            .map((item) => item.author_user_id)
+            .filter((authorId) => authorId && !nextCollaboratorNameByUserId[authorId])
+        )
+      );
+      if (missingCommentAuthorIds.length) {
+        const commentAuthorCollaboratorRes = await supabase
+          .from("colaboradores")
+          .select("user_id,nome")
+          .in("user_id", missingCommentAuthorIds);
+        if (!commentAuthorCollaboratorRes.error) {
+          for (const item of (commentAuthorCollaboratorRes.data ?? []) as Array<{ user_id: string | null; nome: string | null }>) {
+            const fallbackName = (item.nome ?? "").trim();
+            if (item.user_id && fallbackName && !fallbackName.includes("@")) {
+              nextCollaboratorNameByUserId[item.user_id] = fallbackName;
+            }
+          }
+        }
+      }
+      setCollaboratorNameByUserId(nextCollaboratorNameByUserId);
+
       const commentMap = new Map<string, CommentRow[]>();
-      for (const item of (commentsRes.data ?? []) as CommentRow[]) {
+      for (const item of commentRows) {
         const list = commentMap.get(item.post_id) ?? [];
         list.push(item);
         commentMap.set(item.post_id, list);
@@ -4410,7 +4439,7 @@ export default function InternalSocialPage() {
 
               <PulseSprintWidget />
 
-              {showBolaoPulseHubCard ? (
+              {showBolaoPulseHubCard === true ? (
                 <section className="overflow-hidden rounded-[2rem] border border-emerald-200 bg-emerald-950 p-5 text-white shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)]">
                   <div className="flex items-start justify-between gap-3">
                     <div>

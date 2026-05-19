@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink, Eye, RefreshCcw, Send, Upload, X } from "lucide-react";
+import { RefreshCcw, Upload, X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
 type InvoiceStatus = "draft" | "submitted" | "approved" | "rejected" | "cancelled";
@@ -463,7 +463,7 @@ export default function MeuPerfilNotaFiscalPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Notas fiscais</h1>
-            <p className="mt-1 text-sm text-slate-600">Emita, faca upload ou envie notas fiscais para contratante.</p>
+            <p className="mt-1 text-sm text-slate-600">Envie suas notas fiscais para analise e acompanhamento do financeiro.</p>
           </div>
           <button
             type="button"
@@ -479,48 +479,22 @@ export default function MeuPerfilNotaFiscalPage() {
 
       {msg ? <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">{msg}</div> : null}
 
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-        <p className="font-semibold">Configuracao para emissao automatica (SouGov)</p>
-        <p className="mt-1">1. Preencha o onboarding em `Configurar integracao` (CNPJ, portal e senha).</p>
-        <p>2. Garanta no `.env.local`: `INVOICE_CREDENTIALS_ENCRYPTION_KEY`.</p>
-        <p>3. Para API oficial configure: `SOUGOV_NF_API_URL` e `SOUGOV_NF_API_TOKEN`.</p>
-        <p>4. Fallback por portal externo: `SOUGOV_NF_BASE_URL`.</p>
-      </div>
-
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <div className="mb-4 flex flex-wrap items-center justify-end gap-2">
           <button
             type="button"
-            onClick={() => {
-              setOnboardingStep(1);
-              setOnboardingOpen(true);
-            }}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            Configurar integracao
-          </button>
-          <button
-            type="button"
             onClick={() => setUploadOpen(true)}
-            className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-white px-4 py-2 text-sm font-semibold text-indigo-700 hover:bg-indigo-50"
-          >
-            <Upload size={16} />
-            Upload de notas
-          </button>
-          <button
-            type="button"
-            onClick={() => setEmitOpen(true)}
             className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
           >
-            <Send size={16} />
-            Emitir nova nota
+            <Upload size={16} />
+            Enviar nota fiscal
           </button>
         </div>
 
         {!loading && !invoices.length ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-10 text-center">
             <p className="mx-auto max-w-2xl text-sm text-slate-600">
-              Nao ha nenhuma nota fiscal listada no momento. Clique em &quot;Emitir nova nota&quot; para gerar sua primeira nota na plataforma, ou em &quot;Upload de notas&quot; para subir uma nota ja emitida fora da plataforma.
+              Nao ha nenhuma nota fiscal listada no momento. Clique em &quot;Enviar nota fiscal&quot; para subir uma nota ja emitida.
             </p>
           </div>
         ) : (
@@ -531,7 +505,7 @@ export default function MeuPerfilNotaFiscalPage() {
                   <th className="p-3">Data</th>
                   <th className="p-3">Valor</th>
                   <th className="p-3">Status</th>
-                  <th className="p-3">Acao</th>
+                  <th className="p-3">Envio</th>
                 </tr>
               </thead>
               <tbody>
@@ -545,48 +519,9 @@ export default function MeuPerfilNotaFiscalPage() {
                       </span>
                     </td>
                     <td className="p-3">
-                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-2">
-                        <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                          Acoes da nota
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => void enqueueAutomaticIssue(row.id)}
-                            disabled={enqueuingId === row.id}
-                            className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-60"
-                          >
-                            {enqueuingId === row.id ? "Enfileirando..." : "Emitir automatico"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void launchIntegration(row.id)}
-                            disabled={launchingId === row.id}
-                            className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                          >
-                            <ExternalLink size={14} />
-                            {launchingId === row.id ? "Abrindo..." : "Abrir portal"}
-                          </button>
-                        </div>
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <span className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600">
-                            <Eye size={14} />
-                            {PROVIDER_LABEL[row.integration_provider]}
-                          </span>
-                          {latestJobByInvoiceId[row.id] ? (
-                            <span
-                              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${jobStatusClass(
-                                latestJobByInvoiceId[row.id].status
-                              )}`}
-                            >
-                              Job: {jobStatusLabel(latestJobByInvoiceId[row.id].status)}
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
-                      {latestJobByInvoiceId[row.id]?.last_error ? (
-                        <p className="mt-2 text-xs text-rose-700">{latestJobByInvoiceId[row.id].last_error}</p>
-                      ) : null}
+                      <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                        Enviada para analise
+                      </span>
                     </td>
                   </tr>
                 ))}
