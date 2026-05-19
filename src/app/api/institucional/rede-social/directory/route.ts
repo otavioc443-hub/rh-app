@@ -24,6 +24,7 @@ type CollaboratorRow = {
   email: string | null;
   email_empresarial?: string | null;
   email_pessoal?: string | null;
+  company_id?: string | null;
   empresa?: string | null;
   cargo?: string | null;
   cargo_id?: string | null;
@@ -121,11 +122,14 @@ function enrichProfile(
 ): DirectoryProfile {
   const collaborator = resolveCollaboratorForProfile(profile, collaboratorsByUserId, collaboratorsByEmail, authEmailByUserId);
   const collaboratorCompanyKey = normalizeCompanyName(collaborator?.empresa);
-  const collaboratorCompanyId = companyIdByName.get(collaboratorCompanyKey) ?? null;
+  const collaboratorCompanyId =
+    (collaborator?.company_id ?? "").trim() || companyIdByName.get(collaboratorCompanyKey) || null;
   const companyScopeKey = collaboratorCompanyKey
     ? `empresa:${collaboratorCompanyKey}`
-    : profile.company_id
-      ? `company:${profile.company_id}`
+    : collaboratorCompanyId
+      ? `company:${collaboratorCompanyId}`
+      : profile.company_id
+        ? `company:${profile.company_id}`
       : null;
   const collaboratorName = cleanName(collaborator?.nome);
   const profileName = cleanName(profile.full_name);
@@ -165,7 +169,7 @@ async function getRequesterUser(req: Request) {
 
 async function fetchCollaborators() {
   const fullSelect =
-    "user_id,nome,email,email_empresarial,email_pessoal,empresa,cargo,cargo_id,setor,departamento,department_id,is_active";
+    "user_id,nome,email,email_empresarial,email_pessoal,company_id,empresa,cargo,cargo_id,setor,departamento,department_id,is_active";
   const fullRes = await supabaseAdmin.from("colaboradores").select(fullSelect);
   if (!fullRes.error || !isSchemaCompatError(fullRes.error.message)) return fullRes;
 
