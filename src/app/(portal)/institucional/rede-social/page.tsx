@@ -26,7 +26,10 @@ type CollaboratorDirectoryRow = {
   email?: string | null;
   empresa?: string | null;
   cargo: string | null;
+  cargo_id?: string | null;
   setor: string | null;
+  departamento?: string | null;
+  department_id?: string | null;
   data_nascimento?: string | null;
   data_admissao?: string | null;
   is_active?: boolean | null;
@@ -1277,7 +1280,7 @@ export default function InternalSocialPage() {
       if (initialAuthorUserIds.length) {
         const collaboratorRes = await supabase
           .from("colaboradores")
-          .select("user_id,nome,email,empresa,cargo,setor,data_nascimento,data_admissao,is_active")
+          .select("user_id,nome,email,empresa,cargo,setor,departamento,data_nascimento,data_admissao,is_active")
           .in("user_id", initialAuthorUserIds);
         if (!collaboratorRes.error) {
           const collaboratorByUserId = new Map<string, CollaboratorDirectoryRow>();
@@ -1304,8 +1307,8 @@ export default function InternalSocialPage() {
               ...profile,
               company_id: profile.company_id ?? collaboratorCompanyId,
               full_name: safeFullName,
-              cargo: (collaborator?.cargo ?? "").trim() || null,
-              setor: (collaborator?.setor ?? "").trim() || null,
+              cargo: (collaborator?.cargo ?? "").trim() || profile.cargo || null,
+              setor: (collaborator?.setor ?? collaborator?.departamento ?? "").trim() || profile.setor || null,
             };
           });
 
@@ -4687,9 +4690,6 @@ export default function InternalSocialPage() {
                                 )}
                               </div>
                               <p className="mt-3 line-clamp-2 text-sm font-semibold text-slate-900">{highlightMatch(displayName(contact), searchTerm)}</p>
-                              <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#0a66c2]">
-                                @{mentionDirectory.byUserId.get(contact.id)?.handle ?? contact.id.slice(0, 8).toLowerCase()}
-                              </p>
                               <p className="mt-1 text-xs text-slate-500">{highlightMatch((contact.cargo ?? "").trim() || "Cargo não informado", searchTerm)}</p>
                               <p className="mt-1 text-xs text-slate-400">{highlightMatch((contact.setor ?? "").trim() || "Setor não informado", searchTerm)}</p>
                               <span
@@ -4724,9 +4724,6 @@ export default function InternalSocialPage() {
                                     className="rounded-2xl border border-slate-200 bg-white px-3 py-3 text-left hover:border-slate-300"
                                   >
                                     <p className="text-sm font-semibold text-slate-900">{highlightMatch(displayName(member), searchTerm)}</p>
-                                    <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#0a66c2]">
-                                      @{mentionDirectory.byUserId.get(member.id)?.handle ?? member.id.slice(0, 8).toLowerCase()}
-                                    </p>
                                     <p className="mt-1 text-xs text-slate-500">{highlightMatch((member.cargo ?? "").trim() || "Cargo não informado", searchTerm)}</p>
                                     <p className="mt-1 text-xs text-slate-400">{highlightMatch((member.setor ?? "").trim() || "Setor não informado", searchTerm)}</p>
                                     <span

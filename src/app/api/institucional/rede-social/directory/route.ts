@@ -26,8 +26,16 @@ type CollaboratorRow = {
   email_pessoal?: string | null;
   empresa?: string | null;
   cargo?: string | null;
+  cargo_id?: string | null;
   setor?: string | null;
+  departamento?: string | null;
+  department_id?: string | null;
   is_active?: boolean | null;
+};
+
+type NamedRow = {
+  id: string;
+  name: string | null;
 };
 
 type DirectoryProfile = {
@@ -92,12 +100,20 @@ function enrichProfile(
   profile: ProfileRow,
   collaboratorsByUserId: Map<string, CollaboratorRow>,
   collaboratorsByEmail: Map<string, CollaboratorRow>,
-  companyIdByName: Map<string, string>
+  companyIdByName: Map<string, string>,
+  cargoNameById: Map<string, string>,
+  departmentNameById: Map<string, string>
 ): DirectoryProfile {
   const collaborator = resolveCollaboratorForProfile(profile, collaboratorsByUserId, collaboratorsByEmail);
   const collaboratorCompanyId = companyIdByName.get(normalizeCompanyName(collaborator?.empresa)) ?? null;
   const collaboratorName = cleanName(collaborator?.nome);
   const profileName = cleanName(profile.full_name);
+  const cargoName = (collaborator?.cargo_id ? cargoNameById.get(collaborator.cargo_id) : null) ?? collaborator?.cargo ?? null;
+  const departmentName =
+    (collaborator?.department_id ? departmentNameById.get(collaborator.department_id) : null) ??
+    collaborator?.setor ??
+    collaborator?.departamento ??
+    null;
 
   return {
     id: profile.id,
@@ -106,8 +122,8 @@ function enrichProfile(
     company_id: collaboratorCompanyId ?? profile.company_id,
     role: profile.role,
     avatar_url: profile.avatar_url,
-    cargo: (collaborator?.cargo ?? "").trim() || null,
-    setor: (collaborator?.setor ?? "").trim() || null,
+    cargo: (cargoName ?? "").trim() || null,
+    setor: (departmentName ?? "").trim() || null,
   };
 }
 
@@ -130,7 +146,7 @@ export async function GET(req: Request) {
     const user = await getRequesterUser(req);
     if (!user) return NextResponse.json({ error: "Nao autenticado" }, { status: 401 });
 
-    const [profilesRes, companiesRes, collaboratorsRes] = await Promise.all([
+    const [profilesRes, companiesRes, collaboratorsRes, cargosRes, departmentsRes] = await Promise.all([
       supabaseAdmin
         .from("profiles")
         .select("id,full_name,email,company_id,role,avatar_url,active")
@@ -139,16 +155,30 @@ export async function GET(req: Request) {
       supabaseAdmin.from("companies").select("id,name"),
       supabaseAdmin
         .from("colaboradores")
-        .select("user_id,nome,email,email_empresarial,email_pessoal,empresa,cargo,setor,is_active"),
+        .select("user_id,nome,email,email_empresarial,email_pessoal,empresa,cargo,cargo_id,setor,departamento,department_id,is_active"),
+      supabaseAdmin.from("cargos").select("id,name"),
+      supabaseAdmin.from("departments").select("id,name"),
     ]);
 
     if (profilesRes.error) return NextResponse.json({ error: profilesRes.error.message }, { status: 400 });
     if (companiesRes.error) return NextResponse.json({ error: companiesRes.error.message }, { status: 400 });
     if (collaboratorsRes.error) return NextResponse.json({ error: collaboratorsRes.error.message }, { status: 400 });
+    if (cargosRes.error) return NextResponse.json({ error: cargosRes.error.message }, { status: 400 });
+    if (departmentsRes.error) return NextResponse.json({ error: departmentsRes.error.message }, { status: 400 });
 
     const profiles = (profilesRes.data ?? []) as ProfileRow[];
     const companies = (companiesRes.data ?? []) as CompanyRow[];
     const collaborators = ((collaboratorsRes.data ?? []) as CollaboratorRow[]).filter((item) => item.is_active !== false);
+    const cargoNameById = new Map(
+      ((cargosRes.data ?? []) as NamedRow[])
+        .map((row) => [row.id, (row.name ?? "").trim()] as const)
+        .filter(([, name]) => Boolean(name))
+    );
+    const departmentNameById = new Map(
+      ((departmentsRes.data ?? []) as NamedRow[])
+        .map((row) => [row.id, (row.name ?? "").trim()] as const)
+        .filter(([, name]) => Boolean(name))
+    );
 
     const companyIdByName = new Map(
       companies
@@ -166,7 +196,7 @@ export async function GET(req: Request) {
     }
 
     const enrichedProfiles = profiles.map((profile) =>
-      enrichProfile(profile, collaboratorsByUserId, collaboratorsByEmail, companyIdByName)
+      enrichProfile(profile, collaboratorsByUserId, collaboratorsByEmail, companyIdByName, cargoNameById, departmentNameById)
     );
     const requesterProfile = enrichedProfiles.find((profile) => profile.id === user.id);
     if (!requesterProfile) return NextResponse.json({ error: "Sem permissao" }, { status: 403 });
