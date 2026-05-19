@@ -904,6 +904,7 @@ export default function InternalSocialPage() {
   const [error, setError] = useState("");
   const [me, setMe] = useState<Profile | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [directoryScoped, setDirectoryScoped] = useState(false);
   const [collaboratorNameByUserId, setCollaboratorNameByUserId] = useState<Record<string, string>>({});
   const [companies, setCompanies] = useState<CompanyBrand[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -1183,6 +1184,7 @@ export default function InternalSocialPage() {
   async function load() {
     setLoading(true);
     setError("");
+    setDirectoryScoped(false);
     try {
       const auth = await supabase.auth.getUser();
       if (auth.error || !auth.data.user) throw new Error("Sessao invalida.");
@@ -1265,6 +1267,9 @@ export default function InternalSocialPage() {
           ...profile,
           avatar_url: resolvePortalAvatarUrl(profile.avatar_url ?? null),
         }));
+        setDirectoryScoped(true);
+      } else {
+        setDirectoryScoped(false);
       }
       let nextCollaboratorNameByUserId: Record<string, string> = {};
 
@@ -1817,9 +1822,10 @@ export default function InternalSocialPage() {
       profiles.filter((item) => {
         if (item.id === me?.id) return false;
         if (me?.role === "admin") return true;
+        if (directoryScoped) return true;
         return Boolean(me?.company_id && item.company_id === me.company_id);
       }),
-    [me?.company_id, me?.id, me?.role, profiles]
+    [directoryScoped, me?.company_id, me?.id, me?.role, profiles]
   );
   const canPublishOfficial = me?.role === "admin" || me?.role === "rh";
   const canManageCommunities = me?.role === "admin" || me?.role === "rh";
@@ -1888,9 +1894,10 @@ export default function InternalSocialPage() {
       profiles.filter((item) => {
         if (item.id === me?.id) return false;
         if (me?.role === "admin") return true;
+        if (directoryScoped) return true;
         return Boolean(me?.company_id && item.company_id === me.company_id);
       }),
-    [me?.company_id, me?.id, me?.role, profiles]
+    [directoryScoped, me?.company_id, me?.id, me?.role, profiles]
   );
   const myMessageGroupIds = useMemo(
     () => new Set(messageGroupMembers.filter((item) => item.user_id === me?.id).map((item) => item.group_id)),

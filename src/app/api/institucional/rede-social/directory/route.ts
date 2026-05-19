@@ -82,6 +82,11 @@ function normalizeCompanyName(value: string | null | undefined) {
     .toLowerCase();
 }
 
+function isSchemaCompatError(message: string | null | undefined) {
+  const text = (message ?? "").toLowerCase();
+  return text.includes("schema cache") || text.includes("could not find") || text.includes("column") || text.includes("does not exist");
+}
+
 function collaboratorEmails(collaborator: CollaboratorRow) {
   return [collaborator.email, collaborator.email_empresarial, collaborator.email_pessoal]
     .map(cleanEmail)
@@ -105,7 +110,8 @@ function enrichProfile(
   departmentNameById: Map<string, string>
 ): DirectoryProfile {
   const collaborator = resolveCollaboratorForProfile(profile, collaboratorsByUserId, collaboratorsByEmail);
-  const collaboratorCompanyId = companyIdByName.get(normalizeCompanyName(collaborator?.empresa)) ?? null;
+  const collaboratorCompanyKey = normalizeCompanyName(collaborator?.empresa);
+  const collaboratorCompanyId = companyIdByName.get(collaboratorCompanyKey) ?? null;
   const collaboratorName = cleanName(collaborator?.nome);
   const profileName = cleanName(profile.full_name);
   const cargoName = (collaborator?.cargo_id ? cargoNameById.get(collaborator.cargo_id) : null) ?? collaborator?.cargo ?? null;
@@ -119,7 +125,7 @@ function enrichProfile(
     id: profile.id,
     full_name: profileName || collaboratorName || profile.full_name || collaborator?.nome || profile.email,
     email: profile.email,
-    company_id: collaboratorCompanyId ?? profile.company_id,
+    company_id: collaboratorCompanyId ?? (collaboratorCompanyKey ? `empresa:${collaboratorCompanyKey}` : profile.company_id),
     role: profile.role,
     avatar_url: profile.avatar_url,
     cargo: (cargoName ?? "").trim() || null,
@@ -141,6 +147,22 @@ async function getRequesterUser(req: Request) {
   return data.user ?? null;
 }
 
+async function fetchCollaborators() {
+  const fullSelect =
+    "user_id,nome,email,email_empresarial,email_pessoal,empresa,cargo,cargo_id,setor,departamento,department_id,is_active";
+  const fullRes = await supabaseAdmin.from("colaboradores").select(fullSelect);
+  if (!fullRes.error || !isSchemaCompatError(fullRes.error.message)) return fullRes;
+
+  const legacyRes = await supabaseAdmin
+    .from("colaboradores")
+    .select("user_id,nome,email,email_empresarial,email_pessoal,empresa,cargo,setor,departamento,is_active");
+  if (!legacyRes.error || !isSchemaCompatError(legacyRes.error.message)) return legacyRes;
+
+  return supabaseAdmin
+    .from("colaboradores")
+    .select("user_id,nome,email,email_empresarial,email_pessoal,empresa,cargo,setor,is_active");
+}
+
 export async function GET(req: Request) {
   try {
     const user = await getRequesterUser(req);
@@ -153,9 +175,7 @@ export async function GET(req: Request) {
         .eq("active", true)
         .order("full_name", { ascending: true }),
       supabaseAdmin.from("companies").select("id,name"),
-      supabaseAdmin
-        .from("colaboradores")
-        .select("user_id,nome,email,email_empresarial,email_pessoal,empresa,cargo,cargo_id,setor,departamento,department_id,is_active"),
+      fetchCollaborators(),
       supabaseAdmin.from("cargos").select("id,name"),
       supabaseAdmin.from("departments").select("id,name"),
     ]);
@@ -163,19 +183,17 @@ export async function GET(req: Request) {
     if (profilesRes.error) return NextResponse.json({ error: profilesRes.error.message }, { status: 400 });
     if (companiesRes.error) return NextResponse.json({ error: companiesRes.error.message }, { status: 400 });
     if (collaboratorsRes.error) return NextResponse.json({ error: collaboratorsRes.error.message }, { status: 400 });
-    if (cargosRes.error) return NextResponse.json({ error: cargosRes.error.message }, { status: 400 });
-    if (departmentsRes.error) return NextResponse.json({ error: departmentsRes.error.message }, { status: 400 });
 
     const profiles = (profilesRes.data ?? []) as ProfileRow[];
     const companies = (companiesRes.data ?? []) as CompanyRow[];
     const collaborators = ((collaboratorsRes.data ?? []) as CollaboratorRow[]).filter((item) => item.is_active !== false);
     const cargoNameById = new Map(
-      ((cargosRes.data ?? []) as NamedRow[])
+      ((cargosRes.error ? [] : cargosRes.data ?? []) as NamedRow[])
         .map((row) => [row.id, (row.name ?? "").trim()] as const)
         .filter(([, name]) => Boolean(name))
     );
     const departmentNameById = new Map(
-      ((departmentsRes.data ?? []) as NamedRow[])
+      ((departmentsRes.error ? [] : departmentsRes.data ?? []) as NamedRow[])
         .map((row) => [row.id, (row.name ?? "").trim()] as const)
         .filter(([, name]) => Boolean(name))
     );
