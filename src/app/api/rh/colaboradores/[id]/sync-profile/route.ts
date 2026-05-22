@@ -55,6 +55,23 @@ async function findAuthUserIdByEmail(email: string) {
   return null;
 }
 
+async function findProfileIdsByEmails(emails: string[]) {
+  const ids = new Set<string>();
+  for (const email of emails) {
+    const { data } = await supabaseAdmin
+      .from("profiles")
+      .select("id")
+      .ilike("email", email);
+    for (const profile of (data ?? []) as Array<{ id: string | null }>) {
+      if (profile.id) ids.add(profile.id);
+    }
+
+    const authUserId = await findAuthUserIdByEmail(email);
+    if (authUserId) ids.add(authUserId);
+  }
+  return ids;
+}
+
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -118,6 +135,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const candidateEmails = Array.from(
       new Set([cleanEmail(colab.email), cleanEmail(colab.email_empresarial), cleanEmail(colab.email_pessoal)].filter(Boolean))
     );
+    const relatedProfileIds = await findProfileIdsByEmails(candidateEmails);
+    if (colab.user_id) relatedProfileIds.add(colab.user_id);
+    if (explicitProfileUserId) relatedProfileIds.add(explicitProfileUserId);
     let profileUserId: string | null = explicitProfileUserId;
 
     if (!profileUserId) {
@@ -150,6 +170,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         synced: false,
       }, { status: 409 });
     }
+    relatedProfileIds.add(profileUserId);
 
     await supabaseAdmin
       .from("colaboradores")
@@ -193,6 +214,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         });
 
     if (profileRes.error) return NextResponse.json({ error: profileRes.error.message }, { status: 400 });
+
+    if (!profileActive && relatedProfileIds.size) {
+      const deactivateRes = await supabaseAdmin
+        .from("profiles")
+        .update({ active: false })
+        .in("id", Array.from(relatedProfileIds));
+
+      if (deactivateRes.error) {
+        return NextResponse.json({ error: deactivateRes.error.message }, { status: 400 });
+      }
+    }
 
     const { error: colabUpdateErr } = await supabaseAdmin
       .from("colaboradores")
