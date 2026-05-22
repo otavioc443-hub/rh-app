@@ -1924,9 +1924,33 @@ export default function InternalSocialPage() {
     });
   }, [messages, me?.id, selectedConversationId, selectedConversationType]);
   const canModeratePosts = me?.role === "admin" || me?.role === "diretoria";
+  const myProjectIds = useMemo(() => new Set(projects.map((item) => item.id)), [projects]);
+  const mySocialGroupIds = useMemo(
+    () => new Set(groupMembers.filter((item) => item.user_id === me?.id).map((item) => item.group_id)),
+    [groupMembers, me?.id]
+  );
   const visiblePostsForRole = useMemo(
-    () => posts.filter((item) => canModeratePosts || !item.hidden_at),
-    [canModeratePosts, posts]
+    () =>
+      posts.filter((item) => {
+        if (!canModeratePosts && item.hidden_at) return false;
+        if (me?.role === "admin") return true;
+        if (item.author_user_id === me?.id) return true;
+
+        if (item.audience_type === "project") {
+          return Boolean(item.audience_project_id && myProjectIds.has(item.audience_project_id));
+        }
+
+        if (item.audience_type === "group") {
+          return Boolean(item.audience_group_id && mySocialGroupIds.has(item.audience_group_id));
+        }
+
+        const authorProfile = profileById.get(item.author_user_id);
+        if (me?.company_scope_key || authorProfile?.company_scope_key) {
+          return Boolean(me?.company_scope_key && authorProfile?.company_scope_key === me.company_scope_key);
+        }
+        return Boolean(me?.company_id && authorProfile?.company_id === me.company_id);
+      }),
+    [canModeratePosts, me?.company_id, me?.company_scope_key, me?.id, me?.role, myProjectIds, mySocialGroupIds, posts, profileById]
   );
   const pinnedPost = useMemo(
     () => visiblePostsForRole.find((item) => item.id === pinnedPostId) ?? null,
@@ -2170,12 +2194,12 @@ export default function InternalSocialPage() {
   }, [projects, searchTerm]);
   const globalPostResults = useMemo(() => {
     if (!searchTerm) return [] as FeedPost[];
-    return posts.filter((post) => {
+    return visiblePostsForRole.filter((post) => {
       const commentText = post.comments.map((item) => item.text).join(" ");
       const haystack = [post.author_name, post.audience_label, post.text, commentText].join(" ").toLowerCase();
       return haystack.includes(searchTerm);
     });
-  }, [posts, searchTerm]);
+  }, [searchTerm, visiblePostsForRole]);
   const globalConversationResults = useMemo(() => {
     if (!searchTerm) return [] as ConversationListItem[];
     return conversationItems.filter((item) => `${item.title} ${item.subtitle} ${item.lastMessagePreview}`.toLowerCase().includes(searchTerm));
@@ -4916,7 +4940,7 @@ export default function InternalSocialPage() {
                         <div className="rounded-2xl border border-slate-200 bg-white p-4">
                           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-400">Posts</p>
                           <p className="mt-2 text-2xl font-semibold text-slate-900">
-                            {posts.filter((item) => item.audience_type === "group" && item.audience_group_id === selectedCommunity.id).length}
+                            {visiblePostsForRole.filter((item) => item.audience_type === "group" && item.audience_group_id === selectedCommunity.id).length}
                           </p>
                         </div>
                         <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -5011,8 +5035,8 @@ export default function InternalSocialPage() {
                       <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4">
                         <p className="text-sm font-semibold text-slate-900">Feed da comunidade</p>
                         <div className="mt-3 space-y-3">
-                          {posts.filter((item) => item.audience_type === "group" && item.audience_group_id === selectedCommunity.id).length ? (
-                            posts
+                          {visiblePostsForRole.filter((item) => item.audience_type === "group" && item.audience_group_id === selectedCommunity.id).length ? (
+                            visiblePostsForRole
                               .filter((item) => item.audience_type === "group" && item.audience_group_id === selectedCommunity.id)
                               .slice(0, 6)
                               .map((post) => (
