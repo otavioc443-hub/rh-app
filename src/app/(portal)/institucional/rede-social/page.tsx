@@ -3545,6 +3545,7 @@ export default function InternalSocialPage() {
               { id: "network", label: "Minha rede" },
               { id: "communities", label: "Comunidades" },
               { id: "projects", label: "Projetos" },
+              { id: "game", label: "Jogos" },
               { id: "messages", label: "Mensagens" },
             ].map((item) => {
               const active = activeTab === item.id;
@@ -5249,8 +5250,8 @@ export default function InternalSocialPage() {
                 }`}
               >
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Trilha Pulse</p>
-                <h2 className="mt-2 text-xl font-semibold text-slate-950">Desafio da cobrinha</h2>
-                <p className="mt-2 text-sm text-slate-700">Colete pontos no estilo classico da cobrinha usando a mesma rodada diaria.</p>
+                <h2 className="mt-2 text-xl font-semibold text-slate-950">Sequencia diaria</h2>
+                <p className="mt-2 text-sm text-slate-700">Conduza a trilha, colete pontos e avance no ranking usando a mesma rodada diaria.</p>
               </button>
             </div>
 

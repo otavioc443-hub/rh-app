@@ -305,9 +305,9 @@ export function PulseSnakePage({ embedded = false }: { embedded?: boolean }) {
         <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
           <div className="bg-[linear-gradient(120deg,#022c22_0%,#064e3b_48%,#0f172a_100%)] px-6 py-7 text-white">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-200">Trilha Pulse</p>
-            <h1 className="mt-2 text-3xl font-semibold">Desafio da cobrinha</h1>
+            <h1 className="mt-2 text-3xl font-semibold">Sequencia diaria</h1>
             <p className="mt-2 max-w-2xl text-sm text-emerald-50/90">
-              Colete o maximo de pontos antes do tempo acabar. A rodada usa o mesmo limite diario, ranking por empresa e sequencia do Pulse Sprint.
+              Conduza a trilha, colete o maximo de pontos antes do tempo acabar e avance no ranking da empresa.
             </p>
           </div>
 
