@@ -653,6 +653,73 @@ export default function CollaboratorEditWizard({
     }
   }
 
+  async function terminateCollaboratorNow() {
+    const reason = terminationReason === "Outro" ? n(terminationCustomReason) : n(terminationReason);
+    if (!terminationDate) {
+      setMsg("Informe a data de desligamento.");
+      return;
+    }
+    if (!reason) {
+      setMsg("Informe o motivo de desligamento.");
+      return;
+    }
+
+    setSaving(true);
+    setMsg(null);
+    try {
+      const { data: userRes } = await supabase.auth.getUser();
+      const editorEmail = userRes?.user?.email ?? null;
+      const updatePayload: Record<string, unknown> = {
+        is_active: false,
+        data_demissao: terminationDate,
+        motivo_demissao: reason,
+        valor_rescisao: num(terminationAmount),
+        updated_by_email: editorEmail,
+        updated_at: new Date().toISOString(),
+      };
+      const filtered = Object.fromEntries(Object.entries(updatePayload).filter(([key]) => rowColumns.has(key)));
+      const { error } = await supabase.from("colaboradores").update(filtered).eq("id", collaboratorId);
+      if (error) throw new Error(error.message);
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const syncRes = await fetch(`/api/rh/colaboradores/${collaboratorId}/sync-profile`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          company_id: n(linkCompanyId || initial.company_id) || null,
+          department_id: n(initial.department_id) || null,
+          profile_user_id: n(selectedProfileUserId) || null,
+          active: false,
+        }),
+      });
+      if (!syncRes.ok) {
+        const text = await syncRes.text();
+        let errMsg = "Falha ao remover acesso ao portal.";
+        try {
+          const json = JSON.parse(text) as { error?: string };
+          if (json.error) errMsg = json.error;
+        } catch {
+          if (text) errMsg = text;
+        }
+        throw new Error(errMsg);
+      }
+
+      setIsActive(false);
+      setShowTermination(true);
+      setShowTerminationDialog(false);
+      onSaved();
+    } catch (e: unknown) {
+      setMsg(e instanceof Error ? e.message : "Erro ao desligar colaborador.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function promoteCollaborator() {
     const nextCargo = n(promotionCargo);
     const nextSalary = num(promotionSalary);
@@ -1198,7 +1265,7 @@ export default function CollaboratorEditWizard({
                 <div>
                   <div className="text-lg font-semibold text-slate-950">Desligar colaborador</div>
                   <div className="mt-1 text-sm text-slate-600">
-                    Informe os dados do desligamento. O acesso ao portal sera removido ao salvar as alteracoes.
+                    Informe os dados do desligamento. Ao confirmar, o colaborador sera inativado e o acesso ao portal sera removido.
                   </div>
                 </div>
                 <button
@@ -1266,7 +1333,7 @@ export default function CollaboratorEditWizard({
                 ) : null}
 
                 <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-900">
-                  Ao confirmar, o colaborador ficara marcado para desligamento. A remocao de acesso sera aplicada quando voce clicar em Salvar alteracoes.
+                  Ao confirmar, o desligamento sera salvo imediatamente.
                 </div>
               </div>
 
@@ -1280,25 +1347,11 @@ export default function CollaboratorEditWizard({
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    const reason = terminationReason === "Outro" ? n(terminationCustomReason) : n(terminationReason);
-                    if (!terminationDate) {
-                      setMsg("Informe a data de desligamento.");
-                      return;
-                    }
-                    if (!reason) {
-                      setMsg("Informe o motivo de desligamento.");
-                      return;
-                    }
-                    setMsg(null);
-                    setIsActive(false);
-                    setShowPromotion(false);
-                    setShowTermination(true);
-                    setShowTerminationDialog(false);
-                  }}
-                  className="rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800"
+                  onClick={() => void terminateCollaboratorNow()}
+                  disabled={saving}
+                  className="rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800 disabled:opacity-60"
                 >
-                  Confirmar desligamento
+                  {saving ? "Desligando..." : "Confirmar e desligar"}
                 </button>
               </div>
             </div>
