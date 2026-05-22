@@ -8,6 +8,7 @@ import { Trophy } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 import { PulseSprintPage, PulseSprintWidget } from "@/components/engagement-game/PulseSprint";
+import { PulseSnakePage } from "@/components/engagement-game/PulseSnake";
 
 type Profile = {
   id: string;
@@ -956,6 +957,7 @@ export default function InternalSocialPage() {
   const [showComposerEmojiPicker, setShowComposerEmojiPicker] = useState(false);
   const [showComposerOptionsMenu, setShowComposerOptionsMenu] = useState(false);
   const [activeTab, setActiveTab] = useState<"inicio" | "network" | "communities" | "projects" | "game" | "messages">("inicio");
+  const [activeGameMode, setActiveGameMode] = useState<"sprint" | "snake">("sprint");
   const [messageFilter, setMessageFilter] = useState<"all" | "online" | "with_history">("all");
   const [messageSearch, setMessageSearch] = useState("");
   const [search, setSearch] = useState("");
@@ -5221,13 +5223,38 @@ export default function InternalSocialPage() {
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-200">PulseHub</p>
                   <h1 className="mt-2 text-2xl font-semibold">Arena diaria de engajamento</h1>
                   <p className="mt-2 max-w-3xl text-sm text-blue-100/90">
-                    O Pulse Sprint agora faz parte do PulseHub para reforcar o retorno diario, a constancia e a competicao saudavel entre colaboradores.
+                    Escolha entre o Pulse Sprint e o Trilha Pulse. Ambos usam a mesma regra diaria, ranking por empresa e sequencia de participacao.
                   </p>
                 </div>
               </div>
             </section>
 
-            <PulseSprintPage />
+            <div className="grid gap-4 lg:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setActiveGameMode("sprint")}
+                className={`rounded-[2rem] border p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                  activeGameMode === "sprint" ? "border-blue-300 bg-blue-50 ring-2 ring-blue-100" : "border-slate-200 bg-white"
+                }`}
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-600">Pulse Sprint</p>
+                <h2 className="mt-2 text-xl font-semibold text-slate-950">Reflexo diario</h2>
+                <p className="mt-2 text-sm text-slate-600">Acerte os alvos no tempo certo para pontuar no ranking da empresa.</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveGameMode("snake")}
+                className={`rounded-[2rem] border p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                  activeGameMode === "snake" ? "border-emerald-300 bg-emerald-50 ring-2 ring-emerald-100" : "border-slate-200 bg-white"
+                }`}
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">Trilha Pulse</p>
+                <h2 className="mt-2 text-xl font-semibold text-slate-950">Desafio da cobrinha</h2>
+                <p className="mt-2 text-sm text-slate-700">Colete pontos no estilo classico da cobrinha usando a mesma rodada diaria.</p>
+              </button>
+            </div>
+
+            {activeGameMode === "sprint" ? <PulseSprintPage /> : <PulseSnakePage embedded />}
           </section>
         ) : null}
 
