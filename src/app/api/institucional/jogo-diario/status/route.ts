@@ -4,23 +4,28 @@ import {
   canPlayToday,
   ensureEngagementGamePlayer,
   getAuthenticatedPortalUser,
+  getEngagementGameTitle,
   getLocalFortalezaDate,
   getNextBusinessDayLabel,
   getTodayDifficulty,
   getUserStreak,
+  hasCompletedEngagementGameToday,
   isWeekendDate,
   isEngagementGameAdmin,
   loadEngagementGameLeaderboard,
   loadEngagementGamePlayerOfDay,
   loadEngagementGameRankPosition,
+  normalizeEngagementGameSlug,
   syncEngagementGameResets,
 } from "@/lib/server/engagementGameServer";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const user = await getAuthenticatedPortalUser();
     if (!user) return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
+    const url = new URL(req.url);
+    const gameSlug = normalizeEngagementGameSlug(url.searchParams.get("game"));
 
     await syncEngagementGameResets();
     const [player, isAdmin] = await Promise.all([ensureEngagementGamePlayer(user.id), isEngagementGameAdmin(user.id)]);
@@ -42,9 +47,9 @@ export async function GET() {
     const today = getLocalFortalezaDate(now);
     const weekend = isWeekendDate(now);
     const difficulty = getTodayDifficulty(now);
-    const playedToday = player.last_played_date === today;
+    const playedToday = await hasCompletedEngagementGameToday(user.id, gameSlug, today);
     const effectiveStreak = getUserStreak(player.last_played_date, player.streak, now);
-    const playable = weekend ? false : isAdmin ? true : canPlayToday(player.last_played_date);
+    const playable = weekend ? false : isAdmin ? true : !playedToday;
     const message = buildDailyMotivationMessage(effectiveStreak, playable, player.score_current, {
       weekend,
       difficultyLabel: difficulty?.label ?? null,
@@ -53,8 +58,8 @@ export async function GET() {
 
     return NextResponse.json({
       game: {
-        slug: "pulse-sprint",
-        title: "Pulse Sprint",
+        slug: gameSlug,
+        title: getEngagementGameTitle(gameSlug),
         summary: weekend
           ? "Nos finais de semana o desafio faz uma pausa e retorna no proximo dia util."
           : `Toque os pulsos de energia na grade antes que eles sumam. Nivel de hoje: ${difficulty?.label ?? "Medio"}.`,

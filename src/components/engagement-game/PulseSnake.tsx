@@ -70,6 +70,7 @@ type Direction = "up" | "down" | "left" | "right";
 type GameState = "idle" | "playing" | "finished";
 
 const BOARD_SIZE = 14;
+const TRILHA_PULSE_SLUG = "trilha-pulse";
 const INITIAL_SNAKE: Cell[] = [
   { x: 6, y: 7 },
   { x: 5, y: 7 },
@@ -158,7 +159,7 @@ export function PulseSnakePage({ embedded = false }: { embedded?: boolean }) {
     setLoading(true);
     setError("");
     try {
-      const res = await fetch("/api/institucional/jogo-diario/status", { cache: "no-store" });
+      const res = await fetch(`/api/institucional/jogo-diario/status?game=${TRILHA_PULSE_SLUG}`, { cache: "no-store" });
       const json = (await res.json().catch(() => ({}))) as StatusResponse & { error?: string };
       if (!res.ok) throw new Error(json.error || "Erro ao carregar o jogo.");
       setStatus(json);
@@ -190,7 +191,7 @@ export function PulseSnakePage({ embedded = false }: { embedded?: boolean }) {
       const res = await fetch("/api/institucional/jogo-diario/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, hits }),
+        body: JSON.stringify({ sessionId, hits, gameSlug: TRILHA_PULSE_SLUG }),
       });
       const json = (await res.json().catch(() => ({}))) as SubmitResponse & { error?: string };
       if (!res.ok) throw new Error(json.error || "Erro ao concluir a rodada.");
@@ -262,7 +263,7 @@ export function PulseSnakePage({ embedded = false }: { embedded?: boolean }) {
     setError("");
     setResult(null);
     try {
-      const res = await fetch("/api/institucional/jogo-diario/start", { method: "POST" });
+      const res = await fetch(`/api/institucional/jogo-diario/start?game=${TRILHA_PULSE_SLUG}`, { method: "POST" });
       const json = (await res.json().catch(() => ({}))) as StartResponse & { error?: string };
       if (!res.ok) throw new Error(json.error || "Erro ao iniciar o jogo.");
       submitGuardRef.current = false;

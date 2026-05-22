@@ -1747,9 +1747,12 @@ export default function InternalSocialPage() {
     const project = params.get("project");
     const tag = params.get("tag");
     const community = params.get("community");
+    const game = params.get("game");
     if (tab === "inicio" || tab === "network" || tab === "communities" || tab === "projects" || tab === "game" || tab === "messages") {
       setActiveTab(tab);
     }
+    if (game === "trilha-pulse") setActiveGameMode("snake");
+    if (game === "pulse-sprint") setActiveGameMode("sprint");
     if (group) {
       setSelectedConversationType("group");
       setSelectedConversationId(group);

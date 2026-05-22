@@ -278,3 +278,24 @@ export function canPlayToday(lastPlayedDate: string | null) {
   if (!lastPlayedDate) return true;
   return lastPlayedDate !== getLocalFortalezaDate(currentDate);
 }
+
+export function normalizeEngagementGameSlug(value: string | null | undefined) {
+  return value === "trilha-pulse" ? "trilha-pulse" : "pulse-sprint";
+}
+
+export function getEngagementGameTitle(gameSlug: string) {
+  return gameSlug === "trilha-pulse" ? "Trilha Pulse" : "Pulse Sprint";
+}
+
+export async function hasCompletedEngagementGameToday(userId: string, gameSlug: string, today = getLocalFortalezaDate()) {
+  const { data, error } = await supabaseAdmin
+    .from("engagement_game_sessions")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("game_slug", normalizeEngagementGameSlug(gameSlug))
+    .eq("play_date", today)
+    .eq("session_state", "completed")
+    .limit(1);
+  if (error) throw new Error(error.message);
+  return Boolean(data?.length);
+}

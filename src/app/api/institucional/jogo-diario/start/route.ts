@@ -7,16 +7,20 @@ import {
   getAuthenticatedPortalUser,
   getNextBusinessDayLabel,
   getTodayDifficulty,
+  hasCompletedEngagementGameToday,
   isWeekendDate,
   isEngagementGameAdmin,
+  normalizeEngagementGameSlug,
   syncEngagementGameResets,
 } from "@/lib/server/engagementGameServer";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
     const user = await getAuthenticatedPortalUser();
     if (!user) return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
+    const url = new URL(req.url);
+    const gameSlug = normalizeEngagementGameSlug(url.searchParams.get("game"));
 
     await syncEngagementGameResets();
     const [player, isAdmin] = await Promise.all([ensureEngagementGamePlayer(user.id), isEngagementGameAdmin(user.id)]);
@@ -35,7 +39,7 @@ export async function POST() {
     if (!difficulty) {
       return NextResponse.json({ error: "Nivel do dia indisponivel." }, { status: 409 });
     }
-    if (!isAdmin && !canPlayToday(player.last_played_date)) {
+    if (!isAdmin && (await hasCompletedEngagementGameToday(user.id, gameSlug))) {
       return NextResponse.json({ error: "Voce ja jogou hoje." }, { status: 409 });
     }
 
@@ -43,6 +47,7 @@ export async function POST() {
       .from("engagement_game_sessions")
       .select("id,challenge_seed,started_at,expires_at")
       .eq("user_id", user.id)
+      .eq("game_slug", gameSlug)
       .eq("session_state", "started")
       .order("created_at", { ascending: false })
       .limit(1)
@@ -74,6 +79,7 @@ export async function POST() {
         user_id: user.id,
         company_id: player.company_id,
         department_id: player.department_id,
+        game_slug: gameSlug,
         challenge_seed: seed,
         challenge_config: difficulty,
         expires_at: expiresAt,

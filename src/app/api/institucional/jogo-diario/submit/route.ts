@@ -13,10 +13,12 @@ import {
   getLocalFortalezaDate,
   getTodayDifficulty,
   getUserStreak,
+  hasCompletedEngagementGameToday,
   isWeekendDate,
   isEngagementGameAdmin,
   loadEngagementGameLeaderboard,
   loadEngagementGameRankPosition,
+  normalizeEngagementGameSlug,
   syncEngagementGameResets,
 } from "@/lib/server/engagementGameServer";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
@@ -24,6 +26,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 type SubmitBody = {
   sessionId?: string;
   hits?: Array<{ roundIndex?: number; hitAtMs?: number }>;
+  gameSlug?: string;
 };
 
 export async function POST(req: Request) {
@@ -34,6 +37,7 @@ export async function POST(req: Request) {
     const body = (await req.json().catch(() => null)) as SubmitBody | null;
     const sessionId = typeof body?.sessionId === "string" ? body.sessionId.trim() : "";
     if (!sessionId) return NextResponse.json({ error: "Sessao invalida." }, { status: 400 });
+    const requestedGameSlug = normalizeEngagementGameSlug(body?.gameSlug);
 
     await syncEngagementGameResets();
     const [player, isAdmin] = await Promise.all([ensureEngagementGamePlayer(user.id), isEngagementGameAdmin(user.id)]);
@@ -41,17 +45,18 @@ export async function POST(req: Request) {
     if (isWeekendDate(now)) {
       return NextResponse.json({ error: "O desafio fica indisponivel nos finais de semana." }, { status: 409 });
     }
-    if (!isAdmin && !canPlayToday(player.last_played_date)) {
+    if (!isAdmin && (await hasCompletedEngagementGameToday(user.id, requestedGameSlug))) {
       return NextResponse.json({ error: "Voce ja concluiu a rodada de hoje." }, { status: 409 });
     }
 
     const { data: session, error: sessionError } = await supabaseAdmin
       .from("engagement_game_sessions")
-      .select("id,user_id,challenge_seed,challenge_config,session_state,expires_at,started_at")
+      .select("id,user_id,game_slug,challenge_seed,challenge_config,session_state,expires_at,started_at")
       .eq("id", sessionId)
       .maybeSingle<{
         id: string;
         user_id: string;
+        game_slug: string;
         challenge_seed: string;
         challenge_config: { key?: string } | null;
         session_state: "started" | "completed" | "expired" | "cancelled";
@@ -61,6 +66,10 @@ export async function POST(req: Request) {
     if (sessionError) throw new Error(sessionError.message);
     if (!session || session.user_id !== user.id) {
       return NextResponse.json({ error: "Sessao nao encontrada." }, { status: 404 });
+    }
+    const gameSlug = normalizeEngagementGameSlug(session.game_slug);
+    if (gameSlug !== requestedGameSlug) {
+      return NextResponse.json({ error: "Tipo de jogo invalido para esta sessao." }, { status: 400 });
     }
     if (session.session_state !== "started") {
       return NextResponse.json({ error: "Sessao ja encerrada." }, { status: 409 });
@@ -87,7 +96,7 @@ export async function POST(req: Request) {
     const localToday = getLocalFortalezaDate();
     const playedToday = player.last_played_date === localToday;
     const currentStreak = getUserStreak(player.last_played_date, player.streak, now);
-    const replayBaseStreak = isAdmin && playedToday ? Math.max(0, currentStreak - 1) : currentStreak;
+    const replayBaseStreak = playedToday ? Math.max(0, currentStreak - 1) : currentStreak;
     const breakdown = scoreDailyGameSession(rounds, hits, replayBaseStreak, difficultyConfig);
 
     let replacedSession:
@@ -102,6 +111,7 @@ export async function POST(req: Request) {
         .from("engagement_game_sessions")
         .select("id,total_points_awarded")
         .eq("user_id", user.id)
+        .eq("game_slug", gameSlug)
         .eq("play_date", localToday)
         .eq("session_state", "completed")
         .order("completed_at", { ascending: false })

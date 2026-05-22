@@ -1300,6 +1300,20 @@ export function PulseSprintPage() {
                 <CompactLeaderboard leaderboard={status?.leaderboard ?? []} />
               </div>
             </div>
+            <div className="mt-5 overflow-hidden rounded-[1.75rem] border border-emerald-200 bg-[linear-gradient(135deg,#022c22_0%,#064e3b_48%,#0f172a_100%)] p-5 text-white">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">Desafio extra</p>
+              <p className="mt-2 text-xl font-semibold">Continue com o Trilha Pulse</p>
+              <p className="mt-2 text-sm leading-6 text-emerald-50/85">
+                Aproveite o embalo da rodada e jogue o segundo desafio para somar mais pontos no ranking da empresa.
+              </p>
+              <Link
+                href="/institucional/rede-social?tab=game&game=trilha-pulse"
+                onClick={() => setShowResultModal(false)}
+                className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-emerald-300 px-4 py-3 text-sm font-semibold text-emerald-950 hover:bg-emerald-200"
+              >
+                Jogar Trilha Pulse
+              </Link>
+            </div>
             <div className="mt-6 flex flex-wrap justify-end gap-3">
               <button
                 type="button"
