@@ -14,6 +14,7 @@ type Profile = {
   full_name: string | null;
   email: string | null;
   company_id?: string | null;
+  company_scope_key?: string | null;
   role?: string | null;
   avatar_url?: string | null;
   cargo?: string | null;
@@ -1822,10 +1823,10 @@ export default function InternalSocialPage() {
       profiles.filter((item) => {
         if (item.id === me?.id) return false;
         if (me?.role === "admin") return true;
-        if (directoryScoped) return true;
+        if (directoryScoped) return Boolean(me?.company_scope_key && item.company_scope_key === me.company_scope_key);
         return Boolean(me?.company_id && item.company_id === me.company_id);
       }),
-    [directoryScoped, me?.company_id, me?.id, me?.role, profiles]
+    [directoryScoped, me?.company_id, me?.company_scope_key, me?.id, me?.role, profiles]
   );
   const canPublishOfficial = me?.role === "admin" || me?.role === "rh";
   const canManageCommunities = me?.role === "admin" || me?.role === "rh";
@@ -1894,10 +1895,10 @@ export default function InternalSocialPage() {
       profiles.filter((item) => {
         if (item.id === me?.id) return false;
         if (me?.role === "admin") return true;
-        if (directoryScoped) return true;
+        if (directoryScoped) return Boolean(me?.company_scope_key && item.company_scope_key === me.company_scope_key);
         return Boolean(me?.company_id && item.company_id === me.company_id);
       }),
-    [directoryScoped, me?.company_id, me?.id, me?.role, profiles]
+    [directoryScoped, me?.company_id, me?.company_scope_key, me?.id, me?.role, profiles]
   );
   const myMessageGroupIds = useMemo(
     () => new Set(messageGroupMembers.filter((item) => item.user_id === me?.id).map((item) => item.group_id)),

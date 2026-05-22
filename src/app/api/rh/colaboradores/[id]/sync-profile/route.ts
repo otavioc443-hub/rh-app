@@ -88,6 +88,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const explicitProfileUserId =
       typeof body.profile_user_id === "string" && body.profile_user_id.trim() ? body.profile_user_id.trim() : null;
 
+    const { data: company, error: companyErr } = companyId
+      ? await supabaseAdmin
+          .from("companies")
+          .select("id,name")
+          .eq("id", companyId)
+          .maybeSingle<{ id: string; name: string | null }>()
+      : { data: null, error: null };
+    if (companyErr) return NextResponse.json({ error: companyErr.message }, { status: 400 });
+    const companyName = (company?.name ?? "").trim() || null;
+
     const { data: colab, error: colabErr } = await supabaseAdmin
       .from("colaboradores")
       .select("id,user_id,email,email_empresarial,email_pessoal,nome")
@@ -139,6 +149,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }, { status: 409 });
     }
 
+    await supabaseAdmin
+      .from("colaboradores")
+      .update({ user_id: null })
+      .eq("user_id", profileUserId)
+      .neq("id", colab.id);
+
     if (profileUserId !== colab.user_id) {
       await supabaseAdmin.from("colaboradores").update({ user_id: profileUserId }).eq("id", colab.id);
     }
@@ -181,6 +197,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .update({
         user_id: profileUserId,
         company_id: companyId,
+        empresa: companyName,
         department_id: departmentId,
       })
       .eq("id", colab.id);
@@ -192,7 +209,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
       const { error: userIdOnlyErr } = await supabaseAdmin
         .from("colaboradores")
-        .update({ user_id: profileUserId })
+        .update({ user_id: profileUserId, empresa: companyName })
         .eq("id", colab.id);
 
       if (userIdOnlyErr) return NextResponse.json({ error: userIdOnlyErr.message }, { status: 400 });
