@@ -45,6 +45,19 @@ type CompanyOption = {
   name: string | null;
 };
 
+const TERMINATION_REASONS = [
+  "Pedido de demissao",
+  "Demissao sem justa causa",
+  "Demissao por justa causa",
+  "Termino de contrato",
+  "Fim de experiencia",
+  "Acordo entre as partes",
+  "Baixo desempenho",
+  "Reestruturacao interna",
+  "Abandono de emprego",
+  "Outro",
+];
+
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -248,8 +261,10 @@ export default function CollaboratorEditWizard({
   const [initial, setInitial] = useState<Partial<ColaboradorPayload>>({});
   const [isActive, setIsActive] = useState(true);
   const [showTermination, setShowTermination] = useState(false);
+  const [showTerminationDialog, setShowTerminationDialog] = useState(false);
   const [terminationDate, setTerminationDate] = useState(todayIsoDate());
   const [terminationReason, setTerminationReason] = useState("");
+  const [terminationCustomReason, setTerminationCustomReason] = useState("");
   const [terminationAmount, setTerminationAmount] = useState("");
   const [rowColumns, setRowColumns] = useState<Set<string>>(new Set());
   const [portalProfiles, setPortalProfiles] = useState<PortalProfileOption[]>([]);
@@ -315,8 +330,16 @@ export default function CollaboratorEditWizard({
       const nextIsActive = Boolean(row.is_active ?? true);
       setIsActive(nextIsActive);
       setShowTermination(!nextIsActive);
+      setShowTerminationDialog(false);
       setTerminationDate(typeof row.data_demissao === "string" && row.data_demissao ? row.data_demissao : todayIsoDate());
-      setTerminationReason(typeof row.motivo_demissao === "string" ? row.motivo_demissao : "");
+      const savedReason = typeof row.motivo_demissao === "string" ? row.motivo_demissao : "";
+      if (savedReason && !TERMINATION_REASONS.includes(savedReason)) {
+        setTerminationReason("Outro");
+        setTerminationCustomReason(savedReason);
+      } else {
+        setTerminationReason(savedReason);
+        setTerminationCustomReason("");
+      }
       setTerminationAmount(row.valor_rescisao == null ? "" : String(row.valor_rescisao));
       setRowColumns(new Set(Object.keys(row)));
       const rowUserId = typeof row.user_id === "string" ? row.user_id : null;
@@ -572,10 +595,11 @@ export default function CollaboratorEditWizard({
     try {
       const finalPayload: ColaboradorPayload = { ...payload };
       if (!isActive || showTermination) {
+        const reason = terminationReason === "Outro" ? n(terminationCustomReason) : n(terminationReason);
         if (!terminationDate) throw new Error("Informe a data de desligamento.");
-        if (!n(terminationReason)) throw new Error("Informe o motivo de desligamento.");
+        if (!reason) throw new Error("Informe o motivo de desligamento.");
         finalPayload.data_demissao = terminationDate;
-        finalPayload.motivo_demissao = terminationReason;
+        finalPayload.motivo_demissao = reason;
         finalPayload.valor_rescisao = terminationAmount;
       }
       const { data: userRes } = await supabase.auth.getUser();
@@ -785,8 +809,7 @@ export default function CollaboratorEditWizard({
                 onClick={() => {
                   setActiveView("dados");
                   setShowPromotion(false);
-                  setShowTermination(true);
-                  setIsActive(false);
+                  setShowTerminationDialog(true);
                   if (!terminationDate) setTerminationDate(todayIsoDate());
                 }}
                 className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-800 hover:bg-rose-100"
@@ -850,6 +873,7 @@ export default function CollaboratorEditWizard({
                             type="button"
                             onClick={() => {
                               setShowTermination(false);
+                              setShowTerminationDialog(false);
                               setIsActive(true);
                             }}
                             className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-100"
@@ -857,35 +881,10 @@ export default function CollaboratorEditWizard({
                             Cancelar desligamento
                           </button>
                         </div>
-
-                        <div className="mt-4 grid gap-3 md:grid-cols-[160px_minmax(0,1fr)_180px]">
-                          <label className="grid gap-1 text-xs font-semibold text-rose-950">
-                            Data de desligamento
-                            <input
-                              type="date"
-                              value={terminationDate}
-                              onChange={(e) => setTerminationDate(e.target.value)}
-                              className="h-10 rounded-xl border border-rose-200 bg-white px-3 text-sm text-slate-900"
-                            />
-                          </label>
-                          <label className="grid gap-1 text-xs font-semibold text-rose-950">
-                            Motivo de desligamento
-                            <input
-                              value={terminationReason}
-                              onChange={(e) => setTerminationReason(e.target.value)}
-                              placeholder="Informe o motivo"
-                              className="h-10 rounded-xl border border-rose-200 bg-white px-3 text-sm text-slate-900"
-                            />
-                          </label>
-                          <label className="grid gap-1 text-xs font-semibold text-rose-950">
-                            Valor de rescisao
-                            <input
-                              value={terminationAmount}
-                              onChange={(e) => setTerminationAmount(e.target.value)}
-                              placeholder="Ex.: 2500,00"
-                              className="h-10 rounded-xl border border-rose-200 bg-white px-3 text-sm text-slate-900"
-                            />
-                          </label>
+                        <div className="mt-3 rounded-xl bg-white/70 px-3 py-2 text-xs text-rose-900">
+                          Data: <b>{terminationDate || "-"}</b> | Motivo:{" "}
+                          <b>{terminationReason === "Outro" ? terminationCustomReason || "Outro" : terminationReason || "-"}</b> | Rescisao:{" "}
+                          <b>{terminationAmount || "-"}</b>
                         </div>
                       </div>
                     ) : null}
@@ -979,11 +978,12 @@ export default function CollaboratorEditWizard({
                           const checked = e.target.checked;
                           setIsActive(checked);
                           if (!checked) {
-                            setShowTermination(true);
+                            setShowTerminationDialog(true);
                             setShowPromotion(false);
                             if (!terminationDate) setTerminationDate(todayIsoDate());
                           } else {
                             setShowTermination(false);
+                            setShowTerminationDialog(false);
                           }
                         }}
                         className="h-4 w-4"
@@ -1188,6 +1188,123 @@ export default function CollaboratorEditWizard({
           </div>
         </div>
       </div>
+
+      {showTerminationDialog && (
+        <div className="fixed inset-0 z-[80]">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setShowTerminationDialog(false)} />
+          <div className="absolute left-1/2 top-1/2 w-[min(640px,calc(100vw-24px))] -translate-x-1/2 -translate-y-1/2">
+            <div className="rounded-3xl border border-rose-100 bg-white shadow-2xl">
+              <div className="flex items-start justify-between gap-4 border-b border-slate-200 p-5">
+                <div>
+                  <div className="text-lg font-semibold text-slate-950">Desligar colaborador</div>
+                  <div className="mt-1 text-sm text-slate-600">
+                    Informe os dados do desligamento. O acesso ao portal sera removido ao salvar as alteracoes.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowTerminationDialog(false)}
+                  className="rounded-xl border border-slate-200 p-2 text-slate-700 hover:bg-slate-50"
+                  aria-label="Fechar desligamento"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              <div className="space-y-4 p-5">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="grid gap-1 text-xs font-semibold text-slate-700">
+                    Data de desligamento
+                    <input
+                      type="date"
+                      value={terminationDate}
+                      onChange={(e) => setTerminationDate(e.target.value)}
+                      className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                    />
+                  </label>
+
+                  <label className="grid gap-1 text-xs font-semibold text-slate-700">
+                    Valor de rescisao
+                    <input
+                      value={terminationAmount}
+                      onChange={(e) => setTerminationAmount(e.target.value)}
+                      placeholder="Ex.: 2500,00"
+                      className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                    />
+                  </label>
+                </div>
+
+                <label className="grid gap-1 text-xs font-semibold text-slate-700">
+                  Motivo de desligamento
+                  <select
+                    value={terminationReason}
+                    onChange={(e) => {
+                      setTerminationReason(e.target.value);
+                      if (e.target.value !== "Outro") setTerminationCustomReason("");
+                    }}
+                    className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                  >
+                    <option value="">Selecione o motivo</option>
+                    {TERMINATION_REASONS.map((reason) => (
+                      <option key={reason} value={reason}>
+                        {reason}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                {terminationReason === "Outro" ? (
+                  <label className="grid gap-1 text-xs font-semibold text-slate-700">
+                    Descreva o motivo
+                    <input
+                      value={terminationCustomReason}
+                      onChange={(e) => setTerminationCustomReason(e.target.value)}
+                      placeholder="Informe o motivo"
+                      className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900"
+                    />
+                  </label>
+                ) : null}
+
+                <div className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+                  Ao confirmar, o colaborador ficara marcado para desligamento. A remocao de acesso sera aplicada quando voce clicar em Salvar alteracoes.
+                </div>
+              </div>
+
+              <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 p-5">
+                <button
+                  type="button"
+                  onClick={() => setShowTerminationDialog(false)}
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const reason = terminationReason === "Outro" ? n(terminationCustomReason) : n(terminationReason);
+                    if (!terminationDate) {
+                      setMsg("Informe a data de desligamento.");
+                      return;
+                    }
+                    if (!reason) {
+                      setMsg("Informe o motivo de desligamento.");
+                      return;
+                    }
+                    setMsg(null);
+                    setIsActive(false);
+                    setShowPromotion(false);
+                    setShowTermination(true);
+                    setShowTerminationDialog(false);
+                  }}
+                  className="rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-800"
+                >
+                  Confirmar desligamento
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showHistory && (
         <div className="fixed inset-0 z-[70]">
