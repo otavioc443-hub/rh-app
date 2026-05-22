@@ -81,12 +81,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       company_id?: string | null;
       department_id?: string | null;
       profile_user_id?: string | null;
+      active?: boolean | null;
     };
     const companyId = typeof body.company_id === "string" && body.company_id.trim() ? body.company_id.trim() : null;
     const departmentId =
       typeof body.department_id === "string" && body.department_id.trim() ? body.department_id.trim() : null;
     const explicitProfileUserId =
       typeof body.profile_user_id === "string" && body.profile_user_id.trim() ? body.profile_user_id.trim() : null;
+    const profileActive = body.active === false ? false : true;
 
     const { data: company, error: companyErr } = companyId
       ? await supabaseAdmin
@@ -171,7 +173,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       full_name: colab.nome,
       company_id: companyId,
       department_id: departmentId,
-      active: true,
+      active: profileActive,
     };
 
     const profileRes = existingProfile

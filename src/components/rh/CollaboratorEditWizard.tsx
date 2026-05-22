@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, History, TrendingUp, ClipboardPlus, CalendarClock } from "lucide-react";
+import { X, History, TrendingUp, ClipboardPlus, CalendarClock, UserX } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import EmployeeForm, { ColaboradorPayload } from "@/components/rh/EmployeeForm";
 
@@ -247,6 +247,10 @@ export default function CollaboratorEditWizard({
   const [msg, setMsg] = useState<string | null>(null);
   const [initial, setInitial] = useState<Partial<ColaboradorPayload>>({});
   const [isActive, setIsActive] = useState(true);
+  const [showTermination, setShowTermination] = useState(false);
+  const [terminationDate, setTerminationDate] = useState(todayIsoDate());
+  const [terminationReason, setTerminationReason] = useState("");
+  const [terminationAmount, setTerminationAmount] = useState("");
   const [rowColumns, setRowColumns] = useState<Set<string>>(new Set());
   const [portalProfiles, setPortalProfiles] = useState<PortalProfileOption[]>([]);
   const [selectedProfileUserId, setSelectedProfileUserId] = useState("");
@@ -308,7 +312,12 @@ export default function CollaboratorEditWizard({
 
       const row = data as Record<string, unknown>;
       setInitial(mapRowToInitial(row));
-      setIsActive(Boolean(row.is_active ?? true));
+      const nextIsActive = Boolean(row.is_active ?? true);
+      setIsActive(nextIsActive);
+      setShowTermination(!nextIsActive);
+      setTerminationDate(typeof row.data_demissao === "string" && row.data_demissao ? row.data_demissao : todayIsoDate());
+      setTerminationReason(typeof row.motivo_demissao === "string" ? row.motivo_demissao : "");
+      setTerminationAmount(row.valor_rescisao == null ? "" : String(row.valor_rescisao));
       setRowColumns(new Set(Object.keys(row)));
       const rowUserId = typeof row.user_id === "string" ? row.user_id : null;
       setCollaboratorUserId(rowUserId);
@@ -532,6 +541,7 @@ export default function CollaboratorEditWizard({
           company_id: companyId,
           department_id: null,
           profile_user_id: profileUserId,
+          active: true,
         }),
       });
 
@@ -560,9 +570,17 @@ export default function CollaboratorEditWizard({
     setMsg(null);
 
     try {
+      const finalPayload: ColaboradorPayload = { ...payload };
+      if (!isActive || showTermination) {
+        if (!terminationDate) throw new Error("Informe a data de desligamento.");
+        if (!n(terminationReason)) throw new Error("Informe o motivo de desligamento.");
+        finalPayload.data_demissao = terminationDate;
+        finalPayload.motivo_demissao = terminationReason;
+        finalPayload.valor_rescisao = terminationAmount;
+      }
       const { data: userRes } = await supabase.auth.getUser();
       const editorEmail = userRes?.user?.email ?? null;
-      const row = toDb(payload, isActive, editorEmail);
+      const row = toDb(finalPayload, isActive, editorEmail);
       const filtered = Object.fromEntries(
         Object.entries(row).filter(([key]) => rowColumns.has(key))
       );
@@ -573,8 +591,8 @@ export default function CollaboratorEditWizard({
         .eq("id", collaboratorId);
       if (error) throw new Error(error.message);
 
-      const companyId = n(payload.company_id) || null;
-      const departmentId = n(payload.department_id) || null;
+      const companyId = n(finalPayload.company_id) || null;
+      const departmentId = n(finalPayload.department_id) || null;
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
       const syncRes = await fetch(`/api/rh/colaboradores/${collaboratorId}/sync-profile`, {
@@ -588,6 +606,7 @@ export default function CollaboratorEditWizard({
           company_id: companyId,
           department_id: departmentId,
           profile_user_id: n(selectedProfileUserId) || null,
+          active: isActive,
         }),
       });
       if (!syncRes.ok) {
@@ -765,6 +784,21 @@ export default function CollaboratorEditWizard({
               <button
                 onClick={() => {
                   setActiveView("dados");
+                  setShowPromotion(false);
+                  setShowTermination(true);
+                  setIsActive(false);
+                  if (!terminationDate) setTerminationDate(todayIsoDate());
+                }}
+                className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-800 hover:bg-rose-100"
+              >
+                <UserX size={16} />
+                Desligar
+              </button>
+
+              <button
+                onClick={() => {
+                  setActiveView("dados");
+                  setShowTermination(false);
                   setShowPromotion((v) => !v);
                 }}
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
@@ -803,6 +837,59 @@ export default function CollaboratorEditWizard({
               <div className="space-y-5">
                 {activeView === "dados" ? (
                   <>
+                    {showTermination ? (
+                      <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold text-rose-950">Desligamento do colaborador</div>
+                            <div className="mt-1 text-xs leading-5 text-rose-800">
+                              Ao salvar, o colaborador sera marcado como inativo e o acesso ao portal sera removido.
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowTermination(false);
+                              setIsActive(true);
+                            }}
+                            className="rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-800 hover:bg-rose-100"
+                          >
+                            Cancelar desligamento
+                          </button>
+                        </div>
+
+                        <div className="mt-4 grid gap-3 md:grid-cols-[160px_minmax(0,1fr)_180px]">
+                          <label className="grid gap-1 text-xs font-semibold text-rose-950">
+                            Data de desligamento
+                            <input
+                              type="date"
+                              value={terminationDate}
+                              onChange={(e) => setTerminationDate(e.target.value)}
+                              className="h-10 rounded-xl border border-rose-200 bg-white px-3 text-sm text-slate-900"
+                            />
+                          </label>
+                          <label className="grid gap-1 text-xs font-semibold text-rose-950">
+                            Motivo de desligamento
+                            <input
+                              value={terminationReason}
+                              onChange={(e) => setTerminationReason(e.target.value)}
+                              placeholder="Informe o motivo"
+                              className="h-10 rounded-xl border border-rose-200 bg-white px-3 text-sm text-slate-900"
+                            />
+                          </label>
+                          <label className="grid gap-1 text-xs font-semibold text-rose-950">
+                            Valor de rescisao
+                            <input
+                              value={terminationAmount}
+                              onChange={(e) => setTerminationAmount(e.target.value)}
+                              placeholder="Ex.: 2500,00"
+                              className="h-10 rounded-xl border border-rose-200 bg-white px-3 text-sm text-slate-900"
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    ) : null}
+
                     {showPromotion ? (
                       <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
                         <div className="text-sm font-semibold text-emerald-900">Registrar promocao</div>
@@ -888,7 +975,17 @@ export default function CollaboratorEditWizard({
                       <input
                         type="checkbox"
                         checked={isActive}
-                        onChange={(e) => setIsActive(e.target.checked)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setIsActive(checked);
+                          if (!checked) {
+                            setShowTermination(true);
+                            setShowPromotion(false);
+                            if (!terminationDate) setTerminationDate(todayIsoDate());
+                          } else {
+                            setShowTermination(false);
+                          }
+                        }}
                         className="h-4 w-4"
                       />
                       <span className="text-sm font-medium text-slate-800">
