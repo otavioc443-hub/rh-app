@@ -104,9 +104,9 @@ function resolveCollaboratorForProfile(
   const authEmail = cleanEmail(authEmailByUserId.get(profile.id));
   const profileEmail = cleanEmail(profile.email);
   return (
+    collaboratorsByUserId.get(profile.id) ??
     collaboratorsByEmail.get(authEmail) ??
     collaboratorsByEmail.get(profileEmail) ??
-    collaboratorsByUserId.get(profile.id) ??
     null
   );
 }
@@ -124,12 +124,11 @@ function enrichProfile(
   const collaboratorCompanyKey = normalizeCompanyName(collaborator?.empresa);
   const collaboratorCompanyId =
     (collaborator?.company_id ?? "").trim() || companyIdByName.get(collaboratorCompanyKey) || null;
-  const companyScopeKey = collaboratorCompanyKey
-    ? `empresa:${collaboratorCompanyKey}`
-    : collaboratorCompanyId
-      ? `company:${collaboratorCompanyId}`
-      : profile.company_id
-        ? `company:${profile.company_id}`
+  const officialCompanyId = (profile.company_id ?? "").trim() || collaboratorCompanyId;
+  const companyScopeKey = officialCompanyId
+    ? `company:${officialCompanyId}`
+    : collaboratorCompanyKey
+      ? `empresa:${collaboratorCompanyKey}`
       : null;
   const collaboratorName = cleanName(collaborator?.nome);
   const profileName = cleanName(profile.full_name);
@@ -144,7 +143,7 @@ function enrichProfile(
     id: profile.id,
     full_name: profileName || collaboratorName || profile.full_name || collaborator?.nome || profile.email,
     email: profile.email || authEmailByUserId.get(profile.id) || null,
-    company_id: collaboratorCompanyId ?? (collaboratorCompanyKey ? `empresa:${collaboratorCompanyKey}` : profile.company_id),
+    company_id: officialCompanyId ?? (collaboratorCompanyKey ? `empresa:${collaboratorCompanyKey}` : null),
     company_scope_key: companyScopeKey,
     role: profile.role,
     avatar_url: profile.avatar_url,
