@@ -206,7 +206,6 @@ export async function GET(req: Request) {
       supabaseAdmin
         .from("profiles")
         .select("id,full_name,email,company_id,role,avatar_url,active")
-        .eq("active", true)
         .order("full_name", { ascending: true }),
       supabaseAdmin.from("companies").select("id,name"),
       fetchCollaborators(),
@@ -219,7 +218,7 @@ export async function GET(req: Request) {
     if (companiesRes.error) return NextResponse.json({ error: companiesRes.error.message }, { status: 400 });
     if (collaboratorsRes.error) return NextResponse.json({ error: collaboratorsRes.error.message }, { status: 400 });
 
-    const profiles = (profilesRes.data ?? []) as ProfileRow[];
+    const profileRows = ((profilesRes.data ?? []) as ProfileRow[]).filter((profile) => profile.active !== false);
     const companies = (companiesRes.data ?? []) as CompanyRow[];
     const collaborators = ((collaboratorsRes.data ?? []) as CollaboratorRow[]).filter((item) => item.is_active !== false);
     const cargoNameById = new Map(
@@ -246,6 +245,21 @@ export async function GET(req: Request) {
       for (const email of collaboratorEmails(collaborator)) {
         if (!collaboratorsByEmail.has(email)) collaboratorsByEmail.set(email, collaborator);
       }
+    }
+
+    const profileById = new Map(profileRows.map((profile) => [profile.id, profile]));
+    const profiles = [...profileRows];
+    for (const collaborator of collaborators) {
+      if (!collaborator.user_id || profileById.has(collaborator.user_id)) continue;
+      profiles.push({
+        id: collaborator.user_id,
+        full_name: null,
+        email: authEmailByUserId.get(collaborator.user_id) ?? collaboratorEmails(collaborator)[0] ?? null,
+        company_id: null,
+        role: "colaborador",
+        avatar_url: null,
+        active: true,
+      });
     }
 
     const enrichedProfiles = profiles.map((profile) =>

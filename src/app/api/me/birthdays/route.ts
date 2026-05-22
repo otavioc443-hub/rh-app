@@ -88,10 +88,11 @@ async function selectBirthdayCollaborators() {
     const { data, error } = await supabaseAdmin
       .from("colaboradores")
       .select(select)
-      .eq("is_active", true)
       .not("data_nascimento", "is", null);
 
-    if (!error) return ((data ?? []) as unknown) as CollaboratorRow[];
+    if (!error) {
+      return (((data ?? []) as unknown) as CollaboratorRow[]).filter((row) => row.is_active !== false);
+    }
     if (!isSchemaSelectError(error)) throw error;
   }
 
@@ -105,6 +106,22 @@ async function findRequesterCollaborator(userId: string, email: string | null | 
     "id,nome,empresa",
   ];
 
+  const cleanEmail = (email ?? "").trim();
+  if (cleanEmail) {
+    for (const column of ["email", "email_empresarial", "email_pessoal"]) {
+      for (const select of selects) {
+        const byEmail = await supabaseAdmin
+          .from("colaboradores")
+          .select(select)
+          .ilike(column, cleanEmail)
+          .limit(1)
+          .maybeSingle<CollaboratorRow>();
+        if (!byEmail.error && byEmail.data) return byEmail.data;
+        if (byEmail.error && !isSchemaSelectError(byEmail.error)) throw byEmail.error;
+      }
+    }
+  }
+
   for (const select of selects) {
     const byUserId = await supabaseAdmin
       .from("colaboradores")
@@ -114,20 +131,6 @@ async function findRequesterCollaborator(userId: string, email: string | null | 
       .maybeSingle<CollaboratorRow>();
     if (!byUserId.error && byUserId.data) return byUserId.data;
     if (byUserId.error && !isSchemaSelectError(byUserId.error)) throw byUserId.error;
-  }
-
-  const cleanEmail = (email ?? "").trim();
-  if (!cleanEmail) return null;
-
-  for (const column of ["email", "email_empresarial", "email_pessoal"]) {
-    const byEmail = await supabaseAdmin
-      .from("colaboradores")
-      .select("id,user_id,nome,empresa")
-      .ilike(column, cleanEmail)
-      .limit(1)
-      .maybeSingle<CollaboratorRow>();
-    if (!byEmail.error && byEmail.data) return byEmail.data;
-    if (byEmail.error && !isSchemaSelectError(byEmail.error)) throw byEmail.error;
   }
 
   return null;
