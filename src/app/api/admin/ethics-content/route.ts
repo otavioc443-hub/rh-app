@@ -6,7 +6,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 function serializeContent(content: EthicsManagedContent) {
   return {
-    publication_status: content.publicationStatus,
+    publication_status: content.publicationStatus === "inactive" ? "inactive" : "published",
     legal_notice: content.legalNotice,
     non_retaliation_policy: content.nonRetaliationPolicy,
     report_types: content.reportTypes,
@@ -40,13 +40,14 @@ function serializeContent(content: EthicsManagedContent) {
 }
 
 async function getAuditEntries(companyId: string) {
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("ethics_channel_content_audit")
     .select("id, action, created_at")
     .eq("company_id", companyId)
     .order("created_at", { ascending: false })
     .limit(8);
 
+  if (error) return [];
   return data ?? [];
 }
 
@@ -90,7 +91,10 @@ export async function PATCH(request: NextRequest) {
           }
         : {
             company_id: body.companyId,
-            ...serializeContent(body.content),
+            ...serializeContent({
+              ...body.content,
+              publicationStatus: body.content.publicationStatus === "inactive" ? "inactive" : "published",
+            }),
             draft_content: null,
             updated_by: access.userId,
           };

@@ -323,7 +323,7 @@ export function EthicsContentEditor({
             <button
               type="button"
               onClick={() => void handleSave("publish")}
-              disabled={!canEdit || !content || Boolean(savingAction) || loading || publishingWarnings.length > 0}
+              disabled={!canEdit || !content || Boolean(savingAction) || loading}
               className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
               {savingAction === "publish" ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
@@ -354,7 +354,6 @@ export function EthicsContentEditor({
                 className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
               >
                 <option value="published">Publicado</option>
-                <option value="draft">Rascunho</option>
                 <option value="inactive">Inativo</option>
               </select>
             </label>

@@ -3,12 +3,21 @@ export function decodeEscapedUnicode(value: string) {
 }
 
 export function repairMojibake(value: string) {
-  if (!/[ÃÂ]/.test(value)) return value;
-  try {
-    return decodeURIComponent(escape(value));
-  } catch {
-    return value;
+  const looksMojibake = (text: string) => /Ã.|Â.|â[€™€œ€“]/.test(text);
+  if (!looksMojibake(value)) return value;
+
+  let current = value;
+  for (let index = 0; index < 3; index += 1) {
+    try {
+      const repaired = decodeURIComponent(escape(current));
+      if (repaired === current || !looksMojibake(repaired)) return repaired;
+      current = repaired;
+    } catch {
+      return current;
+    }
   }
+
+  return current;
 }
 
 export function normalizeDisplayText(value: string | null | undefined) {

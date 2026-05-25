@@ -347,7 +347,6 @@ export default function EthicsChannelLanding({
   const accentSoft = isSolida ? "#2E3647" : "#0F172A";
   const codeTabHref = config.codeOfEthicsUrl;
   const steerCards = buildSteerCards(content.steerBody);
-  const companyTabs = companies.map((item) => ({ ...item, href: `/canal-de-etica/${item.key}` }));
 
   async function handleSubmitReport() {
     if (!config.companyId) {
@@ -480,21 +479,6 @@ export default function EthicsChannelLanding({
       {activeTab === "home" ? <HomeHero config={config} content={content} /> : null}
 
       <section className="mx-auto max-w-7xl px-6 pb-16 lg:px-10">
-        {companyTabs.length > 1 ? (
-          <div className="mb-6 flex flex-wrap gap-2">
-            {companyTabs.map((item) => (
-              <Link
-                key={item.key}
-                href={item.href}
-                className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] transition ${item.key === config.key ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
-                scroll
-              >
-                {item.companyName}
-              </Link>
-            ))}
-          </div>
-        ) : null}
-
         {activeTab === "home" ? (
           <div className="space-y-10">
             <section className="grid gap-4 lg:grid-cols-3">
