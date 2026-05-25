@@ -213,6 +213,10 @@ function summarizeFoundationText(label: string, text: string) {
   return firstSentence || text;
 }
 
+function isExternalImageUrl(value: string | null | undefined) {
+  return /^https?:\/\//i.test(String(value ?? ""));
+}
+
 function HomeHero({ config, content }: { config: EthicsChannelConfig; content: EthicsManagedContent }) {
   const isSolida = config.companyName
     .toLowerCase()
@@ -220,16 +224,18 @@ function HomeHero({ config, content }: { config: EthicsChannelConfig; content: E
     .replace(/[\u0300-\u036f]/g, "")
     .includes("solida");
 
+  const heroImageUrl = content.heroImageUrl || config.heroImageUrl || "/bg-login.jpg";
+  const heroAlt = isSolida ? "Atuação da Sólida em projetos de energia renovável" : `Equipe da ${config.companyName}`;
+
   return (
     <>
       <section className="relative min-h-[460px] overflow-hidden lg:min-h-[620px]">
-        <Image
-          src={content.heroImageUrl || config.heroImageUrl || "/bg-login.jpg"}
-          alt={isSolida ? "Atua\u00e7\u00e3o da S\u00f3lida em projetos de energia renov\u00e1vel" : `Equipe da ${config.companyName}`}
-          fill
-          className="object-cover"
-          priority
-        />
+        {isExternalImageUrl(heroImageUrl) ? (
+          // Signed Supabase URLs are dynamic, so the native image element avoids Next image host restrictions.
+          <img src={heroImageUrl} alt={heroAlt} className="absolute inset-0 h-full w-full object-cover" />
+        ) : (
+          <Image src={heroImageUrl} alt={heroAlt} fill className="object-cover" priority />
+        )}
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,23,42,0.6)_0%,rgba(15,23,42,0.28)_40%,rgba(15,23,42,0.4)_100%)]" />
       </section>
 
