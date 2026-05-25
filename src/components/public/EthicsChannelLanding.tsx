@@ -343,7 +343,7 @@ export default function EthicsChannelLanding({
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .includes("solida");
-  const accent = isSolida ? "#99A41A" : "#1E3A8A";
+  const accent = content.customPrimaryColor || (isSolida ? "#99A41A" : "#1E3A8A");
   const accentSoft = isSolida ? "#2E3647" : "#0F172A";
   const codeTabHref = config.codeOfEthicsUrl;
   const steerCards = buildSteerCards(content.steerBody);
@@ -462,6 +462,21 @@ export default function EthicsChannelLanding({
         </div>
       </header>
 
+      {content.publicationStatus === "inactive" ? (
+        <section className="mx-auto max-w-4xl px-6 py-20 text-center lg:px-10">
+          <div className="rounded-[36px] border border-slate-200 bg-white p-8 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Canal temporariamente indisponivel</p>
+            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-950">O Canal de Etica desta empresa esta inativo no momento.</h1>
+            <p className="mt-4 text-base leading-8 text-slate-600">
+              Procure os canais institucionais da empresa para orientacao enquanto esta pagina estiver indisponivel.
+            </p>
+          </div>
+        </section>
+      ) : null}
+
+      {content.publicationStatus === "inactive" ? null : (
+        <>
+
       {activeTab === "home" ? <HomeHero config={config} content={content} /> : null}
 
       <section className="mx-auto max-w-7xl px-6 pb-16 lg:px-10">
@@ -482,6 +497,58 @@ export default function EthicsChannelLanding({
 
         {activeTab === "home" ? (
           <div className="space-y-10">
+            <section className="grid gap-4 lg:grid-cols-3">
+              <article className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Nao retaliacao</p>
+                <p className="mt-4 text-sm leading-7 text-slate-700">{content.nonRetaliationPolicy}</p>
+              </article>
+              <article className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Prazo de analise</p>
+                <p className="mt-4 text-sm leading-7 text-slate-700">{content.analysisDeadline}</p>
+              </article>
+              <article className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Aviso institucional</p>
+                <p className="mt-4 text-sm leading-7 text-slate-700">{content.legalNotice}</p>
+              </article>
+            </section>
+
+            <section className="grid gap-6 lg:grid-cols-2">
+              <article className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">O que pode ser relatado</p>
+                <div className="mt-5 grid gap-3">
+                  {content.reportTypes.map((item) => (
+                    <div key={item} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800">
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </article>
+              <article className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Use outro canal para</p>
+                <div className="mt-5 grid gap-3">
+                  {content.outOfScope.map((item) => (
+                    <div key={item} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-800">
+                      {item}
+                    </div>
+                  ))}
+                </div>
+              </article>
+            </section>
+
+            <section className="rounded-[34px] border border-slate-200 bg-white p-7 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-500">Fluxo de tratamento</p>
+              <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+                {content.treatmentFlow.map((item, index) => (
+                  <article key={`${index}-${item}`} className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold text-white" style={{ backgroundColor: "var(--ethics-accent)" }}>
+                      {index + 1}
+                    </span>
+                    <p className="mt-4 text-sm font-medium leading-6 text-slate-800">{item}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
+
             {content.foundationTitle ? (
               <div className="overflow-hidden rounded-[36px] border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-200 px-7 py-7 lg:px-8">
@@ -994,6 +1061,9 @@ export default function EthicsChannelLanding({
           </div>
         </div>
       </footer>
+
+        </>
+      )}
 
       {reportReceiptOpen && submittedProtocol ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 px-4 py-8">

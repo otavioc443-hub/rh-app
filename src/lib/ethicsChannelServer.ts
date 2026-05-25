@@ -28,6 +28,16 @@ type CompanyRow = {
 
 type EthicsContentRow = {
   company_id: string;
+  publication_status: string | null;
+  legal_notice: string | null;
+  non_retaliation_policy: string | null;
+  report_types: unknown;
+  out_of_scope: unknown;
+  treatment_flow: unknown;
+  analysis_deadline: string | null;
+  footer_note: string | null;
+  custom_primary_color: string | null;
+  draft_content: unknown;
   hero_title: string | null;
   hero_subtitle: string | null;
   heading: string | null;
@@ -169,6 +179,18 @@ function coercePageTexts(value: unknown): EthicsManagedPageTexts | undefined {
 function mapContentRow(row: EthicsContentRow | null | undefined): Partial<EthicsManagedContent> | null {
   if (!row) return null;
   return {
+    publicationStatus:
+      row.publication_status === "draft" || row.publication_status === "inactive" || row.publication_status === "published"
+        ? row.publication_status
+        : undefined,
+    legalNotice: clean(row.legal_notice),
+    nonRetaliationPolicy: clean(row.non_retaliation_policy),
+    reportTypes: coerceStringArray(row.report_types),
+    outOfScope: coerceStringArray(row.out_of_scope),
+    treatmentFlow: coerceStringArray(row.treatment_flow),
+    analysisDeadline: clean(row.analysis_deadline),
+    footerNote: clean(row.footer_note),
+    customPrimaryColor: clean(row.custom_primary_color),
     heroTitle: clean(row.hero_title),
     heroSubtitle: clean(row.hero_subtitle),
     heading: clean(row.heading),
@@ -191,6 +213,11 @@ function mapContentRow(row: EthicsContentRow | null | undefined): Partial<Ethics
     faqItems: coerceFaqItems(row.faq_items),
     pageTexts: coercePageTexts(row.page_texts),
   };
+}
+
+function mapDraftContent(value: unknown): Partial<EthicsManagedContent> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Partial<EthicsManagedContent>;
 }
 
 function mergeConfigWithContent(config: EthicsChannelConfig, content: EthicsManagedContent): EthicsChannelConfig {
@@ -353,7 +380,8 @@ export async function getEthicsManagedContentForCompanyId(companyId: string) {
 
   const envConfig = resolveEnvConfigForCompany(companyRow);
   const defaultContent = getDefaultEthicsManagedContent(companyRow.name, envConfig?.key ?? companyRow.name);
-  const mergedContent = mergeEthicsManagedContent(defaultContent, mapContentRow(contentRow));
+  const liveContent = mergeEthicsManagedContent(defaultContent, mapContentRow(contentRow));
+  const mergedContent = mergeEthicsManagedContent(liveContent, mapDraftContent(contentRow?.draft_content));
 
   return {
     company: {

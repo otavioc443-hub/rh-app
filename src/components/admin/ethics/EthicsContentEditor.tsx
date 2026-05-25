@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ArrowRight, ChevronDown, FileText, Loader2, Plus, Save, Settings2, Trash2, Upload } from "lucide-react";
-import type { EthicsManagedContent, EthicsFaqItem } from "@/lib/ethicsChannelDefaults";
+import { ArrowRight, ChevronDown, FileText, Image as ImageIcon, Loader2, Plus, Save, Settings2, Trash2, Upload } from "lucide-react";
+import type { EthicsManagedContent, EthicsFaqItem, EthicsFoundationPillar } from "@/lib/ethicsChannelDefaults";
 
 type CompanyOption = {
   id: string;
@@ -12,6 +12,12 @@ type CompanyOption = {
 };
 
 type EditorTab = "home" | "report" | "follow-up" | "data" | "code";
+
+type AuditEntry = {
+  id: string;
+  action: string;
+  created_at: string;
+};
 
 function toLines(values: string[]) {
   return values.join("\n");
@@ -24,9 +30,25 @@ function fromLines(value: string) {
     .filter(Boolean);
 }
 
+function formatAuditDate(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function auditActionLabel(action: string) {
+  if (action === "save_draft") return "Rascunho salvo";
+  if (action === "publish") return "Conteudo publicado";
+  return action;
+}
+
 function cloneContent(content: EthicsManagedContent): EthicsManagedContent {
   return {
     ...content,
+    reportTypes: [...content.reportTypes],
+    outOfScope: [...content.outOfScope],
+    treatmentFlow: [...content.treatmentFlow],
     principles: [...content.principles],
     foundationPillars: content.foundationPillars.map((item) => ({ ...item })),
     faqItems: content.faqItems.map((item) => ({ ...item })),
@@ -118,30 +140,44 @@ export function EthicsContentEditor({
   const [activeTab, setActiveTab] = useState<EditorTab>("home");
   const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const [savingAction, setSavingAction] = useState<"draft" | "publish" | null>(null);
   const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
 
   const selectedCompany = useMemo(
     () => companies.find((company) => company.id === selectedCompanyId) ?? companies[0] ?? null,
     [companies, selectedCompanyId],
   );
 
+  const publishingWarnings = useMemo(() => {
+    if (!content) return [];
+    return [
+      !content.heroTitle ? "Titulo principal nao informado." : null,
+      !content.heroSubtitle ? "Subtitulo principal nao informado." : null,
+      !content.heroImageUrl ? "Imagem principal nao informada." : null,
+      !content.reportTypes.length ? "Tipos de relato nao configurados." : null,
+      !content.treatmentFlow.length ? "Fluxo de tratamento nao configurado." : null,
+      !content.nonRetaliationPolicy ? "Politica de nao retaliacao nao informada." : null,
+      !content.contactEmail && !content.contactPhone ? "Contato institucional nao informado." : null,
+    ].filter(Boolean) as string[];
+  }, [content]);
+
   useEffect(() => {
     if (!selectedCompanyId) return;
-    if (selectedCompanyId === initialCompanyId && initialContent) {
-      setContent(cloneContent(initialContent));
-      return;
-    }
 
     let active = true;
     setLoading(true);
     setFeedback(null);
     void fetch(`/api/admin/ethics-content?companyId=${selectedCompanyId}`)
       .then(async (response) => {
-        const json = (await response.json()) as { content?: EthicsManagedContent; error?: string };
+        const json = (await response.json()) as { content?: EthicsManagedContent; audit?: AuditEntry[]; error?: string };
         if (!response.ok || !json.content) throw new Error(json.error ?? "Falha ao carregar o conteúdo.");
-        if (active) setContent(cloneContent(json.content));
+        if (active) {
+          setContent(cloneContent(json.content));
+          setAuditEntries(json.audit ?? []);
+        }
       })
       .catch((error) => {
         if (active) setFeedback(error instanceof Error ? error.message : "Falha ao carregar o conteúdo.");
@@ -155,24 +191,25 @@ export function EthicsContentEditor({
     };
   }, [initialCompanyId, initialContent, selectedCompanyId]);
 
-  async function handleSave() {
+  async function handleSave(action: "draft" | "publish") {
     if (!selectedCompanyId || !content || !canEdit) return;
-    setSaving(true);
+    setSavingAction(action);
     setFeedback(null);
     try {
       const response = await fetch("/api/admin/ethics-content", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyId: selectedCompanyId, content }),
+        body: JSON.stringify({ companyId: selectedCompanyId, content, action }),
       });
-      const json = (await response.json()) as { content?: EthicsManagedContent; error?: string };
+      const json = (await response.json()) as { content?: EthicsManagedContent; audit?: AuditEntry[]; error?: string };
       if (!response.ok || !json.content) throw new Error(json.error ?? "Falha ao salvar o conteúdo.");
       setContent(cloneContent(json.content));
+      setAuditEntries(json.audit ?? []);
       setFeedback("Conteúdo salvo com sucesso.");
     } catch (error) {
       setFeedback(error instanceof Error ? error.message : "Falha ao salvar o conteúdo.");
     } finally {
-      setSaving(false);
+      setSavingAction(null);
     }
   }
 
@@ -194,12 +231,41 @@ export function EthicsContentEditor({
     }
   }
 
+  async function handleImageUpload(file: File) {
+    setUploadingImage(true);
+    setFeedback(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("kind", "image");
+      const response = await fetch("/api/admin/ethics-content/upload", { method: "POST", body: formData });
+      const json = (await response.json()) as { storageRef?: string; error?: string };
+      if (!response.ok || !json.storageRef) throw new Error(json.error ?? "Falha ao enviar a imagem.");
+      setContent((current) => (current ? { ...current, heroImageUrl: json.storageRef ?? null } : current));
+      setFeedback("Imagem enviada. Salve o conteudo para publicar a alteracao.");
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Falha ao enviar a imagem.");
+    } finally {
+      setUploadingImage(false);
+    }
+  }
+
   function updateFaqItem(index: number, patch: Partial<EthicsFaqItem>) {
     setContent((current) => {
       if (!current) return current;
       return {
         ...current,
         faqItems: current.faqItems.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)),
+      };
+    });
+  }
+
+  function updateFoundationPillar(index: number, patch: Partial<EthicsFoundationPillar>) {
+    setContent((current) => {
+      if (!current) return current;
+      return {
+        ...current,
+        foundationPillars: current.foundationPillars.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)),
       };
     });
   }
@@ -247,17 +313,135 @@ export function EthicsContentEditor({
             ) : null}
             <button
               type="button"
-              onClick={() => void handleSave()}
-              disabled={!canEdit || !content || saving || loading}
+              onClick={() => void handleSave("draft")}
+              disabled={!canEdit || !content || Boolean(savingAction) || loading}
+              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+            >
+              {savingAction === "draft" ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              Salvar rascunho
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleSave("publish")}
+              disabled={!canEdit || !content || Boolean(savingAction) || loading || publishingWarnings.length > 0}
               className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
             >
-              {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              Salvar textos
+              {savingAction === "publish" ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+              Publicar
             </button>
           </div>
         </div>
         {feedback ? <p className="mt-4 text-sm font-medium text-slate-600">{feedback}</p> : null}
       </div>
+
+      {content ? (
+        <Section
+          title="Publicacao e governanca"
+          description="Controle a visibilidade do canal e os elementos obrigatorios antes de publicar para a empresa selecionada."
+        >
+          <div className="grid gap-4 lg:grid-cols-[0.7fr,1.3fr]">
+            <label className="block">
+              <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Status do canal</span>
+              <select
+                value={content.publicationStatus}
+                onChange={(event) =>
+                  setContent((current) =>
+                    current
+                      ? { ...current, publicationStatus: event.target.value as EthicsManagedContent["publicationStatus"] }
+                      : current,
+                  )
+                }
+                className="h-11 w-full rounded-xl border border-slate-200 bg-white px-4 text-sm text-slate-900 outline-none transition focus:border-slate-400"
+              >
+                <option value="published">Publicado</option>
+                <option value="draft">Rascunho</option>
+                <option value="inactive">Inativo</option>
+              </select>
+            </label>
+            <Field
+              label="Cor principal do canal"
+              value={content.customPrimaryColor ?? ""}
+              onChange={(value) => setContent((current) => (current ? { ...current, customPrimaryColor: value } : current))}
+            />
+          </div>
+          <Field
+            label="Aviso juridico/institucional"
+            value={content.legalNotice ?? ""}
+            onChange={(value) => setContent((current) => (current ? { ...current, legalNotice: value } : current))}
+            multiline
+            rows={4}
+          />
+          <Field
+            label="Politica de nao retaliacao"
+            value={content.nonRetaliationPolicy ?? ""}
+            onChange={(value) => setContent((current) => (current ? { ...current, nonRetaliationPolicy: value } : current))}
+            multiline
+            rows={4}
+          />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Field
+              label="Tipos de relato aceitos (um por linha)"
+              value={toLines(content.reportTypes)}
+              onChange={(value) => setContent((current) => (current ? { ...current, reportTypes: fromLines(value) } : current))}
+              multiline
+              rows={6}
+            />
+            <Field
+              label="O que nao deve ser relatado aqui (um por linha)"
+              value={toLines(content.outOfScope)}
+              onChange={(value) => setContent((current) => (current ? { ...current, outOfScope: fromLines(value) } : current))}
+              multiline
+              rows={6}
+            />
+          </div>
+          <Field
+            label="Fluxo de tratamento (um passo por linha)"
+            value={toLines(content.treatmentFlow)}
+            onChange={(value) => setContent((current) => (current ? { ...current, treatmentFlow: fromLines(value) } : current))}
+            multiline
+            rows={6}
+          />
+          <Field
+            label="Prazo ou criterio de analise"
+            value={content.analysisDeadline ?? ""}
+            onChange={(value) => setContent((current) => (current ? { ...current, analysisDeadline: value } : current))}
+            multiline
+            rows={3}
+          />
+          <Field
+            label="Nota do rodape"
+            value={content.footerNote ?? ""}
+            onChange={(value) => setContent((current) => (current ? { ...current, footerNote: value } : current))}
+          />
+          <div className={`rounded-2xl border p-4 ${publishingWarnings.length ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
+            <p className={`text-sm font-semibold ${publishingWarnings.length ? "text-amber-950" : "text-emerald-950"}`}>
+              {publishingWarnings.length ? "Pendencias antes da publicacao" : "Conteudo minimo configurado"}
+            </p>
+            {publishingWarnings.length ? (
+              <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-amber-900">
+                {publishingWarnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-sm text-emerald-800">O canal possui os principais campos institucionais preenchidos.</p>
+            )}
+          </div>
+        </Section>
+      ) : null}
+
+      {auditEntries.length ? (
+        <Section title="Historico de publicacao" description="Ultimas acoes registradas para este conteudo e empresa.">
+          <div className="grid gap-3">
+            {auditEntries.map((entry) => (
+              <div key={entry.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                <span className="text-sm font-semibold text-slate-900">{auditActionLabel(entry.action)}</span>
+                <span className="text-xs font-medium text-slate-500">{formatAuditDate(entry.created_at)}</span>
+              </div>
+            ))}
+          </div>
+        </Section>
+      ) : null}
 
       {loading ? (
         <div className="rounded-[28px] border border-slate-200 bg-white px-6 py-10 text-sm text-slate-500">Carregando conteúdo...</div>
@@ -363,6 +547,71 @@ export function EthicsContentEditor({
               <Field label="Bloco de compromisso" value={content.pageTexts.homeGuidanceTitle ?? ""} onChange={(value) => setContent((current) => (current ? { ...current, pageTexts: { ...current.pageTexts, homeGuidanceTitle: value } } : current))} />
               <Field label="Parágrafos de orientações do canal" value={toLines(content.pageTexts.homeGuidanceParagraphs)} onChange={(value) => setContent((current) => (current ? { ...current, pageTexts: { ...current.pageTexts, homeGuidanceParagraphs: fromLines(value) } } : current))} multiline rows={7} />
               <Field label="Imagem hero" value={content.heroImageUrl ?? ""} onChange={(value) => setContent((current) => (current ? { ...current, heroImageUrl: value } : current))} />
+              <label className="inline-flex w-fit cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white px-5 py-3 text-sm font-semibold text-slate-900">
+                {uploadingImage ? <Loader2 size={16} className="animate-spin" /> : <ImageIcon size={16} />}
+                Enviar imagem da pagina
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) void handleImageUpload(file);
+                    event.currentTarget.value = "";
+                  }}
+                />
+              </label>
+              <Field label="Titulo de apoio/cabecalho interno" value={content.heading ?? ""} onChange={(value) => setContent((current) => (current ? { ...current, heading: value } : current))} />
+              <Field label="Introducao institucional" value={content.intro ?? ""} onChange={(value) => setContent((current) => (current ? { ...current, intro: value } : current))} multiline rows={5} />
+              <Field label="Principios do canal (um por linha)" value={toLines(content.principles)} onChange={(value) => setContent((current) => (current ? { ...current, principles: fromLines(value) } : current))} multiline rows={6} />
+              <Field label="URL externa para realizar relato" value={content.reportUrl ?? ""} onChange={(value) => setContent((current) => (current ? { ...current, reportUrl: value } : current))} />
+              <Field label="URL externa para acompanhar relato" value={content.followUpUrl ?? ""} onChange={(value) => setContent((current) => (current ? { ...current, followUpUrl: value } : current))} />
+            </Section>
+          ) : null}
+
+          {activeTab === "home" ? (
+            <Section title="Fundamentos, cultura e sigla" description="Itens institucionais exibidos no canal publico, incluindo pilares, fundamentos e explicacao da cultura.">
+              <Field label="Titulo dos fundamentos" value={content.foundationTitle ?? ""} onChange={(value) => setContent((current) => (current ? { ...current, foundationTitle: value } : current))} />
+              <Field label="Subtitulo dos fundamentos" value={content.foundationSubtitle ?? ""} onChange={(value) => setContent((current) => (current ? { ...current, foundationSubtitle: value } : current))} multiline rows={3} />
+              <div className="space-y-4">
+                {content.foundationPillars.map((item, index) => (
+                  <div key={`${index}-${item.label}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm font-semibold text-slate-900">Pilar {index + 1}</p>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setContent((current) =>
+                            current ? { ...current, foundationPillars: current.foundationPillars.filter((_, pillarIndex) => pillarIndex !== index) } : current,
+                          )
+                        }
+                        className="inline-flex items-center gap-1 text-sm font-medium text-rose-600"
+                      >
+                        <Trash2 size={14} />
+                        Remover
+                      </button>
+                    </div>
+                    <div className="mt-3 grid gap-3">
+                      <Field label="Sigla ou titulo do pilar" value={item.label} onChange={(value) => updateFoundationPillar(index, { label: value })} />
+                      <Field label="Descricao do pilar" value={item.text} onChange={(value) => updateFoundationPillar(index, { text: value })} multiline rows={4} />
+                    </div>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setContent((current) =>
+                      current ? { ...current, foundationPillars: [...current.foundationPillars, { label: "", text: "" }] } : current,
+                    )
+                  }
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900"
+                >
+                  <Plus size={16} />
+                  Adicionar pilar
+                </button>
+              </div>
+              <Field label="Titulo da cultura/sigla" value={content.steerTitle ?? ""} onChange={(value) => setContent((current) => (current ? { ...current, steerTitle: value } : current))} />
+              <Field label="Texto explicativo da cultura/sigla" value={content.steerBody ?? ""} onChange={(value) => setContent((current) => (current ? { ...current, steerBody: value } : current))} multiline rows={8} />
             </Section>
           ) : null}
 

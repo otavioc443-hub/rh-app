@@ -39,6 +39,15 @@ export type EthicsManagedPageTexts = {
 };
 
 export type EthicsManagedContent = {
+  publicationStatus: "draft" | "published" | "inactive";
+  legalNotice: string | null;
+  nonRetaliationPolicy: string | null;
+  reportTypes: string[];
+  outOfScope: string[];
+  treatmentFlow: string[];
+  analysisDeadline: string | null;
+  footerNote: string | null;
+  customPrimaryColor: string | null;
   heroTitle: string | null;
   heroSubtitle: string | null;
   heading: string | null;
@@ -243,6 +252,15 @@ function buildDefaultPageTexts(companyName: string): EthicsManagedPageTexts {
 function normalizeManagedContent(content: EthicsManagedContent): EthicsManagedContent {
   return {
     ...content,
+    publicationStatus: content.publicationStatus ?? "published",
+    legalNotice: normalizeDisplayText(content.legalNotice),
+    nonRetaliationPolicy: normalizeDisplayText(content.nonRetaliationPolicy),
+    reportTypes: normalizeStringArray(content.reportTypes),
+    outOfScope: normalizeStringArray(content.outOfScope),
+    treatmentFlow: normalizeStringArray(content.treatmentFlow),
+    analysisDeadline: normalizeDisplayText(content.analysisDeadline),
+    footerNote: normalizeDisplayText(content.footerNote),
+    customPrimaryColor: normalizeDisplayText(content.customPrimaryColor),
     heroTitle: normalizeDisplayText(content.heroTitle),
     heroSubtitle: normalizeDisplayText(content.heroSubtitle),
     heading: normalizeDisplayText(content.heading),
@@ -273,6 +291,33 @@ export function getDefaultEthicsManagedContent(companyName: string, companyKey?:
 
   if (isSolida) {
     return normalizeManagedContent({
+      publicationStatus: "published",
+      legalNotice:
+        "Este canal deve ser utilizado com responsabilidade, boa-fe e compromisso com a verdade dos fatos relatados.",
+      nonRetaliationPolicy:
+        "A empresa nao tolera qualquer forma de retaliacao contra pessoas que realizem relatos de boa-fe ou colaborem com apuracoes internas.",
+      reportTypes: [
+        "Assedio moral ou sexual",
+        "Discriminacao",
+        "Fraude, corrupcao ou conflito de interesses",
+        "Violacao de politicas internas",
+        "Conduta antiética ou irregularidade legal",
+      ],
+      outOfScope: [
+        "Solicitacoes de suporte operacional ou atendimento ao cliente",
+        "Demandas de RH que ja possuam canal proprio",
+        "Duvidas comerciais ou reclamacoes sem relacao com etica e integridade",
+      ],
+      treatmentFlow: [
+        "Recebimento e registro do relato",
+        "Triagem inicial e classificacao do risco",
+        "Apuracao por pessoas autorizadas",
+        "Deliberacao e tratativas cabiveis",
+        "Registro de encerramento e acompanhamento quando aplicavel",
+      ],
+      analysisDeadline: "Os prazos podem variar conforme gravidade, complexidade e necessidade de apuracao.",
+      footerNote: "Canal oficial de etica, integridade e protecao de dados.",
+      customPrimaryColor: null,
       heroTitle: "Bem-vindo ao Canal de Ã‰tica da SÃ³lida",
       heroSubtitle:
         "Um ambiente seguro, imparcial e protegido para comunicar condutas que possam violar o CÃ³digo de Ã‰tica e Conduta, as polÃ­ticas internas ou a legislaÃ§Ã£o aplicÃ¡vel.",
@@ -322,6 +367,32 @@ export function getDefaultEthicsManagedContent(companyName: string, companyKey?:
   }
 
   return normalizeManagedContent({
+    publicationStatus: "published",
+    legalNotice:
+      "Este canal deve ser utilizado com responsabilidade, boa-fe e compromisso com a verdade dos fatos relatados.",
+    nonRetaliationPolicy:
+      "A empresa nao tolera retaliacao contra relatos feitos de boa-fe ou contra pessoas que colaborem com apuracoes.",
+    reportTypes: [
+      "Assedio moral ou sexual",
+      "Discriminacao",
+      "Fraude, corrupcao ou conflito de interesses",
+      "Violacao de politicas internas",
+      "Conduta antiética ou irregularidade legal",
+    ],
+    outOfScope: [
+      "Atendimento ao cliente, suporte operacional ou solicitacoes comerciais",
+      "Demandas sem relacao com etica, integridade ou conformidade",
+    ],
+    treatmentFlow: [
+      "Recebimento do relato",
+      "Triagem e classificacao",
+      "Apuracao por pessoas autorizadas",
+      "Tratativas cabiveis",
+      "Encerramento e acompanhamento quando aplicavel",
+    ],
+    analysisDeadline: "Os prazos variam conforme a complexidade e a necessidade de apuracao.",
+    footerNote: "Canal oficial de etica e integridade.",
+    customPrimaryColor: null,
     heroTitle: `Canal de Ã‰tica de ${companyName}`,
     heroSubtitle:
       "Um espaÃ§o preparado para receber relatos com seriedade, sigilo, imparcialidade e orientaÃ§Ã£o para apuraÃ§Ã£o.",
@@ -387,6 +458,27 @@ export function mergeEthicsManagedContent(
   return {
     ...base,
     ...overrides,
+    publicationStatus:
+      overrides.publicationStatus === "draft" || overrides.publicationStatus === "inactive" || overrides.publicationStatus === "published"
+        ? overrides.publicationStatus
+        : base.publicationStatus,
+    legalNotice: clean(overrides.legalNotice) ?? base.legalNotice,
+    nonRetaliationPolicy: clean(overrides.nonRetaliationPolicy) ?? base.nonRetaliationPolicy,
+    reportTypes:
+      Array.isArray(overrides.reportTypes) && overrides.reportTypes.length
+        ? overrides.reportTypes.map((item) => normalizeDisplayText(item) ?? "").filter(Boolean)
+        : base.reportTypes,
+    outOfScope:
+      Array.isArray(overrides.outOfScope) && overrides.outOfScope.length
+        ? overrides.outOfScope.map((item) => normalizeDisplayText(item) ?? "").filter(Boolean)
+        : base.outOfScope,
+    treatmentFlow:
+      Array.isArray(overrides.treatmentFlow) && overrides.treatmentFlow.length
+        ? overrides.treatmentFlow.map((item) => normalizeDisplayText(item) ?? "").filter(Boolean)
+        : base.treatmentFlow,
+    analysisDeadline: clean(overrides.analysisDeadline) ?? base.analysisDeadline,
+    footerNote: clean(overrides.footerNote) ?? base.footerNote,
+    customPrimaryColor: clean(overrides.customPrimaryColor) ?? base.customPrimaryColor,
     heroTitle: clean(overrides.heroTitle) ?? base.heroTitle,
     heroSubtitle: clean(overrides.heroSubtitle) ?? base.heroSubtitle,
     heading: clean(overrides.heading) ?? base.heading,
