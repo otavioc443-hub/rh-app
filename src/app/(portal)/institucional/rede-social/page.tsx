@@ -3953,7 +3953,10 @@ export default function InternalSocialPage() {
                       {post.attachments.length ? (
                         <div className="mt-4 grid gap-3">
                           {post.attachments.map((attachment) => (
-                            <div key={attachment.id} className="inline-flex max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                            <div
+                              key={attachment.id}
+                              className="flex w-full max-w-full items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"
+                            >
                               {(() => {
                                 const mediaUrl = attachment.resolvedUrl || attachment.url;
                                 const imageReady = canRenderImageUrl(mediaUrl);
@@ -3964,12 +3967,12 @@ export default function InternalSocialPage() {
                                     width={1200}
                                     height={900}
                                     unoptimized
-                                    className="h-auto max-h-[420px] w-auto max-w-full bg-white object-contain sm:max-w-[560px]"
+                                    className="mx-auto h-auto max-h-[520px] w-auto max-w-full object-contain"
                                   />
                                 ) : attachment.type === "video" && imageReady ? (
                                   <video
                                     controls
-                                    className="h-auto max-h-[420px] w-auto max-w-full bg-slate-950 sm:max-w-[560px]"
+                                    className="mx-auto h-auto max-h-[520px] w-auto max-w-full bg-slate-950 object-contain"
                                     src={mediaUrl}
                                   />
                                 ) : (
@@ -4143,7 +4146,10 @@ export default function InternalSocialPage() {
                                         (isAbsoluteUrl(attachmentRef) ? attachmentRef : attachmentRef);
                                       const attachmentType = inferAttachmentTypeFromUrl(attachmentRef);
                                       return (
-                                        <div key={`${comment.id}-${attachmentRef}`} className="inline-block max-w-full overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                                        <div
+                                          key={`${comment.id}-${attachmentRef}`}
+                                          className="flex w-full max-w-[460px] items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-white"
+                                        >
                                           {attachmentType === "image" ? (
                                             <Image
                                               src={attachmentUrl}
@@ -4151,10 +4157,10 @@ export default function InternalSocialPage() {
                                               width={900}
                                               height={700}
                                               unoptimized
-                                              className="max-h-[260px] w-full max-w-[460px] object-contain"
+                                              className="mx-auto max-h-[260px] w-auto max-w-full object-contain"
                                             />
                                           ) : attachmentType === "video" ? (
-                                            <video src={attachmentUrl} controls className="max-h-[260px] w-full max-w-[460px] bg-slate-950" />
+                                            <video src={attachmentUrl} controls className="mx-auto max-h-[260px] w-auto max-w-full bg-slate-950 object-contain" />
                                           ) : (
                                             <a
                                               href={attachmentUrl}
