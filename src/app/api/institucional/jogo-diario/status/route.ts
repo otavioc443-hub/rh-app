@@ -12,6 +12,7 @@ import {
   hasCompletedEngagementGameToday,
   isWeekendDate,
   isEngagementGameAdmin,
+  loadEngagementGameDepartmentRanking,
   loadEngagementGameLeaderboard,
   loadEngagementGamePlayerOfDay,
   loadEngagementGameRankPosition,
@@ -29,8 +30,9 @@ export async function GET(req: Request) {
 
     await syncEngagementGameResets();
     const [player, isAdmin] = await Promise.all([ensureEngagementGamePlayer(user.id), isEngagementGameAdmin(user.id)]);
-    const [leaderboard, rankPosition, playerOfDay, recentHistoryRes] = await Promise.all([
+    const [leaderboard, departmentRanking, rankPosition, playerOfDay, recentHistoryRes] = await Promise.all([
       loadEngagementGameLeaderboard(player.company_id, user.id),
+      loadEngagementGameDepartmentRanking(player.company_id, player.department_name),
       loadEngagementGameRankPosition(player.company_id, user.id),
       loadEngagementGamePlayerOfDay(player.company_id),
       supabaseAdmin
@@ -90,6 +92,7 @@ export async function GET(req: Request) {
         rankPosition,
       },
       leaderboard,
+      departmentRanking,
       playerOfDay,
       recentHistory: recentHistoryRes.data ?? [],
       message,

@@ -17,6 +17,7 @@ import {
   isWeekendDate,
   isEngagementGameAdmin,
   loadEngagementGameLeaderboard,
+  loadEngagementGameDepartmentRanking,
   loadEngagementGameRankPosition,
   normalizeEngagementGameSlug,
   syncEngagementGameResets,
@@ -219,8 +220,9 @@ export async function POST(req: Request) {
     });
     if (historyError) throw new Error(historyError.message);
 
-    const [leaderboard, rankPosition] = await Promise.all([
+    const [leaderboard, departmentRanking, rankPosition] = await Promise.all([
       loadEngagementGameLeaderboard(player.company_id, user.id),
+      loadEngagementGameDepartmentRanking(player.company_id, player.department_name),
       loadEngagementGameRankPosition(player.company_id, user.id),
     ]);
 
@@ -249,6 +251,7 @@ export async function POST(req: Request) {
         }),
       },
       leaderboard,
+      departmentRanking,
       config: difficultyConfig,
     });
   } catch (error) {

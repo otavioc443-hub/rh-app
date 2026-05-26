@@ -24,6 +24,7 @@ import {
   DAILY_GAME_TITLE,
   formatCompactPoints,
   type DailyGameHit,
+  type DailyGameDepartmentRankingEntry,
   type DailyDifficultyKey,
   type DailyGameLeaderboardEntry,
   type DailyGameRound,
@@ -61,6 +62,7 @@ type StatusResponse = {
     rankPosition: number | null;
   };
   leaderboard: DailyGameLeaderboardEntry[];
+  departmentRanking: DailyGameDepartmentRankingEntry[];
   playerOfDay: {
     userId: string;
     displayName: string;
@@ -111,6 +113,7 @@ type SubmitResponse = {
     shareText: string;
   };
   leaderboard: DailyGameLeaderboardEntry[];
+  departmentRanking: DailyGameDepartmentRankingEntry[];
 };
 
 type ShareMode = "community" | "message_group" | "direct";
@@ -237,6 +240,76 @@ function CompactLeaderboard({
   );
 }
 
+function DepartmentLeaderboard({
+  ranking,
+}: {
+  ranking: DailyGameDepartmentRankingEntry[];
+}) {
+  return (
+    <div className="space-y-2.5">
+      {ranking.length ? (
+        ranking.map((entry) => (
+          <div
+            key={entry.departmentName}
+            className={clsx(
+              "flex items-center justify-between gap-3 rounded-2xl border px-3 py-3",
+              entry.rankPosition === 1 ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50",
+              entry.isCurrentUserDepartment && "ring-2 ring-emerald-500/20"
+            )}
+          >
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-bold text-slate-900 shadow-sm">
+                  {entry.rankPosition}
+                </span>
+                <p className="truncate text-sm font-semibold text-slate-900">{entry.departmentName}</p>
+              </div>
+              <p className="mt-1 truncate text-xs text-slate-500">
+                {entry.playerCount} jogador(es) - media {formatCompactPoints(entry.averageScore)}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-semibold text-slate-900">{formatCompactPoints(entry.scoreCurrent)}</p>
+              <p className="text-[11px] text-slate-500">pontos do setor</p>
+            </div>
+          </div>
+        ))
+      ) : (
+        <p className="text-sm text-slate-500">O ranking por setores aparecera apos as primeiras rodadas.</p>
+      )}
+    </div>
+  );
+}
+
+function RankingModeTabs({
+  mode,
+  onChange,
+}: {
+  mode: "players" | "departments";
+  onChange: (mode: "players" | "departments") => void;
+}) {
+  return (
+    <div className="inline-flex rounded-2xl border border-slate-200 bg-slate-50 p-1">
+      {[
+        { id: "players", label: "Pessoas" },
+        { id: "departments", label: "Setores" },
+      ].map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          onClick={() => onChange(item.id as "players" | "departments")}
+          className={clsx(
+            "rounded-xl px-3 py-1.5 text-xs font-semibold transition",
+            mode === item.id ? "bg-slate-950 text-white shadow-sm" : "text-slate-600 hover:bg-white"
+          )}
+        >
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function PulseSprintWidget({
   className = "",
 }: {
@@ -245,6 +318,7 @@ export function PulseSprintWidget({
   const [data, setData] = useState<StatusResponse | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [rankingMode, setRankingMode] = useState<"players" | "departments">("players");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -307,9 +381,18 @@ export function PulseSprintWidget({
           ) : null}
 
           <div className="mt-5">
-            <p className="text-sm font-semibold text-slate-900">Top 5 da empresa</p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-slate-900">
+                {rankingMode === "players" ? "Top 5 da empresa" : "Ranking por setores"}
+              </p>
+              <RankingModeTabs mode={rankingMode} onChange={setRankingMode} />
+            </div>
             <div className="mt-3">
-              <CompactLeaderboard leaderboard={data.leaderboard} />
+              {rankingMode === "players" ? (
+                <CompactLeaderboard leaderboard={data.leaderboard} />
+              ) : (
+                <DepartmentLeaderboard ranking={data.departmentRanking} />
+              )}
             </div>
           </div>
         </>
@@ -333,6 +416,7 @@ export function PulseSprintPage() {
   const [gameState, setGameState] = useState<"idle" | "countdown" | "playing" | "finished">("idle");
   const [countdownValue, setCountdownValue] = useState<number | null>(null);
   const [heroCollapsed, setHeroCollapsed] = useState(false);
+  const [rankingMode, setRankingMode] = useState<"players" | "departments">("players");
   const [showIntroModal, setShowIntroModal] = useState(false);
   const [showWeekendModal, setShowWeekendModal] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
@@ -443,6 +527,7 @@ export function PulseSprintPage() {
                 rankPosition: json.result.rankPosition,
               },
               leaderboard: json.leaderboard,
+              departmentRanking: json.departmentRanking,
               message: "Rodada concluida. Seu placar de hoje ja foi registrado.",
             }
           : prev
@@ -990,13 +1075,22 @@ export function PulseSprintPage() {
               <div className="rounded-2xl bg-amber-50 p-3 text-amber-700">
                 <Crown size={20} />
               </div>
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">Top 5</p>
-                <p className="mt-1 text-lg font-semibold text-slate-900">Ranking da empresa</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">
+                  {rankingMode === "players" ? "Ranking da empresa" : "Pontuacao por setores"}
+                </p>
               </div>
             </div>
             <div className="mt-4">
-              <CompactLeaderboard leaderboard={status?.leaderboard ?? []} />
+              <RankingModeTabs mode={rankingMode} onChange={setRankingMode} />
+            </div>
+            <div className="mt-4">
+              {rankingMode === "players" ? (
+                <CompactLeaderboard leaderboard={status?.leaderboard ?? []} />
+              ) : (
+                <DepartmentLeaderboard ranking={status?.departmentRanking ?? []} />
+              )}
             </div>
           </section>
 
@@ -1295,9 +1389,18 @@ export function PulseSprintPage() {
               </div>
             </div>
             <div className="mt-5">
-              <p className="text-sm font-semibold text-slate-900">Top 5 da empresa</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-slate-900">
+                  {rankingMode === "players" ? "Top 5 da empresa" : "Ranking por setores"}
+                </p>
+                <RankingModeTabs mode={rankingMode} onChange={setRankingMode} />
+              </div>
               <div className="mt-3 max-h-[260px] overflow-auto pr-1">
-                <CompactLeaderboard leaderboard={status?.leaderboard ?? []} />
+                {rankingMode === "players" ? (
+                  <CompactLeaderboard leaderboard={status?.leaderboard ?? []} />
+                ) : (
+                  <DepartmentLeaderboard ranking={status?.departmentRanking ?? []} />
+                )}
               </div>
             </div>
             <div className="mt-5 overflow-hidden rounded-[1.75rem] border border-emerald-200 bg-[linear-gradient(135deg,#022c22_0%,#064e3b_48%,#0f172a_100%)] p-5 text-white">

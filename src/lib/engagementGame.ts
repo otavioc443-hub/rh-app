@@ -123,6 +123,16 @@ export type DailyGameLeaderboardEntry = {
   isCurrentUser?: boolean;
 };
 
+export type DailyGameDepartmentRankingEntry = {
+  departmentName: string;
+  scoreCurrent: number;
+  scoreTotal: number;
+  playerCount: number;
+  averageScore: number;
+  rankPosition: number;
+  isCurrentUserDepartment?: boolean;
+};
+
 export type DailyGamePlayerOfDay = {
   userId: string;
   displayName: string;

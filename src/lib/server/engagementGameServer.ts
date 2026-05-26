@@ -7,6 +7,7 @@ import {
   getNextBusinessDay,
   isBusinessDay,
   type DailyGameLeaderboardEntry,
+  type DailyGameDepartmentRankingEntry,
   type DailyGamePlayerOfDay,
 } from "@/lib/engagementGame";
 
@@ -42,6 +43,13 @@ type LeaderboardRow = {
   score_total: number;
   streak: number;
   rank_position: number;
+};
+
+type DepartmentRankingPlayerRow = {
+  user_id: string;
+  department_name: string | null;
+  score_current: number;
+  score_total: number;
 };
 
 export async function getAuthenticatedPortalUser(): Promise<AuthenticatedUser | null> {
@@ -222,6 +230,43 @@ export async function loadEngagementGameLeaderboard(companyId: string | null, cu
     rankPosition: Number(item.rank_position || 0),
     isCurrentUser: item.user_id === currentUserId,
   }));
+}
+
+export async function loadEngagementGameDepartmentRanking(
+  companyId: string | null,
+  currentDepartmentName?: string | null
+) {
+  if (!companyId) return [] as DailyGameDepartmentRankingEntry[];
+  const { data, error } = await supabaseAdmin
+    .from("engagement_game_players")
+    .select("user_id,department_name,score_current,score_total")
+    .eq("company_id", companyId);
+  if (error) throw new Error(error.message);
+
+  const grouped = new Map<string, { scoreCurrent: number; scoreTotal: number; playerCount: number }>();
+  for (const item of (data ?? []) as DepartmentRankingPlayerRow[]) {
+    const departmentName = (item.department_name ?? "").trim() || "Setor nao informado";
+    const current = grouped.get(departmentName) ?? { scoreCurrent: 0, scoreTotal: 0, playerCount: 0 };
+    current.scoreCurrent += Number(item.score_current || 0);
+    current.scoreTotal += Number(item.score_total || 0);
+    current.playerCount += 1;
+    grouped.set(departmentName, current);
+  }
+
+  const currentDepartmentKey = (currentDepartmentName ?? "").trim() || "Setor nao informado";
+  return Array.from(grouped.entries())
+    .map(([departmentName, stats]) => ({
+      departmentName,
+      scoreCurrent: stats.scoreCurrent,
+      scoreTotal: stats.scoreTotal,
+      playerCount: stats.playerCount,
+      averageScore: stats.playerCount > 0 ? Math.round(stats.scoreCurrent / stats.playerCount) : 0,
+      rankPosition: 0,
+      isCurrentUserDepartment: departmentName === currentDepartmentKey,
+    }))
+    .sort((a, b) => b.scoreCurrent - a.scoreCurrent || b.averageScore - a.averageScore || a.departmentName.localeCompare(b.departmentName))
+    .map((item, index) => ({ ...item, rankPosition: index + 1 }))
+    .slice(0, 8);
 }
 
 export async function loadEngagementGameRankPosition(companyId: string | null, userId: string) {
