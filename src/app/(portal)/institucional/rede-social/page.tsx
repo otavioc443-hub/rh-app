@@ -125,6 +125,12 @@ type DraftAttachment = {
   storagePath?: string;
 };
 
+type MediaPreview = {
+  type: "image" | "video";
+  url: string;
+  label: string;
+};
+
 type ReactionRow = {
   id: string;
   post_id: string;
@@ -998,6 +1004,7 @@ export default function InternalSocialPage() {
   const [communityPrivate, setCommunityPrivate] = useState(false);
   const [communityAllowMemberPosts, setCommunityAllowMemberPosts] = useState(true);
   const [communityCreatorUserId, setCommunityCreatorUserId] = useState("");
+  const [mediaPreview, setMediaPreview] = useState<MediaPreview | null>(null);
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const postActionsRef = useRef<HTMLDivElement | null>(null);
   const commentActionsRef = useRef<HTMLDivElement | null>(null);
@@ -1829,6 +1836,15 @@ export default function InternalSocialPage() {
     };
   }, [me?.id]);
   /* eslint-enable react-hooks/exhaustive-deps */
+
+  useEffect(() => {
+    if (!mediaPreview) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMediaPreview(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [mediaPreview]);
 
   const profileById = useMemo(() => {
     const map = new Map<string, Profile>();
@@ -4004,20 +4020,40 @@ export default function InternalSocialPage() {
                                 const mediaUrl = attachment.resolvedUrl || attachment.url;
                                 const imageReady = canRenderImageUrl(mediaUrl);
                                 return attachment.type === "image" && imageReady ? (
-                                  <Image
-                                    src={mediaUrl}
-                                    alt={attachment.label ?? "Imagem do post"}
-                                    width={1200}
-                                    height={900}
-                                    unoptimized
-                                    className="mx-auto h-auto max-h-[520px] w-auto max-w-full object-contain"
-                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setMediaPreview({ type: "image", url: mediaUrl, label: attachment.label ?? "Imagem do post" })}
+                                    className="group relative flex w-full cursor-zoom-in items-center justify-center"
+                                    aria-label="Ampliar imagem"
+                                  >
+                                    <Image
+                                      src={mediaUrl}
+                                      alt={attachment.label ?? "Imagem do post"}
+                                      width={1200}
+                                      height={900}
+                                      unoptimized
+                                      className="mx-auto h-auto max-h-[520px] w-auto max-w-full object-contain"
+                                    />
+                                    <span className="pointer-events-none absolute right-3 top-3 rounded-full bg-slate-950/75 px-3 py-1 text-xs font-semibold text-white opacity-0 transition group-hover:opacity-100">
+                                      Ampliar
+                                    </span>
+                                  </button>
                                 ) : attachment.type === "video" && imageReady ? (
-                                  <video
-                                    controls
-                                    className="mx-auto h-auto max-h-[520px] w-auto max-w-full bg-slate-950 object-contain"
-                                    src={mediaUrl}
-                                  />
+                                  <div className="group relative flex w-full items-center justify-center">
+                                    <video
+                                      controls
+                                      onClick={() => setMediaPreview({ type: "video", url: mediaUrl, label: attachment.label ?? "Video do post" })}
+                                      className="mx-auto h-auto max-h-[520px] w-auto max-w-full cursor-zoom-in bg-slate-950 object-contain"
+                                      src={mediaUrl}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => setMediaPreview({ type: "video", url: mediaUrl, label: attachment.label ?? "Video do post" })}
+                                      className="absolute right-3 top-3 rounded-full bg-slate-950/75 px-3 py-1 text-xs font-semibold text-white opacity-0 transition hover:bg-slate-950 group-hover:opacity-100"
+                                    >
+                                      Ampliar
+                                    </button>
+                                  </div>
                                 ) : (
                                   <a
                                     href={canRenderImageUrl(mediaUrl) ? mediaUrl : "#"}
@@ -6017,6 +6053,45 @@ export default function InternalSocialPage() {
                 {busy ? "Salvando..." : "Salvar"}
               </button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {mediaPreview ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/90 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label={mediaPreview.label}
+          onClick={() => setMediaPreview(null)}
+        >
+          <div className="absolute left-4 top-4 max-w-[calc(100vw-7rem)] text-white">
+            <p className="truncate text-sm font-semibold">{mediaPreview.label}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setMediaPreview(null)}
+            className="absolute right-4 top-4 inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-white/10 text-3xl leading-none text-white transition hover:bg-white/20"
+            aria-label="Fechar visualização"
+          >
+            ×
+          </button>
+          <div className="flex max-h-[88vh] w-full max-w-6xl items-center justify-center" onClick={(event) => event.stopPropagation()}>
+            {mediaPreview.type === "image" ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={mediaPreview.url}
+                alt={mediaPreview.label}
+                className="max-h-[88vh] max-w-full rounded-2xl object-contain shadow-[0_30px_90px_-32px_rgba(0,0,0,0.8)]"
+              />
+            ) : (
+              <video
+                src={mediaPreview.url}
+                controls
+                autoPlay
+                className="max-h-[88vh] max-w-full rounded-2xl bg-black shadow-[0_30px_90px_-32px_rgba(0,0,0,0.8)]"
+              />
+            )}
           </div>
         </div>
       ) : null}
