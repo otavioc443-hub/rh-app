@@ -1851,7 +1851,11 @@ export default function InternalSocialPage() {
     (post: PostRow) => {
       const authorProfile = profileById.get(post.author_user_id);
       const targetCompanyId = post.audience_type === "company" ? post.audience_company_id || authorProfile?.company_id : authorProfile?.company_id;
-      const company = targetCompanyId ? companyById.get(targetCompanyId) : null;
+      const companyByName =
+        companies.find((item) => normalizeCompanyName(item.name) === normalizeCompanyName(post.author_name)) ??
+        companies.find((item) => normalizeCompanyName(item.name) === normalizeCompanyName(post.audience_label)) ??
+        null;
+      const company = (targetCompanyId ? companyById.get(targetCompanyId) : null) ?? companyByName;
       const companyName = (company?.name ?? "").trim();
       const companyLogoUrl = (company?.logo_url ?? "").trim();
       const isOfficial = isOfficialPostType(post.post_type);
@@ -1866,7 +1870,7 @@ export default function InternalSocialPage() {
         isCompanyBrand: isOfficial,
       };
     },
-    [collaboratorNameByUserId, companyById, profileById]
+    [collaboratorNameByUserId, companies, companyById, profileById]
   );
   const composerMentionOptions = useMemo(() => {
     const term = mentionQuery.trim().toLowerCase();
