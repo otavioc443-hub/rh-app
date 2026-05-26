@@ -452,7 +452,7 @@ function postTypeLabel(value: PostType | string | null | undefined) {
 }
 
 function isOfficialPostType(value: PostType | string | null | undefined) {
-  return value === "announcement" || value === "campaign";
+  return value === "announcement" || value === "campaign" || value === "event" || value === "recognition";
 }
 
 function roleOfficialLabel(role: string | null | undefined) {
@@ -3833,9 +3833,10 @@ export default function InternalSocialPage() {
                           <div className="flex items-center gap-3">
                             <div className={`relative h-12 w-12 overflow-hidden ${publisher.isCompanyBrand ? "rounded-xl border border-slate-200 bg-white" : "rounded-full"}`}>
                               {authorAvatar ? (
-                                <div
-                                  className={`h-full w-full bg-center ${publisher.isCompanyBrand ? "bg-contain bg-no-repeat" : "rounded-full bg-cover"}`}
-                                  style={{ backgroundImage: `url(${authorAvatar})` }}
+                                <img
+                                  src={authorAvatar}
+                                  alt={authorName}
+                                  className={`h-full w-full bg-white ${publisher.isCompanyBrand ? "object-contain p-1" : "rounded-full object-cover"}`}
                                 />
                               ) : (
                                 <div className={`flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-900 to-blue-700 text-sm font-semibold text-white ${publisher.isCompanyBrand ? "rounded-xl" : "rounded-full"}`}>
@@ -4689,7 +4690,7 @@ export default function InternalSocialPage() {
                             <div className="flex min-w-0 items-center gap-2.5">
                               <div className="h-9 w-9 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white">
                                 {publisher.avatarUrl ? (
-                                  <div className="h-full w-full bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url(${publisher.avatarUrl})` }} />
+                                  <img src={publisher.avatarUrl} alt={publisher.name} className="h-full w-full bg-white object-contain p-1" />
                                 ) : (
                                   <div className="flex h-full w-full items-center justify-center bg-slate-900 text-[11px] font-semibold text-white">
                                     {initials(publisher.name)}
