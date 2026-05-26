@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { CalendarClock, CheckCircle2, Clock3, XCircle, RefreshCcw } from "lucide-react";
+import { CalendarClock, CheckCircle2, Clock3, XCircle, RefreshCcw, Archive } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import type { AbsenceRequest, Allowance } from "@/lib/absence";
-import { addDays, diffDaysInclusive, toISODate } from "@/lib/absence";
+import { diffDaysInclusive, toISODate } from "@/lib/absence";
 import AbsenceCalendar from "@/components/agenda/AbsenceCalendar";
 
 function KpiCard({
@@ -53,10 +53,41 @@ function fmtBR(iso: string) {
   return new Date(y, m - 1, d).toLocaleDateString("pt-BR");
 }
 
+function normalizeText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function isTakenAbsence(request: Pick<AbsenceRequest, "end_date" | "manager_comment" | "reason">) {
+  const marker = normalizeText(`${request.manager_comment ?? ""} ${request.reason ?? ""}`);
+  if (marker.includes("ja tirada") || marker.includes("ja tirado") || marker.includes("efetivamente tirada")) return true;
+  return request.end_date < toISODate(new Date());
+}
+
+function timingLabel(request: Pick<AbsenceRequest, "end_date" | "manager_comment" | "reason">) {
+  return isTakenAbsence(request) ? "Ja tirada" : "Programada";
+}
+
+function allowanceStart(allowance: Allowance) {
+  return allowance.window_start ?? allowance.valid_from;
+}
+
+function allowanceEnd(allowance: Allowance) {
+  return allowance.window_end ?? allowance.valid_to;
+}
+
+function allowanceDays(allowance: Allowance) {
+  return Number(allowance.days_allowed ?? allowance.max_days ?? 0) || 0;
+}
+
 export default function AusenciasProgramadasPage() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
   const [myAllowance, setMyAllowance] = useState<Allowance | null>(null);
+  const [myAllowances, setMyAllowances] = useState<Allowance[]>([]);
   const [myRequests, setMyRequests] = useState<AbsenceRequest[]>([]);
   const [savingRequestId, setSavingRequestId] = useState<string | null>(null);
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
@@ -84,10 +115,12 @@ export default function AusenciasProgramadasPage() {
         .eq("user_id", user.id)
         .eq("is_active", true)
         .order("created_at", { ascending: false })
-        .limit(1);
+        .limit(20);
       if (allowanceErr) throw allowanceErr;
 
-      setMyAllowance((allowances?.[0] as Allowance | undefined) ?? null);
+      const allowanceRows = (allowances ?? []) as Allowance[];
+      setMyAllowances(allowanceRows);
+      setMyAllowance(allowanceRows[0] ?? null);
 
       const { data: requests, error: reqErr } = await supabase
         .from("absence_requests")
@@ -100,6 +133,7 @@ export default function AusenciasProgramadasPage() {
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao carregar ausencias.");
       setMyAllowance(null);
+      setMyAllowances([]);
       setMyRequests([]);
     } finally {
       setLoading(false);
@@ -116,20 +150,24 @@ export default function AusenciasProgramadasPage() {
       .reduce((acc, r) => acc + (r.days_count ?? 0), 0);
   }, [myRequests]);
 
+  const takenUsed = useMemo(() => {
+    return myRequests
+      .filter((r) => r.status === "approved" && isTakenAbsence(r))
+      .reduce((acc, r) => acc + (r.days_count ?? 0), 0);
+  }, [myRequests]);
+
+  const scheduledUsed = useMemo(() => {
+    return myRequests
+      .filter((r) => r.status === "approved" && !isTakenAbsence(r))
+      .reduce((acc, r) => acc + (r.days_count ?? 0), 0);
+  }, [myRequests]);
+
   const pendingCount = useMemo(
     () => myRequests.filter((r) => r.status === "pending_manager").length,
     [myRequests]
   );
 
-  const approved30 = useMemo(() => {
-    const today = toISODate(new Date());
-    const in30 = toISODate(addDays(new Date(), 30));
-    return myRequests.filter(
-      (r) => r.status === "approved" && r.start_date <= in30 && r.end_date >= today
-    ).length;
-  }, [myRequests]);
-
-  const daysAllowed = myAllowance?.max_days ?? 0;
+  const daysAllowed = myAllowance ? allowanceDays(myAllowance) : 0;
   const daysRemaining = Math.max(0, daysAllowed - approvedUsed);
 
   function startEditRequest(r: AbsenceRequest) {
@@ -152,7 +190,7 @@ export default function AusenciasProgramadasPage() {
     if (!editStartDate || !editEndDate) return setMsg("Informe inicio e fim.");
     if (editEndDate < editStartDate) return setMsg("Data final nao pode ser menor que a inicial.");
     if (myAllowance) {
-      if (editStartDate < myAllowance.valid_from || editEndDate > myAllowance.valid_to) {
+      if (editStartDate < allowanceStart(myAllowance) || editEndDate > allowanceEnd(myAllowance)) {
         return setMsg("Periodo fora da janela liberada pelo RH.");
       }
     }
@@ -239,16 +277,18 @@ export default function AusenciasProgramadasPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <KpiCard label="Dias liberados" value={String(daysAllowed)} icon={CalendarClock} />
-        <KpiCard label="Solicitacoes pendentes" value={String(pendingCount)} icon={Clock3} />
-        <KpiCard label="Aprovadas (30 dias)" value={String(approved30)} icon={CheckCircle2} />
+        <KpiCard label="Programadas" value={String(scheduledUsed)} icon={Clock3} />
+        <KpiCard label="Ja tiradas" value={String(takenUsed)} icon={Archive} />
+        <KpiCard label="Pendentes" value={String(pendingCount)} icon={CheckCircle2} />
       </div>
 
       {myAllowance ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
-          Janela liberada: <b>{fmtBR(myAllowance.valid_from)}</b> ate <b>{fmtBR(myAllowance.valid_to)}</b> | Cota:
-          <b> {daysAllowed}</b> dia(s) | Usado: <b>{approvedUsed}</b> | Restante: <b>{daysRemaining}</b>
+          Janela liberada: <b>{fmtBR(allowanceStart(myAllowance))}</b> ate <b>{fmtBR(allowanceEnd(myAllowance))}</b> | Cota:
+          <b> {daysAllowed}</b> dia(s) | Programado: <b>{scheduledUsed}</b> | Ja tirado: <b>{takenUsed}</b> |
+          Restante: <b>{daysRemaining}</b>
         </div>
       ) : (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
@@ -271,6 +311,50 @@ export default function AusenciasProgramadasPage() {
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
         <div className="flex items-center justify-between gap-4">
           <div>
+            <p className="text-sm font-semibold text-slate-900">Liberacoes registradas pelo RH</p>
+            <p className="mt-1 text-sm text-slate-600">Consulte as janelas e cotas que foram cadastradas para voce.</p>
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead className="bg-slate-50 text-slate-700">
+              <tr>
+                <th className="p-3">Janela</th>
+                <th className="p-3">Dias liberados</th>
+                <th className="p-3">Status</th>
+                <th className="p-3">Cadastro</th>
+              </tr>
+            </thead>
+            <tbody>
+              {myAllowances.length ? (
+                myAllowances.map((allowance) => (
+                  <tr key={allowance.id} className="border-t">
+                    <td className="p-3">{fmtBR(allowanceStart(allowance))} - {fmtBR(allowanceEnd(allowance))}</td>
+                    <td className="p-3">{allowanceDays(allowance)}</td>
+                    <td className="p-3">
+                      <span className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                        Liberada
+                      </span>
+                    </td>
+                    <td className="p-3 text-slate-600">{new Date(allowance.created_at).toLocaleDateString("pt-BR")}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="p-3 text-slate-500" colSpan={4}>
+                    Nenhuma liberacao cadastrada pelo RH para voce.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
             <p className="text-sm font-semibold text-slate-900">Minhas solicitacoes</p>
             <p className="mt-1 text-sm text-slate-600">Historico completo de pedidos de ausencia.</p>
           </div>
@@ -282,6 +366,7 @@ export default function AusenciasProgramadasPage() {
               <tr>
                 <th className="p-3">Periodo</th>
                 <th className="p-3">Dias</th>
+                <th className="p-3">Situacao</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Motivo</th>
                 <th className="p-3">Criada em</th>
@@ -317,6 +402,20 @@ export default function AusenciasProgramadasPage() {
                       </td>
                       <td className="p-3">{isEditing ? diffDaysInclusive(editStartDate, editEndDate) : r.days_count}</td>
                       <td className="p-3">
+                        {r.status === "approved" ? (
+                          <span
+                            className={[
+                              "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
+                              isTakenAbsence(r) ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700",
+                            ].join(" ")}
+                          >
+                            {timingLabel(r)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">-</span>
+                        )}
+                      </td>
+                      <td className="p-3">
                         <span
                           className={[
                             "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
@@ -339,9 +438,16 @@ export default function AusenciasProgramadasPage() {
                           ) : (
                             <div>{r.reason ?? "-"}</div>
                           )}
-                          {r.status === "rejected" && (r.manager_comment ?? "").trim() ? (
-                            <div className="rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-xs text-rose-700">
-                              Motivo da recusa: {r.manager_comment}
+                          {(r.manager_comment ?? "").trim() ? (
+                            <div
+                              className={[
+                                "rounded-lg border px-2 py-1 text-xs",
+                                r.status === "rejected"
+                                  ? "border-rose-200 bg-rose-50 text-rose-700"
+                                  : "border-slate-200 bg-slate-50 text-slate-600",
+                              ].join(" ")}
+                            >
+                              {r.status === "rejected" ? "Motivo da recusa" : "Observacao"}: {r.manager_comment}
                             </div>
                           ) : null}
                         </div>
@@ -404,7 +510,7 @@ export default function AusenciasProgramadasPage() {
                 })
               ) : (
                 <tr>
-                  <td className="p-3 text-slate-500" colSpan={6}>
+                  <td className="p-3 text-slate-500" colSpan={7}>
                     Nenhuma solicitacao para exibir.
                   </td>
                 </tr>

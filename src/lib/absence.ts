@@ -14,10 +14,14 @@ export type Allowance = {
   valid_from: string; // YYYY-MM-DD
   valid_to: string;   // YYYY-MM-DD
   max_days: number;
+  window_start?: string | null;
+  window_end?: string | null;
+  days_allowed?: number | null;
   is_active: boolean;
   notes: string | null;
   created_by: string | null;
   created_at: string;
+  updated_at?: string | null;
 };
 
 export type AbsenceStatus = "pending_manager" | "approved" | "rejected" | "cancelled";

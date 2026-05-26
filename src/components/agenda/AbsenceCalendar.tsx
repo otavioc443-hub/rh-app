@@ -34,6 +34,32 @@ function fmtBR(iso: string) {
   return new Date(y, m - 1, day).toLocaleDateString("pt-BR");
 }
 
+function normalizeText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+}
+
+function allowanceStart(allowance: Allowance) {
+  return allowance.window_start ?? allowance.valid_from;
+}
+
+function allowanceEnd(allowance: Allowance) {
+  return allowance.window_end ?? allowance.valid_to;
+}
+
+function allowanceDays(allowance: Allowance) {
+  return Number(allowance.days_allowed ?? allowance.max_days ?? 0) || 0;
+}
+
+function isTakenAbsence(request: Pick<AbsenceRequest, "end_date" | "manager_comment" | "reason">) {
+  const marker = normalizeText(`${request.manager_comment ?? ""} ${request.reason ?? ""}`);
+  if (marker.includes("ja tirada") || marker.includes("ja tirado") || marker.includes("efetivamente tirada")) return true;
+  return request.end_date < toISODate(new Date());
+}
+
 export default function AbsenceCalendar({ myAllowance, myRequests, onRefresh }: Props) {
   const [cursor, setCursor] = useState(() => new Date());
   const [startISO, setStartISO] = useState<string>(toISODate(new Date()));
@@ -66,7 +92,7 @@ export default function AbsenceCalendar({ myAllowance, myRequests, onRefresh }: 
 
   const remainingDays = useMemo(() => {
     if (!myAllowance || !myAllowance.is_active) return 0;
-    return Math.max(0, myAllowance.max_days - usedDaysApproved);
+    return Math.max(0, allowanceDays(myAllowance) - usedDaysApproved);
   }, [myAllowance, usedDaysApproved]);
 
   function statusBadge(iso: string) {
@@ -74,16 +100,17 @@ export default function AbsenceCalendar({ myAllowance, myRequests, onRefresh }: 
       (r) => r.start_date <= iso && r.end_date >= iso && r.status !== "cancelled"
     );
     if (!match) return null;
-
-    if (match.status === "approved") return <span className="ml-1 text-xs text-emerald-700">●</span>;
+    if (match.status === "approved" && isTakenAbsence(match)) return <span className="ml-1 text-xs text-emerald-700">●</span>;
+    if (match.status === "approved") return <span className="ml-1 text-xs text-blue-700">●</span>;
     if (match.status === "pending_manager") return <span className="ml-1 text-xs text-amber-700">●</span>;
     if (match.status === "rejected") return <span className="ml-1 text-xs text-rose-700">●</span>;
+
     return null;
   }
 
   function canRequest(iso: string) {
     if (!myAllowance || !myAllowance.is_active) return false;
-    if (iso < myAllowance.valid_from || iso > myAllowance.valid_to) return false;
+    if (iso < allowanceStart(myAllowance) || iso > allowanceEnd(myAllowance)) return false;
     return true;
   }
 
@@ -109,7 +136,7 @@ export default function AbsenceCalendar({ myAllowance, myRequests, onRefresh }: 
       // 2) validações: allowance
       if (!myAllowance || !myAllowance.is_active) throw new Error("Sem liberação de ausências pelo RH.");
       if (startISO > endISO) throw new Error("Data início não pode ser maior que data fim.");
-      if (startISO < myAllowance.valid_from || endISO > myAllowance.valid_to)
+      if (startISO < allowanceStart(myAllowance) || endISO > allowanceEnd(myAllowance))
         throw new Error("Período fora da janela liberada pelo RH.");
 
       const days = diffDaysInclusive(startISO, endISO);
@@ -222,9 +249,9 @@ export default function AbsenceCalendar({ myAllowance, myRequests, onRefresh }: 
             <div className="font-medium">Sua liberação</div>
             {myAllowance ? (
               <div className="mt-1 text-xs text-slate-700">
-                Janela: <b>{fmtBR(myAllowance.valid_from)}</b> → <b>{fmtBR(myAllowance.valid_to)}</b>
+                Janela: <b>{fmtBR(allowanceStart(myAllowance))}</b> - <b>{fmtBR(allowanceEnd(myAllowance))}</b>
                 <br />
-                Cota: <b>{myAllowance.max_days}</b> dia(s) • Usado: <b>{usedDaysApproved}</b> • Restante:{" "}
+                Cota: <b>{allowanceDays(myAllowance)}</b> dia(s) - Usado: <b>{usedDaysApproved}</b> - Restante:{" "}
                 <b>{remainingDays}</b>
               </div>
             ) : (
