@@ -50,6 +50,7 @@ type Row = {
 type CompanyOpt = { id: string; name: string };
 
 type Mode = "edit" | "preview";
+type EditorPanel = "hero" | "history" | "core" | "values" | "culture";
 
 type Editing =
   | null
@@ -189,6 +190,53 @@ function buttonClass(variant: "solid" | "outline" | "ghost") {
   if (variant === "outline")
     return "inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50";
   return "inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50";
+}
+
+function panelButtonClass(active: boolean) {
+  return [
+    "rounded-2xl px-4 py-2 text-sm font-semibold transition",
+    active
+      ? "bg-slate-900 text-white"
+      : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+  ].join(" ");
+}
+
+function EditorField({
+  label,
+  value,
+  onChange,
+  multiline = false,
+  rows = 4,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  multiline?: boolean;
+  rows?: number;
+  placeholder?: string;
+}) {
+  return (
+    <label className="grid gap-1 text-xs font-semibold text-slate-700">
+      {label}
+      {multiline ? (
+        <textarea
+          rows={rows}
+          value={value}
+          placeholder={placeholder}
+          onChange={(event) => onChange(event.target.value)}
+          className="min-h-[92px] rounded-2xl border border-slate-200 bg-white p-3 text-sm font-normal text-slate-900 outline-none transition focus:border-slate-400"
+        />
+      ) : (
+        <input
+          value={value}
+          placeholder={placeholder}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-normal text-slate-900 outline-none transition focus:border-slate-400"
+        />
+      )}
+    </label>
+  );
 }
 
 function newId() {
@@ -384,6 +432,7 @@ export default function RHInstitucionalPage() {
   const { loading: roleLoading, isRH, error: roleErr } = useUserRole();
 
   const [mode, setMode] = useState<Mode>("edit");
+  const [editorPanel, setEditorPanel] = useState<EditorPanel>("hero");
   const [editing, setEditing] = useState<Editing>(null);
 
   const [scope, setScope] = useState<Scope>("company");
@@ -672,6 +721,45 @@ export default function RHInstitucionalPage() {
     }
   }
 
+  function updateCultureText(kind: "mission" | "vision" | "business", value: string) {
+    const matchers =
+      kind === "mission"
+        ? ["missao", "missão"]
+        : kind === "vision"
+        ? ["visao", "visão"]
+        : ["negocio", "negócio"];
+    const title = kind === "mission" ? "Missão" : kind === "vision" ? "Visão" : "Nosso negócio";
+    setCulture((prev) => {
+      const next = [...prev];
+      const idx = next.findIndex((it) => {
+        const t = norm(it.title ?? "");
+        return matchers.some((m) => t.includes(norm(m)));
+      });
+      if (idx >= 0) next[idx] = { ...next[idx], description: value };
+      else next.push({ title, description: value });
+      return next;
+    });
+  }
+
+  function updateListItem(
+    list: "history" | "values" | "culture",
+    idx: number,
+    patch: Partial<InstitutionalItem>,
+  ) {
+    const updater = (prev: InstitutionalItem[]) => prev.map((item, i) => (i === idx ? { ...item, ...patch } : item));
+    if (list === "history") setHistory(updater);
+    if (list === "values") setValues(updater);
+    if (list === "culture") setCulture(updater);
+  }
+
+  function removeListItem(list: "history" | "values" | "culture", idx: number) {
+    const updater = (prev: InstitutionalItem[]) => prev.filter((_, i) => i !== idx);
+    if (list === "history") setHistory(updater);
+    if (list === "values") setValues(updater);
+    if (list === "culture") setCulture(updater);
+    setEditing(null);
+  }
+
   useEffect(() => {
     let alive = true;
     async function boot() {
@@ -946,6 +1034,187 @@ export default function RHInstitucionalPage() {
           </div>
         )}
       </details>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-[0_18px_42px_-32px_rgba(15,23,42,0.35)]">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">Painel de edição do conteúdo institucional</p>
+            <p className="mt-1 text-sm text-slate-600">
+              Altere textos, imagens e listas diretamente pelo frontend. Salve como rascunho e publique quando revisar.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={buttonClass("outline")} onClick={() => void saveContent()} disabled={saving}>
+              <Save size={16} /> Salvar rascunho
+            </button>
+            <button type="button" className={buttonClass("solid")} style={{ backgroundColor: SOLIDA_GREEN }} onClick={() => void publishDraft()} disabled={saving || loading}>
+              <Send size={16} /> Publicar
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+          {[
+            { id: "hero", label: "Topo" },
+            { id: "history", label: "História" },
+            { id: "core", label: "Missão e negócio" },
+            { id: "values", label: "Valores" },
+            { id: "culture", label: "Cultura" },
+          ].map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={panelButtonClass(editorPanel === item.id)}
+              onClick={() => setEditorPanel(item.id as EditorPanel)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+          {editorPanel === "hero" ? (
+            <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr),360px]">
+              <div className="grid gap-3">
+                <EditorField label="Título principal" value={title} onChange={setTitle} />
+                <EditorField label="Subtítulo" value={subtitle} onChange={setSubtitle} />
+                <EditorField label="Texto institucional / sobre" value={about} onChange={setAbout} multiline rows={7} />
+                <EditorField label="URL da imagem principal" value={heroImageUrl} onChange={setHeroImageUrl} />
+              </div>
+              <div className="rounded-3xl border border-slate-200 bg-white p-3">
+                <p className="text-xs font-semibold text-slate-700">Imagem do topo</p>
+                <p className="mt-1 text-xs text-slate-500">Clique para enviar ou arraste a imagem para ajustar o foco.</p>
+                <div className="mt-3">
+                  <ClickToUploadImage
+                    src={heroImageUrl || null}
+                    heightClass="h-56"
+                    prefix={`${scope === "company" && companyId ? companyId : "global"}/quick-hero`}
+                    label="Enviar imagem principal"
+                    focusX={heroFocusX}
+                    focusY={heroFocusY}
+                    onFocusChange={(x, y) => {
+                      setHeroFocusX(x);
+                      setHeroFocusY(y);
+                    }}
+                    onUploaded={(url) => {
+                      setHeroImageUrl(url);
+                      setHeroFocusX(50);
+                      setHeroFocusY(50);
+                      setMsg("Imagem do topo atualizada no rascunho.");
+                    }}
+                    onError={(m) => setMsg(m)}
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {editorPanel === "history" ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-slate-900">Marcos da história</p>
+                <button
+                  type="button"
+                  className={buttonClass("outline")}
+                  onClick={() => setHistory((prev) => [...prev, { year: "", title: "Novo marco", description: "", image_url: "" }])}
+                >
+                  <Plus size={16} /> Adicionar marco
+                </button>
+              </div>
+              {history.map((item, idx) => (
+                <div key={`quick-history-${idx}`} className="grid gap-3 rounded-3xl border border-slate-200 bg-white p-4 lg:grid-cols-[120px,minmax(0,1fr)]">
+                  <EditorField label="Ano" value={item.year ?? ""} onChange={(value) => updateListItem("history", idx, { year: value })} />
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <EditorField label="Título" value={item.title} onChange={(value) => updateListItem("history", idx, { title: value })} />
+                    <EditorField label="URL da imagem" value={item.image_url ?? ""} onChange={(value) => updateListItem("history", idx, { image_url: value })} />
+                    <div className="md:col-span-2">
+                      <EditorField label="Descrição" value={item.description ?? ""} onChange={(value) => updateListItem("history", idx, { description: value })} multiline rows={3} />
+                    </div>
+                    <div className="md:col-span-2 flex justify-end">
+                      <button type="button" className={buttonClass("ghost")} onClick={() => removeListItem("history", idx)}>
+                        <Trash2 size={14} /> Remover marco
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {editorPanel === "core" ? (
+            <div className="grid gap-3 lg:grid-cols-3">
+              <EditorField label="Missão" value={mission} onChange={(value) => updateCultureText("mission", value)} multiline rows={7} />
+              <EditorField label="Visão" value={vision} onChange={(value) => updateCultureText("vision", value)} multiline rows={7} />
+              <EditorField label="Nosso negócio" value={business} onChange={(value) => updateCultureText("business", value)} multiline rows={7} />
+            </div>
+          ) : null}
+
+          {editorPanel === "values" ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-slate-900">Valores e princípios</p>
+                <button
+                  type="button"
+                  className={buttonClass("outline")}
+                  onClick={() => setValues((prev) => [...prev, { title: "Novo valor", description: "", image_url: "" }])}
+                >
+                  <Plus size={16} /> Adicionar valor
+                </button>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-2">
+                {values.map((item, idx) => (
+                  <div key={`quick-value-${idx}`} className="rounded-3xl border border-slate-200 bg-white p-4">
+                    <div className="grid gap-3">
+                      <EditorField label="Título" value={item.title} onChange={(value) => updateListItem("values", idx, { title: value })} />
+                      <EditorField label="Descrição" value={item.description ?? ""} onChange={(value) => updateListItem("values", idx, { description: value })} multiline rows={3} />
+                      <EditorField label="URL da imagem" value={item.image_url ?? ""} onChange={(value) => updateListItem("values", idx, { image_url: value })} />
+                      <div className="flex justify-end">
+                        <button type="button" className={buttonClass("ghost")} onClick={() => removeListItem("values", idx)}>
+                          <Trash2 size={14} /> Remover valor
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {editorPanel === "culture" ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-slate-900">Itens de cultura na prática</p>
+                <button
+                  type="button"
+                  className={buttonClass("outline")}
+                  onClick={() => setCulture((prev) => [...prev, { title: "Novo item", description: "", image_url: "" }])}
+                >
+                  <Plus size={16} /> Adicionar item
+                </button>
+              </div>
+              <div className="grid gap-3 lg:grid-cols-2">
+                {culture.map((item, idx) => {
+                  const fixed = ["missao", "visao", "negocio"].some((word) => norm(item.title).includes(word));
+                  return (
+                    <div key={`quick-culture-${idx}`} className="rounded-3xl border border-slate-200 bg-white p-4">
+                      <div className="grid gap-3">
+                        <EditorField label="Título" value={item.title} onChange={(value) => updateListItem("culture", idx, { title: value })} />
+                        <EditorField label="Descrição" value={item.description ?? ""} onChange={(value) => updateListItem("culture", idx, { description: value })} multiline rows={3} />
+                        <EditorField label="URL da imagem" value={item.image_url ?? ""} onChange={(value) => updateListItem("culture", idx, { image_url: value })} />
+                        <div className="flex justify-end">
+                          <button type="button" className={buttonClass("ghost")} onClick={() => removeListItem("culture", idx)} disabled={fixed}>
+                            <Trash2 size={14} /> {fixed ? "Item essencial" : "Remover item"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      </section>
 
       <nav className="sticky top-0 z-20 -mx-1 rounded-2xl border border-slate-200/70 bg-white/85 px-3 py-2 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-2">
