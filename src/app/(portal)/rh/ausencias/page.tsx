@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { CalendarClock, CalendarDays, Filter, Users, Wand2 } from "lucide-react";
+import { CalendarClock, CalendarDays, ChevronLeft, ChevronRight, Filter, Printer, Users, Wand2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import Papa from "papaparse";
+
+const PAGE_SIZE = 10;
 
 type Colaborador = {
   id: string;
@@ -96,6 +98,15 @@ function csvValue(row: Record<string, unknown>, keys: string[]) {
   return "";
 }
 
+function htmlEscape(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function isTakenAbsence(request: Pick<AbsenceRequestRow, "end_date" | "manager_comment" | "reason">) {
   const marker = normalizeText(`${request.manager_comment ?? ""} ${request.reason ?? ""}`);
   if (marker.includes("ja tirada") || marker.includes("ja tirado") || marker.includes("efetivamente tirada")) return true;
@@ -148,6 +159,9 @@ export default function RHAusenciasPage() {
   const [importingCsv, setImportingCsv] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(todayISO().slice(0, 7));
+  const [summaryPage, setSummaryPage] = useState(0);
+  const [approvedPage, setApprovedPage] = useState(0);
+  const [historyPage, setHistoryPage] = useState(0);
 
   async function loadCreatorNames(rows: AllowanceHistoryRow[]) {
     const creatorIds = Array.from(new Set(rows.map((r) => r.created_by).filter(Boolean))) as string[];
@@ -337,6 +351,10 @@ export default function RHAusenciasPage() {
       return nameMatches && companyMatches && departmentMatches && hasStatus;
     });
   }, [colaboradores, companyFilter, departmentFilter, requests, statusFilter, summaryQuery]);
+
+  useEffect(() => {
+    setSummaryPage(0);
+  }, [companyFilter, departmentFilter, statusFilter, summaryQuery]);
 
   function toggleAllFiltered() {
     setSelectedMany((prev) => {
@@ -907,6 +925,36 @@ export default function RHAusenciasPage() {
     [requests],
   );
 
+  const pagedSummary = useMemo(
+    () => filteredSummary.slice(summaryPage * PAGE_SIZE, summaryPage * PAGE_SIZE + PAGE_SIZE),
+    [filteredSummary, summaryPage],
+  );
+
+  const pagedApprovedRequests = useMemo(
+    () => approvedRequests.slice(approvedPage * PAGE_SIZE, approvedPage * PAGE_SIZE + PAGE_SIZE),
+    [approvedRequests, approvedPage],
+  );
+
+  const pagedHistory = useMemo(
+    () => history.slice(historyPage * PAGE_SIZE, historyPage * PAGE_SIZE + PAGE_SIZE),
+    [history, historyPage],
+  );
+
+  useEffect(() => {
+    const maxPage = Math.max(0, Math.ceil(filteredSummary.length / PAGE_SIZE) - 1);
+    if (summaryPage > maxPage) setSummaryPage(maxPage);
+  }, [filteredSummary.length, summaryPage]);
+
+  useEffect(() => {
+    const maxPage = Math.max(0, Math.ceil(approvedRequests.length / PAGE_SIZE) - 1);
+    if (approvedPage > maxPage) setApprovedPage(maxPage);
+  }, [approvedRequests.length, approvedPage]);
+
+  useEffect(() => {
+    const maxPage = Math.max(0, Math.ceil(history.length / PAGE_SIZE) - 1);
+    if (historyPage > maxPage) setHistoryPage(maxPage);
+  }, [history.length, historyPage]);
+
   const calendarRequests = useMemo(
     () =>
       approvedRequests.filter(
@@ -924,6 +972,112 @@ export default function RHAusenciasPage() {
     }
     return map;
   }, [colaboradores]);
+
+  function printAbsenceSummary() {
+    const generatedAt = new Date().toLocaleString("pt-BR");
+    const filterLabel = [
+      `Empresa: ${companyFilter === "todos" ? "Todas" : companyFilter}`,
+      `Setor: ${departmentFilter === "todos" ? "Todos" : departmentFilter}`,
+      `Status: ${statusFilter === "todos" ? "Todos" : statusLabel(statusFilter)}`,
+      summaryQuery.trim() ? `Busca: ${summaryQuery.trim()}` : null,
+    ]
+      .filter(Boolean)
+      .join(" | ");
+
+    const summaryRows = filteredSummary
+      .map((collab) => {
+        const summary = absenceSummaryFor(collab);
+        const department = collab.departamento ?? collab.setor ?? "Sem setor";
+        return `
+          <tr>
+            <td>${htmlEscape(collab.nome ?? "Sem nome")}</td>
+            <td>${htmlEscape(collab.empresa ?? "Sem empresa")}</td>
+            <td>${htmlEscape(department)}</td>
+            <td>${summary.allowed}</td>
+            <td>${summary.scheduled}</td>
+            <td>${summary.taken}</td>
+            <td>${summary.remaining}</td>
+            <td>${summary.nextAbsence ? `${htmlEscape(fmtDate(summary.nextAbsence.start_date))} ate ${htmlEscape(fmtDate(summary.nextAbsence.end_date))}` : "-"}</td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    const requestRows = approvedRequests
+      .slice(0, 200)
+      .map(
+        (request) => `
+          <tr>
+            <td>${htmlEscape(colaboradorNomeByRef[request.user_id] ?? "Colaborador sem nome")}</td>
+            <td>${htmlEscape(fmtDate(request.start_date))} ate ${htmlEscape(fmtDate(request.end_date))}</td>
+            <td>${request.days_count ?? "-"}</td>
+            <td>${htmlEscape(timingLabel(request))}</td>
+            <td>${htmlEscape(request.reason ?? "-")}</td>
+          </tr>
+        `,
+      )
+      .join("");
+
+    const html = `<!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Relatorio de ausencias programadas</title>
+          <style>
+            body { font-family: Arial, sans-serif; color: #0f172a; margin: 32px; }
+            h1 { font-size: 22px; margin: 0 0 6px; }
+            h2 { font-size: 15px; margin: 28px 0 10px; }
+            p { margin: 4px 0; color: #475569; font-size: 12px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
+            th { background: #f8fafc; text-align: left; color: #334155; }
+            th, td { border: 1px solid #cbd5e1; padding: 8px; vertical-align: top; }
+            .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 18px; }
+            .kpi { border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px; }
+            .kpi b { display: block; font-size: 18px; margin-top: 4px; }
+            @media print { body { margin: 18mm; } .page-break { page-break-before: always; } }
+          </style>
+        </head>
+        <body>
+          <h1>Relatorio de resumo de ausencias programadas</h1>
+          <p>Gerado em ${htmlEscape(generatedAt)}</p>
+          <p>${htmlEscape(filterLabel)}</p>
+          <div class="kpis">
+            <div class="kpi">Colaboradores<b>${filteredSummary.length}</b></div>
+            <div class="kpi">Liberacoes<b>${history.length}</b></div>
+            <div class="kpi">Ausencias aprovadas<b>${approvedRequests.length}</b></div>
+            <div class="kpi">Solicitacoes totais<b>${requests.length}</b></div>
+          </div>
+          <h2>Resumo por colaborador</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Colaborador</th><th>Empresa</th><th>Setor</th><th>Liberado</th>
+                <th>Programado</th><th>Ja tirado</th><th>Saldo</th><th>Proxima ausencia</th>
+              </tr>
+            </thead>
+            <tbody>${summaryRows || '<tr><td colspan="8">Nenhum registro encontrado.</td></tr>'}</tbody>
+          </table>
+          <h2 class="page-break">Ausencias aprovadas</h2>
+          <table>
+            <thead>
+              <tr><th>Colaborador</th><th>Periodo</th><th>Dias</th><th>Situacao</th><th>Observacao</th></tr>
+            </thead>
+            <tbody>${requestRows || '<tr><td colspan="5">Nenhuma ausencia aprovada encontrada.</td></tr>'}</tbody>
+          </table>
+        </body>
+      </html>`;
+
+    const printWindow = window.open("", "_blank", "width=1100,height=800");
+    if (!printWindow) {
+      setMessage("Nao foi possivel abrir a janela de impressao. Verifique o bloqueador de pop-ups.");
+      return;
+    }
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  }
 
   return (
     <div className="space-y-6">
@@ -946,8 +1100,19 @@ export default function RHAusenciasPage() {
               Acompanhe dias liberados, programados e saldo por colaborador.
             </p>
           </div>
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-slate-700">
-            <Filter size={18} />
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={printAbsenceSummary}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+              title="Imprimir relatorio de resumo de ausencias programadas"
+            >
+              <Printer size={16} />
+              Imprimir relatorio
+            </button>
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-100 text-slate-700">
+              <Filter size={18} />
+            </div>
           </div>
         </div>
 
@@ -1015,7 +1180,7 @@ export default function RHAusenciasPage() {
                   <td colSpan={8} className="p-3 text-slate-500">Nenhum colaborador encontrado nos filtros.</td>
                 </tr>
               ) : (
-                filteredSummary.slice(0, 12).map((collab) => {
+                pagedSummary.map((collab) => {
                   const summary = absenceSummaryFor(collab);
                   const department = collab.departamento ?? collab.setor ?? "Sem setor";
                   return (
@@ -1041,9 +1206,7 @@ export default function RHAusenciasPage() {
             </tbody>
           </table>
         </div>
-        {filteredSummary.length > 12 ? (
-          <p className="mt-3 text-xs text-slate-500">Mostrando 12 de {filteredSummary.length}. Use os filtros para refinar a lista.</p>
-        ) : null}
+        <PaginationControls page={summaryPage} total={filteredSummary.length} onPageChange={setSummaryPage} />
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
@@ -1304,7 +1467,7 @@ export default function RHAusenciasPage() {
                   <td colSpan={8} className="p-3 text-slate-500">Nenhuma ausencia aprovada encontrada.</td>
                 </tr>
               ) : (
-                approvedRequests.slice(0, 20).map((request) => {
+                pagedApprovedRequests.map((request) => {
                   const isEditing = editingRequestId === request.id;
                   const isPreApproved = (request.manager_comment ?? "").toLowerCase().includes("rh");
                   return (
@@ -1420,6 +1583,7 @@ export default function RHAusenciasPage() {
             </tbody>
           </table>
         </div>
+        <PaginationControls page={approvedPage} total={approvedRequests.length} onPageChange={setApprovedPage} />
 
         <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1500,7 +1664,7 @@ export default function RHAusenciasPage() {
                   <td colSpan={8} className="p-3 text-slate-500">Nenhuma liberacao encontrada.</td>
                 </tr>
               ) : (
-                history.map((r) => {
+                pagedHistory.map((r) => {
                   const isEditing = editingId === r.id;
                   const start = (r.window_start ?? r.valid_from ?? "").slice(0, 10);
                   const end = (r.window_end ?? r.valid_to ?? "").slice(0, 10);
@@ -1629,6 +1793,53 @@ export default function RHAusenciasPage() {
             </tbody>
           </table>
         </div>
+        <PaginationControls page={historyPage} total={history.length} onPageChange={setHistoryPage} />
+      </div>
+    </div>
+  );
+}
+
+function PaginationControls({
+  page,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages - 1);
+  const start = total === 0 ? 0 : currentPage * PAGE_SIZE + 1;
+  const end = Math.min(total, (currentPage + 1) * PAGE_SIZE);
+
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+      <span>
+        Mostrando {start}-{end} de {total}
+      </span>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onPageChange(Math.max(0, currentPage - 1))}
+          disabled={currentPage === 0}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          title="Voltar"
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <span className="min-w-[86px] text-center font-semibold text-slate-700">
+          {currentPage + 1} de {totalPages}
+        </span>
+        <button
+          type="button"
+          onClick={() => onPageChange(Math.min(totalPages - 1, currentPage + 1))}
+          disabled={currentPage >= totalPages - 1}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+          title="Seguir"
+        >
+          <ChevronRight size={16} />
+        </button>
       </div>
     </div>
   );

@@ -10,6 +10,9 @@ type Colaborador = {
   user_id: string | null;
   nome: string | null;
   is_active: boolean | null;
+  department_id?: string | null;
+  departamento?: string | null;
+  setor?: string | null;
 };
 
 type ProfileRow = {
@@ -17,6 +20,8 @@ type ProfileRow = {
   full_name: string | null;
   role: string | null;
   manager_id: string | null;
+  company_id?: string | null;
+  department_id?: string | null;
   active: boolean | null;
 };
 
@@ -154,8 +159,8 @@ export default function GestorAusenciasPage() {
       setMeId(userId);
 
       const [profilesRes, collabRes, allowancesRes, requestsRes, membersRes] = await Promise.all([
-        supabase.from("profiles").select("id,full_name,role,manager_id,active"),
-        supabase.from("colaboradores").select("id,user_id,nome,is_active").eq("is_active", true).order("nome", { ascending: true }),
+        supabase.from("profiles").select("id,full_name,role,manager_id,company_id,department_id,active"),
+        supabase.from("colaboradores").select("*").eq("is_active", true).order("nome", { ascending: true }),
         supabase
           .from("absence_allowances")
           .select("id,user_id,collaborator_id,valid_from,valid_to,max_days,window_start,window_end,days_allowed,is_active,created_at,updated_at,created_by")
@@ -206,6 +211,16 @@ export default function GestorAusenciasPage() {
     );
   }, [profiles, meId]);
 
+  const myProfile = useMemo(
+    () => (meId ? profiles.find((p) => p.id === meId) ?? null : null),
+    [profiles, meId]
+  );
+
+  const myCollaborator = useMemo(
+    () => (meId ? colaboradores.find((c) => c.user_id === meId) ?? null : null),
+    [colaboradores, meId]
+  );
+
   const collabByUserId = useMemo(() => {
     const map = new Map<string, Colaborador>();
     for (const c of colaboradores) {
@@ -229,41 +244,59 @@ export default function GestorAusenciasPage() {
     return map;
   }, [profiles]);
 
+  function collaboratorDepartmentKey(collab: Colaborador | null | undefined) {
+    return (
+      (collab?.department_id ?? "").trim() ||
+      (collab?.departamento ?? "").trim().toLowerCase() ||
+      (collab?.setor ?? "").trim().toLowerCase()
+    );
+  }
+
+  const sameDepartmentUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    const myProfileDepartment = (myProfile?.department_id ?? "").trim();
+    const myCollabDepartment = collaboratorDepartmentKey(myCollaborator);
+    if (!myProfileDepartment && !myCollabDepartment) return ids;
+
+    for (const profile of profiles) {
+      if (profile.active === false || profile.id === meId) continue;
+      if (myProfileDepartment && profile.department_id === myProfileDepartment) ids.add(profile.id);
+    }
+
+    for (const collab of colaboradores) {
+      if (!collab.user_id || collab.user_id === meId) continue;
+      const collabDepartment = collaboratorDepartmentKey(collab);
+      if (myCollabDepartment && collabDepartment && collabDepartment === myCollabDepartment) ids.add(collab.user_id);
+      if (myProfileDepartment && collab.department_id === myProfileDepartment) ids.add(collab.user_id);
+    }
+
+    return ids;
+  }, [colaboradores, meId, myCollaborator, myProfile, profiles]);
+
   const teamUserIds = useMemo(() => {
     const ids = new Set<string>();
-    const projectIdsByMeAsGestor = new Set<string>();
     const isWideViewer = meRole === "admin" || meRole === "rh" || meRole === "diretoria";
-    for (const pm of projectMembers) {
-      if (
-        meId &&
-        pm.user_id === meId &&
-        (pm.member_role === "gestor" || pm.member_role === "coordenador")
-      ) {
-        projectIdsByMeAsGestor.add(pm.project_id);
+    if (isWideViewer) {
+      for (const profile of profiles) {
+        if (profile.active !== false && profile.id !== meId) ids.add(profile.id);
       }
-    }
-    if (isWideViewer && projectIdsByMeAsGestor.size === 0) {
-      for (const pm of projectMembers) {
-        if (pm.member_role === "colaborador" || pm.member_role === "coordenador") ids.add(pm.user_id);
+      for (const collab of colaboradores) {
+        if (collab.user_id && collab.user_id !== meId) ids.add(collab.user_id);
       }
+      return ids;
     }
-    for (const pm of projectMembers) {
-      if (!projectIdsByMeAsGestor.has(pm.project_id)) continue;
-      if (pm.user_id === meId) continue;
-      if (pm.member_role === "colaborador" || pm.member_role === "coordenador") {
-        ids.add(pm.user_id);
-      }
-    }
+
     for (const uid of directReportUserIds) ids.add(uid);
+    for (const uid of sameDepartmentUserIds) ids.add(uid);
     for (const r of requests) {
       if (meId && r.manager_id === meId) ids.add(r.user_id);
     }
     for (const a of allowances) {
       if (!a.user_id) continue;
-      if (directReportUserIds.has(a.user_id)) ids.add(a.user_id);
+      if (directReportUserIds.has(a.user_id) || sameDepartmentUserIds.has(a.user_id)) ids.add(a.user_id);
     }
     return ids;
-  }, [directReportUserIds, requests, allowances, meId, meRole, projectMembers]);
+  }, [allowances, colaboradores, directReportUserIds, meId, meRole, profiles, requests, sameDepartmentUserIds]);
 
   const teamCollaboratorIds = useMemo(() => {
     const ids = new Set<string>();
@@ -364,7 +397,7 @@ export default function GestorAusenciasPage() {
       });
     }
 
-    return rows.sort((a, b) => {
+    return rows.filter((row) => row.remaining > 0).sort((a, b) => {
       if (a.remaining !== b.remaining) return a.remaining - b.remaining; // menor saldo primeiro
       return a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" });
     });
