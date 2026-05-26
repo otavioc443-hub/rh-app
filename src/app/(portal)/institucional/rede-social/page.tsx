@@ -48,6 +48,10 @@ type CompanyBrand = {
   logo_url: string | null;
 };
 
+type PortalBrandResponse = {
+  company?: CompanyBrand | null;
+};
+
 type Group = {
   id: string;
   name: string;
@@ -910,6 +914,7 @@ export default function InternalSocialPage() {
   const [directoryScoped, setDirectoryScoped] = useState(false);
   const [collaboratorNameByUserId, setCollaboratorNameByUserId] = useState<Record<string, string>>({});
   const [companies, setCompanies] = useState<CompanyBrand[]>([]);
+  const [myCompanyBrand, setMyCompanyBrand] = useState<CompanyBrand | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [groupMembers, setGroupMembers] = useState<GroupMemberRow[]>([]);
@@ -1195,7 +1200,7 @@ export default function InternalSocialPage() {
       if (auth.error || !auth.data.user) throw new Error("Sessao invalida.");
       const userId = auth.data.user.id;
 
-      const [profilesRes, companiesRes, memberRes, msgRes, messageGroupsRes, messageGroupMembersRes, groupMessagesRes, bolaoConfigRes] = await Promise.all([
+      const [profilesRes, companiesRes, memberRes, msgRes, messageGroupsRes, messageGroupMembersRes, groupMessagesRes, bolaoConfigRes, portalBrandRes] = await Promise.all([
         supabase.from("profiles").select("id,full_name,email,company_id,role,avatar_url").order("full_name", { ascending: true }),
         supabase.from("companies").select("id,name,logo_url").order("name", { ascending: true }),
         supabase.from("project_members").select("project_id").eq("user_id", userId),
@@ -1219,6 +1224,7 @@ export default function InternalSocialPage() {
           .order("updated_at", { ascending: false })
           .limit(1)
           .maybeSingle<{ status: string | null }>(),
+        fetch("/api/me/portal-brand").then((res) => (res.ok ? res.json() : null)).catch(() => null),
       ]);
 
       const postsResWithQuickWins = await supabase
@@ -1247,7 +1253,16 @@ export default function InternalSocialPage() {
       }
 
       if (profilesRes.error) throw new Error(profilesRes.error.message);
-      const companyRows = companiesRes.error ? [] : ((companiesRes.data ?? []) as CompanyBrand[]);
+      const portalBrand = portalBrandRes as PortalBrandResponse | null;
+      const ownCompanyBrand = portalBrand?.company?.id ? portalBrand.company : null;
+      const companyRowsBase = companiesRes.error ? [] : ((companiesRes.data ?? []) as CompanyBrand[]);
+      const companyRows = ownCompanyBrand
+        ? [
+            ownCompanyBrand,
+            ...companyRowsBase.filter((company) => company.id !== ownCompanyBrand.id),
+          ]
+        : companyRowsBase;
+      setMyCompanyBrand(ownCompanyBrand);
       setCompanies(companyRows);
       if (memberRes.error) throw new Error(memberRes.error.message);
       if (postsError) throw new Error(postsError.message);
@@ -1854,6 +1869,10 @@ export default function InternalSocialPage() {
       const companyByName =
         companies.find((item) => normalizeCompanyName(item.name) === normalizeCompanyName(post.author_name)) ??
         companies.find((item) => normalizeCompanyName(item.name) === normalizeCompanyName(post.audience_label)) ??
+        (normalizeCompanyName(myCompanyBrand?.name) === normalizeCompanyName(post.author_name) ||
+        normalizeCompanyName(myCompanyBrand?.name) === normalizeCompanyName(post.audience_label)
+          ? myCompanyBrand
+          : null) ??
         null;
       const company = (targetCompanyId ? companyById.get(targetCompanyId) : null) ?? companyByName;
       const companyName = (company?.name ?? "").trim();
@@ -1870,7 +1889,7 @@ export default function InternalSocialPage() {
         isCompanyBrand: isOfficial,
       };
     },
-    [collaboratorNameByUserId, companies, companyById, profileById]
+    [collaboratorNameByUserId, companies, companyById, myCompanyBrand, profileById]
   );
   const composerMentionOptions = useMemo(() => {
     const term = mentionQuery.trim().toLowerCase();
