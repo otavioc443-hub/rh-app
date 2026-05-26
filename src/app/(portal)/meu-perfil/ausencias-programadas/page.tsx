@@ -83,6 +83,16 @@ function allowanceDays(allowance: Allowance) {
   return Number(allowance.days_allowed ?? allowance.max_days ?? 0) || 0;
 }
 
+function allowanceOverlapsRequest(allowance: Allowance, request: AbsenceRequest) {
+  return allowanceStart(allowance) <= request.end_date && request.start_date <= allowanceEnd(allowance);
+}
+
+function allowanceStatus(allowance: Allowance) {
+  if (!allowance.is_active) return { label: "Inativa", className: "bg-slate-100 text-slate-600" };
+  if (allowanceEnd(allowance) < toISODate(new Date())) return { label: "Ja tirada", className: "bg-emerald-50 text-emerald-700" };
+  return { label: "Liberada", className: "bg-blue-50 text-blue-700" };
+}
+
 export default function AusenciasProgramadasPage() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
@@ -109,18 +119,30 @@ export default function AusenciasProgramadasPage() {
         return;
       }
 
-      const { data: allowances, error: allowanceErr } = await supabase
+      const { data: myCollaborators } = await supabase
+        .from("colaboradores")
+        .select("id")
+        .eq("user_id", user.id);
+      const collaboratorIds = ((myCollaborators ?? []) as Array<{ id: string }>).map((item) => item.id).filter(Boolean);
+
+      let allowanceQuery = supabase
         .from("absence_allowances")
         .select("*")
-        .eq("user_id", user.id)
-        .eq("is_active", true)
         .order("created_at", { ascending: false })
-        .limit(20);
+        .limit(100);
+      if (collaboratorIds.length) {
+        allowanceQuery = allowanceQuery.or(`user_id.eq.${user.id},collaborator_id.in.(${collaboratorIds.join(",")})`);
+      } else {
+        allowanceQuery = allowanceQuery.eq("user_id", user.id);
+      }
+
+      const { data: allowances, error: allowanceErr } = await allowanceQuery;
       if (allowanceErr) throw allowanceErr;
 
       const allowanceRows = (allowances ?? []) as Allowance[];
+      const activeAllowance = allowanceRows.find((allowance) => allowance.is_active) ?? null;
       setMyAllowances(allowanceRows);
-      setMyAllowance(allowanceRows[0] ?? null);
+      setMyAllowance(activeAllowance);
 
       const { data: requests, error: reqErr } = await supabase
         .from("absence_requests")
@@ -150,17 +172,36 @@ export default function AusenciasProgramadasPage() {
       .reduce((acc, r) => acc + (r.days_count ?? 0), 0);
   }, [myRequests]);
 
+  const legacyAllowancesWithoutRequest = useMemo(() => {
+    const approvedRequests = myRequests.filter((request) => request.status === "approved");
+    return myAllowances.filter(
+      (allowance) => !approvedRequests.some((request) => allowanceOverlapsRequest(allowance, request)),
+    );
+  }, [myAllowances, myRequests]);
+
+  const legacyTakenUsed = useMemo(() => {
+    return legacyAllowancesWithoutRequest
+      .filter((allowance) => allowanceEnd(allowance) < toISODate(new Date()))
+      .reduce((acc, allowance) => acc + allowanceDays(allowance), 0);
+  }, [legacyAllowancesWithoutRequest]);
+
+  const legacyScheduledUsed = useMemo(() => {
+    return legacyAllowancesWithoutRequest
+      .filter((allowance) => allowance.is_active && allowanceEnd(allowance) >= toISODate(new Date()))
+      .reduce((acc, allowance) => acc + allowanceDays(allowance), 0);
+  }, [legacyAllowancesWithoutRequest]);
+
   const takenUsed = useMemo(() => {
     return myRequests
       .filter((r) => r.status === "approved" && isTakenAbsence(r))
-      .reduce((acc, r) => acc + (r.days_count ?? 0), 0);
-  }, [myRequests]);
+      .reduce((acc, r) => acc + (r.days_count ?? 0), 0) + legacyTakenUsed;
+  }, [legacyTakenUsed, myRequests]);
 
   const scheduledUsed = useMemo(() => {
     return myRequests
       .filter((r) => r.status === "approved" && !isTakenAbsence(r))
-      .reduce((acc, r) => acc + (r.days_count ?? 0), 0);
-  }, [myRequests]);
+      .reduce((acc, r) => acc + (r.days_count ?? 0), 0) + legacyScheduledUsed;
+  }, [legacyScheduledUsed, myRequests]);
 
   const pendingCount = useMemo(
     () => myRequests.filter((r) => r.status === "pending_manager").length,
@@ -168,7 +209,7 @@ export default function AusenciasProgramadasPage() {
   );
 
   const daysAllowed = myAllowance ? allowanceDays(myAllowance) : 0;
-  const daysRemaining = Math.max(0, daysAllowed - approvedUsed);
+  const daysRemaining = Math.max(0, daysAllowed - approvedUsed - legacyTakenUsed - legacyScheduledUsed);
 
   function startEditRequest(r: AbsenceRequest) {
     setEditingRequestId(r.id);
@@ -328,18 +369,29 @@ export default function AusenciasProgramadasPage() {
             </thead>
             <tbody>
               {myAllowances.length ? (
-                myAllowances.map((allowance) => (
-                  <tr key={allowance.id} className="border-t">
-                    <td className="p-3">{fmtBR(allowanceStart(allowance))} - {fmtBR(allowanceEnd(allowance))}</td>
-                    <td className="p-3">{allowanceDays(allowance)}</td>
-                    <td className="p-3">
-                      <span className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-                        Liberada
-                      </span>
-                    </td>
-                    <td className="p-3 text-slate-600">{new Date(allowance.created_at).toLocaleDateString("pt-BR")}</td>
-                  </tr>
-                ))
+                myAllowances.map((allowance) => {
+                  const status = allowanceStatus(allowance);
+                  const alreadyInRequests = myRequests.some(
+                    (request) => request.status === "approved" && allowanceOverlapsRequest(allowance, request),
+                  );
+                  return (
+                    <tr key={allowance.id} className="border-t">
+                      <td className="p-3">{fmtBR(allowanceStart(allowance))} - {fmtBR(allowanceEnd(allowance))}</td>
+                      <td className="p-3">{allowanceDays(allowance)}</td>
+                      <td className="p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${status.className}`}>
+                            {status.label}
+                          </span>
+                          {alreadyInRequests ? (
+                            <span className="text-xs text-slate-500">tambem consta no historico</span>
+                          ) : null}
+                        </div>
+                      </td>
+                      <td className="p-3 text-slate-600">{new Date(allowance.created_at).toLocaleDateString("pt-BR")}</td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
                   <td className="p-3 text-slate-500" colSpan={4}>
