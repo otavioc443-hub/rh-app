@@ -10,6 +10,7 @@ type InputRow = {
   endDate?: string;
   reason?: string | null;
   daysAllowed?: number | null;
+  alreadyTaken?: boolean | null;
 };
 
 type CollaboratorRow = {
@@ -72,7 +73,11 @@ export async function POST(request: Request) {
       const daysAllowed = Math.max(daysCount, Number(row.daysAllowed ?? daysCount) || daysCount);
       const profile = profileById.get(userId);
       const managerId = profile?.manager_id ?? access.userId;
+      const alreadyTaken = row.alreadyTaken === true;
       const reason = (row.reason ?? "").trim() || "Ausencia previamente autorizada pelo gestor e registrada pelo RH.";
+      const managerComment = alreadyTaken
+        ? "Autorizacao previa registrada pelo RH. Periodo ja tirado pelo colaborador."
+        : "Autorizacao previa registrada pelo RH. Periodo programado.";
 
       allowanceRows.push({
         user_id: userId,
@@ -96,7 +101,7 @@ export async function POST(request: Request) {
         days_count: daysCount,
         reason,
         status: "approved",
-        manager_comment: "Autorizacao previa registrada pelo RH.",
+        manager_comment: managerComment,
         decided_at: nowIso,
       });
 
@@ -107,7 +112,7 @@ export async function POST(request: Request) {
         end_date: endDate,
         days_count: daysCount,
         reason,
-        manager_comment: "Autorizacao previa registrada pelo RH.",
+        manager_comment: managerComment,
       });
     }
 

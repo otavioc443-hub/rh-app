@@ -96,6 +96,16 @@ function csvValue(row: Record<string, unknown>, keys: string[]) {
   return "";
 }
 
+function isTakenAbsence(request: Pick<AbsenceRequestRow, "end_date" | "manager_comment" | "reason">) {
+  const marker = normalizeText(`${request.manager_comment ?? ""} ${request.reason ?? ""}`);
+  if (marker.includes("ja tirada") || marker.includes("ja tirado") || marker.includes("efetivamente tirada")) return true;
+  return request.end_date < todayISO();
+}
+
+function timingLabel(request: Pick<AbsenceRequestRow, "end_date" | "manager_comment" | "reason">) {
+  return isTakenAbsence(request) ? "Ja tirada" : "Programada";
+}
+
 export default function RHAusenciasPage() {
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,6 +123,7 @@ export default function RHAusenciasPage() {
   const [windowEnd, setWindowEnd] = useState(plusDaysISO(todayISO(), 30));
   const [daysAllowed, setDaysAllowed] = useState<number>(1);
   const [preApprovedReason, setPreApprovedReason] = useState("Ausencia previamente autorizada pelo gestor.");
+  const [absenceTiming, setAbsenceTiming] = useState<"scheduled" | "taken">("scheduled");
 
   const [saving, setSaving] = useState(false);
   const [savingPreApproved, setSavingPreApproved] = useState(false);
@@ -133,9 +144,42 @@ export default function RHAusenciasPage() {
   const [requestEditStart, setRequestEditStart] = useState("");
   const [requestEditEnd, setRequestEditEnd] = useState("");
   const [requestEditReason, setRequestEditReason] = useState("");
+  const [requestEditTiming, setRequestEditTiming] = useState<"scheduled" | "taken">("scheduled");
   const [importingCsv, setImportingCsv] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(todayISO().slice(0, 7));
+
+  async function loadCreatorNames(rows: AllowanceHistoryRow[]) {
+    const creatorIds = Array.from(new Set(rows.map((r) => r.created_by).filter(Boolean))) as string[];
+    if (!creatorIds.length) {
+      setCreatorNames({});
+      return;
+    }
+
+    const [profRes, collabRes] = await Promise.all([
+      supabase.from("profiles").select("id,full_name,email").in("id", creatorIds),
+      supabase.from("colaboradores").select("user_id,nome,email").in("user_id", creatorIds),
+    ]);
+
+    const map: Record<string, string> = {};
+
+    if (!collabRes.error) {
+      for (const c of (collabRes.data ?? []) as Array<{ user_id: string | null; nome: string | null; email: string | null }>) {
+        const id = c.user_id;
+        const name = (c.nome ?? "").trim();
+        if (id && name && !name.includes("@")) map[id] = name;
+      }
+    }
+
+    if (!profRes.error) {
+      for (const p of (profRes.data ?? []) as Array<{ id: string; full_name: string | null; email: string | null }>) {
+        const name = (p.full_name ?? "").trim();
+        if (name && !name.includes("@")) map[p.id] = name;
+      }
+    }
+
+    setCreatorNames(map);
+  }
 
   useEffect(() => {
     let alive = true;
@@ -185,18 +229,7 @@ export default function RHAusenciasPage() {
       } else {
         const rows = (histRes.data ?? []) as AllowanceHistoryRow[];
         setHistory(rows);
-        const creatorIds = Array.from(new Set(rows.map((r) => r.created_by).filter(Boolean))) as string[];
-        if (creatorIds.length) {
-          const profRes = await supabase.from("profiles").select("id,full_name").in("id", creatorIds);
-          if (!profRes.error) {
-            const map: Record<string, string> = {};
-            for (const p of (profRes.data ?? []) as Array<{ id: string; full_name: string | null }>) {
-              const n = (p.full_name ?? "").trim();
-              map[p.id] = n && !n.includes("@") ? n : "Usuario sem nome";
-            }
-            setCreatorNames(map);
-          }
-        }
+        await loadCreatorNames(rows);
       }
 
       if (requestsRes.error) {
@@ -258,6 +291,16 @@ export default function RHAusenciasPage() {
     return map;
   }, [requests]);
 
+  const takenDaysByUser = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const request of requests) {
+      if (request.status !== "approved") continue;
+      if (!isTakenAbsence(request)) continue;
+      map[request.user_id] = (map[request.user_id] ?? 0) + (Number(request.days_count ?? 0) || 0);
+    }
+    return map;
+  }, [requests]);
+
   const latestAllowanceByUser = useMemo(() => {
     const map: Record<string, AllowanceHistoryRow> = {};
     for (const allowance of history) {
@@ -271,11 +314,13 @@ export default function RHAusenciasPage() {
     const allowance = collab.user_id ? latestAllowanceByUser[collab.user_id] : null;
     const allowed = Number(allowance?.days_allowed ?? allowance?.max_days ?? 0) || 0;
     const used = collab.user_id ? approvedDaysByUser[collab.user_id] ?? 0 : 0;
+    const taken = collab.user_id ? takenDaysByUser[collab.user_id] ?? 0 : 0;
+    const scheduled = Math.max(0, used - taken);
     const requested = requests.filter((request) => request.user_id === collab.user_id && request.status !== "cancelled").length;
     const nextAbsence = requests
       .filter((request) => request.user_id === collab.user_id && request.status === "approved" && request.end_date >= todayISO())
       .sort((a, b) => a.start_date.localeCompare(b.start_date))[0];
-    return { allowed, used, requested, remaining: Math.max(0, allowed - used), nextAbsence };
+    return { allowed, used, taken, scheduled, requested, remaining: Math.max(0, allowed - used), nextAbsence };
   }
 
   const filteredSummary = useMemo(() => {
@@ -484,6 +529,7 @@ export default function RHAusenciasPage() {
         endDate: windowEnd,
         daysAllowed,
         reason: preApprovedReason,
+        alreadyTaken: absenceTiming === "taken",
       }));
 
       const response = await fetch("/api/rh/ausencias/pre-approved", {
@@ -537,6 +583,7 @@ export default function RHAusenciasPage() {
           const endDate = csvValue(raw, ["fim", "data fim", "end"]);
           const reason = csvValue(raw, ["motivo", "observacao", "observação"]);
           const daysText = csvValue(raw, ["dias", "dias liberados"]);
+          const timingText = normalizeText(csvValue(raw, ["situacao", "situação", "status do periodo", "periodo"]));
           const collab = collabByName.get(normalizeText(name));
 
           if (!name || !startDate || !endDate) {
@@ -577,6 +624,7 @@ export default function RHAusenciasPage() {
             endDate,
             daysAllowed: days,
             reason: reason || "Ausencia previamente autorizada pelo gestor.",
+            alreadyTaken: timingText.includes("tirad") || timingText.includes("realizad"),
           };
         })
         .filter(Boolean);
@@ -625,7 +673,9 @@ export default function RHAusenciasPage() {
         .select("id,user_id,collaborator_id,valid_from,valid_to,max_days,window_start,window_end,days_allowed,is_active,created_by,created_at,updated_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      setHistory((data ?? []) as AllowanceHistoryRow[]);
+      const rows = (data ?? []) as AllowanceHistoryRow[];
+      setHistory(rows);
+      await loadCreatorNames(rows);
     } catch (e: unknown) {
       setHistoryMsg(e instanceof Error ? e.message : "Erro ao carregar historico.");
     } finally {
@@ -646,6 +696,7 @@ export default function RHAusenciasPage() {
     setRequestEditStart(row.start_date.slice(0, 10));
     setRequestEditEnd(row.end_date.slice(0, 10));
     setRequestEditReason(row.reason ?? "");
+    setRequestEditTiming(isTakenAbsence(row) ? "taken" : "scheduled");
     setHistoryMsg(null);
   }
 
@@ -678,6 +729,10 @@ export default function RHAusenciasPage() {
           end_date: requestEditEnd,
           days_count: days,
           reason: requestEditReason,
+          manager_comment:
+            requestEditTiming === "taken"
+              ? "Autorizacao previa registrada pelo RH. Periodo ja tirado pelo colaborador."
+              : "Autorizacao previa registrada pelo RH. Periodo programado.",
         })
         .eq("id", row.id);
       if (error) throw error;
@@ -947,7 +1002,8 @@ export default function RHAusenciasPage() {
                 <th className="p-3">Colaborador</th>
                 <th className="p-3">Empresa/Setor</th>
                 <th className="p-3">Dias liberados</th>
-                <th className="p-3">Programado/tirado</th>
+                <th className="p-3">Programado</th>
+                <th className="p-3">Ja tirado</th>
                 <th className="p-3">Saldo</th>
                 <th className="p-3">Proxima ausencia</th>
                 <th className="p-3">Solicitacoes</th>
@@ -956,7 +1012,7 @@ export default function RHAusenciasPage() {
             <tbody>
               {filteredSummary.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-3 text-slate-500">Nenhum colaborador encontrado nos filtros.</td>
+                  <td colSpan={8} className="p-3 text-slate-500">Nenhum colaborador encontrado nos filtros.</td>
                 </tr>
               ) : (
                 filteredSummary.slice(0, 12).map((collab) => {
@@ -969,7 +1025,8 @@ export default function RHAusenciasPage() {
                         {(collab.empresa ?? "Sem empresa")} · {department}
                       </td>
                       <td className="p-3">{summary.allowed}</td>
-                      <td className="p-3">{summary.used}</td>
+                      <td className="p-3">{summary.scheduled}</td>
+                      <td className="p-3">{summary.taken}</td>
                       <td className={`p-3 font-semibold ${summary.remaining <= 0 && summary.allowed > 0 ? "text-rose-700" : "text-emerald-700"}`}>
                         {summary.remaining}
                       </td>
@@ -1051,7 +1108,7 @@ export default function RHAusenciasPage() {
                           const summary = absenceSummaryFor(c);
                           return (
                             <p className="mt-0.5 text-xs text-slate-500">
-                              Liberado: {summary.allowed} dia(s) · Programado/tirado: {summary.used} · Restante: {summary.remaining}
+                              Liberado: {summary.allowed} dia(s) · Programado: {summary.scheduled} · Ja tirado: {summary.taken} · Restante: {summary.remaining}
                             </p>
                           );
                         })()}
@@ -1115,11 +1172,37 @@ export default function RHAusenciasPage() {
               <p className="mt-2 text-xs text-slate-500">
                 Use quando já houve autorização prévia do gestor/parceiro. O RH registra e aprova direto, carregando no perfil do colaborador.
               </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAbsenceTiming("scheduled")}
+                  className={`rounded-xl px-3 py-2 text-xs font-semibold ${
+                    absenceTiming === "scheduled"
+                      ? "bg-slate-900 text-white"
+                      : "border border-slate-200 bg-white text-slate-700"
+                  }`}
+                >
+                  Periodo programado
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAbsenceTiming("taken")}
+                  className={`rounded-xl px-3 py-2 text-xs font-semibold ${
+                    absenceTiming === "taken"
+                      ? "bg-emerald-600 text-white"
+                      : "border border-slate-200 bg-white text-slate-700"
+                  }`}
+                >
+                  Ja foi tirado
+                </button>
+              </div>
             </div>
             <div className="rounded-xl bg-white px-4 py-3 text-sm text-slate-600">
               Período: <b>{fmtDate(windowStart)}</b> até <b>{fmtDate(windowEnd)}</b>
               <br />
               Dias do período: <b>{diffDaysInclusiveLocal(windowStart, windowEnd)}</b>
+              <br />
+              Situacao: <b>{absenceTiming === "taken" ? "Ja tirado" : "Programado"}</b>
             </div>
           </div>
         </div>
@@ -1166,7 +1249,7 @@ export default function RHAusenciasPage() {
             <div>
               <p className="text-sm font-semibold text-slate-900">Importacao em massa por CSV</p>
               <p className="mt-1 text-xs text-slate-500">
-                Colunas aceitas: colaborador, inicio, fim, dias e motivo. As ausencias importadas entram como pre-aprovadas pelo RH.
+                Colunas aceitas: colaborador, inicio, fim, dias, motivo e situacao. Use "ja tirado" na situacao quando o periodo ja foi gozado.
               </p>
               {importMsg ? <p className="mt-2 text-sm text-slate-700">{importMsg}</p> : null}
             </div>
@@ -1208,6 +1291,7 @@ export default function RHAusenciasPage() {
                 <th className="p-3">Colaborador</th>
                 <th className="p-3">Periodo</th>
                 <th className="p-3">Dias</th>
+                <th className="p-3">Situacao</th>
                 <th className="p-3">Origem</th>
                 <th className="p-3">Status</th>
                 <th className="p-3">Observacao</th>
@@ -1217,7 +1301,7 @@ export default function RHAusenciasPage() {
             <tbody>
               {approvedRequests.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="p-3 text-slate-500">Nenhuma ausencia aprovada encontrada.</td>
+                  <td colSpan={8} className="p-3 text-slate-500">Nenhuma ausencia aprovada encontrada.</td>
                 </tr>
               ) : (
                 approvedRequests.slice(0, 20).map((request) => {
@@ -1249,6 +1333,24 @@ export default function RHAusenciasPage() {
                         )}
                       </td>
                       <td className="p-3">{isEditing ? diffDaysInclusiveLocal(requestEditStart, requestEditEnd) : request.days_count ?? "-"}</td>
+                      <td className="p-3">
+                        {isEditing ? (
+                          <select
+                            value={requestEditTiming}
+                            onChange={(e) => setRequestEditTiming(e.target.value as "scheduled" | "taken")}
+                            className="rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                          >
+                            <option value="scheduled">Programada</option>
+                            <option value="taken">Ja tirada</option>
+                          </select>
+                        ) : (
+                          <span className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                            isTakenAbsence(request) ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700"
+                          }`}>
+                            {timingLabel(request)}
+                          </span>
+                        )}
+                      </td>
                       <td className="p-3">
                         <span className="inline-flex rounded-full bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700">
                           {isPreApproved ? "Pre-aprovada RH" : "Fluxo normal"}
@@ -1409,7 +1511,7 @@ export default function RHAusenciasPage() {
                     "Colaborador sem nome";
                   const creatorName =
                     (r.created_by && creatorNames[r.created_by]) ||
-                    (r.created_by ? `Usuario ${r.created_by.slice(0, 8)}` : "-");
+                    (r.created_by ? "Usuario nao identificado" : "-");
 
                   return (
                     <tr key={r.id} className="border-t align-top">
