@@ -49,6 +49,11 @@ type CollaboratorDirectoryRow = {
   nome: string | null;
 };
 
+function isSchemaCompatError(message: string) {
+  const normalized = message.toLowerCase();
+  return normalized.includes("schema cache") || normalized.includes("column") || normalized.includes("does not exist");
+}
+
 function slugifyHandle(value: string) {
   return value
     .normalize("NFD")
@@ -186,17 +191,31 @@ async function syncPost(
   requesterUserId: string,
   body: Extract<SyncBody, { type: "post_sync" }>
 ) {
-  const { data: post, error: postError } = await supabaseUser
+  type SyncPostRow = {
+    id: string;
+    author_user_id: string;
+    audience_type: "company" | "project" | "group";
+    audience_company_id: string | null;
+    audience_project_id: string | null;
+    post_type: string | null;
+  };
+
+  const postWithCompanyRes = await supabaseUser
     .from("internal_social_posts")
-    .select("id,author_user_id,audience_type,audience_project_id,post_type")
+    .select("id,author_user_id,audience_type,audience_company_id,audience_project_id,post_type")
     .eq("id", body.postId)
-    .maybeSingle<{
-      id: string;
-      author_user_id: string;
-      audience_type: "company" | "project";
-      audience_project_id: string | null;
-      post_type: string | null;
-    }>();
+    .maybeSingle<SyncPostRow>();
+  let postError = postWithCompanyRes.error;
+  let post = postWithCompanyRes.data;
+  if (postError && isSchemaCompatError(postError.message)) {
+    const legacyPostRes = await supabaseUser
+      .from("internal_social_posts")
+      .select("id,author_user_id,audience_type,audience_project_id,post_type")
+      .eq("id", body.postId)
+      .maybeSingle<Omit<SyncPostRow, "audience_company_id">>();
+    postError = legacyPostRes.error;
+    post = legacyPostRes.data ? { ...legacyPostRes.data, audience_company_id: null } : null;
+  }
   if (postError) throw new Error(postError.message);
   if (!post?.id || post.author_user_id !== requesterUserId) {
     return NextResponse.json({ error: "Sem permissao" }, { status: 403 });
@@ -265,11 +284,11 @@ async function syncPost(
   } else {
     const { data: profiles, error: profilesError } = await supabaseUser
       .from("profiles")
-      .select("id,active")
+      .select("id,active,company_id")
       .eq("active", true);
     if (profilesError) throw new Error(profilesError.message);
-    targetUserIds = ((profiles ?? []) as Array<{ id: string; active: boolean | null }>)
-      .filter((item) => item.active === true)
+    targetUserIds = ((profiles ?? []) as Array<{ id: string; active: boolean | null; company_id: string | null }>)
+      .filter((item) => item.active === true && (!post.audience_company_id || item.company_id === post.audience_company_id))
       .map((item) => item.id);
   }
 

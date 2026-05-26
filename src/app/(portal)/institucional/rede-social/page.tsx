@@ -82,6 +82,7 @@ type PostRow = {
   author_name: string;
   author_avatar_url: string | null;
   audience_type: "company" | "project" | "group";
+  audience_company_id?: string | null;
   audience_project_id: string | null;
   audience_group_id?: string | null;
   audience_label: string;
@@ -925,6 +926,7 @@ export default function InternalSocialPage() {
   const [scopeType, setScopeType] = useState<"company" | "project" | "group">("company");
   const [projectId, setProjectId] = useState("");
   const [groupId, setGroupId] = useState("");
+  const [audienceCompanyId, setAudienceCompanyId] = useState("");
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [expandedCommentPostIds, setExpandedCommentPostIds] = useState<string[]>([]);
   const [commentAttachments, setCommentAttachments] = useState<Record<string, DraftAttachment[]>>({});
@@ -1222,7 +1224,7 @@ export default function InternalSocialPage() {
       const postsResWithQuickWins = await supabase
         .from("internal_social_posts")
         .select(
-          "id,author_user_id,author_name,author_avatar_url,audience_type,audience_project_id,audience_group_id,audience_label,text,post_type,official_author_label,hidden_at,hidden_reason,created_at"
+          "id,author_user_id,author_name,author_avatar_url,audience_type,audience_company_id,audience_project_id,audience_group_id,audience_label,text,post_type,official_author_label,hidden_at,hidden_reason,created_at"
         )
         .order("created_at", { ascending: false });
       let postsError = postsResWithQuickWins.error;
@@ -1235,6 +1237,7 @@ export default function InternalSocialPage() {
         postsError = legacyPostsRes.error;
         postRowsSource = ((legacyPostsRes.data ?? []) as PostRow[]).map((item) => ({
           ...item,
+          audience_company_id: null,
           audience_group_id: null,
           post_type: "social",
           official_author_label: null,
@@ -1835,12 +1838,20 @@ export default function InternalSocialPage() {
   );
   const canPublishOfficial = me?.role === "admin" || me?.role === "rh";
   const canManageCommunities = me?.role === "admin" || me?.role === "rh";
+  const selectedAudienceCompanyId =
+    scopeType === "company"
+      ? me?.role === "admin"
+        ? audienceCompanyId || me?.company_id || ""
+        : me?.company_id || ""
+      : "";
+  const selectedAudienceCompany = selectedAudienceCompanyId ? companyById.get(selectedAudienceCompanyId) : null;
   const canCreateCommunities =
     canManageCommunities || communityCreatorPermissions.some((item) => item.user_id === me?.id);
   const postPublisherByBrand = useCallback(
     (post: PostRow) => {
       const authorProfile = profileById.get(post.author_user_id);
-      const company = authorProfile?.company_id ? companyById.get(authorProfile.company_id) : null;
+      const targetCompanyId = post.audience_type === "company" ? post.audience_company_id || authorProfile?.company_id : authorProfile?.company_id;
+      const company = targetCompanyId ? companyById.get(targetCompanyId) : null;
       const companyName = (company?.name ?? "").trim();
       const companyLogoUrl = (company?.logo_url ?? "").trim();
       const isOfficial = isOfficialPostType(post.post_type);
@@ -1947,6 +1958,10 @@ export default function InternalSocialPage() {
 
         if (item.audience_type === "group") {
           return Boolean(item.audience_group_id && mySocialGroupIds.has(item.audience_group_id));
+        }
+
+        if (item.audience_type === "company" && item.audience_company_id) {
+          return Boolean(me?.company_id && item.audience_company_id === me.company_id);
         }
 
         const authorProfile = profileById.get(item.author_user_id);
@@ -2637,7 +2652,9 @@ export default function InternalSocialPage() {
     try {
       const normalizedPostType = canPublishOfficial ? postType : "social";
       const isOfficial = isOfficialPostType(normalizedPostType);
-      const publisherCompanyName = me.company_id ? (companyById.get(me.company_id)?.name ?? "").trim() : "";
+      const targetCompanyId = scopeType === "company" ? selectedAudienceCompanyId || me.company_id || null : null;
+      const targetCompanyName = targetCompanyId ? (companyById.get(targetCompanyId)?.name ?? "").trim() : "";
+      const publisherCompanyName = targetCompanyName || (me.company_id ? (companyById.get(me.company_id)?.name ?? "").trim() : "");
       const personalAuthorName = resolveCommentAuthorName(currentName, me, collaboratorNameByUserId[me.id]);
       const postAuthorName = isOfficial ? publisherCompanyName || officialAuthorName(me.role) || personalAuthorName : personalAuthorName;
       const postAuthorAvatarUrl = isOfficial ? null : resolvePortalAvatarUrl(me.avatar_url ?? null);
@@ -2648,6 +2665,7 @@ export default function InternalSocialPage() {
           author_name: postAuthorName,
           author_avatar_url: postAuthorAvatarUrl,
           audience_type: scopeType,
+          audience_company_id: scopeType === "company" ? targetCompanyId : null,
           audience_project_id: scopeType === "project" ? projectId || null : null,
           audience_group_id: scopeType === "group" ? groupId || null : null,
           audience_label:
@@ -2655,7 +2673,7 @@ export default function InternalSocialPage() {
               ? projects.find((item) => item.id === projectId)?.name ?? "Equipe de projeto"
               : scopeType === "group"
                 ? groups.find((item) => item.id === groupId)?.name ?? "Comunidade"
-              : "Toda a empresa",
+              : targetCompanyName || "Toda a empresa",
           text: postText.trim(),
           post_type: normalizedPostType,
           official_author_label: isOfficial ? roleOfficialLabel(me.role) : null,
@@ -2677,7 +2695,7 @@ export default function InternalSocialPage() {
                 ? projects.find((item) => item.id === projectId)?.name ?? "Equipe de projeto"
                 : scopeType === "group"
                   ? groups.find((item) => item.id === groupId)?.name ?? "Comunidade"
-                : "Toda a empresa",
+                : targetCompanyName || "Toda a empresa",
             text: postText.trim(),
           })
           .select("id")
@@ -2733,6 +2751,7 @@ export default function InternalSocialPage() {
       setScopeType("company");
       setProjectId("");
       setGroupId("");
+      setAudienceCompanyId("");
       setComposerExpanded(false);
       setShowComposerMentionPicker(false);
       setMentionQuery("");
@@ -5995,7 +6014,7 @@ export default function InternalSocialPage() {
                       ? projects.find((item) => item.id === projectId)?.name ?? "equipe de projeto"
                       : scopeType === "group"
                         ? groups.find((item) => item.id === groupId)?.name ?? "comunidade"
-                        : "toda a empresa"}
+                        : selectedAudienceCompany?.name ?? "toda a empresa"}
                   </p>
                 </div>
               </div>
@@ -6023,6 +6042,7 @@ export default function InternalSocialPage() {
                               setScopeType(next);
                               if (next !== "project") setProjectId("");
                               if (next !== "group") setGroupId("");
+                              if (next !== "company") setAudienceCompanyId("");
                             }}
                             className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900"
                           >
@@ -6043,6 +6063,23 @@ export default function InternalSocialPage() {
                               {projects.map((project) => (
                                 <option key={project.id} value={project.id}>
                                   {project.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : null}
+                        {scopeType === "company" && canPublishOfficial && me?.role === "admin" ? (
+                          <div>
+                            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Empresa de destino</p>
+                            <select
+                              value={audienceCompanyId || me?.company_id || ""}
+                              onChange={(event) => setAudienceCompanyId(event.target.value)}
+                              className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900"
+                            >
+                              <option value="">Selecione a empresa</option>
+                              {companies.map((company) => (
+                                <option key={company.id} value={company.id}>
+                                  {company.name || "Empresa sem nome"}
                                 </option>
                               ))}
                             </select>
@@ -6110,11 +6147,11 @@ export default function InternalSocialPage() {
               <div className="space-y-4 pb-2">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700">
-                  {scopeType === "project"
-                    ? `Projeto: ${projects.find((item) => item.id === projectId)?.name ?? "Selecione um projeto"}`
-                    : scopeType === "group"
-                      ? `Comunidade: ${groups.find((item) => item.id === groupId)?.name ?? "Selecione uma comunidade"}`
-                      : "Toda a empresa"}
+                    {scopeType === "project"
+                      ? `Projeto: ${projects.find((item) => item.id === projectId)?.name ?? "Selecione um projeto"}`
+                      : scopeType === "group"
+                        ? `Comunidade: ${groups.find((item) => item.id === groupId)?.name ?? "Selecione uma comunidade"}`
+                      : `Empresa: ${selectedAudienceCompany?.name ?? "Selecione a empresa"}`}
                 </span>
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-700">
                   {postType === "announcement"
@@ -6268,6 +6305,7 @@ export default function InternalSocialPage() {
                     setDraftAttachments([]);
                     setProjectId("");
                     setGroupId("");
+                    setAudienceCompanyId("");
                     setScopeType("company");
                     setPollEnabled(false);
                     setPollQuestion("");
@@ -6382,7 +6420,8 @@ export default function InternalSocialPage() {
                   uploadingMedia ||
                   (!postText.trim() && !draftAttachments.length && !pollEnabled) ||
                   (scopeType === "project" && !projectId) ||
-                  (scopeType === "group" && !groupId)
+                  (scopeType === "group" && !groupId) ||
+                  (scopeType === "company" && me?.role === "admin" && isOfficialPostType(postType) && !selectedAudienceCompanyId)
                 }
                 onClick={() => void submitPost()}
                 className="rounded-full bg-[#0a66c2] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#004182] disabled:cursor-not-allowed disabled:opacity-60"
