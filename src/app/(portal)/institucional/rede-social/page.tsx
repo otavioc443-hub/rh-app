@@ -126,9 +126,10 @@ type DraftAttachment = {
 };
 
 type MediaPreview = {
-  type: "image" | "video";
+  type: "image" | "video" | "pdf";
   url: string;
   label: string;
+  caption?: string | null;
 };
 
 type ReactionRow = {
@@ -577,6 +578,12 @@ function highlightMatch(text: string, term: string) {
   );
 }
 
+function compactText(value: string | null | undefined, max = 160) {
+  const normalized = String(value ?? "").replace(/\s+/g, " ").trim();
+  if (normalized.length <= max) return normalized;
+  return `${normalized.slice(0, Math.max(0, max - 1))}...`;
+}
+
 function splitMessageContent(text: string) {
   const lines = text.split("\n");
   const attachmentLines = lines.filter((line) => line.trim().toLowerCase().startsWith("anexo:"));
@@ -1005,6 +1012,7 @@ export default function InternalSocialPage() {
   const [communityAllowMemberPosts, setCommunityAllowMemberPosts] = useState(true);
   const [communityCreatorUserId, setCommunityCreatorUserId] = useState("");
   const [mediaPreview, setMediaPreview] = useState<MediaPreview | null>(null);
+  const [mediaCaptionExpanded, setMediaCaptionExpanded] = useState(false);
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const postActionsRef = useRef<HTMLDivElement | null>(null);
   const commentActionsRef = useRef<HTMLDivElement | null>(null);
@@ -1839,6 +1847,7 @@ export default function InternalSocialPage() {
 
   useEffect(() => {
     if (!mediaPreview) return undefined;
+    setMediaCaptionExpanded(false);
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setMediaPreview(null);
     };
@@ -4022,7 +4031,14 @@ export default function InternalSocialPage() {
                                 return attachment.type === "image" && imageReady ? (
                                   <button
                                     type="button"
-                                    onClick={() => setMediaPreview({ type: "image", url: mediaUrl, label: attachment.label ?? "Imagem do post" })}
+                                    onClick={() =>
+                                      setMediaPreview({
+                                        type: "image",
+                                        url: mediaUrl,
+                                        label: "Imagem da publicacao",
+                                        caption: post.text,
+                                      })
+                                    }
                                     className="group relative flex w-full cursor-zoom-in items-center justify-center"
                                     aria-label="Ampliar imagem"
                                   >
@@ -4042,27 +4058,58 @@ export default function InternalSocialPage() {
                                   <div className="group relative flex w-full items-center justify-center">
                                     <video
                                       controls
-                                      onClick={() => setMediaPreview({ type: "video", url: mediaUrl, label: attachment.label ?? "Video do post" })}
+                                      onClick={() =>
+                                        setMediaPreview({
+                                          type: "video",
+                                          url: mediaUrl,
+                                          label: "Video da publicacao",
+                                          caption: post.text,
+                                        })
+                                      }
                                       className="mx-auto h-auto max-h-[520px] w-auto max-w-full cursor-zoom-in bg-slate-950 object-contain"
                                       src={mediaUrl}
                                     />
                                     <button
                                       type="button"
-                                      onClick={() => setMediaPreview({ type: "video", url: mediaUrl, label: attachment.label ?? "Video do post" })}
+                                      onClick={() =>
+                                        setMediaPreview({
+                                          type: "video",
+                                          url: mediaUrl,
+                                          label: "Video da publicacao",
+                                          caption: post.text,
+                                        })
+                                      }
                                       className="absolute right-3 top-3 rounded-full bg-slate-950/75 px-3 py-1 text-xs font-semibold text-white opacity-0 transition hover:bg-slate-950 group-hover:opacity-100"
                                     >
                                       Ampliar
                                     </button>
                                   </div>
                                 ) : (
-                                  <a
-                                    href={canRenderImageUrl(mediaUrl) ? mediaUrl : "#"}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="block px-4 py-3 text-sm font-semibold text-blue-700 hover:underline"
-                                  >
-                                    {attachment.label || "Abrir anexo"}
-                                  </a>
+                                  /\.pdf(\?|#|$)/i.test(mediaUrl) && canRenderImageUrl(mediaUrl) ? (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setMediaPreview({
+                                          type: "pdf",
+                                          url: mediaUrl,
+                                          label: "Documento da publicacao",
+                                          caption: post.text,
+                                        })
+                                      }
+                                      className="block px-4 py-3 text-sm font-semibold text-blue-700 hover:underline"
+                                    >
+                                      Ver documento
+                                    </button>
+                                  ) : (
+                                    <a
+                                      href={canRenderImageUrl(mediaUrl) ? mediaUrl : "#"}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="block px-4 py-3 text-sm font-semibold text-blue-700 hover:underline"
+                                    >
+                                      {attachment.label || "Abrir anexo"}
+                                    </a>
+                                  )
                                 );
                               })()}
                             </div>
@@ -6065,9 +6112,6 @@ export default function InternalSocialPage() {
           aria-label={mediaPreview.label}
           onClick={() => setMediaPreview(null)}
         >
-          <div className="absolute left-4 top-4 max-w-[calc(100vw-7rem)] text-white">
-            <p className="truncate text-sm font-semibold">{mediaPreview.label}</p>
-          </div>
           <button
             type="button"
             onClick={() => setMediaPreview(null)}
@@ -6076,22 +6120,46 @@ export default function InternalSocialPage() {
           >
             ×
           </button>
-          <div className="flex max-h-[88vh] w-full max-w-6xl items-center justify-center" onClick={(event) => event.stopPropagation()}>
-            {mediaPreview.type === "image" ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={mediaPreview.url}
-                alt={mediaPreview.label}
-                className="max-h-[88vh] max-w-full rounded-2xl object-contain shadow-[0_30px_90px_-32px_rgba(0,0,0,0.8)]"
-              />
-            ) : (
-              <video
-                src={mediaPreview.url}
-                controls
-                autoPlay
-                className="max-h-[88vh] max-w-full rounded-2xl bg-black shadow-[0_30px_90px_-32px_rgba(0,0,0,0.8)]"
-              />
-            )}
+          <div className="flex max-h-[92vh] w-full max-w-6xl flex-col items-center justify-center gap-3" onClick={(event) => event.stopPropagation()}>
+            <div className="flex min-h-0 w-full flex-1 items-center justify-center">
+              {mediaPreview.type === "image" ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={mediaPreview.url}
+                  alt={mediaPreview.label}
+                  className="max-h-[82vh] max-w-full rounded-2xl object-contain shadow-[0_30px_90px_-32px_rgba(0,0,0,0.8)]"
+                />
+              ) : mediaPreview.type === "video" ? (
+                <video
+                  src={mediaPreview.url}
+                  controls
+                  autoPlay
+                  className="max-h-[82vh] max-w-full rounded-2xl bg-black shadow-[0_30px_90px_-32px_rgba(0,0,0,0.8)]"
+                />
+              ) : (
+                <iframe
+                  src={mediaPreview.url}
+                  title="Documento da publicacao"
+                  className="h-[82vh] w-full rounded-2xl border border-white/10 bg-white shadow-[0_30px_90px_-32px_rgba(0,0,0,0.8)]"
+                />
+              )}
+            </div>
+            {(mediaPreview.caption ?? "").trim() ? (
+              <div className="w-full max-w-3xl rounded-2xl bg-slate-950/70 px-4 py-3 text-white ring-1 ring-white/10">
+                <p className="text-sm leading-6">
+                  {mediaCaptionExpanded ? (mediaPreview.caption ?? "").trim() : compactText(mediaPreview.caption, 180)}
+                </p>
+                {(mediaPreview.caption ?? "").trim().length > 180 ? (
+                  <button
+                    type="button"
+                    onClick={() => setMediaCaptionExpanded((prev) => !prev)}
+                    className="mt-2 text-xs font-semibold text-white/80 hover:text-white"
+                  >
+                    {mediaCaptionExpanded ? "Ver menos" : "Ver mais"}
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </div>
       ) : null}
