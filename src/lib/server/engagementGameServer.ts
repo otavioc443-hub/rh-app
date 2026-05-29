@@ -45,6 +45,12 @@ type LeaderboardRow = {
   rank_position: number;
 };
 
+type LeaderboardCollaboratorRow = {
+  user_id: string | null;
+  nome: string | null;
+  cargo: string | null;
+};
+
 type DepartmentRankingPlayerRow = {
   user_id: string;
   department_name: string | null;
@@ -220,16 +226,31 @@ export async function loadEngagementGameLeaderboard(companyId: string | null, cu
     .order("rank_position", { ascending: true })
     .limit(5);
   if (error) throw new Error(error.message);
-  return ((data ?? []) as LeaderboardRow[]).map((item) => ({
+  const rows = (data ?? []) as LeaderboardRow[];
+  const userIds = rows.map((item) => item.user_id).filter(Boolean);
+  const collaboratorsRes = userIds.length
+    ? await supabaseAdmin.from("colaboradores").select("user_id,nome,cargo").in("user_id", userIds)
+    : { data: [], error: null };
+  if (collaboratorsRes.error) throw new Error(collaboratorsRes.error.message);
+  const collaboratorByUserId = new Map(
+    ((collaboratorsRes.data ?? []) as LeaderboardCollaboratorRow[])
+      .filter((item) => item.user_id)
+      .map((item) => [item.user_id as string, item] as const)
+  );
+  return rows.map((item) => {
+    const collaborator = collaboratorByUserId.get(item.user_id);
+    return {
     userId: item.user_id,
-    displayName: item.display_name,
+    displayName: (collaborator?.nome ?? "").trim() || item.display_name,
     departmentName: item.department_name,
+    roleName: (collaborator?.cargo ?? "").trim() || null,
     scoreCurrent: Number(item.score_current || 0),
     scoreTotal: Number(item.score_total || 0),
     streak: Number(item.streak || 0),
     rankPosition: Number(item.rank_position || 0),
     isCurrentUser: item.user_id === currentUserId,
-  }));
+    };
+  });
 }
 
 export async function loadEngagementGameDepartmentRanking(

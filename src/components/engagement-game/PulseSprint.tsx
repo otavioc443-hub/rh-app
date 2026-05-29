@@ -224,7 +224,7 @@ function CompactLeaderboard({
                 <p className="truncate text-sm font-semibold text-slate-900">{entry.displayName}</p>
               </div>
               <p className="mt-1 truncate text-xs text-slate-500">
-                {(entry.departmentName ?? "Area interna")} - {entry.streak} dia(s) uteis
+                {(entry.roleName ?? entry.departmentName ?? "Area interna")} - {entry.streak} dia(s) uteis
               </p>
             </div>
             <div className="text-right">

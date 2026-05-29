@@ -116,6 +116,7 @@ export type DailyGameLeaderboardEntry = {
   userId: string;
   displayName: string;
   departmentName: string | null;
+  roleName?: string | null;
   scoreCurrent: number;
   scoreTotal: number;
   streak: number;
