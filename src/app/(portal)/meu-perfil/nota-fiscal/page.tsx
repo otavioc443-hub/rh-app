@@ -63,6 +63,8 @@ const PROVIDER_LABEL: Record<IntegrationProvider, string> = {
   custom: "Outro portal",
 };
 
+const INVOICE_INTEGRATION_STANDBY = true;
+
 function statusLabel(status: InvoiceStatus) {
   if (status === "draft") return "Cadastrada";
   if (status === "submitted") return "Emitida";
@@ -245,14 +247,17 @@ export default function MeuPerfilNotaFiscalPage() {
       }));
       setAllocations(allocationData);
 
-      if (!profileRes.data) {
+      if (!profileRes.data && !INVOICE_INTEGRATION_STANDBY) {
         setOnboardingStep(1);
         setOnboardingOpen(true);
       } else {
-        setPreferredProvider(profileRes.data.preferred_provider);
-        setCnpjPrestador(profileRes.data.cnpj_prestador);
-        setSimplesNacional(profileRes.data.simples_nacional);
-        setInscricaoMunicipal(profileRes.data.inscricao_municipal ?? "");
+        setOnboardingOpen(false);
+        if (profileRes.data) {
+          setPreferredProvider(profileRes.data.preferred_provider);
+          setCnpjPrestador(profileRes.data.cnpj_prestador);
+          setSimplesNacional(profileRes.data.simples_nacional);
+          setInscricaoMunicipal(profileRes.data.inscricao_municipal ?? "");
+        }
       }
     } catch (e: unknown) {
       setInvoices([]);
@@ -673,7 +678,7 @@ export default function MeuPerfilNotaFiscalPage() {
         </div>
       </div>
 
-      {onboardingOpen ? (
+      {!INVOICE_INTEGRATION_STANDBY && onboardingOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4">
           <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl">
             <div className="mb-4 flex items-start justify-between gap-2">
