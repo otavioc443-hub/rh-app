@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, FileText, MessageCircle, Share2, Trophy } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileText, MessageCircle, Share2, Trophy } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 import { PulseSprintPage, PulseSprintWidget } from "@/components/engagement-game/PulseSprint";
@@ -1133,10 +1133,11 @@ function PdfCarousel({
             Carregando PDF...
           </div>
         ) : error ? (
-          <div className="flex max-w-xs flex-col items-center gap-2 rounded-2xl bg-white px-4 py-3 text-center text-sm font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200">
-            <FileText size={18} />
-            Pré-visualização do PDF indisponível.
-          </div>
+          <iframe
+            src={`${url}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+            title={label || "Pré-visualização do PDF"}
+            className="h-full min-h-[inherit] w-full rounded-xl border-0 bg-white"
+          />
         ) : (
           <button type="button" onClick={onOpen} className="flex max-h-full max-w-full cursor-zoom-in items-center justify-center" aria-label="Ampliar PDF">
             <canvas ref={canvasRef} className="mx-auto max-h-full max-w-full rounded-xl bg-white shadow-sm" />
@@ -1169,18 +1170,6 @@ function PdfCarousel({
         <FileText size={14} />
         <span>{pageCount > 0 ? `${pageNumber}/${pageCount}` : "PDF"}</span>
       </div>
-      {!compact && !loading && !error ? (
-        <a
-          href={url}
-          download
-          target="_blank"
-          rel="noreferrer"
-          className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-lg ring-1 ring-slate-200 hover:bg-white"
-        >
-          <Download size={14} />
-          Baixar PDF
-        </a>
-      ) : null}
       {!compact && Object.keys(thumbnailUrls).length ? (
         <div className="flex gap-2 overflow-x-auto border-t border-slate-200 bg-white/90 p-3">
           {Array.from({ length: Math.min(pageCount, 12) }, (_, index) => index + 1).map((pageIndex) => (
