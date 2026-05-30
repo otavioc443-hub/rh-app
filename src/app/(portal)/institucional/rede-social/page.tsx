@@ -1002,9 +1002,17 @@ function PdfCarousel({
       setPageCount(0);
       setPageNumber(1);
       try {
-        const pdfjs = await import("pdfjs-dist");
-        pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.mjs", import.meta.url).toString();
-        const task = pdfjs.getDocument(url);
+        const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+        pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.mjs", import.meta.url).toString();
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("PDF indisponível.");
+        const data = await response.arrayBuffer();
+        if (cancelled) return;
+        const task = pdfjs.getDocument({
+          data,
+          useWorkerFetch: false,
+          isEvalSupported: false,
+        });
         loadedDoc = (await task.promise) as typeof loadedDoc;
         if (cancelled || !loadedDoc) {
           await loadedDoc?.destroy?.();
@@ -1055,6 +1063,8 @@ function PdfCarousel({
         canvas.style.width = `${Math.floor(cssViewport.width)}px`;
         canvas.style.height = `${Math.floor(cssViewport.height)}px`;
         context.setTransform(1, 0, 0, 1, 0, 0);
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = "high";
         context.clearRect(0, 0, canvas.width, canvas.height);
         await page.render({ canvasContext: context, viewport: renderViewport }).promise;
       } catch {
@@ -1123,10 +1133,10 @@ function PdfCarousel({
             Carregando PDF...
           </div>
         ) : error ? (
-          <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-blue-700 shadow-sm hover:underline">
+          <div className="flex max-w-xs flex-col items-center gap-2 rounded-2xl bg-white px-4 py-3 text-center text-sm font-semibold text-slate-600 shadow-sm ring-1 ring-slate-200">
             <FileText size={18} />
-            Abrir PDF
-          </a>
+            Pré-visualização do PDF indisponível.
+          </div>
         ) : (
           <button type="button" onClick={onOpen} className="flex max-h-full max-w-full cursor-zoom-in items-center justify-center" aria-label="Ampliar PDF">
             <canvas ref={canvasRef} className="mx-auto max-h-full max-w-full rounded-xl bg-white shadow-sm" />
