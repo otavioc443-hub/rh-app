@@ -958,18 +958,20 @@ function PdfCarousel({
   label,
   compact = false,
   onOpen,
+  className = "",
 }: {
   url: string;
   label: string;
   compact?: boolean;
   onOpen?: () => void;
+  className?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const [pdfDoc, setPdfDoc] = useState<{ numPages: number; getPage: (pageNumber: number) => Promise<unknown>; destroy?: () => Promise<void> } | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [pageCount, setPageCount] = useState(0);
-  const [frameWidth, setFrameWidth] = useState(compact ? 560 : 920);
+  const [frameSize, setFrameSize] = useState({ width: compact ? 560 : 920, height: compact ? 340 : 720 });
   const [thumbnailUrls, setThumbnailUrls] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -977,7 +979,12 @@ function PdfCarousel({
   useEffect(() => {
     const frame = frameRef.current;
     if (!frame) return;
-    const syncSize = () => setFrameWidth(Math.max(260, Math.floor(frame.clientWidth || (compact ? 560 : 920))));
+    const syncSize = () => {
+      setFrameSize({
+        width: Math.max(260, Math.floor(frame.clientWidth || (compact ? 560 : 920))),
+        height: Math.max(260, Math.floor(frame.clientHeight || (compact ? 340 : 720))),
+      });
+    };
     syncSize();
     const observer = new ResizeObserver(syncSize);
     observer.observe(frame);
@@ -1023,7 +1030,7 @@ function PdfCarousel({
     let cancelled = false;
 
     async function renderPage() {
-      if (!pdfDoc || !canvasRef.current || !frameWidth) return;
+      if (!pdfDoc || !canvasRef.current || !frameSize.width) return;
       try {
         const page = (await pdfDoc.getPage(pageNumber)) as {
           getViewport: (options: { scale: number }) => { width: number; height: number };
@@ -1031,17 +1038,25 @@ function PdfCarousel({
         };
         if (cancelled) return;
         const baseViewport = page.getViewport({ scale: 1 });
-        const maxWidth = compact ? Math.min(frameWidth - 32, 760) : Math.min(frameWidth - 32, 1120);
-        const maxHeight = compact ? 420 : 760;
-        const scale = Math.min(maxWidth / baseViewport.width, maxHeight / baseViewport.height, compact ? 1.35 : 1.8);
-        const viewport = page.getViewport({ scale: Math.max(0.5, scale) });
+        const hasThumbnailRail = !compact && pageCount > 1;
+        const reservedHeight = compact ? 32 : hasThumbnailRail ? 142 : 64;
+        const maxWidth = compact ? Math.min(frameSize.width - 32, 760) : Math.min(frameSize.width - 32, 1280);
+        const maxHeight = compact ? Math.min(Math.max(frameSize.height - 32, 260), 460) : Math.max(320, frameSize.height - reservedHeight);
+        const cssScale = Math.min(maxWidth / baseViewport.width, maxHeight / baseViewport.height, compact ? 1.35 : 2.2);
+        const safeCssScale = Math.max(0.35, cssScale);
+        const cssViewport = page.getViewport({ scale: safeCssScale });
+        const pixelRatio = Math.min(window.devicePixelRatio || 1, compact ? 2 : 2.5);
+        const renderViewport = page.getViewport({ scale: safeCssScale * pixelRatio });
         const canvas = canvasRef.current;
         const context = canvas.getContext("2d");
         if (!context) return;
-        canvas.width = Math.floor(viewport.width);
-        canvas.height = Math.floor(viewport.height);
+        canvas.width = Math.floor(renderViewport.width);
+        canvas.height = Math.floor(renderViewport.height);
+        canvas.style.width = `${Math.floor(cssViewport.width)}px`;
+        canvas.style.height = `${Math.floor(cssViewport.height)}px`;
+        context.setTransform(1, 0, 0, 1, 0, 0);
         context.clearRect(0, 0, canvas.width, canvas.height);
-        await page.render({ canvasContext: context, viewport }).promise;
+        await page.render({ canvasContext: context, viewport: renderViewport }).promise;
       } catch {
         if (!cancelled) setError("Não foi possível renderizar esta página.");
       }
@@ -1051,7 +1066,7 @@ function PdfCarousel({
     return () => {
       cancelled = true;
     };
-  }, [compact, frameWidth, pageNumber, pdfDoc]);
+  }, [compact, frameSize.height, frameSize.width, pageCount, pageNumber, pdfDoc]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1097,8 +1112,11 @@ function PdfCarousel({
   const canGoForward = pageCount > 0 && pageNumber < pageCount;
 
   return (
-    <div ref={frameRef} className={`relative w-full bg-slate-100 ${compact ? "min-h-[260px]" : "min-h-[420px]"}`}>
-      <div className="flex min-h-[inherit] w-full items-center justify-center p-4">
+    <div
+      ref={frameRef}
+      className={`relative w-full bg-slate-100 ${compact ? "min-h-[260px]" : "min-h-[420px]"} ${className}`}
+    >
+      <div className="flex h-full min-h-[inherit] w-full items-center justify-center p-4">
         {loading ? (
           <div className="flex flex-col items-center gap-3 text-sm font-semibold text-slate-500">
             <FileText size={28} />
@@ -1110,7 +1128,7 @@ function PdfCarousel({
             Abrir PDF
           </a>
         ) : (
-          <button type="button" onClick={onOpen} className="cursor-zoom-in" aria-label="Ampliar PDF">
+          <button type="button" onClick={onOpen} className="flex max-h-full max-w-full cursor-zoom-in items-center justify-center" aria-label="Ampliar PDF">
             <canvas ref={canvasRef} className="mx-auto max-h-full max-w-full rounded-xl bg-white shadow-sm" />
           </button>
         )}
@@ -6688,6 +6706,7 @@ export default function InternalSocialPage() {
                   <PdfCarousel
                     url={mediaPreview.url}
                     label={mediaPreview.label}
+                    className="h-full"
                   />
                 </div>
               )}
