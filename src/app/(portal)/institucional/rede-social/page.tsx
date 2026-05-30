@@ -593,6 +593,19 @@ function compactText(value: string | null | undefined, max = 160) {
   return `${normalized.slice(0, Math.max(0, max - 1))}...`;
 }
 
+function getPulseHubPdfSourceUrl(value: string) {
+  try {
+    const targetUrl = new URL(value);
+    const supabaseUrl = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "");
+    if (targetUrl.hostname === supabaseUrl.hostname && targetUrl.pathname.includes("/storage/v1/object/")) {
+      return `/api/institucional/rede-social/pdf-proxy?url=${encodeURIComponent(value)}`;
+    }
+  } catch {
+    // Blob/object URLs and relative URLs should be read directly.
+  }
+  return value;
+}
+
 function plainShareText(value: string | null | undefined) {
   return String(value ?? "")
     .replace(/\*\*(.*?)\*\*/g, "$1")
@@ -1004,7 +1017,12 @@ function PdfCarousel({
       try {
         const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
         pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.mjs", import.meta.url).toString();
-        const response = await fetch(url);
+        const sourceUrl = getPulseHubPdfSourceUrl(url);
+        const sessionRes = sourceUrl.startsWith("/api/") ? await supabase.auth.getSession() : null;
+        const token = sessionRes?.data.session?.access_token;
+        const response = await fetch(sourceUrl, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
         if (!response.ok) throw new Error("PDF indisponível.");
         const data = await response.arrayBuffer();
         if (cancelled) return;
