@@ -52,12 +52,14 @@ function extFromMime(mime: string) {
   if (mime === "video/mp4") return "mp4";
   if (mime === "video/webm") return "webm";
   if (mime === "video/quicktime") return "mov";
+  if (mime === "application/pdf") return "pdf";
   return null;
 }
 
-function attachmentTypeFromMime(mime: string): "image" | "video" | null {
+function attachmentTypeFromMime(mime: string): "image" | "video" | "pdf" | null {
   if (mime.startsWith("image/")) return "image";
   if (mime.startsWith("video/")) return "video";
+  if (mime === "application/pdf") return "pdf";
   return null;
 }
 
@@ -89,10 +91,10 @@ export async function POST(req: Request) {
     const ext = extFromMime(file.type);
     const attachmentType = attachmentTypeFromMime(file.type);
     if (!ext || !attachmentType) {
-      return NextResponse.json({ error: "Tipo de arquivo nao suportado. Use imagem ou video." }, { status: 400 });
+      return NextResponse.json({ error: "Tipo de arquivo nao suportado. Use imagem, video ou PDF." }, { status: 400 });
     }
 
-    const maxBytes = attachmentType === "image" ? 10 * 1024 * 1024 : 40 * 1024 * 1024;
+    const maxBytes = attachmentType === "image" ? 10 * 1024 * 1024 : attachmentType === "pdf" ? 25 * 1024 * 1024 : 40 * 1024 * 1024;
     if (file.size > maxBytes) {
       return NextResponse.json({ error: "Arquivo muito grande para upload." }, { status: 400 });
     }

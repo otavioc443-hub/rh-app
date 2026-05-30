@@ -43,20 +43,65 @@ type LeaderboardRow = {
   score_total: number;
   streak: number;
   rank_position: number;
+  last_played_date?: string | null;
+  updated_at?: string | null;
 };
 
 type LeaderboardCollaboratorRow = {
   user_id: string | null;
   nome: string | null;
   cargo: string | null;
+  departamento?: string | null;
+  setor?: string | null;
 };
 
 type DepartmentRankingPlayerRow = {
   user_id: string;
+  display_name?: string | null;
+  department_id?: string | null;
   department_name: string | null;
   score_current: number;
   score_total: number;
+  streak?: number;
+  last_played_date?: string | null;
+  updated_at?: string | null;
 };
+
+type EngagementGameCompanyProfileRow = {
+  id: string;
+  full_name: string | null;
+  company_id: string | null;
+  department_id: string | null;
+};
+
+type EngagementGameDepartmentRow = {
+  id: string;
+  name: string | null;
+};
+
+function normalizeDepartmentName(value: string | null | undefined) {
+  return String(value ?? "").replace(/\s+/g, " ").trim() || null;
+}
+
+function resolveCurrentDepartmentName({
+  collaborator,
+  profile,
+  playerDepartmentName,
+  departmentById,
+}: {
+  collaborator?: Pick<LeaderboardCollaboratorRow, "setor" | "departamento"> | null;
+  profile?: Pick<EngagementGameCompanyProfileRow, "department_id"> | null;
+  playerDepartmentName?: string | null;
+  departmentById?: Map<string, string>;
+}) {
+  return (
+    normalizeDepartmentName(collaborator?.setor) ||
+    normalizeDepartmentName(collaborator?.departamento) ||
+    (profile?.department_id ? normalizeDepartmentName(departmentById?.get(profile.department_id)) : null) ||
+    normalizeDepartmentName(playerDepartmentName) ||
+    "Setor não informado"
+  );
+}
 
 export async function getAuthenticatedPortalUser(): Promise<AuthenticatedUser | null> {
   const cookieStore = await cookies();
@@ -167,15 +212,18 @@ export async function ensureEngagementGamePlayer(userId: string) {
   if (profileError) throw new Error(profileError.message);
   if (collaboratorError && collaboratorError.code !== "PGRST116") throw new Error(collaboratorError.message);
 
-  let departmentName: string | null = null;
-  if (profile?.department_id) {
+  let departmentName =
+    normalizeDepartmentName(collaborator?.setor) ||
+    normalizeDepartmentName(collaborator?.departamento);
+
+  if (!departmentName && profile?.department_id) {
     const { data: department, error: departmentError } = await supabaseAdmin
       .from("departments")
       .select("id,name")
       .eq("id", profile.department_id)
       .maybeSingle<{ id: string; name: string | null }>();
     if (departmentError && departmentError.code !== "PGRST116") throw new Error(departmentError.message);
-    departmentName = (department?.name ?? "").trim() || null;
+    departmentName = normalizeDepartmentName(department?.name);
   }
 
   const displayName =
@@ -183,13 +231,6 @@ export async function ensureEngagementGamePlayer(userId: string) {
     (profile?.full_name ?? "").trim() ||
     (profile?.email ?? "").trim() ||
     "Colaborador";
-
-  if (!departmentName) {
-    departmentName =
-      (collaborator?.setor ?? "").trim() ||
-      (collaborator?.departamento ?? "").trim() ||
-      null;
-  }
 
   const payload = {
     user_id: userId,
@@ -219,19 +260,57 @@ export async function ensureEngagementGamePlayer(userId: string) {
 
 export async function loadEngagementGameLeaderboard(companyId: string | null, currentUserId?: string) {
   if (!companyId) return [] as DailyGameLeaderboardEntry[];
-  const { data, error } = await supabaseAdmin
-    .from("engagement_game_leaderboard")
-    .select("user_id,display_name,department_name,score_current,score_total,streak,rank_position")
+  const { data: profilesData, error: profilesError } = await supabaseAdmin
+    .from("profiles")
+    .select("id,full_name,company_id,department_id")
     .eq("company_id", companyId)
-    .order("rank_position", { ascending: true })
+    .eq("active", true);
+  if (profilesError) throw new Error(profilesError.message);
+
+  const profiles = (profilesData ?? []) as EngagementGameCompanyProfileRow[];
+  const companyUserIds = profiles.map((profile) => profile.id).filter(Boolean);
+  if (!companyUserIds.length) return [] as DailyGameLeaderboardEntry[];
+
+  const { data, error } = await supabaseAdmin
+    .from("engagement_game_players")
+    .select("user_id,display_name,department_name,score_current,score_total,streak,last_played_date,updated_at")
+    .in("user_id", companyUserIds)
+    .gt("score_current", 0)
+    .order("score_current", { ascending: false })
+    .order("streak", { ascending: false })
+    .order("last_played_date", { ascending: false, nullsFirst: false })
+    .order("updated_at", { ascending: true })
     .limit(5);
   if (error) throw new Error(error.message);
-  const rows = (data ?? []) as LeaderboardRow[];
+  const rows = ((data ?? []) as DepartmentRankingPlayerRow[]).map((item, index) => ({
+    user_id: item.user_id,
+    display_name: item.display_name ?? "Colaborador",
+    department_name: item.department_name,
+    score_current: item.score_current,
+    score_total: item.score_total,
+    streak: item.streak ?? 0,
+    last_played_date: item.last_played_date ?? null,
+    updated_at: item.updated_at ?? null,
+    rank_position: index + 1,
+  }));
   const userIds = rows.map((item) => item.user_id).filter(Boolean);
-  const collaboratorsRes = userIds.length
-    ? await supabaseAdmin.from("colaboradores").select("user_id,nome,cargo").in("user_id", userIds)
-    : { data: [], error: null };
+  const departmentIds = Array.from(new Set(profiles.map((profile) => profile.department_id).filter(Boolean))) as string[];
+  const [collaboratorsRes, departmentsRes] = await Promise.all([
+    userIds.length
+      ? supabaseAdmin.from("colaboradores").select("user_id,nome,cargo,departamento,setor").in("user_id", userIds)
+      : Promise.resolve({ data: [], error: null }),
+    departmentIds.length
+      ? supabaseAdmin.from("departments").select("id,name").in("id", departmentIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
   if (collaboratorsRes.error) throw new Error(collaboratorsRes.error.message);
+  if (departmentsRes.error) throw new Error(departmentsRes.error.message);
+  const profileByUserId = new Map(profiles.map((profile) => [profile.id, profile] as const));
+  const departmentById = new Map(
+    ((departmentsRes.data ?? []) as EngagementGameDepartmentRow[])
+      .filter((item) => item.id)
+      .map((item) => [item.id, normalizeDepartmentName(item.name) ?? "Setor não informado"] as const)
+  );
   const collaboratorByUserId = new Map(
     ((collaboratorsRes.data ?? []) as LeaderboardCollaboratorRow[])
       .filter((item) => item.user_id)
@@ -239,16 +318,22 @@ export async function loadEngagementGameLeaderboard(companyId: string | null, cu
   );
   return rows.map((item) => {
     const collaborator = collaboratorByUserId.get(item.user_id);
+    const profile = profileByUserId.get(item.user_id);
     return {
-    userId: item.user_id,
-    displayName: (collaborator?.nome ?? "").trim() || item.display_name,
-    departmentName: item.department_name,
-    roleName: (collaborator?.cargo ?? "").trim() || null,
-    scoreCurrent: Number(item.score_current || 0),
-    scoreTotal: Number(item.score_total || 0),
-    streak: Number(item.streak || 0),
-    rankPosition: Number(item.rank_position || 0),
-    isCurrentUser: item.user_id === currentUserId,
+      userId: item.user_id,
+      displayName: (collaborator?.nome ?? "").trim() || item.display_name,
+      departmentName: resolveCurrentDepartmentName({
+        collaborator,
+        profile,
+        playerDepartmentName: item.department_name,
+        departmentById,
+      }),
+      roleName: (collaborator?.cargo ?? "").trim() || null,
+      scoreCurrent: Number(item.score_current || 0),
+      scoreTotal: Number(item.score_total || 0),
+      streak: Number(item.streak || 0),
+      rankPosition: Number(item.rank_position || 0),
+      isCurrentUser: item.user_id === currentUserId,
     };
   });
 }
@@ -258,15 +343,57 @@ export async function loadEngagementGameDepartmentRanking(
   currentDepartmentName?: string | null
 ) {
   if (!companyId) return [] as DailyGameDepartmentRankingEntry[];
+  const { data: profilesData, error: profilesError } = await supabaseAdmin
+    .from("profiles")
+    .select("id,full_name,company_id,department_id")
+    .eq("company_id", companyId)
+    .eq("active", true);
+  if (profilesError) throw new Error(profilesError.message);
+
+  const profiles = (profilesData ?? []) as EngagementGameCompanyProfileRow[];
+  const companyUserIds = profiles.map((profile) => profile.id).filter(Boolean);
+  if (!companyUserIds.length) return [] as DailyGameDepartmentRankingEntry[];
+
   const { data, error } = await supabaseAdmin
     .from("engagement_game_players")
-    .select("user_id,department_name,score_current,score_total")
-    .eq("company_id", companyId);
+    .select("user_id,department_id,department_name,score_current,score_total")
+    .in("user_id", companyUserIds);
   if (error) throw new Error(error.message);
 
+  const rows = (data ?? []) as DepartmentRankingPlayerRow[];
+  const userIds = rows.map((item) => item.user_id).filter(Boolean);
+  const departmentIds = Array.from(new Set(profiles.map((profile) => profile.department_id).filter(Boolean))) as string[];
+  const [collaboratorsRes, departmentsRes] = await Promise.all([
+    userIds.length
+      ? supabaseAdmin.from("colaboradores").select("user_id,departamento,setor").in("user_id", userIds)
+      : Promise.resolve({ data: [], error: null }),
+    departmentIds.length
+      ? supabaseAdmin.from("departments").select("id,name").in("id", departmentIds)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
+  if (collaboratorsRes.error) throw new Error(collaboratorsRes.error.message);
+  if (departmentsRes.error) throw new Error(departmentsRes.error.message);
+
+  const profileByUserId = new Map(profiles.map((profile) => [profile.id, profile] as const));
+  const collaboratorByUserId = new Map(
+    ((collaboratorsRes.data ?? []) as LeaderboardCollaboratorRow[])
+      .filter((item) => item.user_id)
+      .map((item) => [item.user_id as string, item] as const)
+  );
+  const departmentById = new Map(
+    ((departmentsRes.data ?? []) as EngagementGameDepartmentRow[])
+      .filter((item) => item.id)
+      .map((item) => [item.id, normalizeDepartmentName(item.name) ?? "Setor não informado"] as const)
+  );
+
   const grouped = new Map<string, { scoreCurrent: number; scoreTotal: number; playerCount: number }>();
-  for (const item of (data ?? []) as DepartmentRankingPlayerRow[]) {
-    const departmentName = (item.department_name ?? "").trim() || "Setor nao informado";
+  for (const item of rows) {
+    const departmentName = resolveCurrentDepartmentName({
+      collaborator: collaboratorByUserId.get(item.user_id),
+      profile: profileByUserId.get(item.user_id),
+      playerDepartmentName: item.department_name,
+      departmentById,
+    });
     const current = grouped.get(departmentName) ?? { scoreCurrent: 0, scoreTotal: 0, playerCount: 0 };
     current.scoreCurrent += Number(item.score_current || 0);
     current.scoreTotal += Number(item.score_total || 0);
@@ -274,7 +401,7 @@ export async function loadEngagementGameDepartmentRanking(
     grouped.set(departmentName, current);
   }
 
-  const currentDepartmentKey = (currentDepartmentName ?? "").trim() || "Setor nao informado";
+  const currentDepartmentKey = normalizeDepartmentName(currentDepartmentName) || "Setor não informado";
   return Array.from(grouped.entries())
     .map(([departmentName, stats]) => ({
       departmentName,

@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Trophy } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, FileText, MessageCircle, Share2, Trophy } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 import { PulseSprintPage, PulseSprintWidget } from "@/components/engagement-game/PulseSprint";
@@ -101,13 +101,14 @@ type PostRow = {
 type CommentRow = {
   id: string;
   post_id: string;
+  parent_comment_id?: string | null;
   author_user_id: string;
   author_name: string;
   text: string;
   created_at: string;
 };
 
-type AttachmentType = "image" | "video" | "link";
+type AttachmentType = "image" | "video" | "link" | "pdf";
 
 type AttachmentRow = {
   id: string;
@@ -137,6 +138,13 @@ type ReactionRow = {
   post_id: string;
   user_id: string;
   emoji: string;
+};
+
+type ViewRow = {
+  id: string;
+  post_id: string;
+  user_id: string;
+  viewed_at: string;
 };
 
 type MessageRow = {
@@ -183,6 +191,7 @@ type FeedPost = PostRow & {
   attachments: AttachmentRow[];
   comments: CommentRow[];
   reactions: ReactionRow[];
+  views: ViewRow[];
   poll?: FeedPoll | null;
   reportsCount?: number;
   isReportedByMe?: boolean;
@@ -584,6 +593,16 @@ function compactText(value: string | null | undefined, max = 160) {
   return `${normalized.slice(0, Math.max(0, max - 1))}...`;
 }
 
+function plainShareText(value: string | null | undefined) {
+  return String(value ?? "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/_(.*?)_/g, "$1")
+    .replace(/<u>(.*?)<\/u>/gi, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function splitMessageContent(text: string) {
   const lines = text.split("\n");
   const attachmentLines = lines.filter((line) => line.trim().toLowerCase().startsWith("anexo:"));
@@ -601,6 +620,7 @@ function inferAttachmentTypeFromUrl(url: string): AttachmentType {
   const lower = url.toLowerCase();
   if (/\.(png|jpg|jpeg|gif|webp|bmp|svg)(\?|#|$)/.test(lower)) return "image";
   if (/\.(mp4|webm|mov|m4v|ogg)(\?|#|$)/.test(lower)) return "video";
+  if (/\.pdf(\?|#|$)/.test(lower)) return "pdf";
   return "link";
 }
 
@@ -786,6 +806,31 @@ function EmojiGlyph({ emoji, className }: { emoji: string; className?: string })
   return <span className={className}>{emoji}</span>;
 }
 
+function ProfileAvatar({
+  name,
+  avatarUrl,
+  size = "md",
+}: {
+  name: string;
+  avatarUrl?: string | null;
+  size?: "sm" | "md" | "lg";
+}) {
+  const resolvedAvatar = resolvePortalAvatarUrl(avatarUrl ?? null);
+  const sizeClass = size === "sm" ? "h-9 w-9 text-xs" : size === "lg" ? "h-12 w-12 text-sm" : "h-10 w-10 text-xs";
+  return (
+    <div className={`${sizeClass} shrink-0 overflow-hidden rounded-full border border-white bg-white shadow-sm ring-1 ring-slate-200`}>
+      {resolvedAvatar ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={resolvedAvatar} alt={name} className="h-full w-full object-cover" />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-slate-900 to-blue-700 font-semibold text-white">
+          {initials(name)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 type EmojiPickerProps = {
   groups: EmojiGroup[];
   onSelect: (emoji: string) => void;
@@ -908,6 +953,238 @@ function EmojiPicker({ groups, onSelect, className, panelClassName }: EmojiPicke
   );
 }
 
+function PdfCarousel({
+  url,
+  label,
+  compact = false,
+  onOpen,
+}: {
+  url: string;
+  label: string;
+  compact?: boolean;
+  onOpen?: () => void;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const [pdfDoc, setPdfDoc] = useState<{ numPages: number; getPage: (pageNumber: number) => Promise<unknown>; destroy?: () => Promise<void> } | null>(null);
+  const [pageNumber, setPageNumber] = useState(1);
+  const [pageCount, setPageCount] = useState(0);
+  const [frameWidth, setFrameWidth] = useState(compact ? 560 : 920);
+  const [thumbnailUrls, setThumbnailUrls] = useState<Record<number, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
+    const syncSize = () => setFrameWidth(Math.max(260, Math.floor(frame.clientWidth || (compact ? 560 : 920))));
+    syncSize();
+    const observer = new ResizeObserver(syncSize);
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, [compact]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let loadedDoc: { numPages: number; getPage: (pageNumber: number) => Promise<unknown>; destroy?: () => Promise<void> } | null = null;
+
+    async function loadPdf() {
+      setLoading(true);
+      setError("");
+      setPdfDoc(null);
+      setPageCount(0);
+      setPageNumber(1);
+      try {
+        const pdfjs = await import("pdfjs-dist");
+        pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.mjs", import.meta.url).toString();
+        const task = pdfjs.getDocument(url);
+        loadedDoc = (await task.promise) as typeof loadedDoc;
+        if (cancelled || !loadedDoc) {
+          await loadedDoc?.destroy?.();
+          return;
+        }
+        setPdfDoc(loadedDoc);
+        setPageCount(loadedDoc.numPages);
+      } catch {
+        if (!cancelled) setError("Não foi possível carregar o PDF.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void loadPdf();
+    return () => {
+      cancelled = true;
+      void loadedDoc?.destroy?.();
+    };
+  }, [url]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function renderPage() {
+      if (!pdfDoc || !canvasRef.current || !frameWidth) return;
+      try {
+        const page = (await pdfDoc.getPage(pageNumber)) as {
+          getViewport: (options: { scale: number }) => { width: number; height: number };
+          render: (options: { canvasContext: CanvasRenderingContext2D; viewport: { width: number; height: number } }) => { promise: Promise<void> };
+        };
+        if (cancelled) return;
+        const baseViewport = page.getViewport({ scale: 1 });
+        const maxWidth = compact ? Math.min(frameWidth - 32, 760) : Math.min(frameWidth - 32, 1120);
+        const maxHeight = compact ? 420 : 760;
+        const scale = Math.min(maxWidth / baseViewport.width, maxHeight / baseViewport.height, compact ? 1.35 : 1.8);
+        const viewport = page.getViewport({ scale: Math.max(0.5, scale) });
+        const canvas = canvasRef.current;
+        const context = canvas.getContext("2d");
+        if (!context) return;
+        canvas.width = Math.floor(viewport.width);
+        canvas.height = Math.floor(viewport.height);
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: context, viewport }).promise;
+      } catch {
+        if (!cancelled) setError("Não foi possível renderizar esta página.");
+      }
+    }
+
+    void renderPage();
+    return () => {
+      cancelled = true;
+    };
+  }, [compact, frameWidth, pageNumber, pdfDoc]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function renderThumbnails() {
+      if (!pdfDoc || compact || pageCount <= 1) {
+        setThumbnailUrls({});
+        return;
+      }
+      const pages = Array.from({ length: Math.min(pageCount, 12) }, (_, index) => index + 1);
+      const next: Record<number, string> = {};
+      for (const pageIndex of pages) {
+        try {
+          const page = (await pdfDoc.getPage(pageIndex)) as {
+            getViewport: (options: { scale: number }) => { width: number; height: number };
+            render: (options: { canvasContext: CanvasRenderingContext2D; viewport: { width: number; height: number } }) => { promise: Promise<void> };
+          };
+          if (cancelled) return;
+          const baseViewport = page.getViewport({ scale: 1 });
+          const scale = Math.min(90 / baseViewport.width, 120 / baseViewport.height);
+          const viewport = page.getViewport({ scale: Math.max(0.15, scale) });
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
+          if (!context) continue;
+          canvas.width = Math.floor(viewport.width);
+          canvas.height = Math.floor(viewport.height);
+          await page.render({ canvasContext: context, viewport }).promise;
+          next[pageIndex] = canvas.toDataURL("image/png");
+        } catch {
+          // Thumbnail failure should not block PDF reading.
+        }
+      }
+      if (!cancelled) setThumbnailUrls(next);
+    }
+
+    void renderThumbnails();
+    return () => {
+      cancelled = true;
+    };
+  }, [compact, pageCount, pdfDoc]);
+
+  const canGoBack = pageNumber > 1;
+  const canGoForward = pageCount > 0 && pageNumber < pageCount;
+
+  return (
+    <div ref={frameRef} className={`relative w-full bg-slate-100 ${compact ? "min-h-[260px]" : "min-h-[420px]"}`}>
+      <div className="flex min-h-[inherit] w-full items-center justify-center p-4">
+        {loading ? (
+          <div className="flex flex-col items-center gap-3 text-sm font-semibold text-slate-500">
+            <FileText size={28} />
+            Carregando PDF...
+          </div>
+        ) : error ? (
+          <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-blue-700 shadow-sm hover:underline">
+            <FileText size={18} />
+            Abrir PDF
+          </a>
+        ) : (
+          <button type="button" onClick={onOpen} className="cursor-zoom-in" aria-label="Ampliar PDF">
+            <canvas ref={canvasRef} className="mx-auto max-h-full max-w-full rounded-xl bg-white shadow-sm" />
+          </button>
+        )}
+      </div>
+      {!loading && !error && pageCount > 1 ? (
+        <>
+          <button
+            type="button"
+            disabled={!canGoBack}
+            onClick={() => setPageNumber((prev) => Math.max(1, prev - 1))}
+            className="absolute left-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-slate-900 shadow-lg ring-1 ring-slate-200 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label="Página anterior"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <button
+            type="button"
+            disabled={!canGoForward}
+            onClick={() => setPageNumber((prev) => Math.min(pageCount, prev + 1))}
+            className="absolute right-3 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-slate-900 shadow-lg ring-1 ring-slate-200 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label="Próxima página"
+          >
+            <ChevronRight size={20} />
+          </button>
+        </>
+      ) : null}
+      <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-slate-950/80 px-3 py-1.5 text-xs font-semibold text-white">
+        <FileText size={14} />
+        <span>{pageCount > 0 ? `${pageNumber}/${pageCount}` : "PDF"}</span>
+      </div>
+      {!compact && !loading && !error ? (
+        <a
+          href={url}
+          download
+          target="_blank"
+          rel="noreferrer"
+          className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-lg ring-1 ring-slate-200 hover:bg-white"
+        >
+          <Download size={14} />
+          Baixar PDF
+        </a>
+      ) : null}
+      {!compact && Object.keys(thumbnailUrls).length ? (
+        <div className="flex gap-2 overflow-x-auto border-t border-slate-200 bg-white/90 p-3">
+          {Array.from({ length: Math.min(pageCount, 12) }, (_, index) => index + 1).map((pageIndex) => (
+            <button
+              key={`pdf-thumb-${pageIndex}`}
+              type="button"
+              onClick={() => setPageNumber(pageIndex)}
+              className={`shrink-0 rounded-xl border p-1 transition ${
+                pageNumber === pageIndex ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white hover:bg-slate-50"
+              }`}
+              aria-label={`Ir para página ${pageIndex}`}
+            >
+              {thumbnailUrls[pageIndex] ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={thumbnailUrls[pageIndex]} alt={`Página ${pageIndex}`} className="h-20 w-14 object-contain" />
+              ) : (
+                <div className="flex h-20 w-14 items-center justify-center text-xs font-semibold text-slate-400">{pageIndex}</div>
+              )}
+            </button>
+          ))}
+          {pageCount > 12 ? (
+            <div className="flex h-[90px] shrink-0 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-semibold text-slate-500">
+              +{pageCount - 12} páginas
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      <span className="sr-only">{label}</span>
+    </div>
+  );
+}
+
 const PROJECT_BOARD_TEMPLATE = [
   "Contexto:",
   "",
@@ -947,6 +1224,7 @@ export default function InternalSocialPage() {
   const [audienceCompanyId, setAudienceCompanyId] = useState("");
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [expandedCommentPostIds, setExpandedCommentPostIds] = useState<string[]>([]);
+  const [replyingToCommentId, setReplyingToCommentId] = useState("");
   const [commentAttachments, setCommentAttachments] = useState<Record<string, DraftAttachment[]>>({});
   const [commentMediaUrls, setCommentMediaUrls] = useState<Record<string, string>>({});
   const [activeCommentUploadPostId, setActiveCommentUploadPostId] = useState("");
@@ -1013,6 +1291,10 @@ export default function InternalSocialPage() {
   const [communityCreatorUserId, setCommunityCreatorUserId] = useState("");
   const [mediaPreview, setMediaPreview] = useState<MediaPreview | null>(null);
   const [mediaCaptionExpanded, setMediaCaptionExpanded] = useState(false);
+  const [insightsPost, setInsightsPost] = useState<FeedPost | null>(null);
+  const [insightsTab, setInsightsTab] = useState<"views" | "reactions" | "comments">("views");
+  const [sharePost, setSharePost] = useState<FeedPost | null>(null);
+  const recordedViewIdsRef = useRef<Set<string>>(new Set());
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const postActionsRef = useRef<HTMLDivElement | null>(null);
   const commentActionsRef = useRef<HTMLDivElement | null>(null);
@@ -1554,7 +1836,7 @@ export default function InternalSocialPage() {
 
       const postRows = postRowsSource;
       const postIds = postRows.map((item) => item.id);
-      const [attachmentsRes, commentsRes, reactionsRes, pollsRes, pollOptionsRes, pollVotesRes, reportsRes] = await Promise.all([
+      const [attachmentsRes, commentsResInitial, reactionsRes, viewsRes, pollsRes, pollOptionsRes, pollVotesRes, reportsRes] = await Promise.all([
         postIds.length
           ? supabase
               .from("internal_social_post_attachments")
@@ -1564,12 +1846,15 @@ export default function InternalSocialPage() {
         postIds.length
           ? supabase
               .from("internal_social_post_comments")
-              .select("id,post_id,author_user_id,author_name,text,created_at")
+              .select("id,post_id,parent_comment_id,author_user_id,author_name,text,created_at")
               .in("post_id", postIds)
               .order("created_at", { ascending: true })
           : Promise.resolve({ data: [], error: null }),
         postIds.length
           ? supabase.from("internal_social_post_reactions").select("id,post_id,user_id,emoji").in("post_id", postIds)
+          : Promise.resolve({ data: [], error: null }),
+        postIds.length
+          ? supabase.from("internal_social_post_views").select("id,post_id,user_id,viewed_at").in("post_id", postIds)
           : Promise.resolve({ data: [], error: null }),
         postIds.length
           ? supabase.from("internal_social_polls").select("id,post_id,question,allow_multiple").in("post_id", postIds)
@@ -1588,8 +1873,19 @@ export default function InternalSocialPage() {
       ]);
 
       if (attachmentsRes.error) throw new Error(attachmentsRes.error.message);
+      let commentsRes: { data: unknown[] | null; error: { message: string } | null } = commentsResInitial;
+      if (commentsResInitial.error && isSchemaCompatError(commentsResInitial.error.message)) {
+        commentsRes = postIds.length
+          ? await supabase
+              .from("internal_social_post_comments")
+              .select("id,post_id,author_user_id,author_name,text,created_at")
+              .in("post_id", postIds)
+              .order("created_at", { ascending: true })
+          : { data: [], error: null };
+      }
       if (commentsRes.error) throw new Error(commentsRes.error.message);
       if (reactionsRes.error) throw new Error(reactionsRes.error.message);
+      if (viewsRes.error && !isSchemaCompatError(viewsRes.error.message)) throw new Error(viewsRes.error.message);
       if (pollsRes.error && !isSchemaCompatError(pollsRes.error.message)) throw new Error(pollsRes.error.message);
       if (pollOptionsRes.error && !isSchemaCompatError(pollOptionsRes.error.message)) throw new Error(pollOptionsRes.error.message);
       if (pollVotesRes.error && !isSchemaCompatError(pollVotesRes.error.message)) throw new Error(pollVotesRes.error.message);
@@ -1644,6 +1940,13 @@ export default function InternalSocialPage() {
         const list = reactionMap.get(item.post_id) ?? [];
         list.push(item);
         reactionMap.set(item.post_id, list);
+      }
+
+      const viewMap = new Map<string, ViewRow[]>();
+      for (const item of ((viewsRes.error ? [] : viewsRes.data) ?? []) as ViewRow[]) {
+        const list = viewMap.get(item.post_id) ?? [];
+        list.push(item);
+        viewMap.set(item.post_id, list);
       }
 
       const pollsByPostId = new Map<string, FeedPoll>();
@@ -1701,6 +2004,7 @@ export default function InternalSocialPage() {
           attachments: attachmentMap.get(item.id) ?? [],
           comments: commentMap.get(item.id) ?? [],
           reactions: reactionMap.get(item.id) ?? [],
+          views: viewMap.get(item.id) ?? [],
           poll: pollsByPostId.get(item.id) ?? null,
           reportsCount: reportsByPostId.get(item.id)?.length ?? 0,
           isReportedByMe: (reportsByPostId.get(item.id) ?? []).some((report) => report.reporter_user_id === userId),
@@ -1824,6 +2128,9 @@ export default function InternalSocialPage() {
         void load();
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "internal_social_post_reactions" }, () => {
+        void load();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "internal_social_post_views" }, () => {
         void load();
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "internal_social_direct_messages" }, () => {
@@ -2230,6 +2537,35 @@ export default function InternalSocialPage() {
       return haystack.includes(searchTerm);
     });
   }, [feedFilter, feedPosts, savedPostIds, searchTerm]);
+
+  useEffect(() => {
+    if (!me?.id || !visibleFeedPosts.length) return;
+    const nextIds = visibleFeedPosts
+      .map((post) => post.id)
+      .filter((postId) => !recordedViewIdsRef.current.has(`${me.id}:${postId}`));
+    if (!nextIds.length) return;
+
+    nextIds.forEach((postId) => recordedViewIdsRef.current.add(`${me.id}:${postId}`));
+    const timer = window.setTimeout(() => {
+      void supabase
+        .from("internal_social_post_views")
+        .upsert(
+          nextIds.map((postId) => ({
+            post_id: postId,
+            user_id: me.id,
+            viewed_at: new Date().toISOString(),
+          })),
+          { onConflict: "post_id,user_id" }
+        )
+        .then((res) => {
+          if (res.error && isSchemaCompatError(res.error.message)) return;
+          if (res.error) setError(normalizeError(res.error.message));
+        });
+    }, 900);
+
+    return () => window.clearTimeout(timer);
+  }, [me?.id, visibleFeedPosts]);
+
   const visiblePinnedPost = useMemo(() => {
     if (!pinnedPost) return null;
     if (!searchTerm) return pinnedPost;
@@ -2670,7 +3006,7 @@ export default function InternalSocialPage() {
         path?: string;
       };
       if (!res.ok || !json.url || !json.attachmentType) {
-        const message = json.error || "Nao foi possivel enviar o anexo do comentario.";
+        const message = json.error || "Não foi possível enviar o anexo do comentário.";
         throw new Error(message);
       }
       const nextAttachment: DraftAttachment = {
@@ -2687,7 +3023,7 @@ export default function InternalSocialPage() {
         ],
       }));
     } catch (err) {
-      setError(normalizeError(err instanceof Error ? err.message : "Erro ao enviar anexo do comentario."));
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao enviar anexo do comentário."));
     } finally {
       setUploadingMedia(false);
     }
@@ -2833,10 +3169,11 @@ export default function InternalSocialPage() {
     }
   }
 
-  async function submitComment(postId: string) {
+  async function submitComment(postId: string, parentCommentId?: string) {
     if (!me?.id) return;
-    const content = (commentDrafts[postId] ?? "").trim();
-    const attachments = commentAttachments[postId] ?? [];
+    const draftKey = parentCommentId ? `reply:${parentCommentId}` : postId;
+    const content = (commentDrafts[draftKey] ?? "").trim();
+    const attachments = parentCommentId ? [] : commentAttachments[postId] ?? [];
     if (!content && !attachments.length) return;
     setError("");
     try {
@@ -2846,16 +3183,29 @@ export default function InternalSocialPage() {
       ]
         .filter(Boolean)
         .join("\n");
-      const res = await supabase
+      let res = await supabase
         .from("internal_social_post_comments")
         .insert({
-        post_id: postId,
-        author_user_id: me.id,
-        author_name: resolveCommentAuthorName(currentName, profileById.get(me.id), collaboratorNameByUserId[me.id]),
-        text: composedText,
-      })
+          post_id: postId,
+          parent_comment_id: parentCommentId ?? null,
+          author_user_id: me.id,
+          author_name: resolveCommentAuthorName(currentName, profileById.get(me.id), collaboratorNameByUserId[me.id]),
+          text: composedText,
+        })
         .select("id")
         .single<{ id: string }>();
+      if (res.error && parentCommentId && isSchemaCompatError(res.error.message)) {
+        res = await supabase
+          .from("internal_social_post_comments")
+          .insert({
+            post_id: postId,
+            author_user_id: me.id,
+            author_name: resolveCommentAuthorName(currentName, profileById.get(me.id), collaboratorNameByUserId[me.id]),
+            text: `Em resposta: ${content}`,
+          })
+          .select("id")
+          .single<{ id: string }>();
+      }
       if (res.error) throw new Error(res.error.message);
       await syncPulseHubEvent({
         type: "comment_sync",
@@ -2864,8 +3214,9 @@ export default function InternalSocialPage() {
         text: content || "Anexo compartilhado.",
         notifyPostAuthor: true,
       });
-      setCommentDrafts((prev) => ({ ...prev, [postId]: "" }));
-      setCommentAttachments((prev) => ({ ...prev, [postId]: [] }));
+      setCommentDrafts((prev) => ({ ...prev, [draftKey]: "" }));
+      if (!parentCommentId) setCommentAttachments((prev) => ({ ...prev, [postId]: [] }));
+      if (parentCommentId) setReplyingToCommentId("");
       setShowCommentEmojiPickerForPostId("");
       setShowCommentStickerPickerForPostId("");
       await load();
@@ -3016,7 +3367,7 @@ export default function InternalSocialPage() {
     const attachmentLines = parsed.attachmentRefs.map((ref) => `Anexo: ${ref}`);
     const nextText = [body, ...attachmentLines].filter(Boolean).join("\n");
     if (!nextText) {
-      setError("Informe um texto ou mantenha um anexo para salvar o comentario.");
+      setError("Informe um texto ou mantenha um anexo para salvar o comentário.");
       return;
     }
     setBusy(true);
@@ -3036,14 +3387,14 @@ export default function InternalSocialPage() {
       cancelEditComment();
       await load();
     } catch (err) {
-      setError(normalizeError(err instanceof Error ? err.message : "Erro ao editar comentario."));
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao editar comentário."));
     } finally {
       setBusy(false);
     }
   }
 
   async function deleteComment(comment: CommentRow) {
-    if (!window.confirm("Deseja excluir este comentario?")) return;
+    if (!window.confirm("Deseja excluir este comentário?")) return;
     setBusy(true);
     setError("");
     try {
@@ -3052,7 +3403,7 @@ export default function InternalSocialPage() {
       if (editingCommentId === comment.id) cancelEditComment();
       await load();
     } catch (err) {
-      setError(normalizeError(err instanceof Error ? err.message : "Erro ao excluir comentario."));
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao excluir comentário."));
     } finally {
       setBusy(false);
     }
@@ -3369,7 +3720,7 @@ export default function InternalSocialPage() {
       if (res.error) throw new Error(res.error.message);
       await load();
     } catch (err) {
-      setError(normalizeError(err instanceof Error ? err.message : "Erro ao denunciar publicacao."));
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao denunciar publicação."));
     } finally {
       setBusy(false);
     }
@@ -3410,7 +3761,7 @@ export default function InternalSocialPage() {
 
   async function setPostModerationState(post: FeedPost, hide: boolean) {
     if (!me?.id) return;
-    const reason = hide ? window.prompt("Motivo para ocultar a publicacao:", post.hidden_reason ?? "moderacao interna") : "";
+    const reason = hide ? window.prompt("Motivo para ocultar a publicação:", post.hidden_reason ?? "moderação interna") : "";
     if (hide && !reason?.trim()) return;
     const normalizedReason = hide ? reason?.trim() ?? null : null;
     setBusy(true);
@@ -3435,7 +3786,7 @@ export default function InternalSocialPage() {
       if (actionRes.error) throw new Error(actionRes.error.message);
       await load();
     } catch (err) {
-      setError(normalizeError(err instanceof Error ? err.message : "Erro ao atualizar visibilidade da publicacao."));
+      setError(normalizeError(err instanceof Error ? err.message : "Erro ao atualizar visibilidade da publicação."));
     } finally {
       setBusy(false);
     }
@@ -3443,6 +3794,70 @@ export default function InternalSocialPage() {
 
   const currentName = displayName(me);
   const visiblePinnedPostPublisher = visiblePinnedPost ? postPublisherByBrand(visiblePinnedPost) : null;
+  const activeInsightsPost = insightsPost ? posts.find((post) => post.id === insightsPost.id) ?? insightsPost : null;
+  const activeSharePost = sharePost ? posts.find((post) => post.id === sharePost.id) ?? sharePost : null;
+  const activeSharePublisher = activeSharePost ? postPublisherByBrand(activeSharePost) : null;
+  const activeShareUrl =
+    activeSharePost && typeof window !== "undefined"
+      ? `${window.location.origin}/institucional/rede-social?tab=inicio#post-${activeSharePost.id}`
+      : "";
+  const activeShareSummary = activeSharePost
+    ? compactText(
+        plainShareText(activeSharePost.text) ||
+          `${postTypeLabel(activeSharePost.post_type)} de ${activeSharePublisher?.name ?? activeSharePost.author_name}`,
+        220
+      )
+    : "";
+  const activeShareMessage =
+    activeSharePost && activeShareUrl
+      ? `${activeShareSummary}\n👉🏼 ${activeShareUrl}`
+      : "";
+  const activeShareAttachment = activeSharePost?.attachments[0] ?? null;
+  const activeShareAttachmentUrl = activeShareAttachment ? activeShareAttachment.resolvedUrl || activeShareAttachment.url : "";
+  const insightViewers = activeInsightsPost
+    ? [...activeInsightsPost.views]
+        .sort((a, b) => new Date(b.viewed_at).getTime() - new Date(a.viewed_at).getTime())
+        .map((view) => {
+          const profile = profileById.get(view.user_id);
+          return {
+            userId: view.user_id,
+            name: resolveCommentAuthorName(null, profile, collaboratorNameByUserId[view.user_id]),
+            avatarUrl: profile?.avatar_url ?? null,
+            subtitle: profileRoleLine(profile),
+            date: view.viewed_at,
+          };
+        })
+    : [];
+  const insightReactors = activeInsightsPost
+    ? [...activeInsightsPost.reactions]
+        .sort((a, b) => a.emoji.localeCompare(b.emoji))
+        .map((reaction) => {
+          const profile = profileById.get(reaction.user_id);
+          return {
+            userId: reaction.user_id,
+            name: resolveCommentAuthorName(null, profile, collaboratorNameByUserId[reaction.user_id]),
+            avatarUrl: profile?.avatar_url ?? null,
+            subtitle: profileRoleLine(profile),
+            emoji: reaction.emoji,
+          };
+        })
+    : [];
+  const insightComments = activeInsightsPost
+    ? [...activeInsightsPost.comments]
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .map((comment) => {
+          const profile = profileById.get(comment.author_user_id);
+          return {
+            id: comment.id,
+            userId: comment.author_user_id,
+            name: resolveCommentAuthorName(comment.author_name, profile, collaboratorNameByUserId[comment.author_user_id]),
+            avatarUrl: profile?.avatar_url ?? null,
+            subtitle: profileRoleLine(profile),
+            body: splitMessageContent(comment.text).body || "Anexo compartilhado.",
+            date: comment.created_at,
+          };
+        })
+    : [];
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_#f8fbff_0%,_#eef4ff_22%,_#f4f2ee_58%,_#f1ede6_100%)]">
@@ -3869,8 +4284,17 @@ export default function InternalSocialPage() {
                     const authorName = publisher.name;
                     const authorAvatar = publisher.avatarUrl;
                     const canManagePost = post.author_user_id === me?.id || canModeratePosts;
+                    const canViewPostInsights = me?.role === "admin" || me?.role === "rh" || post.author_user_id === me?.id;
+                    const rootComments = post.comments.filter((comment) => !comment.parent_comment_id);
+                    const repliesByParentId = post.comments.reduce((map, comment) => {
+                      if (!comment.parent_comment_id) return map;
+                      const list = map.get(comment.parent_comment_id) ?? [];
+                      list.push(comment);
+                      map.set(comment.parent_comment_id, list);
+                      return map;
+                    }, new Map<string, CommentRow[]>());
                     return (
-                      <article key={post.id} className="rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_70px_-44px_rgba(15,23,42,0.32)] backdrop-blur">
+                      <article id={`post-${post.id}`} key={post.id} className="scroll-mt-28 rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_70px_-44px_rgba(15,23,42,0.32)] backdrop-blur">
                         {post.hidden_at ? (
                           <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
                             Publicacao oculta pela moderacao em {when(post.hidden_at)}.
@@ -3956,6 +4380,18 @@ export default function InternalSocialPage() {
                                 >
                                   <span>{savedPostIds.includes(post.id) ? "Remover dos salvos" : "Salvar publicação"}</span>
                                 </button>
+                                {me?.role === "admin" ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setOpenPostActionsId("");
+                                      setSharePost(post);
+                                    }}
+                                    className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
+                                  >
+                                    <span>Compartilhar publicação</span>
+                                  </button>
+                                ) : null}
                                 {canManagePost ? (
                                   <>
                                     <button
@@ -4023,7 +4459,7 @@ export default function InternalSocialPage() {
                           {post.attachments.map((attachment) => (
                             <div
                               key={attachment.id}
-                              className="flex w-full max-w-full items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"
+                              className="relative flex w-full max-w-full items-center justify-center overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"
                             >
                               {(() => {
                                 const mediaUrl = attachment.resolvedUrl || attachment.url;
@@ -4035,7 +4471,7 @@ export default function InternalSocialPage() {
                                       setMediaPreview({
                                         type: "image",
                                         url: mediaUrl,
-                                        label: "Imagem da publicacao",
+                                        label: "Imagem da publicação",
                                         caption: post.text,
                                       })
                                     }
@@ -4062,7 +4498,7 @@ export default function InternalSocialPage() {
                                         setMediaPreview({
                                           type: "video",
                                           url: mediaUrl,
-                                          label: "Video da publicacao",
+                                          label: "Vídeo da publicação",
                                           caption: post.text,
                                         })
                                       }
@@ -4075,7 +4511,7 @@ export default function InternalSocialPage() {
                                         setMediaPreview({
                                           type: "video",
                                           url: mediaUrl,
-                                          label: "Video da publicacao",
+                                          label: "Vídeo da publicação",
                                           caption: post.text,
                                         })
                                       }
@@ -4084,22 +4520,35 @@ export default function InternalSocialPage() {
                                       Ampliar
                                     </button>
                                   </div>
+                                ) : attachment.type === "pdf" && imageReady ? (
+                                  <PdfCarousel
+                                    url={mediaUrl}
+                                    label={attachment.label ?? "Documento da publicação"}
+                                    compact
+                                    onOpen={() =>
+                                      setMediaPreview({
+                                        type: "pdf",
+                                        url: mediaUrl,
+                                        label: "Documento da publicação",
+                                        caption: post.text,
+                                      })
+                                    }
+                                  />
                                 ) : (
                                   /\.pdf(\?|#|$)/i.test(mediaUrl) && canRenderImageUrl(mediaUrl) ? (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
+                                    <PdfCarousel
+                                      url={mediaUrl}
+                                      label={attachment.label ?? "Documento da publicação"}
+                                      compact
+                                      onOpen={() =>
                                         setMediaPreview({
                                           type: "pdf",
                                           url: mediaUrl,
-                                          label: "Documento da publicacao",
+                                          label: "Documento da publicação",
                                           caption: post.text,
                                         })
                                       }
-                                      className="block px-4 py-3 text-sm font-semibold text-blue-700 hover:underline"
-                                    >
-                                      Ver documento
-                                    </button>
+                                    />
                                   ) : (
                                     <a
                                       href={canRenderImageUrl(mediaUrl) ? mediaUrl : "#"}
@@ -4112,6 +4561,22 @@ export default function InternalSocialPage() {
                                   )
                                 );
                               })()}
+                              {canViewPostInsights ? (
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setInsightsPost(post);
+                                    setInsightsTab("views");
+                                  }}
+                                  className="absolute bottom-3 right-3 inline-flex items-center gap-2 rounded-full bg-slate-950/85 px-3 py-1.5 text-xs font-semibold text-white shadow-lg ring-1 ring-white/10 transition hover:bg-slate-900"
+                                  aria-label="Ver visualizações e reações da publicação"
+                                  title="Visualizações e reações"
+                                >
+                                  <span aria-hidden="true">👁</span>
+                                  <span>{post.views.length}</span>
+                                </button>
+                              ) : null}
                             </div>
                           ))}
                         </div>
@@ -4121,7 +4586,7 @@ export default function InternalSocialPage() {
                         <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                           <p className="text-sm font-semibold text-slate-900">{post.poll.question}</p>
                           <p className="mt-1 text-xs text-slate-500">
-                            {post.poll.allow_multiple ? "Voce pode marcar mais de uma opcao." : "Escolha uma opcao."}
+                            {post.poll.allow_multiple ? "Você pode marcar mais de uma opção." : "Escolha uma opção."}
                           </p>
                           <div className="mt-3 space-y-2">
                             {post.poll.options.map((option) => {
@@ -4171,63 +4636,82 @@ export default function InternalSocialPage() {
                       </div>
 
                       <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4 text-sm font-semibold text-slate-500">
-                        <span>{post.reactions.length} reacao(oes)</span>
-                        <span>{post.comments.length} comentario(s)</span>
+                        <span>{post.views.length} visualizações</span>
+                        <span>•</span>
+                        <span>{post.reactions.length} reações</span>
+                        <span>•</span>
+                        <span>{post.comments.length} comentários</span>
                         {post.reportsCount ? <span>{post.reportsCount} denuncia(s)</span> : null}
+                        {me?.role === "admin" ? (
+                          <>
+                            <span>•</span>
+                            <button
+                              type="button"
+                              onClick={() => setSharePost(post)}
+                              className="inline-flex items-center gap-1 text-[#0a66c2] hover:underline"
+                            >
+                              <Share2 size={14} />
+                              Compartilhar
+                            </button>
+                          </>
+                        ) : null}
                       </div>
 
                       <div className="mt-3 space-y-3 border-t border-slate-100 pt-4">
-                        {(expandedCommentPostIds.includes(post.id) ? post.comments : post.comments.slice(0, 1)).map((comment) => (
-                          <div key={comment.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                            {(() => {
-                              const parsedComment = splitMessageContent(comment.text);
-                              return (
-                                <>
-                            <div className="flex items-center justify-between gap-3">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                {resolveCommentAuthorName(
-                                  comment.author_name,
-                                  profileById.get(comment.author_user_id),
-                                  collaboratorNameByUserId[comment.author_user_id]
-                                )}
-                              </p>
-                              <div className="flex items-center gap-2">
-                                <p className="text-xs text-slate-400">{when(comment.created_at)}</p>
-                                {comment.author_user_id === me?.id || canModeratePosts ? (
-                                  <div ref={openCommentActionsId === comment.id ? commentActionsRef : null} className="relative">
-                                    <button
-                                      type="button"
-                                      onClick={() => setOpenCommentActionsId((current) => (current === comment.id ? "" : comment.id))}
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-semibold text-slate-500 hover:bg-slate-50"
-                                      aria-label="Abrir opções do comentário"
-                                    >
-                                      ...
-                                    </button>
-                                    {openCommentActionsId === comment.id ? (
-                                      <div className="absolute right-0 top-9 z-20 min-w-[160px] rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.35)]">
+                        {(expandedCommentPostIds.includes(post.id) ? rootComments : rootComments.slice(0, 1)).map((comment) => {
+                          const commentProfile = profileById.get(comment.author_user_id);
+                          const commentAuthorName = resolveCommentAuthorName(
+                            comment.author_name,
+                            commentProfile,
+                            collaboratorNameByUserId[comment.author_user_id]
+                          );
+                          const parsedComment = splitMessageContent(comment.text);
+                          const replies = repliesByParentId.get(comment.id) ?? [];
+                          return (
+                            <div key={comment.id} className="flex items-start gap-3">
+                              <ProfileAvatar name={commentAuthorName} avatarUrl={commentProfile?.avatar_url ?? null} size="sm" />
+                              <div className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-semibold text-slate-900">{commentAuthorName}</p>
+                                    <p className="text-xs text-slate-400">{when(comment.created_at)}</p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {comment.author_user_id === me?.id || canModeratePosts ? (
+                                      <div ref={openCommentActionsId === comment.id ? commentActionsRef : null} className="relative">
                                         <button
                                           type="button"
-                                          onClick={() => startEditComment(comment)}
-                                          className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                                          onClick={() => setOpenCommentActionsId((current) => (current === comment.id ? "" : comment.id))}
+                                          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-sm font-semibold text-slate-500 hover:bg-slate-50"
+                                          aria-label="Abrir opções do comentário"
                                         >
-                                          <span>Editar comentário</span>
+                                          ...
                                         </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setOpenCommentActionsId("");
-                                            void deleteComment(comment);
-                                          }}
-                                          className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold text-rose-700 hover:bg-rose-50"
-                                        >
-                                          <span>Excluir comentário</span>
-                                        </button>
+                                        {openCommentActionsId === comment.id ? (
+                                          <div className="absolute right-0 top-9 z-20 min-w-[160px] rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.35)]">
+                                            <button
+                                              type="button"
+                                              onClick={() => startEditComment(comment)}
+                                              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                                            >
+                                              <span>Editar comentário</span>
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setOpenCommentActionsId("");
+                                                void deleteComment(comment);
+                                              }}
+                                              className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold text-rose-700 hover:bg-rose-50"
+                                            >
+                                              <span>Excluir comentário</span>
+                                            </button>
+                                          </div>
+                                        ) : null}
                                       </div>
                                     ) : null}
                                   </div>
-                                ) : null}
-                              </div>
-                            </div>
+                                </div>
                             {editingCommentId === comment.id ? (
                               <div className="mt-2 space-y-2">
                                 <textarea
@@ -4279,7 +4763,7 @@ export default function InternalSocialPage() {
                                           {attachmentType === "image" ? (
                                             <Image
                                               src={attachmentUrl}
-                                              alt="Anexo do comentario"
+                                              alt="Anexo do comentário"
                                               width={900}
                                               height={700}
                                               unoptimized
@@ -4302,14 +4786,76 @@ export default function InternalSocialPage() {
                                     })}
                                   </div>
                                 ) : null}
+                                <div className="mt-3 flex items-center gap-3 text-xs font-semibold text-slate-500">
+                                  <button
+                                    type="button"
+                                    onClick={() => setReplyingToCommentId((current) => (current === comment.id ? "" : comment.id))}
+                                    className="hover:text-[#0a66c2]"
+                                  >
+                                    Responder
+                                  </button>
+                                </div>
+                                {replies.length ? (
+                                  <div className="mt-3 space-y-3 border-l-2 border-slate-200 pl-3">
+                                    {replies.map((reply) => {
+                                      const replyProfile = profileById.get(reply.author_user_id);
+                                      const replyAuthorName = resolveCommentAuthorName(
+                                        reply.author_name,
+                                        replyProfile,
+                                        collaboratorNameByUserId[reply.author_user_id]
+                                      );
+                                      const parsedReply = splitMessageContent(reply.text);
+                                      return (
+                                        <div key={reply.id} className="flex items-start gap-2">
+                                          <ProfileAvatar name={replyAuthorName} avatarUrl={replyProfile?.avatar_url ?? null} size="sm" />
+                                          <div className="min-w-0 flex-1 rounded-2xl bg-white px-3 py-2 ring-1 ring-slate-200">
+                                            <div className="flex items-center justify-between gap-2">
+                                              <p className="truncate text-sm font-semibold text-slate-900">{replyAuthorName}</p>
+                                              <p className="shrink-0 text-[11px] text-slate-400">{when(reply.created_at)}</p>
+                                            </div>
+                                            {parsedReply.body ? (
+                                              <RichText
+                                                className="mt-1 text-sm text-slate-700 [&_p]:whitespace-pre-wrap"
+                                                value={parsedReply.body}
+                                                mentionDirectory={mentionDirectory.byHandle}
+                                              />
+                                            ) : null}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                ) : null}
+                                {replyingToCommentId === comment.id ? (
+                                  <div className="mt-3 flex items-start gap-2">
+                                    <ProfileAvatar name={currentName} avatarUrl={me?.avatar_url ?? null} size="sm" />
+                                    <div className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white px-3 py-2">
+                                      <textarea
+                                        value={commentDrafts[`reply:${comment.id}`] ?? ""}
+                                        onChange={(event) =>
+                                          setCommentDrafts((prev) => ({ ...prev, [`reply:${comment.id}`]: event.target.value }))
+                                        }
+                                        placeholder={`Responder ${commentAuthorName}`}
+                                        rows={1}
+                                        className="min-h-[34px] w-full resize-none border-0 bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                                      />
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => void submitComment(post.id, comment.id)}
+                                      className="rounded-2xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800"
+                                    >
+                                      Responder
+                                    </button>
+                                  </div>
+                                ) : null}
                               </>
                             )}
-                                </>
-                              );
-                            })()}
-                          </div>
-                        ))}
-                        {post.comments.length > 1 ? (
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {rootComments.length > 1 ? (
                           <button
                             type="button"
                             onClick={() =>
@@ -4320,8 +4866,8 @@ export default function InternalSocialPage() {
                             className="text-sm font-semibold text-[#0a66c2] hover:underline"
                           >
                             {expandedCommentPostIds.includes(post.id)
-                              ? "Ver menos comentarios"
-                              : `Ver mais ${post.comments.length - 1} comentario(s)`}
+                              ? "Ver menos comentários"
+                              : `Ver mais ${rootComments.length - 1} comentário(s)`}
                           </button>
                         ) : null}
                         <input
@@ -4396,7 +4942,7 @@ export default function InternalSocialPage() {
                                     );
                                   })
                                 ) : (
-                                  <p className="text-sm text-slate-500">Nenhum usuario encontrado para essa mencao.</p>
+                                  <p className="text-sm text-slate-500">Nenhum usuário encontrado para essa menção.</p>
                                 )}
                               </div>
                             </div>
@@ -4468,7 +5014,8 @@ export default function InternalSocialPage() {
                               </div>
                             </div>
                           ) : null}
-                        <div className="flex gap-2">
+                        <div className="flex items-start gap-3">
+                          <ProfileAvatar name={currentName} avatarUrl={me?.avatar_url ?? null} size="sm" />
                           <div className="flex-1 rounded-2xl border border-slate-200 bg-white px-3 py-2">
                             {(commentAttachments[post.id] ?? []).length ? (
                               <div className="mb-3 flex flex-wrap gap-2">
@@ -4570,7 +5117,7 @@ export default function InternalSocialPage() {
                                 target.style.height = "0px";
                                 target.style.height = `${Math.min(target.scrollHeight, 220)}px`;
                               }}
-                              placeholder="Escreva um comentario. Use @handle, #assunto, emojis, imagem ou GIF."
+                              placeholder="Escreva um comentário. Use @handle, #assunto, emojis, imagem ou GIF."
                               rows={1}
                               className="min-h-[36px] w-full resize-none border-0 bg-transparent px-0 py-0 text-sm text-slate-900 outline-none placeholder:text-slate-400"
                             />
@@ -5221,7 +5768,7 @@ export default function InternalSocialPage() {
                                 </div>
                               ))
                           ) : (
-                            <p className="text-sm text-slate-500">Ainda nao ha publicacoes nesta comunidade.</p>
+                            <p className="text-sm text-slate-500">Ainda não há publicações nesta comunidade.</p>
                           )}
                         </div>
                       </div>
@@ -5301,7 +5848,7 @@ export default function InternalSocialPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Projetos</p>
-                <p className="mt-1 text-lg font-semibold text-slate-900">Ambiente colaborativo de informacoes</p>
+                <p className="mt-1 text-lg font-semibold text-slate-900">Ambiente colaborativo de informações</p>
               </div>
               <select
                 value={projectBoardProjectId}
@@ -5331,7 +5878,7 @@ export default function InternalSocialPage() {
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-sm font-semibold text-slate-900">Quadro colaborativo do projeto</p>
                   <p className="mt-1 text-xs text-slate-500">
-                    Use este espaco para registrar contexto, combinados e informacoes compartilhadas sobre o projeto.
+                    Use este espaço para registrar contexto, combinados e informações compartilhadas sobre o projeto.
                   </p>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
                     {["Contexto", "Riscos", "Combinados", "Proximos passos"].map((item) => (
@@ -5344,7 +5891,7 @@ export default function InternalSocialPage() {
                     value={projectNotes[selectedProjectBoard.id] ?? ""}
                     onChange={(event) => updateProjectNote(selectedProjectBoard.id, event.target.value)}
                     rows={6}
-                    placeholder="Ex.: status da equipe, informacoes relevantes, combinados internos, riscos e proximas acoes."
+                    placeholder="Ex.: status da equipe, informações relevantes, combinados internos, riscos e próximas ações."
                     className="mt-3 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-blue-300"
                   />
                   <div className="mt-3 flex justify-end gap-2">
@@ -5368,7 +5915,7 @@ export default function InternalSocialPage() {
               </div>
             ) : (
               <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
-                Selecione um projeto para visualizar os dados basicos e registrar informacoes colaborativas.
+                Selecione um projeto para visualizar os dados básicos e registrar informações colaborativas.
               </div>
             )}
           </section>
@@ -6137,11 +6684,12 @@ export default function InternalSocialPage() {
                   className="max-h-[82vh] max-w-full rounded-2xl bg-black shadow-[0_30px_90px_-32px_rgba(0,0,0,0.8)]"
                 />
               ) : (
-                <iframe
-                  src={mediaPreview.url}
-                  title="Documento da publicacao"
-                  className="h-[82vh] w-full rounded-2xl border border-white/10 bg-white shadow-[0_30px_90px_-32px_rgba(0,0,0,0.8)]"
-                />
+                <div className="h-[82vh] w-full overflow-hidden rounded-2xl border border-white/10 bg-white shadow-[0_30px_90px_-32px_rgba(0,0,0,0.8)]">
+                  <PdfCarousel
+                    url={mediaPreview.url}
+                    label={mediaPreview.label}
+                  />
+                </div>
               )}
             </div>
             {(mediaPreview.caption ?? "").trim() ? (
@@ -6160,6 +6708,219 @@ export default function InternalSocialPage() {
                 ) : null}
               </div>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {activeInsightsPost ? (
+        <div
+          className="fixed inset-0 z-[85] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Visualizações e reações"
+          onClick={() => setInsightsPost(null)}
+        >
+          <div
+            className="flex max-h-[86vh] w-full max-w-2xl flex-col overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_35px_100px_-36px_rgba(15,23,42,0.55)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Publicação</p>
+                <h2 className="mt-1 text-lg font-semibold text-slate-900">Visualizações e reações</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  {insightViewers.length} visualizações • {insightReactors.length} reações • {insightComments.length} comentários
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInsightsPost(null)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-2xl leading-none text-slate-500 hover:bg-slate-50"
+                aria-label="Fechar"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="border-b border-slate-100 px-5 py-3">
+              <div className="flex flex-wrap gap-2 rounded-full bg-slate-100 p-1">
+                {[
+                  { id: "views", label: "Visualizaram", count: insightViewers.length },
+                  { id: "reactions", label: "Reagiram", count: insightReactors.length },
+                  { id: "comments", label: "Comentaram", count: insightComments.length },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setInsightsTab(tab.id as "views" | "reactions" | "comments")}
+                    className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                      insightsTab === tab.id ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    {tab.label} ({tab.count})
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-5">
+              <div className="space-y-3">
+                {insightsTab === "views" ? (
+                  insightViewers.length ? (
+                    insightViewers.map((viewer) => (
+                      <div key={`viewer-${viewer.userId}`} className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                        <ProfileAvatar name={viewer.name} avatarUrl={viewer.avatarUrl} size="sm" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-slate-900">{viewer.name}</p>
+                          <p className="truncate text-xs text-slate-500">{viewer.subtitle}</p>
+                          <p className="text-[11px] text-slate-400">{when(viewer.date)}</p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">Ainda não há visualizações registradas.</p>
+                  )
+                ) : insightsTab === "reactions" ? (
+                  insightReactors.length ? (
+                    insightReactors.map((reaction, index) => (
+                      <div key={`reaction-${reaction.userId}-${reaction.emoji}-${index}`} className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                        <div className="relative">
+                          <ProfileAvatar name={reaction.name} avatarUrl={reaction.avatarUrl} size="sm" />
+                          <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border border-white bg-white text-sm shadow-sm">{reaction.emoji}</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-slate-900">{reaction.name}</p>
+                          <p className="truncate text-xs text-slate-500">{reaction.subtitle}</p>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">Ainda não há reações nesta publicação.</p>
+                  )
+                ) : insightComments.length ? (
+                  insightComments.map((comment) => (
+                    <div key={`insight-comment-${comment.id}`} className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2.5">
+                      <ProfileAvatar name={comment.name} avatarUrl={comment.avatarUrl} size="sm" />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="truncate text-sm font-semibold text-slate-900">{comment.name}</p>
+                          <p className="shrink-0 text-[11px] text-slate-400">{when(comment.date)}</p>
+                        </div>
+                        <p className="truncate text-xs text-slate-500">{comment.subtitle}</p>
+                        <p className="mt-1 text-sm text-slate-700">{compactText(comment.body, 180)}</p>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">Ainda não há comentários nesta publicação.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {activeSharePost ? (
+        <div
+          className="fixed inset-0 z-[86] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Compartilhar publicação"
+          onClick={() => setSharePost(null)}
+        >
+          <div
+            className="w-full max-w-xl overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_35px_100px_-36px_rgba(15,23,42,0.55)]"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">PulseHub</p>
+                <h2 className="mt-1 text-lg font-semibold text-slate-900">Compartilhar publicação</h2>
+                <p className="mt-1 text-sm text-slate-500">Revise o texto e envie pelo WhatsApp.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSharePost(null)}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-2xl leading-none text-slate-500 hover:bg-slate-50"
+                aria-label="Fechar"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center gap-3">
+                  <ProfileAvatar
+                    name={activeSharePublisher?.name ?? activeSharePost.author_name}
+                    avatarUrl={activeSharePublisher?.avatarUrl ?? activeSharePost.author_avatar_url}
+                    size="sm"
+                  />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">
+                      {activeSharePublisher?.name ?? activeSharePost.author_name}
+                    </p>
+                    <p className="truncate text-xs text-slate-500">
+                      {postTypeLabel(activeSharePost.post_type)} • {when(activeSharePost.created_at)}
+                    </p>
+                  </div>
+                </div>
+                <p className="mt-4 text-sm leading-6 text-slate-700">{activeShareSummary}</p>
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-blue-700 break-all">
+                  {activeShareUrl}
+                </div>
+                <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                  É necessário fazer login no Portal de RH para visualizar esta publicação.
+                </p>
+                {activeShareAttachmentUrl ? (
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="truncate text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Anexo</p>
+                      <p className="truncate text-sm font-semibold text-slate-800">{activeShareAttachment?.label ?? "Mídia da publicação"}</p>
+                    </div>
+                    <a
+                      href={activeShareAttachmentUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Abrir mídia
+                    </a>
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="rounded-3xl border border-slate-200 bg-white p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Mensagem pronta</p>
+                <textarea
+                  readOnly
+                  value={activeShareMessage}
+                  rows={4}
+                  className="mt-3 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-800 outline-none"
+                />
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (activeShareMessage && navigator.clipboard) void navigator.clipboard.writeText(activeShareMessage);
+                  }}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Copiar texto
+                </button>
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(activeShareMessage)}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-[#25D366] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#1ebe5d]"
+                >
+                  <MessageCircle size={18} />
+                  Enviar no WhatsApp
+                </a>
+              </div>
+            </div>
           </div>
         </div>
       ) : null}
@@ -6413,7 +7174,7 @@ export default function InternalSocialPage() {
                         onClick={() => setPollOptions((prev) => [...prev, ""])}
                         className="text-sm font-semibold text-[#0a66c2] hover:underline"
                       >
-                        Adicionar opcao
+                        Adicionar opção
                       </button>
                     ) : null}
                   </div>
@@ -6438,6 +7199,20 @@ export default function InternalSocialPage() {
                           src={item.url}
                           controls
                           className={`${draftAttachments.length === 1 ? "max-h-[360px]" : "h-56"} w-full bg-slate-950 object-contain`}
+                        />
+                      ) : item.type === "pdf" ? (
+                        <PdfCarousel
+                          url={item.url}
+                          label={item.label}
+                          compact
+                          onOpen={() =>
+                            setMediaPreview({
+                              type: "pdf",
+                              url: item.url,
+                              label: item.label || "Documento da publicação",
+                              caption: postText,
+                            })
+                          }
                         />
                       ) : null}
                       <div className="flex items-center justify-end gap-3 px-3 py-2 text-xs font-semibold text-slate-600">
@@ -6483,10 +7258,10 @@ export default function InternalSocialPage() {
                   Cancelar
                 </button>
                 <label className="inline-flex cursor-pointer items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
-                  {uploadingMedia ? "Enviando mídia..." : "Vídeo ou foto"}
+                  {uploadingMedia ? "Enviando mídia..." : "PDF, vídeo ou foto"}
                   <input
                     type="file"
-                    accept="image/*,video/mp4,video/webm,video/quicktime"
+                    accept="image/*,video/mp4,video/webm,video/quicktime,application/pdf,.pdf"
                     className="hidden"
                     disabled={uploadingMedia || busy}
                     onChange={(event) => {
