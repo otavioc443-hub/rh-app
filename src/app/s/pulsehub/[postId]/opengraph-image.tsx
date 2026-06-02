@@ -1,7 +1,7 @@
 import { ImageResponse } from "next/og";
 import { getPulseHubSharePost } from "@/lib/pulsehubShare";
 
-export const runtime = "edge";
+export const runtime = "nodejs";
 export const size = {
   width: 1200,
   height: 630,

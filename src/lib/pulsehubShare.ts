@@ -98,10 +98,9 @@ export async function getPulseHubSharePost(postId: string): Promise<PulseHubShar
   }
 
   const publisher = compact(post.official_author_label || companyName || post.audience_label || post.author_name || "Portal de RH", 80);
-  const body = plainText(post.text);
   const fallbackTitle = `${postTypeLabel(post.post_type)} - ${publisher}`;
   const title = extractTitle(post.text, fallbackTitle);
-  const description = compact(body || `${postTypeLabel(post.post_type)} publicado no PulseHub. Acesse o Portal de RH para visualizar.`, 180);
+  const description = `Acesse o link para ver o comunicado completo no Portal de RH.`;
 
   return {
     id: post.id,
