@@ -1167,7 +1167,15 @@ function PdfCarousel({
             className="h-full w-full border-0 bg-white"
           />
         ) : (
-          <button type="button" onClick={onOpen} className="flex h-full w-full cursor-zoom-in items-center justify-center" aria-label="Ampliar PDF">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpen?.();
+            }}
+            className={`flex h-full w-full items-center justify-center ${onOpen ? "cursor-zoom-in" : "cursor-default"}`}
+            aria-label="Ampliar PDF"
+          >
             <canvas ref={canvasRef} className="mx-auto max-h-full max-w-full bg-white shadow-sm" />
           </button>
         )}
@@ -1202,14 +1210,20 @@ function PdfCarousel({
             style={{ width: `${pageCount > 0 ? Math.max(8, (pageNumber / pageCount) * 100) : 8}%` }}
           />
         </div>
-        <button
-          type="button"
-          onClick={onOpen}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white transition hover:bg-white/15"
-          aria-label="Expandir PDF"
-        >
-          <Maximize2 size={17} />
-        </button>
+        {onOpen ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpen();
+            }}
+            className="relative z-10 inline-flex h-8 w-8 items-center justify-center rounded-full text-white transition hover:bg-white/15"
+            aria-label="Expandir PDF"
+            title="Expandir PDF"
+          >
+            <Maximize2 size={17} />
+          </button>
+        ) : null}
       </div>
       {!compact && Object.keys(thumbnailUrls).length ? (
         <div className="flex gap-2 overflow-x-auto border-t border-slate-200 bg-white/90 p-3">
@@ -1282,6 +1296,7 @@ export default function InternalSocialPage() {
   const [audienceCompanyId, setAudienceCompanyId] = useState("");
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [expandedCommentPostIds, setExpandedCommentPostIds] = useState<string[]>([]);
+  const [activeCommentComposerPostIds, setActiveCommentComposerPostIds] = useState<string[]>([]);
   const [replyingToCommentId, setReplyingToCommentId] = useState("");
   const [commentAttachments, setCommentAttachments] = useState<Record<string, DraftAttachment[]>>({});
   const [commentMediaUrls, setCommentMediaUrls] = useState<Record<string, string>>({});
@@ -1362,6 +1377,7 @@ export default function InternalSocialPage() {
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const editingPostTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const commentTextareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+  const pendingViewTimersRef = useRef<Record<string, number>>({});
 
   async function resolvePostAttachmentUrls(items: AttachmentRow[]) {
     const toResolve = items
@@ -2597,31 +2613,65 @@ export default function InternalSocialPage() {
   }, [feedFilter, feedPosts, savedPostIds, searchTerm]);
 
   useEffect(() => {
-    if (!me?.id || !visibleFeedPosts.length) return;
-    const nextIds = visibleFeedPosts
-      .map((post) => post.id)
-      .filter((postId) => !recordedViewIdsRef.current.has(`${me.id}:${postId}`));
-    if (!nextIds.length) return;
+    if (!me?.id || !visibleFeedPosts.length || typeof IntersectionObserver === "undefined") return;
+    const visiblePostIds = new Set(visibleFeedPosts.map((post) => post.id));
+    const elements = Array.from(document.querySelectorAll<HTMLElement>("[data-pulsehub-post-id]")).filter((element) =>
+      visiblePostIds.has(element.dataset.pulsehubPostId ?? "")
+    );
+    if (!elements.length) return;
 
-    nextIds.forEach((postId) => recordedViewIdsRef.current.add(`${me.id}:${postId}`));
-    const timer = window.setTimeout(() => {
+    const markAsViewed = (postId: string) => {
+      const viewKey = `${me.id}:${postId}`;
+      if (recordedViewIdsRef.current.has(viewKey)) return;
+      recordedViewIdsRef.current.add(viewKey);
       void supabase
         .from("internal_social_post_views")
         .upsert(
-          nextIds.map((postId) => ({
+          {
             post_id: postId,
             user_id: me.id,
             viewed_at: new Date().toISOString(),
-          })),
+          },
           { onConflict: "post_id,user_id" }
         )
         .then((res) => {
           if (res.error && isSchemaCompatError(res.error.message)) return;
           if (res.error) setError(normalizeError(res.error.message));
         });
-    }, 900);
+    };
 
-    return () => window.clearTimeout(timer);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const postId = (entry.target as HTMLElement).dataset.pulsehubPostId ?? "";
+          if (!postId) continue;
+          const timerKey = `${me.id}:${postId}`;
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.55) {
+            if (recordedViewIdsRef.current.has(timerKey) || pendingViewTimersRef.current[timerKey]) continue;
+            pendingViewTimersRef.current[timerKey] = window.setTimeout(() => {
+              delete pendingViewTimersRef.current[timerKey];
+              markAsViewed(postId);
+            }, 1000);
+          } else if (pendingViewTimersRef.current[timerKey]) {
+            window.clearTimeout(pendingViewTimersRef.current[timerKey]);
+            delete pendingViewTimersRef.current[timerKey];
+          }
+        }
+      },
+      { threshold: [0, 0.55, 0.75], rootMargin: "0px 0px -12% 0px" }
+    );
+
+    elements.forEach((element) => observer.observe(element));
+    return () => {
+      observer.disconnect();
+      for (const postId of visiblePostIds) {
+        const timerKey = `${me.id}:${postId}`;
+        if (pendingViewTimersRef.current[timerKey]) {
+          window.clearTimeout(pendingViewTimersRef.current[timerKey]);
+          delete pendingViewTimersRef.current[timerKey];
+        }
+      }
+    };
   }, [me?.id, visibleFeedPosts]);
 
   const visiblePinnedPost = useMemo(() => {
@@ -3275,6 +3325,7 @@ export default function InternalSocialPage() {
       setCommentDrafts((prev) => ({ ...prev, [draftKey]: "" }));
       if (!parentCommentId) setCommentAttachments((prev) => ({ ...prev, [postId]: [] }));
       if (parentCommentId) setReplyingToCommentId("");
+      if (!parentCommentId) setActiveCommentComposerPostIds((current) => current.filter((id) => id !== postId));
       setShowCommentEmojiPickerForPostId("");
       setShowCommentStickerPickerForPostId("");
       await load();
@@ -4352,7 +4403,12 @@ export default function InternalSocialPage() {
                       return map;
                     }, new Map<string, CommentRow[]>());
                     return (
-                      <article id={`post-${post.id}`} key={post.id} className="scroll-mt-28 rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_70px_-44px_rgba(15,23,42,0.32)] backdrop-blur">
+                      <article
+                        id={`post-${post.id}`}
+                        key={post.id}
+                        data-pulsehub-post-id={post.id}
+                        className="scroll-mt-28 rounded-[2rem] border border-slate-200 bg-white/95 p-5 shadow-[0_24px_70px_-44px_rgba(15,23,42,0.32)] backdrop-blur"
+                      >
                         {post.hidden_at ? (
                           <div className="mb-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
                             Publicacao oculta pela moderacao em {when(post.hidden_at)}.
@@ -4631,7 +4687,9 @@ export default function InternalSocialPage() {
                                     setInsightsPost(post);
                                     setInsightsTab("views");
                                   }}
-                                  className="absolute bottom-3 right-3 inline-flex items-center gap-2 rounded-full bg-slate-950/85 px-3 py-1.5 text-xs font-semibold text-white shadow-lg ring-1 ring-white/10 transition hover:bg-slate-900"
+                                  className={`absolute right-3 inline-flex items-center gap-2 rounded-full bg-slate-950/85 px-3 py-1.5 text-xs font-semibold text-white shadow-lg ring-1 ring-white/10 transition hover:bg-slate-900 ${
+                                    attachment.type === "pdf" ? "bottom-14" : "bottom-3"
+                                  }`}
                                   aria-label="Ver visualizações e reações da publicação"
                                   title="Visualizações e reações"
                                 >
@@ -4680,43 +4738,89 @@ export default function InternalSocialPage() {
                         </div>
                       ) : null}
 
-                      <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
-                        {REACTION_EMOJIS.map((emoji) => {
-                          const count = post.reactions.filter((item) => item.emoji === emoji).length;
-                          const active = !!post.reactions.find((item) => item.user_id === me?.id && item.emoji === emoji);
-                          return (
-                            <button
-                              key={emoji}
-                              type="button"
-                              onClick={() => void toggleReaction(post, emoji)}
-                              className={`rounded-full border px-3 py-1 text-sm font-semibold ${active ? "border-blue-300 bg-blue-50 text-blue-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
-                            >
-                              {emoji} {count || ""}
-                            </button>
-                          );
-                        })}
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4 text-sm text-slate-500">
+                        <div className="flex min-w-0 flex-wrap items-center gap-2">
+                          {post.reactions.length ? (
+                            <span className="inline-flex -space-x-1">
+                              {Array.from(new Set(post.reactions.map((item) => item.emoji))).slice(0, 3).map((emoji) => (
+                                <span key={`${post.id}-summary-${emoji}`} className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-white bg-slate-100 text-sm shadow-sm">
+                                  {emoji}
+                                </span>
+                              ))}
+                            </span>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInsightsPost(post);
+                              setInsightsTab("reactions");
+                            }}
+                            className="font-medium text-slate-500 hover:text-[#0a66c2]"
+                          >
+                            {post.reactions.length ? `${post.reactions.length} reações` : "Seja o primeiro a reagir"}
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-3 font-medium">
+                          <span>{post.views.length} visualizações</span>
+                          <span>{post.comments.length} comentários</span>
+                        </div>
+                        {post.reportsCount ? <span>{post.reportsCount} denuncia(s)</span> : null}
                       </div>
 
-                      <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4 text-sm font-semibold text-slate-500">
-                        <span>{post.views.length} visualizações</span>
-                        <span>•</span>
-                        <span>{post.reactions.length} reações</span>
-                        <span>•</span>
-                        <span>{post.comments.length} comentários</span>
-                        {post.reportsCount ? <span>{post.reportsCount} denuncia(s)</span> : null}
+                      <div className="mt-3 grid grid-cols-3 border-y border-slate-100 py-1 text-sm font-semibold text-slate-600">
+                        <div className="group relative">
+                          <button
+                            type="button"
+                            onClick={() => void toggleReaction(post, "👍")}
+                            className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 transition hover:bg-slate-50 hover:text-slate-900"
+                          >
+                            <span aria-hidden="true">👍</span>
+                            <span>Gostar</span>
+                          </button>
+                          <div className="pointer-events-none absolute bottom-full left-1/2 z-30 mb-2 flex -translate-x-1/2 scale-95 items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-1.5 opacity-0 shadow-[0_18px_45px_-24px_rgba(15,23,42,0.45)] transition group-hover:pointer-events-auto group-hover:scale-100 group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:scale-100 group-focus-within:opacity-100">
+                            {REACTION_EMOJIS.map((emoji) => {
+                              const active = !!post.reactions.find((item) => item.user_id === me?.id && item.emoji === emoji);
+                              return (
+                                <button
+                                  key={`${post.id}-reaction-${emoji}`}
+                                  type="button"
+                                  onClick={() => void toggleReaction(post, emoji)}
+                                  className={`inline-flex h-10 w-10 items-center justify-center rounded-full text-xl transition hover:-translate-y-1 hover:bg-slate-100 ${
+                                    active ? "bg-blue-50 ring-2 ring-blue-200" : ""
+                                  }`}
+                                  title={emoji}
+                                >
+                                  {emoji}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveCommentComposerPostIds((current) =>
+                              current.includes(post.id) ? current : [...current, post.id]
+                            );
+                            window.setTimeout(() => commentTextareaRefs.current[post.id]?.focus(), 0);
+                          }}
+                          className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 transition hover:bg-slate-50 hover:text-slate-900"
+                        >
+                          <span aria-hidden="true">💬</span>
+                          <span>Comentar</span>
+                        </button>
                         {me?.role === "admin" ? (
-                          <>
-                            <span>•</span>
-                            <button
-                              type="button"
-                              onClick={() => setSharePost(post)}
-                              className="inline-flex items-center gap-1 text-[#0a66c2] hover:underline"
-                            >
-                              <Share2 size={14} />
-                              Compartilhar
-                            </button>
-                          </>
-                        ) : null}
+                          <button
+                            type="button"
+                            onClick={() => setSharePost(post)}
+                            className="flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 transition hover:bg-slate-50 hover:text-slate-900"
+                          >
+                            <Share2 size={16} />
+                            <span>Compartilhar</span>
+                          </button>
+                        ) : (
+                          <span />
+                        )}
                       </div>
 
                       <div className="mt-3 space-y-3 border-t border-slate-100 pt-4">
@@ -4944,6 +5048,7 @@ export default function InternalSocialPage() {
                             event.currentTarget.value = "";
                           }}
                         />
+                        {activeCommentComposerPostIds.includes(post.id) ? (
                         <div className="space-y-3">
                           {showCommentEmojiPickerForPostId === post.id ? (
                             <EmojiPicker
@@ -5193,6 +5298,7 @@ export default function InternalSocialPage() {
                           </button>
                         </div>
                         </div>
+                        ) : null}
                       </div>
                     </article>
                   );
