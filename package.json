@@ -25,6 +25,7 @@
     "test:feature-modules": "node scripts/test-feature-modules.mjs"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.0.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.95.3",
     "html-to-image": "^1.11.13",

@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { renderPulseHubFirstPdfPagePng } from "@/lib/pulsehubPdfPreview";
 import { getPulseHubSharePost } from "@/lib/pulsehubShare";
 
 export const runtime = "nodejs";
@@ -10,6 +11,17 @@ type PreviewImageProps = {
 export async function GET(_request: Request, { params }: PreviewImageProps) {
   const { postId } = await params;
   const post = await getPulseHubSharePost(postId);
+  const pdfPreview = await renderPulseHubFirstPdfPagePng(postId).catch(() => null);
+
+  if (pdfPreview) {
+    return new Response(new Uint8Array(pdfPreview), {
+      status: 200,
+      headers: {
+        "Content-Type": "image/png",
+        "Cache-Control": "public, max-age=300, s-maxage=300",
+      },
+    });
+  }
 
   const title = post?.title ?? "Publicação PulseHub";
   const description = post?.description ?? "Acesse o Portal de RH para visualizar esta publicação.";
