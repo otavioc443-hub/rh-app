@@ -2612,6 +2612,50 @@ export default function InternalSocialPage() {
     });
   }, [feedFilter, feedPosts, savedPostIds, searchTerm]);
 
+  const recordPostView = useCallback(
+    async (postId: string) => {
+      if (!me?.id || !postId) return;
+      const viewKey = `${me.id}:${postId}`;
+      if (recordedViewIdsRef.current.has(viewKey)) return;
+      recordedViewIdsRef.current.add(viewKey);
+
+      const viewedAt = new Date().toISOString();
+      const res = await supabase
+        .from("internal_social_post_views")
+        .upsert(
+          {
+            post_id: postId,
+            user_id: me.id,
+            viewed_at: viewedAt,
+          },
+          { onConflict: "post_id,user_id" }
+        )
+        .select("id,post_id,user_id,viewed_at")
+        .maybeSingle<ViewRow>();
+
+      if (res.error && isSchemaCompatError(res.error.message)) return;
+      if (res.error) {
+        recordedViewIdsRef.current.delete(viewKey);
+        setError(normalizeError(res.error.message));
+        return;
+      }
+
+      const nextView: ViewRow = res.data ?? {
+        id: `local-${postId}-${me.id}`,
+        post_id: postId,
+        user_id: me.id,
+        viewed_at: viewedAt,
+      };
+      setPosts((current) =>
+        current.map((post) => {
+          if (post.id !== postId || post.views.some((view) => view.user_id === me.id)) return post;
+          return { ...post, views: [...post.views, nextView] };
+        })
+      );
+    },
+    [me?.id]
+  );
+
   useEffect(() => {
     if (!me?.id || !visibleFeedPosts.length || typeof IntersectionObserver === "undefined") return;
     const visiblePostIds = new Set(visibleFeedPosts.map((post) => post.id));
@@ -2620,37 +2664,17 @@ export default function InternalSocialPage() {
     );
     if (!elements.length) return;
 
-    const markAsViewed = (postId: string) => {
-      const viewKey = `${me.id}:${postId}`;
-      if (recordedViewIdsRef.current.has(viewKey)) return;
-      recordedViewIdsRef.current.add(viewKey);
-      void supabase
-        .from("internal_social_post_views")
-        .upsert(
-          {
-            post_id: postId,
-            user_id: me.id,
-            viewed_at: new Date().toISOString(),
-          },
-          { onConflict: "post_id,user_id" }
-        )
-        .then((res) => {
-          if (res.error && isSchemaCompatError(res.error.message)) return;
-          if (res.error) setError(normalizeError(res.error.message));
-        });
-    };
-
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           const postId = (entry.target as HTMLElement).dataset.pulsehubPostId ?? "";
           if (!postId) continue;
           const timerKey = `${me.id}:${postId}`;
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.55) {
+          if (entry.isIntersecting && entry.intersectionRatio >= 0.12) {
             if (recordedViewIdsRef.current.has(timerKey) || pendingViewTimersRef.current[timerKey]) continue;
             pendingViewTimersRef.current[timerKey] = window.setTimeout(() => {
               delete pendingViewTimersRef.current[timerKey];
-              markAsViewed(postId);
+              void recordPostView(postId);
             }, 1000);
           } else if (pendingViewTimersRef.current[timerKey]) {
             window.clearTimeout(pendingViewTimersRef.current[timerKey]);
@@ -2658,7 +2682,7 @@ export default function InternalSocialPage() {
           }
         }
       },
-      { threshold: [0, 0.55, 0.75], rootMargin: "0px 0px -12% 0px" }
+      { threshold: [0, 0.12, 0.35], rootMargin: "0px 0px -10% 0px" }
     );
 
     elements.forEach((element) => observer.observe(element));
@@ -2672,7 +2696,7 @@ export default function InternalSocialPage() {
         }
       }
     };
-  }, [me?.id, visibleFeedPosts]);
+  }, [me?.id, recordPostView, visibleFeedPosts]);
 
   const visiblePinnedPost = useMemo(() => {
     if (!pinnedPost) return null;
@@ -4581,14 +4605,15 @@ export default function InternalSocialPage() {
                                 return attachment.type === "image" && imageReady ? (
                                   <button
                                     type="button"
-                                    onClick={() =>
+                                    onClick={() => {
+                                      void recordPostView(post.id);
                                       setMediaPreview({
                                         type: "image",
                                         url: mediaUrl,
                                         label: "Imagem da publicação",
                                         caption: post.text,
-                                      })
-                                    }
+                                      });
+                                    }}
                                     className="group relative flex w-full cursor-zoom-in items-center justify-center"
                                     aria-label="Ampliar imagem"
                                   >
@@ -4608,27 +4633,29 @@ export default function InternalSocialPage() {
                                   <div className="group relative flex w-full items-center justify-center">
                                     <video
                                       controls
-                                      onClick={() =>
+                                      onClick={() => {
+                                        void recordPostView(post.id);
                                         setMediaPreview({
                                           type: "video",
                                           url: mediaUrl,
                                           label: "Vídeo da publicação",
                                           caption: post.text,
-                                        })
-                                      }
+                                        });
+                                      }}
                                       className="mx-auto h-auto max-h-[520px] w-auto max-w-full cursor-zoom-in bg-slate-950 object-contain"
                                       src={mediaUrl}
                                     />
                                     <button
                                       type="button"
-                                      onClick={() =>
+                                      onClick={() => {
+                                        void recordPostView(post.id);
                                         setMediaPreview({
                                           type: "video",
                                           url: mediaUrl,
                                           label: "Vídeo da publicação",
                                           caption: post.text,
-                                        })
-                                      }
+                                        });
+                                      }}
                                       className="absolute right-3 top-3 rounded-full bg-slate-950/75 px-3 py-1 text-xs font-semibold text-white opacity-0 transition hover:bg-slate-950 group-hover:opacity-100"
                                     >
                                       Ampliar
@@ -4640,15 +4667,16 @@ export default function InternalSocialPage() {
                                     storagePath={extractInternalSocialStoragePath(attachment.url)}
                                     label={attachment.label ?? "Documento da publicação"}
                                     compact
-                                    onOpen={() =>
+                                    onOpen={() => {
+                                      void recordPostView(post.id);
                                       setMediaPreview({
                                         type: "pdf",
                                         url: mediaUrl,
                                         storagePath: extractInternalSocialStoragePath(attachment.url),
                                         label: "Documento da publicação",
                                         caption: post.text,
-                                      })
-                                    }
+                                      });
+                                    }}
                                   />
                                 ) : (
                                   /\.pdf(\?|#|$)/i.test(mediaUrl) && canRenderImageUrl(mediaUrl) ? (
@@ -4657,15 +4685,16 @@ export default function InternalSocialPage() {
                                       storagePath={extractInternalSocialStoragePath(attachment.url)}
                                       label={attachment.label ?? "Documento da publicação"}
                                       compact
-                                      onOpen={() =>
+                                      onOpen={() => {
+                                        void recordPostView(post.id);
                                         setMediaPreview({
                                           type: "pdf",
                                           url: mediaUrl,
                                           storagePath: extractInternalSocialStoragePath(attachment.url),
                                           label: "Documento da publicação",
                                           caption: post.text,
-                                        })
-                                      }
+                                        });
+                                      }}
                                     />
                                   ) : (
                                     <a
