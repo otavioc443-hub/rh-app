@@ -2664,37 +2664,77 @@ export default function InternalSocialPage() {
   );
 
   useEffect(() => {
-    if (!me?.id || !visibleFeedPosts.length || typeof IntersectionObserver === "undefined") return;
+    if (!me?.id || !visibleFeedPosts.length) return;
     const visiblePostIds = new Set(visibleFeedPosts.map((post) => post.id));
     const elements = Array.from(document.querySelectorAll<HTMLElement>("[data-pulsehub-post-id]")).filter((element) =>
       visiblePostIds.has(element.dataset.pulsehubPostId ?? "")
     );
     if (!elements.length) return;
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          const postId = (entry.target as HTMLElement).dataset.pulsehubPostId ?? "";
-          if (!postId) continue;
-          const timerKey = `${me.id}:${postId}`;
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.12) {
-            if (recordedViewIdsRef.current.has(timerKey) || pendingViewTimersRef.current[timerKey]) continue;
-            pendingViewTimersRef.current[timerKey] = window.setTimeout(() => {
-              delete pendingViewTimersRef.current[timerKey];
-              void recordPostView(postId);
-            }, 1000);
-          } else if (pendingViewTimersRef.current[timerKey]) {
-            window.clearTimeout(pendingViewTimersRef.current[timerKey]);
-            delete pendingViewTimersRef.current[timerKey];
-          }
-        }
-      },
-      { threshold: [0, 0.12, 0.35], rootMargin: "0px 0px -10% 0px" }
-    );
+    const hasMeaningfulViewportPresence = (element: HTMLElement) => {
+      const rect = element.getBoundingClientRect();
+      const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+      const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+      if (!viewportHeight || !viewportWidth || rect.width <= 0 || rect.height <= 0) return false;
 
-    elements.forEach((element) => observer.observe(element));
+      const visibleHeight = Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0);
+      const visibleWidth = Math.min(rect.right, viewportWidth) - Math.max(rect.left, 0);
+      const minHeight = Math.min(220, Math.max(90, rect.height * 0.06));
+      const minWidth = Math.min(220, Math.max(90, rect.width * 0.18));
+      return visibleHeight >= minHeight && visibleWidth >= minWidth;
+    };
+
+    const scheduleView = (element: HTMLElement) => {
+      const postId = element.dataset.pulsehubPostId ?? "";
+      if (!postId) return;
+      const timerKey = `${me.id}:${postId}`;
+      if (recordedViewIdsRef.current.has(timerKey) || pendingViewTimersRef.current[timerKey]) return;
+      if (!hasMeaningfulViewportPresence(element)) return;
+      pendingViewTimersRef.current[timerKey] = window.setTimeout(() => {
+        delete pendingViewTimersRef.current[timerKey];
+        if (hasMeaningfulViewportPresence(element)) void recordPostView(postId);
+      }, 700);
+    };
+
+    const clearPendingView = (element: HTMLElement) => {
+      const postId = element.dataset.pulsehubPostId ?? "";
+      if (!postId) return;
+      const timerKey = `${me.id}:${postId}`;
+      if (!pendingViewTimersRef.current[timerKey]) return;
+      window.clearTimeout(pendingViewTimersRef.current[timerKey]);
+      delete pendingViewTimersRef.current[timerKey];
+    };
+
+    const scanVisiblePosts = () => {
+      for (const element of elements) {
+        if (hasMeaningfulViewportPresence(element)) scheduleView(element);
+        else clearPendingView(element);
+      }
+    };
+
+    let observer: IntersectionObserver | null = null;
+    if (typeof IntersectionObserver !== "undefined") {
+      observer = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            const element = entry.target as HTMLElement;
+            if (entry.isIntersecting) scheduleView(element);
+            else clearPendingView(element);
+          }
+        },
+        { threshold: [0], rootMargin: "0px 0px 0px 0px" }
+      );
+      elements.forEach((element) => observer?.observe(element));
+    }
+
+    const raf = window.requestAnimationFrame(scanVisiblePosts);
+    window.addEventListener("scroll", scanVisiblePosts, { passive: true });
+    window.addEventListener("resize", scanVisiblePosts);
     return () => {
-      observer.disconnect();
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", scanVisiblePosts);
+      window.removeEventListener("resize", scanVisiblePosts);
+      observer?.disconnect();
       for (const postId of visiblePostIds) {
         const timerKey = `${me.id}:${postId}`;
         if (pendingViewTimersRef.current[timerKey]) {
