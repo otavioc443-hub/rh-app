@@ -620,6 +620,13 @@ function plainShareText(value: string | null | undefined) {
     .trim();
 }
 
+function cleanShareTitle(value: string | null | undefined) {
+  return plainShareText(value)
+    .split(/[.!?\n]/)[0]
+    .replace(/^[^\p{L}\p{N}]+/u, "")
+    .trim();
+}
+
 function splitMessageContent(text: string) {
   const lines = text.split("\n");
   const attachmentLines = lines.filter((line) => line.trim().toLowerCase().startsWith("anexo:"));
@@ -3932,7 +3939,7 @@ export default function InternalSocialPage() {
   const activeSharePublisher = activeSharePost ? postPublisherByBrand(activeSharePost) : null;
   const activeShareUrl =
     activeSharePost && typeof window !== "undefined"
-      ? `${window.location.origin}/s/pulsehub/${activeSharePost.id}?v=3`
+      ? `${window.location.origin}/s/pulsehub/${activeSharePost.id}?v=4`
       : "";
   const activeShareSummary = activeSharePost
     ? compactText(
@@ -3943,7 +3950,7 @@ export default function InternalSocialPage() {
     : "";
   const activeShareMessage =
     activeSharePost && activeShareUrl
-      ? `${activeSharePost.text ? compactText(plainShareText(activeSharePost.text).split(/[.!?\n]/)[0] || activeShareSummary, 95) : activeShareSummary}\n\nAcesse o link para ver o comunicado completo:\n👉🏼 ${activeShareUrl}`
+      ? `${activeSharePost.text ? compactText(cleanShareTitle(activeSharePost.text) || activeShareSummary, 95) : activeShareSummary}\n\nAcesse o link para ver o comunicado completo:\n👉🏼 ${activeShareUrl}`
       : "";
   const activeShareAttachment = activeSharePost?.attachments[0] ?? null;
   const activeShareAttachmentUrl = activeShareAttachment ? activeShareAttachment.resolvedUrl || activeShareAttachment.url : "";

@@ -45,6 +45,13 @@ export async function generateMetadata({ params }: SharePageProps): Promise<Meta
       description: post.description,
       images: [post.imageUrl],
     },
+    other: {
+      "og:image:secure_url": post.imageUrl,
+      "og:image:type": "image/png",
+      "og:image:width": "1200",
+      "og:image:height": "630",
+      "twitter:image": post.imageUrl,
+    },
   };
 }
 
