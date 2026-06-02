@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Eye, MoreHorizontal, RefreshCcw, Save, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Eye, FileSpreadsheet, MoreHorizontal, RefreshCcw, Save, X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserRole } from "@/hooks/useUserRole";
 
@@ -36,6 +36,8 @@ type InvoiceFileRow = {
 };
 
 type CollaboratorRow = { user_id: string | null; nome: string | null; email: string | null; setor: string | null };
+
+const PAGE_SIZE = 25;
 
 function statusLabel(status: InvoiceStatus) {
   if (status === "draft") return "Rascunho";
@@ -74,6 +76,30 @@ function invoiceYear(row: InvoiceRow) {
   return String(new Date(row.reference_month).getUTCFullYear());
 }
 
+function statusSortRank(status: InvoiceStatus) {
+  if (status === "submitted") return 0;
+  if (status === "draft") return 1;
+  if (status === "rejected") return 2;
+  if (status === "cancelled") return 3;
+  return 4;
+}
+
+function downloadBlob(filename: string, blob: Blob) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function csvCell(value: unknown) {
+  const text = String(value ?? "").replace(/"/g, '""');
+  return `"${text}"`;
+}
+
 export default function FinanceiroNotasFiscaisPage() {
   const { role, loading: roleLoading } = useUserRole();
   const canReview = role === "financeiro" || role === "admin" || role === "rh";
@@ -94,6 +120,8 @@ export default function FinanceiroNotasFiscaisPage() {
   const [reviewerUserId, setReviewerUserId] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<{ name: string; kind: InvoiceFileRow["file_kind"]; url: string } | null>(null);
   const [commentInvoice, setCommentInvoice] = useState<InvoiceRow | null>(null);
+  const [page, setPage] = useState(1);
+  const [exportingFiles, setExportingFiles] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -197,8 +225,76 @@ export default function FinanceiroNotasFiscaisPage() {
       if (monthFilter !== "all" && invoiceMonth(row) !== monthFilter) return false;
       if (yearFilter !== "all" && invoiceYear(row) !== yearFilter) return false;
       return true;
+    }).sort((a, b) => {
+      const statusDiff = statusSortRank(a.status) - statusSortRank(b.status);
+      if (statusDiff !== 0) return statusDiff;
+      const monthDiff = new Date(b.reference_month).getTime() - new Date(a.reference_month).getTime();
+      if (monthDiff !== 0) return monthDiff;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
   }, [collaboratorFilter, monthFilter, rows, sectorByUserId, sectorFilter, statusFilter, yearFilter]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [collaboratorFilter, monthFilter, sectorFilter, statusFilter, yearFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginatedRows = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, safePage]);
+
+  function exportFilteredSheet() {
+    const headers = ["Colaborador", "Setor", "Competencia", "Numero NF", "Valor", "Plataforma", "Status", "Data envio", "Data analise", "Comentario"];
+    const lines = [
+      headers.map(csvCell).join(";"),
+      ...filtered.map((row) =>
+        [
+          nameByUserId[row.user_id] ?? row.user_id,
+          sectorByUserId[row.user_id] ?? "Sem setor",
+          `${invoiceMonth(row)}/${invoiceYear(row)}`,
+          row.invoice_number ?? "",
+          row.gross_amount ?? "",
+          providerLabel(row.integration_provider),
+          statusLabel(row.status),
+          row.sent_at ? new Date(row.sent_at).toLocaleString("pt-BR") : "",
+          row.reviewed_at ? new Date(row.reviewed_at).toLocaleString("pt-BR") : "",
+          row.review_comment ?? "",
+        ].map(csvCell).join(";")
+      ),
+    ];
+    downloadBlob(`notas-fiscais-filtradas-${new Date().toISOString().slice(0, 10)}.csv`, new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" }));
+  }
+
+  async function downloadFilteredFiles() {
+    if (!filtered.length) return setMsg("Nao ha notas filtradas para baixar.");
+    setExportingFiles(true);
+    setMsg("");
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token ?? null;
+      const res = await fetch("/api/financeiro/notas-fiscais/download", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ invoice_ids: filtered.map((row) => row.id) }),
+      });
+      if (!res.ok) {
+        const json = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(json.error || `Erro ao baixar anexos (status ${res.status}).`);
+      }
+      const blob = await res.blob();
+      downloadBlob(`notas-fiscais-filtradas-${new Date().toISOString().slice(0, 10)}.zip`, blob);
+    } catch (error: unknown) {
+      setMsg(error instanceof Error ? error.message : "Erro ao baixar anexos filtrados.");
+    } finally {
+      setExportingFiles(false);
+    }
+  }
 
   async function updateStatus(row: InvoiceRow, status: InvoiceStatus) {
     if (!reviewerUserId) return;
@@ -277,15 +373,35 @@ export default function FinanceiroNotasFiscaisPage() {
             <h1 className="text-xl font-semibold text-slate-900">Notas fiscais dos colaboradores</h1>
             <p className="mt-1 text-sm text-slate-600">Analise, aprove ou reprove notas enviadas no Meu Perfil.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => void load()}
-            disabled={loading}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
-          >
-            <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
-            Atualizar
-          </button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => void downloadFilteredFiles()}
+              disabled={loading || exportingFiles || !filtered.length}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+            >
+              <Download size={16} />
+              {exportingFiles ? "Gerando..." : "Baixar notas"}
+            </button>
+            <button
+              type="button"
+              onClick={exportFilteredSheet}
+              disabled={loading || !filtered.length}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+            >
+              <FileSpreadsheet size={16} />
+              Baixar planilha
+            </button>
+            <button
+              type="button"
+              onClick={() => void load()}
+              disabled={loading}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+            >
+              <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
+              Atualizar
+            </button>
+          </div>
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-5">
@@ -334,6 +450,13 @@ export default function FinanceiroNotasFiscaisPage() {
       {msg ? <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">{msg}</div> : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white p-3">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 px-1 text-xs font-semibold text-slate-500">
+          <span>
+            Exibindo {filtered.length ? (safePage - 1) * PAGE_SIZE + 1 : 0}-
+            {Math.min(safePage * PAGE_SIZE, filtered.length)} de {filtered.length} nota(s) filtrada(s).
+          </span>
+          <span>Notas pendentes aparecem primeiro.</span>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1120px] text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -352,8 +475,8 @@ export default function FinanceiroNotasFiscaisPage() {
             <tbody>
               {loading ? (
                 <tr><td colSpan={9} className="px-3 py-4 text-slate-500">Carregando...</td></tr>
-              ) : filtered.length ? (
-                filtered.map((row) => {
+              ) : paginatedRows.length ? (
+                paginatedRows.map((row) => {
                   const busy = savingId === row.id;
                   const files = filesByInvoiceId[row.id] ?? [];
                   return (
@@ -404,6 +527,29 @@ export default function FinanceiroNotasFiscaisPage() {
               )}
             </tbody>
           </table>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
+          <p className="text-xs font-semibold text-slate-500">Pagina {safePage} de {totalPages} • 25 notas por pagina</p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+              disabled={safePage <= 1}
+              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              <ChevronLeft size={14} />
+              Voltar
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+              disabled={safePage >= totalPages}
+              className="inline-flex items-center gap-1 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Seguir
+              <ChevronRight size={14} />
+            </button>
+          </div>
         </div>
       </div>
 
