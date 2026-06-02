@@ -156,6 +156,31 @@ export async function getPulseHubAttachedPreviewImage(postId: string): Promise<P
   return downloadImageBytes(imageAttachment);
 }
 
+export async function renderPulseHubAttachedImagePng(postId: string) {
+  const imageBytes = await getPulseHubAttachedPreviewImage(postId);
+  if (!imageBytes) return null;
+
+  const { createCanvas, loadImage } = await import("@napi-rs/canvas");
+  const image = await loadImage(Buffer.from(imageBytes.body));
+  const targetWidth = 1200;
+  const targetHeight = 630;
+  const canvas = createCanvas(targetWidth, targetHeight);
+  const context = canvas.getContext("2d");
+
+  context.fillStyle = "#f4f7fb";
+  context.fillRect(0, 0, targetWidth, targetHeight);
+
+  const imageRatio = image.width / image.height;
+  const targetRatio = targetWidth / targetHeight;
+  const drawWidth = imageRatio > targetRatio ? targetWidth : targetHeight * imageRatio;
+  const drawHeight = imageRatio > targetRatio ? targetWidth / imageRatio : targetHeight;
+  const drawX = (targetWidth - drawWidth) / 2;
+  const drawY = (targetHeight - drawHeight) / 2;
+
+  context.drawImage(image, drawX, drawY, drawWidth, drawHeight);
+  return canvas.toBuffer("image/png") as Buffer;
+}
+
 export async function renderPulseHubFirstPdfPagePng(postId: string) {
   const attachment = await getFirstPdfAttachment(postId);
   if (!attachment) return null;

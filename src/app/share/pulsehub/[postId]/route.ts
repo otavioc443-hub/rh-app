@@ -30,9 +30,9 @@ export async function GET(request: Request, { params }: ShareRouteContext) {
   const post = await getPulseHubSharePost(postId);
   const title = post?.title || "Publicação PulseHub";
   const description = post?.description || "Acesse o link para ver o comunicado completo no Portal de RH.";
-  const shareUrl = `${origin}/share/pulsehub/${postId}?v=6`;
-  const portalUrl = post?.portalUrl || `${origin}/institucional/rede-social?tab=inicio#post-${postId}`;
-  const imageUrl = `${origin}/share/pulsehub/${postId}/image.png?v=6`;
+  const shareUrl = `${origin}/share/pulsehub/${postId}?v=7`;
+  const portalUrl = `${origin}/institucional/rede-social?tab=inicio#post-${postId}`;
+  const imageUrl = `${origin}/share/pulsehub/${postId}/image.png?v=7`;
   const publisher = post?.publisher || "Portal de RH";
 
   const html = `<!doctype html>
