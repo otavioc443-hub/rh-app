@@ -3908,7 +3908,7 @@ export default function InternalSocialPage() {
   const activeSharePublisher = activeSharePost ? postPublisherByBrand(activeSharePost) : null;
   const activeShareUrl =
     activeSharePost && typeof window !== "undefined"
-      ? `${window.location.origin}/institucional/rede-social?tab=inicio#post-${activeSharePost.id}`
+      ? `${window.location.origin}/s/pulsehub/${activeSharePost.id}`
       : "";
   const activeShareSummary = activeSharePost
     ? compactText(
