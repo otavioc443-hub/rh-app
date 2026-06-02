@@ -100,6 +100,10 @@ function csvCell(value: unknown) {
   return `"${text}"`;
 }
 
+function isUuid(value: string | null | undefined) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value ?? "").trim());
+}
+
 export default function FinanceiroNotasFiscaisPage() {
   const { role, loading: roleLoading } = useUserRole();
   const canReview = role === "financeiro" || role === "admin" || role === "rh";
@@ -122,6 +126,12 @@ export default function FinanceiroNotasFiscaisPage() {
   const [commentInvoice, setCommentInvoice] = useState<InvoiceRow | null>(null);
   const [page, setPage] = useState(1);
   const [exportingFiles, setExportingFiles] = useState(false);
+
+  function collaboratorName(userId: string) {
+    const name = nameByUserId[userId]?.trim();
+    if (name && !isUuid(name)) return name;
+    return isUuid(userId) ? "Colaborador sem nome" : userId;
+  }
 
   async function load() {
     setLoading(true);
@@ -172,7 +182,8 @@ export default function FinanceiroNotasFiscaisPage() {
           body: JSON.stringify({ userIds }),
         });
         const namesJson = (await namesRes.json().catch(() => ({}))) as { names?: Record<string, string> };
-        setNameByUserId(namesRes.ok && namesJson.names ? namesJson.names : {});
+        const apiNames = namesRes.ok && namesJson.names ? namesJson.names : {};
+        setNameByUserId(apiNames);
 
         const { data: collabRows, error: collabErr } = await supabase
           .from("colaboradores")
@@ -186,7 +197,7 @@ export default function FinanceiroNotasFiscaisPage() {
             names[collaborator.user_id] = collaborator.nome?.trim() || collaborator.email?.trim() || collaborator.user_id;
             sectors[collaborator.user_id] = collaborator.setor?.trim() || "Sem setor";
           }
-          setNameByUserId((current) => ({ ...names, ...current }));
+          setNameByUserId((current) => ({ ...current, ...names }));
           setSectorByUserId(sectors);
         }
       } else {
@@ -211,7 +222,7 @@ export default function FinanceiroNotasFiscaisPage() {
 
   const filterOptions = useMemo(() => {
     const sectors = Array.from(new Set(rows.map((row) => sectorByUserId[row.user_id] ?? "Sem setor"))).sort();
-    const collaborators = Array.from(new Set(rows.map((row) => row.user_id))).sort((a, b) => (nameByUserId[a] ?? a).localeCompare(nameByUserId[b] ?? b));
+    const collaborators = Array.from(new Set(rows.map((row) => row.user_id))).sort((a, b) => collaboratorName(a).localeCompare(collaboratorName(b)));
     const months = Array.from(new Set(rows.map(invoiceMonth))).sort();
     const years = Array.from(new Set(rows.map(invoiceYear))).sort((a, b) => b.localeCompare(a));
     return { sectors, collaborators, months, years };
@@ -251,7 +262,7 @@ export default function FinanceiroNotasFiscaisPage() {
       headers.map(csvCell).join(";"),
       ...filtered.map((row) =>
         [
-          nameByUserId[row.user_id] ?? row.user_id,
+          collaboratorName(row.user_id),
           sectorByUserId[row.user_id] ?? "Sem setor",
           `${invoiceMonth(row)}/${invoiceYear(row)}`,
           row.invoice_number ?? "",
@@ -427,7 +438,7 @@ export default function FinanceiroNotasFiscaisPage() {
             Colaborador
             <select value={collaboratorFilter} onChange={(event) => setCollaboratorFilter(event.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900">
               <option value="all">Todos</option>
-              {filterOptions.collaborators.map((userId) => <option key={userId} value={userId}>{nameByUserId[userId] ?? userId}</option>)}
+              {filterOptions.collaborators.map((userId) => <option key={userId} value={userId}>{collaboratorName(userId)}</option>)}
             </select>
           </label>
           <label className="grid gap-1 text-xs font-semibold text-slate-700">
@@ -481,7 +492,7 @@ export default function FinanceiroNotasFiscaisPage() {
                   const files = filesByInvoiceId[row.id] ?? [];
                   return (
                     <tr key={row.id} className="border-t border-slate-100">
-                      <td className="max-w-[190px] truncate px-3 py-2 font-semibold text-slate-900">{nameByUserId[row.user_id] ?? row.user_id}</td>
+                      <td className="max-w-[190px] truncate px-3 py-2 font-semibold text-slate-900">{collaboratorName(row.user_id)}</td>
                       <td className="max-w-[150px] truncate px-3 py-2 text-slate-600">{sectorByUserId[row.user_id] ?? "Sem setor"}</td>
                       <td className="whitespace-nowrap px-3 py-2">{invoiceMonth(row)}/{invoiceYear(row)}</td>
                       <td className="max-w-[120px] truncate px-3 py-2">{row.invoice_number ?? "-"}</td>
@@ -559,7 +570,7 @@ export default function FinanceiroNotasFiscaisPage() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-lg font-semibold text-slate-900">Comentario da analise</p>
-                <p className="text-sm text-slate-500">{nameByUserId[commentInvoice.user_id] ?? "Colaborador"}</p>
+                <p className="text-sm text-slate-500">{collaboratorName(commentInvoice.user_id)}</p>
               </div>
               <button type="button" onClick={() => setCommentInvoice(null)} className="rounded-full p-2 text-slate-500 hover:bg-slate-100" aria-label="Fechar comentario">
                 <X size={18} />

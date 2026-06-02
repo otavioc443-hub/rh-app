@@ -20,6 +20,32 @@ import {
 const DEFAULT_AFTER_LOGIN = "/home";
 const PORTAL_ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://rh-app-seven.vercel.app").replace(/\/$/, "");
 
+function sanitizeRedirect(path: string | null) {
+  if (!path) return DEFAULT_AFTER_LOGIN;
+  if (!path.startsWith("/")) return DEFAULT_AFTER_LOGIN;
+  if (path.startsWith("//")) return DEFAULT_AFTER_LOGIN;
+  if (path.includes("http://") || path.includes("https://")) return DEFAULT_AFTER_LOGIN;
+
+  const blocked = ["/", "/auth", "/auth/callback", "/auth/recovery", "/set-password", "/recuperar-senha"];
+  if (blocked.some((route) => path === route || path.startsWith(`${route}/`))) return DEFAULT_AFTER_LOGIN;
+
+  return path;
+}
+
+function getLoginRedirectTarget() {
+  if (typeof window === "undefined") return DEFAULT_AFTER_LOGIN;
+  const params = new URLSearchParams(window.location.search);
+  const fromQuery = params.get("next") || params.get("redirectedFrom");
+  const fromStorage = window.localStorage.getItem("redirectedFrom");
+  return sanitizeRedirect(fromQuery || fromStorage);
+}
+
+function clearStoredRedirectTarget() {
+  try {
+    window.localStorage.removeItem("redirectedFrom");
+  } catch {}
+}
+
 function hasAuthLinkParams() {
   if (typeof window === "undefined") return false;
   const url = new URL(window.location.href);
@@ -76,7 +102,9 @@ export default function LoginPage() {
           await forceClientLogout();
           return;
         }
-        router.replace(DEFAULT_AFTER_LOGIN);
+        const target = getLoginRedirectTarget();
+        clearStoredRedirectTarget();
+        router.replace(target);
       })
       .catch(console.error);
 
@@ -98,10 +126,14 @@ export default function LoginPage() {
         }
         clearPortalExitIntent();
         markRecentLogin();
-        router.replace(DEFAULT_AFTER_LOGIN);
+        const target = getLoginRedirectTarget();
+        clearStoredRedirectTarget();
+        router.replace(target);
         return;
       }
-      router.replace(DEFAULT_AFTER_LOGIN);
+      const target = getLoginRedirectTarget();
+      clearStoredRedirectTarget();
+      router.replace(target);
     });
 
     return () => {
@@ -132,7 +164,9 @@ export default function LoginPage() {
       if (data.user) {
         clearPasswordRecoveryIntent();
         markRecentLogin();
-        router.replace(DEFAULT_AFTER_LOGIN);
+        const target = getLoginRedirectTarget();
+        clearStoredRedirectTarget();
+        router.replace(target);
       }
     } catch (err) {
       console.error(err);

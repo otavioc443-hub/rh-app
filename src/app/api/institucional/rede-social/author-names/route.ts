@@ -124,6 +124,29 @@ export async function POST(req: Request) {
       if (profileName && !names[row.id]) names[row.id] = profileName;
     }
 
+    const unresolvedUserIds = userIds.filter((id) => !names[id]);
+    if (unresolvedUserIds.length) {
+      const authUsers = await Promise.all(
+        unresolvedUserIds.map(async (id) => {
+          const { data } = await supabaseAdmin.auth.admin.getUserById(id).catch(() => ({ data: null }));
+          return data?.user ?? null;
+        })
+      );
+      for (const authUser of authUsers) {
+        if (!authUser?.id || names[authUser.id]) continue;
+        const metadata = authUser.user_metadata as Record<string, unknown> | null;
+        const metadataName = cleanName(
+          String(metadata?.full_name ?? metadata?.name ?? metadata?.nome ?? metadata?.display_name ?? "")
+        );
+        if (metadataName) {
+          names[authUser.id] = metadataName;
+          continue;
+        }
+        const email = cleanEmail(authUser.email);
+        if (email) names[authUser.id] = email;
+      }
+    }
+
     return NextResponse.json({ ok: true, names });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Erro inesperado";

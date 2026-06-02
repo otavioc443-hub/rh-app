@@ -24,6 +24,23 @@ function originFromRequest(request: Request) {
   }
 }
 
+function isPreviewCrawler(request: Request) {
+  const userAgent = request.headers.get("user-agent")?.toLowerCase() || "";
+  return [
+    "bot",
+    "crawler",
+    "facebookexternalhit",
+    "facebot",
+    "linkedinbot",
+    "twitterbot",
+    "slackbot",
+    "telegrambot",
+    "whatsapp",
+    "discordbot",
+    "skypeuripreview",
+  ].some((token) => userAgent.includes(token));
+}
+
 export async function GET(request: Request, { params }: ShareRouteContext) {
   const { postId } = await params;
   const origin = originFromRequest(request);
@@ -31,9 +48,13 @@ export async function GET(request: Request, { params }: ShareRouteContext) {
   const title = post?.title || "Publicação PulseHub";
   const description = post?.description || "Acesse o link para ver o comunicado completo no Portal de RH.";
   const shareUrl = `${origin}/share/pulsehub/${postId}?v=7`;
-  const portalUrl = `${origin}/institucional/rede-social?tab=inicio#post-${postId}`;
+  const loginUrl = `${origin}/?next=${encodeURIComponent(`/institucional/rede-social?tab=inicio#post-${postId}`)}`;
   const imageUrl = `${origin}/share/pulsehub/${postId}/image.png?v=7`;
   const publisher = post?.publisher || "Portal de RH";
+
+  if (!isPreviewCrawler(request)) {
+    return NextResponse.redirect(loginUrl);
+  }
 
   const html = `<!doctype html>
 <html lang="pt-BR">
@@ -76,7 +97,7 @@ export async function GET(request: Request, { params }: ShareRouteContext) {
       <div class="brand"><div class="logo">RH</div><div><div class="eyebrow">PulseHub</div><strong>${escapeHtml(publisher)}</strong></div></div>
       <h1>${escapeHtml(title)}</h1>
       <p>${escapeHtml(description)}</p>
-      <a href="${escapeHtml(portalUrl)}">Acessar comunicado completo</a>
+      <a href="${escapeHtml(loginUrl)}">Acessar comunicado completo</a>
     </section>
   </main>
 </body>

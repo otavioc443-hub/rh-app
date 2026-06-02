@@ -379,7 +379,11 @@ export default function PortalShell({ children }: { children: React.ReactNode })
 
     async function safeRedirectToLogin() {
       if (window.location.pathname === "/") return;
-      router.replace("/?redirectedFrom=%2Fhome");
+      const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      try {
+        window.localStorage.setItem("redirectedFrom", currentPath);
+      } catch {}
+      router.replace(`/?next=${encodeURIComponent(currentPath)}`);
     }
 
     function redirectToPasswordRecoveryIfNeeded() {
