@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { renderPulseHubFirstPdfPagePng } from "@/lib/pulsehubPdfPreview";
+import { getPulseHubAttachedPreviewImage, renderPulseHubFirstPdfPagePng } from "@/lib/pulsehubPdfPreview";
 import { getPulseHubSharePost } from "@/lib/pulsehubShare";
 
 export const runtime = "nodejs";
@@ -11,6 +11,18 @@ type PreviewImageProps = {
 export async function GET(_request: Request, { params }: PreviewImageProps) {
   const { postId } = await params;
   const post = await getPulseHubSharePost(postId);
+  const attachedImage = await getPulseHubAttachedPreviewImage(postId).catch(() => null);
+
+  if (attachedImage) {
+    return new Response(new Uint8Array(attachedImage.body), {
+      status: 200,
+      headers: {
+        "Content-Type": attachedImage.contentType,
+        "Cache-Control": "public, max-age=300, s-maxage=300",
+      },
+    });
+  }
+
   const pdfPreview = await renderPulseHubFirstPdfPagePng(postId).catch(() => null);
 
   if (pdfPreview) {

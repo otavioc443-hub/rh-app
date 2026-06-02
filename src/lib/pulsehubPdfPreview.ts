@@ -1,7 +1,5 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { createCanvas } from "@napi-rs/canvas";
-import type { Canvas, SKRSContext2D } from "@napi-rs/canvas";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const PDF_BUCKET = "internal-social-media";
@@ -10,6 +8,13 @@ const STORAGE_MARKERS = [
   "/storage/v1/object/public/internal-social-media/",
   "/storage/v1/object/authenticated/internal-social-media/",
 ];
+const IMAGE_CONTENT_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  gif: "image/gif",
+};
 
 type PdfAttachmentRow = {
   id: string;
@@ -17,9 +22,19 @@ type PdfAttachmentRow = {
   label: string | null;
 };
 
+type PreviewImageBytes = {
+  body: ArrayBuffer;
+  contentType: string;
+};
+
 type CanvasEntry = {
-  canvas: Canvas;
-  context: SKRSContext2D;
+  canvas: {
+    width: number;
+    height: number;
+    toBuffer: (mime: "image/png") => Buffer;
+    getContext: (type: "2d") => unknown;
+  };
+  context: unknown;
 };
 
 function safeDecode(value: string) {
@@ -35,10 +50,20 @@ function isSafePdfPath(value: string) {
   return !!cleaned && !cleaned.startsWith("/") && !cleaned.includes("..") && /\.pdf$/i.test(cleaned);
 }
 
+function isSafeImagePath(value: string) {
+  const cleaned = value.trim().split("?")[0].split("#")[0];
+  return !!cleaned && !cleaned.startsWith("/") && !cleaned.includes("..") && /\.(png|jpe?g|webp|gif)$/i.test(cleaned);
+}
+
+function contentTypeFromPath(value: string) {
+  const ext = value.trim().split("?")[0].split("#")[0].split(".").pop()?.toLowerCase() ?? "";
+  return IMAGE_CONTENT_TYPES[ext] ?? "image/png";
+}
+
 function storagePathFromUrl(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return null;
-  if (!/^https?:\/\//i.test(trimmed) && isSafePdfPath(trimmed)) return trimmed;
+  if (!/^https?:\/\//i.test(trimmed) && (isSafePdfPath(trimmed) || isSafeImagePath(trimmed))) return trimmed;
 
   try {
     const targetUrl = new URL(trimmed);
@@ -47,7 +72,7 @@ function storagePathFromUrl(value: string) {
       if (markerIndex >= 0) {
         const rawPath = targetUrl.pathname.slice(markerIndex + marker.length);
         const decodedPath = safeDecode(rawPath);
-        return isSafePdfPath(decodedPath) ? decodedPath : null;
+        return isSafePdfPath(decodedPath) || isSafeImagePath(decodedPath) ? decodedPath : null;
       }
     }
   } catch {
@@ -55,6 +80,20 @@ function storagePathFromUrl(value: string) {
   }
 
   return null;
+}
+
+async function getFirstImageAttachment(postId: string) {
+  const { data, error } = await supabaseAdmin
+    .from("internal_social_post_attachments")
+    .select("id,url,label")
+    .eq("post_id", postId)
+    .eq("type", "image")
+    .order("id", { ascending: true })
+    .limit(1)
+    .maybeSingle<PdfAttachmentRow>();
+
+  if (error || !data?.url) return null;
+  return data;
 }
 
 async function getFirstPdfAttachment(postId: string) {
@@ -71,9 +110,31 @@ async function getFirstPdfAttachment(postId: string) {
   return data;
 }
 
+async function downloadImageBytes(attachment: PdfAttachmentRow): Promise<PreviewImageBytes | null> {
+  const storagePath = storagePathFromUrl(attachment.url);
+  if (storagePath && isSafeImagePath(storagePath)) {
+    const file = await supabaseAdmin.storage.from(PDF_BUCKET).download(storagePath);
+    if (file.error || !file.data) return null;
+    return {
+      body: await file.data.arrayBuffer(),
+      contentType: contentTypeFromPath(storagePath),
+    };
+  }
+
+  if (!/^https?:\/\//i.test(attachment.url)) return null;
+  const response = await fetch(attachment.url, { cache: "no-store" });
+  if (!response.ok) return null;
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().startsWith("image/")) return null;
+  return {
+    body: await response.arrayBuffer(),
+    contentType: contentType.split(";")[0] || contentTypeFromPath(attachment.url),
+  };
+}
+
 async function downloadPdfBytes(attachment: PdfAttachmentRow) {
   const storagePath = storagePathFromUrl(attachment.url);
-  if (storagePath) {
+  if (storagePath && isSafePdfPath(storagePath)) {
     const file = await supabaseAdmin.storage.from(PDF_BUCKET).download(storagePath);
     if (file.error || !file.data) return null;
     return file.data.arrayBuffer();
@@ -89,6 +150,12 @@ async function downloadPdfBytes(attachment: PdfAttachmentRow) {
   return body;
 }
 
+export async function getPulseHubAttachedPreviewImage(postId: string): Promise<PreviewImageBytes | null> {
+  const imageAttachment = await getFirstImageAttachment(postId);
+  if (!imageAttachment) return null;
+  return downloadImageBytes(imageAttachment);
+}
+
 export async function renderPulseHubFirstPdfPagePng(postId: string) {
   const attachment = await getFirstPdfAttachment(postId);
   if (!attachment) return null;
@@ -96,7 +163,10 @@ export async function renderPulseHubFirstPdfPagePng(postId: string) {
   const pdfBytes = await downloadPdfBytes(attachment);
   if (!pdfBytes) return null;
 
-  const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  const [{ createCanvas }, pdfjs] = await Promise.all([
+    import("@napi-rs/canvas"),
+    import("pdfjs-dist/legacy/build/pdf.mjs"),
+  ]);
   const standardFontDataUrl = pathToFileURL(path.join(process.cwd(), "node_modules", "pdfjs-dist", "standard_fonts") + path.sep).href;
   const task = pdfjs.getDocument({
     data: new Uint8Array(pdfBytes),
@@ -118,7 +188,7 @@ export async function renderPulseHubFirstPdfPagePng(postId: string) {
     const canvasFactory = {
       create(width: number, height: number): CanvasEntry {
         const canvas = createCanvas(width, height);
-        const context = canvas.getContext("2d") as SKRSContext2D;
+        const context = canvas.getContext("2d");
         return { canvas, context };
       },
       reset(canvasEntry: CanvasEntry, width: number, height: number) {

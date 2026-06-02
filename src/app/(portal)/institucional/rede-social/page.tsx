@@ -3979,7 +3979,7 @@ export default function InternalSocialPage() {
   const activeSharePublisher = activeSharePost ? postPublisherByBrand(activeSharePost) : null;
   const activeShareUrl =
     activeSharePost && typeof window !== "undefined"
-      ? `${window.location.origin}/s/pulsehub/${activeSharePost.id}?v=4`
+      ? `${window.location.origin}/s/pulsehub/${activeSharePost.id}?v=5`
       : "";
   const activeShareSummary = activeSharePost
     ? compactText(

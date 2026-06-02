@@ -64,7 +64,7 @@ export function getPulseHubPortalPostUrl(postId: string) {
 }
 
 export function getPulseHubShareImageUrl(postId: string) {
-  return `${SITE_ORIGIN}/s/pulsehub/${postId}/preview.png?v=4`;
+  return `${SITE_ORIGIN}/s/pulsehub/${postId}/preview.png?v=5`;
 }
 
 export async function getPulseHubSharePost(postId: string): Promise<PulseHubSharePost | null> {
