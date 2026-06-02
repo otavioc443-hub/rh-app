@@ -66,6 +66,7 @@ type ColaboradorName = {
 
 type PortalBrandPayload = {
   company?: Company | null;
+  availableCompanies?: Company[];
   department?: Department | null;
   fullName?: string | null;
   jobTitle?: string | null;
@@ -114,6 +115,7 @@ type PortalShellCache = {
   userId: string | null;
   role: Role | null;
   company: Company | null;
+  availableCompanies: Company[];
   department: Department | null;
   fullName: string | null;
   jobTitle: string | null;
@@ -307,6 +309,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
   const [fatalError, setFatalError] = useState<string | null>(null);
   const [debugErr, setDebugErr] = useState<string | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
+  const [availableCompanies, setAvailableCompanies] = useState<Company[]>([]);
   const [department, setDepartment] = useState<Department | null>(null);
   const [fullName, setFullName] = useState<string | null>(null);
   const [jobTitle, setJobTitle] = useState<string | null>(null);
@@ -364,6 +367,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       currentUserIdRef.current = cached.userId;
       setRole(cached.role);
       setCompany(cached.company);
+      setAvailableCompanies(cached.availableCompanies ?? (cached.company ? [cached.company] : []));
       setDepartment(cached.department);
       setFullName(cached.fullName);
       setJobTitle(cached.jobTitle);
@@ -461,6 +465,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
           if (cached) {
             setRole(cached.role);
             setCompany(cached.company);
+            setAvailableCompanies(cached.availableCompanies ?? (cached.company ? [cached.company] : []));
             setDepartment(cached.department);
             setFullName(cached.fullName);
             setJobTitle(cached.jobTitle);
@@ -479,6 +484,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
           if (cached) {
             setRole(cached.role);
             setCompany(cached.company);
+            setAvailableCompanies(cached.availableCompanies ?? (cached.company ? [cached.company] : []));
             setDepartment(cached.department);
             setFullName(cached.fullName);
             setJobTitle(cached.jobTitle);
@@ -537,6 +543,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
           if (cached) {
             setRole(cached.role);
             setCompany(cached.company);
+            setAvailableCompanies(cached.availableCompanies ?? (cached.company ? [cached.company] : []));
             setDepartment(cached.department);
             setFullName(cached.fullName);
             setJobTitle(cached.jobTitle);
@@ -634,6 +641,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
         }
 
         setCompany(resolvedCompany);
+        setAvailableCompanies(portalBrand?.availableCompanies?.length ? portalBrand.availableCompanies : resolvedCompany ? [resolvedCompany] : []);
         setDepartment(portalBrand?.department ?? (!departmentRes.error && departmentRes.data ? (departmentRes.data as Department) : null));
       } catch (err: unknown) {
         if (!alive.current) return;
@@ -658,6 +666,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       if (event === "TOKEN_REFRESHED") return;
       setRole(null);
       setCompany(null);
+      setAvailableCompanies([]);
       setDepartment(null);
       setFullName(null);
       setJobTitle(null);
@@ -710,13 +719,14 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       userId: currentUserIdRef.current,
       role,
       company,
+      availableCompanies,
       department,
       fullName,
       jobTitle,
       avatarUrl,
       hiddenRoutes: Array.from(hiddenRoutes),
     });
-  }, [avatarUrl, company, department, fullName, hiddenRoutes, hiddenRoutesLoaded, jobTitle, role]);
+  }, [avatarUrl, availableCompanies, company, department, fullName, hiddenRoutes, hiddenRoutesLoaded, jobTitle, role]);
 
   useEffect(() => {
     if (!role) return;
@@ -822,6 +832,32 @@ export default function PortalShell({ children }: { children: React.ReactNode })
     };
   }, [pathname]);
 
+  async function handleActiveCompanyChange(companyId: string) {
+    if (!companyId || companyId === company?.id) return;
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const res = await fetch("/api/me/portal-company", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ company_id: companyId }),
+      });
+      if (!res.ok) return;
+      try {
+        window.sessionStorage.removeItem(PORTAL_SHELL_CACHE_KEY);
+      } catch {}
+      setLoading(true);
+      setBootNonce((value) => value + 1);
+      window.dispatchEvent(new Event("portal-profile-updated"));
+    } catch {
+      // Mantem a empresa atual caso a troca falhe.
+    }
+  }
+
   const hasStableShell = !!role && hiddenRoutesLoaded;
 
   if (!hasStableShell && (loading || !hiddenRoutesLoaded)) {
@@ -882,6 +918,9 @@ export default function PortalShell({ children }: { children: React.ReactNode })
             avatarUrl={avatarUrl}
             companyName={company?.name ?? null}
             companyLogoUrl={company?.logo_url ?? null}
+            activeCompanyId={company?.id ?? null}
+            availableCompanies={availableCompanies}
+            onCompanyChange={handleActiveCompanyChange}
             departmentName={department?.name ?? null}
             jobTitle={jobTitle}
             hiddenRoutes={hiddenRoutes}

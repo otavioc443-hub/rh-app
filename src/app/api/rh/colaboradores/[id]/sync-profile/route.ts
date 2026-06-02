@@ -72,6 +72,110 @@ async function findProfileIdsByEmails(emails: string[]) {
   return ids;
 }
 
+async function ensureRhAdmin(req: Request) {
+  const requester = await getRequesterUser(req);
+  const user = requester.user;
+  if (!user) return { user: null, status: requester.status, error: "Nao autenticado" };
+
+  const { data: prof, error: profErr } = await supabaseAdmin
+    .from("profiles")
+    .select("role, active")
+    .eq("id", user.id)
+    .maybeSingle<{ role: string | null; active: boolean | null }>();
+
+  if (profErr || !prof?.active) return { user: null, status: 403 as const, error: "Sem permissao" };
+  if (!(prof.role === "rh" || prof.role === "admin")) {
+    return { user: null, status: 403 as const, error: "Apenas RH/Admin" };
+  }
+
+  return { user, status: 200 as const, error: null };
+}
+
+async function findCollaboratorProfileId(id: string, explicitProfileUserId: string | null) {
+  const { data: colab, error: colabErr } = await supabaseAdmin
+    .from("colaboradores")
+    .select("id,user_id,email,email_empresarial,email_pessoal,nome")
+    .eq("id", id)
+    .maybeSingle<{
+      id: string;
+      user_id: string | null;
+      email: string | null;
+      email_empresarial: string | null;
+      email_pessoal: string | null;
+      nome: string | null;
+    }>();
+
+  if (colabErr || !colab) return { colab: null, profileUserId: null, candidateEmails: [] as string[] };
+
+  const candidateEmails = Array.from(
+    new Set([cleanEmail(colab.email), cleanEmail(colab.email_empresarial), cleanEmail(colab.email_pessoal)].filter(Boolean))
+  );
+  let profileUserId: string | null = explicitProfileUserId;
+
+  if (!profileUserId) {
+    for (const email of candidateEmails) {
+      const { data: profileByEmail } = await supabaseAdmin
+        .from("profiles")
+        .select("id")
+        .ilike("email", email)
+        .maybeSingle<{ id: string }>();
+      if (profileByEmail?.id) {
+        profileUserId = profileByEmail.id;
+        break;
+      }
+    }
+  }
+
+  if (!profileUserId) {
+    for (const email of candidateEmails) {
+      profileUserId = await findAuthUserIdByEmail(email);
+      if (profileUserId) break;
+    }
+  }
+
+  return { colab, profileUserId: profileUserId ?? colab.user_id, candidateEmails };
+}
+
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+    if (!id) return NextResponse.json({ error: "id do colaborador e obrigatorio" }, { status: 400 });
+
+    const access = await ensureRhAdmin(req);
+    if (!access.user) return NextResponse.json({ error: access.error }, { status: access.status });
+
+    const url = new URL(req.url);
+    const explicitProfileUserId = url.searchParams.get("profile_user_id")?.trim() || null;
+    const { colab, profileUserId } = await findCollaboratorProfileId(id, explicitProfileUserId);
+    if (!colab) return NextResponse.json({ error: "Colaborador nao encontrado" }, { status: 404 });
+    if (!profileUserId) return NextResponse.json({ ok: true, user_id: null, company_ids: [] });
+
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("company_id")
+      .eq("id", profileUserId)
+      .maybeSingle<{ company_id: string | null }>();
+
+    const ids = new Set<string>();
+    if (profile?.company_id) ids.add(profile.company_id);
+
+    const { data: memberships, error } = await supabaseAdmin
+      .from("profile_company_memberships")
+      .select("company_id")
+      .eq("user_id", profileUserId);
+    if (!error) {
+      for (const row of (memberships ?? []) as Array<{ company_id: string | null }>) {
+        if (row.company_id) ids.add(row.company_id);
+      }
+    }
+
+    return NextResponse.json({ ok: true, user_id: profileUserId, company_ids: Array.from(ids) });
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : "Erro inesperado";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -79,25 +183,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       return NextResponse.json({ error: "id do colaborador e obrigatorio" }, { status: 400 });
     }
 
-    const requester = await getRequesterUser(req);
-    const user = requester.user;
-    if (!user) return NextResponse.json({ error: "Nao autenticado" }, { status: requester.status });
-
-    const { data: prof, error: profErr } = await supabaseAdmin
-      .from("profiles")
-      .select("role, active")
-      .eq("id", user.id)
-      .maybeSingle<{ role: string | null; active: boolean | null }>();
-
-    if (profErr || !prof?.active) return NextResponse.json({ error: "Sem permissao" }, { status: 403 });
-    if (!(prof.role === "rh" || prof.role === "admin")) {
-      return NextResponse.json({ error: "Apenas RH/Admin" }, { status: 403 });
-    }
+    const access = await ensureRhAdmin(req);
+    if (!access.user) return NextResponse.json({ error: access.error }, { status: access.status });
 
     const body = (await req.json()) as {
       company_id?: string | null;
       department_id?: string | null;
       profile_user_id?: string | null;
+      company_ids?: string[] | null;
       active?: boolean | null;
     };
     const companyId = typeof body.company_id === "string" && body.company_id.trim() ? body.company_id.trim() : null;
@@ -106,6 +199,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const explicitProfileUserId =
       typeof body.profile_user_id === "string" && body.profile_user_id.trim() ? body.profile_user_id.trim() : null;
     const profileActive = body.active === false ? false : true;
+    const companyIds = Array.from(
+      new Set([
+        companyId,
+        ...((Array.isArray(body.company_ids) ? body.company_ids : [])
+          .map((item) => (typeof item === "string" ? item.trim() : ""))
+          .filter(Boolean)),
+      ].filter(Boolean) as string[])
+    );
 
     const { data: company, error: companyErr } = companyId
       ? await supabaseAdmin
@@ -117,51 +218,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (companyErr) return NextResponse.json({ error: companyErr.message }, { status: 400 });
     const companyName = (company?.name ?? "").trim() || null;
 
-    const { data: colab, error: colabErr } = await supabaseAdmin
-      .from("colaboradores")
-      .select("id,user_id,email,email_empresarial,email_pessoal,nome")
-      .eq("id", id)
-      .maybeSingle<{
-        id: string;
-        user_id: string | null;
-        email: string | null;
-        email_empresarial: string | null;
-        email_pessoal: string | null;
-        nome: string | null;
-      }>();
+    const { colab, profileUserId: foundProfileUserId, candidateEmails } = await findCollaboratorProfileId(id, explicitProfileUserId);
+    if (!colab) return NextResponse.json({ error: "Colaborador nao encontrado" }, { status: 404 });
 
-    if (colabErr || !colab) return NextResponse.json({ error: "Colaborador nao encontrado" }, { status: 404 });
-
-    const candidateEmails = Array.from(
-      new Set([cleanEmail(colab.email), cleanEmail(colab.email_empresarial), cleanEmail(colab.email_pessoal)].filter(Boolean))
-    );
     const relatedProfileIds = await findProfileIdsByEmails(candidateEmails);
     if (colab.user_id) relatedProfileIds.add(colab.user_id);
     if (explicitProfileUserId) relatedProfileIds.add(explicitProfileUserId);
-    let profileUserId: string | null = explicitProfileUserId;
-
-    if (!profileUserId) {
-      for (const email of candidateEmails) {
-        const { data: profileByEmail } = await supabaseAdmin
-          .from("profiles")
-          .select("id")
-          .ilike("email", email)
-          .maybeSingle<{ id: string }>();
-        if (profileByEmail?.id) {
-          profileUserId = profileByEmail.id;
-          break;
-        }
-      }
-    }
-
-    if (!profileUserId) {
-      for (const email of candidateEmails) {
-        profileUserId = await findAuthUserIdByEmail(email);
-        if (profileUserId) break;
-      }
-    }
-
-    profileUserId = profileUserId ?? colab.user_id;
+    let profileUserId: string | null = foundProfileUserId;
 
     if (!profileUserId) {
       return NextResponse.json({
@@ -214,6 +277,34 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         });
 
     if (profileRes.error) return NextResponse.json({ error: profileRes.error.message }, { status: 400 });
+
+    if (profileActive) {
+      if (companyIds.length) {
+        const rows = companyIds.map((id) => ({
+          user_id: profileUserId,
+          company_id: id,
+          created_by: access.user.id,
+        }));
+        const upsertRes = await supabaseAdmin
+          .from("profile_company_memberships")
+          .upsert(rows, { onConflict: "user_id,company_id", ignoreDuplicates: true });
+        if (upsertRes.error && !isMissingColumnError(upsertRes.error.message)) {
+          return NextResponse.json({ error: upsertRes.error.message }, { status: 400 });
+        }
+      }
+
+      const deleteIds = companyIds.length ? companyIds : companyId ? [companyId] : [];
+      if (deleteIds.length) {
+        const deleteRes = await supabaseAdmin
+          .from("profile_company_memberships")
+          .delete()
+          .eq("user_id", profileUserId)
+          .not("company_id", "in", `(${deleteIds.join(",")})`);
+        if (deleteRes.error && !isMissingColumnError(deleteRes.error.message)) {
+          return NextResponse.json({ error: deleteRes.error.message }, { status: 400 });
+        }
+      }
+    }
 
     if (!profileActive && relatedProfileIds.size) {
       const deactivateRes = await supabaseAdmin

@@ -72,6 +72,9 @@ type SidebarProps = {
   avatarUrl: string | null;
   companyName: string | null;
   companyLogoUrl: string | null;
+  activeCompanyId: string | null;
+  availableCompanies: Array<{ id: string; name: string | null; logo_url: string | null; primary_color: string | null }>;
+  onCompanyChange?: (companyId: string) => void;
   departmentName: string | null;
   jobTitle: string | null;
   hiddenRoutes: Set<string>;
@@ -84,6 +87,9 @@ export default function Sidebar({
   avatarUrl,
   companyName,
   companyLogoUrl,
+  activeCompanyId,
+  availableCompanies,
+  onCompanyChange,
   departmentName,
   jobTitle,
   hiddenRoutes,
@@ -382,7 +388,23 @@ export default function Sidebar({
           )}
 
           <div className="min-w-0 leading-tight">
-            <div className="truncate text-sm font-semibold text-slate-900">{companyName ?? "Portal de RH"}</div>
+            {availableCompanies.length > 1 ? (
+              <select
+                value={activeCompanyId ?? ""}
+                onChange={(event) => onCompanyChange?.(event.target.value)}
+                className="w-full max-w-[180px] truncate rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm font-semibold text-slate-900 outline-none focus:border-slate-300"
+                title="Selecionar portal da empresa"
+                aria-label="Selecionar portal da empresa"
+              >
+                {availableCompanies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name || "Empresa"}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="truncate text-sm font-semibold text-slate-900">{companyName ?? "Portal de RH"}</div>
+            )}
             <div className="text-xs text-slate-500">Portal de RH</div>
           </div>
         </div>

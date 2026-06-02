@@ -271,6 +271,7 @@ export default function CollaboratorEditWizard({
   const [selectedProfileUserId, setSelectedProfileUserId] = useState("");
   const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([]);
   const [linkCompanyId, setLinkCompanyId] = useState("");
+  const [linkedCompanyIds, setLinkedCompanyIds] = useState<string[]>([]);
   const [linkingCompany, setLinkingCompany] = useState(false);
 
   const [showHistory, setShowHistory] = useState(false);
@@ -346,6 +347,7 @@ export default function CollaboratorEditWizard({
       setCollaboratorUserId(rowUserId);
       setSelectedProfileUserId(rowUserId ?? "");
       setLinkCompanyId(typeof row.company_id === "string" ? row.company_id : "");
+      setLinkedCompanyIds(typeof row.company_id === "string" && row.company_id ? [row.company_id] : []);
       setCurrentCargo(typeof row.cargo === "string" ? row.cargo : "");
       setPromotionCargo(typeof row.cargo === "string" ? row.cargo : "");
       setPromotionManualCargo(false);
@@ -395,8 +397,43 @@ export default function CollaboratorEditWizard({
         .toLowerCase();
       return name === normalizedEmpresa || name.includes(normalizedEmpresa) || normalizedEmpresa.includes(name);
     });
-    if (match) setLinkCompanyId(match.id);
+    if (match) {
+      setLinkCompanyId(match.id);
+      setLinkedCompanyIds((prev) => Array.from(new Set([...prev, match.id])));
+    }
   }, [companyOptions, initial.empresa, linkCompanyId]);
+
+  useEffect(() => {
+    let alive = true;
+    async function loadLinkedCompanies() {
+      const profileUserId = n(selectedProfileUserId);
+      if (!profileUserId) return;
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+        const res = await fetch(
+          `/api/rh/colaboradores/${collaboratorId}/sync-profile?profile_user_id=${encodeURIComponent(profileUserId)}`,
+          {
+            method: "GET",
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+            credentials: "include",
+          }
+        );
+        if (!alive || !res.ok) return;
+        const payload = (await res.json()) as { company_ids?: string[] };
+        const ids = (payload.company_ids ?? []).filter(Boolean);
+        setLinkedCompanyIds(ids);
+        if (!ids.includes(linkCompanyId) && ids[0]) setLinkCompanyId(ids[0]);
+      } catch {
+        // Mantem os dados locais se a tabela de vinculos ainda nao existir.
+      }
+    }
+    void loadLinkedCompanies();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProfileUserId, collaboratorId]);
 
   useEffect(() => {
     let alive = true;
@@ -551,6 +588,7 @@ export default function CollaboratorEditWizard({
     setLinkingCompany(true);
     setMsg(null);
     try {
+      const companyIds = Array.from(new Set([companyId, ...linkedCompanyIds].filter(Boolean)));
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
       const syncRes = await fetch(`/api/rh/colaboradores/${collaboratorId}/sync-profile`, {
@@ -562,6 +600,7 @@ export default function CollaboratorEditWizard({
         credentials: "include",
         body: JSON.stringify({
           company_id: companyId,
+          company_ids: companyIds,
           department_id: null,
           profile_user_id: profileUserId,
           active: true,
@@ -580,7 +619,8 @@ export default function CollaboratorEditWizard({
       const linkedUserId = payload?.user_id ?? profileUserId;
       setCollaboratorUserId(linkedUserId);
       setSelectedProfileUserId(linkedUserId);
-      setMsg("Perfil vinculado a empresa com sucesso.");
+      setLinkedCompanyIds(companyIds);
+      setMsg(companyIds.length > 1 ? "Perfil vinculado as empresas com sucesso." : "Perfil vinculado a empresa com sucesso.");
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao vincular perfil a empresa.");
     } finally {
@@ -617,6 +657,7 @@ export default function CollaboratorEditWizard({
 
       const companyId = n(finalPayload.company_id) || null;
       const departmentId = n(finalPayload.department_id) || null;
+      const companyIds = Array.from(new Set([companyId, ...linkedCompanyIds].filter(Boolean) as string[]));
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
       const syncRes = await fetch(`/api/rh/colaboradores/${collaboratorId}/sync-profile`, {
@@ -628,6 +669,7 @@ export default function CollaboratorEditWizard({
         credentials: "include",
         body: JSON.stringify({
           company_id: companyId,
+          company_ids: companyIds,
           department_id: departmentId,
           profile_user_id: n(selectedProfileUserId) || null,
           active: isActive,
@@ -1079,10 +1121,14 @@ export default function CollaboratorEditWizard({
                           </select>
                         </label>
                         <label className="grid gap-1 text-xs font-semibold text-blue-950">
-                          Empresa para vincular
+                          Empresa principal/portal inicial
                           <select
                             value={linkCompanyId}
-                            onChange={(e) => setLinkCompanyId(e.target.value)}
+                            onChange={(e) => {
+                              const next = e.target.value;
+                              setLinkCompanyId(next);
+                              if (next) setLinkedCompanyIds((prev) => Array.from(new Set([...prev, next])));
+                            }}
                             className="mt-1 h-11 rounded-xl border border-blue-200 bg-white px-3 text-sm text-slate-900"
                           >
                             <option value="">Selecionar empresa</option>
@@ -1096,11 +1142,42 @@ export default function CollaboratorEditWizard({
                         <button
                           type="button"
                           onClick={() => void linkSelectedProfileToCompany()}
-                          disabled={linkingCompany || !selectedProfileUserId || !linkCompanyId}
+                          disabled={linkingCompany || !selectedProfileUserId || !linkCompanyId || linkedCompanyIds.length === 0}
                           className="h-11 rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
                         >
-                          {linkingCompany ? "Vinculando..." : "Vincular perfil a empresa"}
+                          {linkingCompany ? "Salvando..." : "Salvar vinculos"}
                         </button>
+                      </div>
+                      <div className="mt-4">
+                        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-900">Empresas vinculadas</div>
+                        <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                          {companyOptions.map((company) => {
+                            const checked = linkedCompanyIds.includes(company.id);
+                            return (
+                              <label
+                                key={company.id}
+                                className="flex items-center gap-2 rounded-xl border border-blue-100 bg-white px-3 py-2 text-sm font-medium text-slate-800"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(event) => {
+                                    const isChecked = event.target.checked;
+                                    setLinkedCompanyIds((prev) => {
+                                      const next = isChecked
+                                        ? Array.from(new Set([...prev, company.id]))
+                                        : prev.filter((id) => id !== company.id);
+                                      if (!next.includes(linkCompanyId)) setLinkCompanyId(next[0] ?? "");
+                                      return next;
+                                    });
+                                  }}
+                                  className="h-4 w-4"
+                                />
+                                <span className="truncate">{company.name || company.id}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
                       </div>
                       <p className="mt-2 text-xs leading-5 text-blue-900">
                         Use este campo quando o vínculo automático por e-mail não encontrar a pessoa certa. O botão

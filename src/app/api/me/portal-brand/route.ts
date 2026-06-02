@@ -133,6 +133,20 @@ export async function GET(req: Request) {
       }
     }
 
+    let availableCompanies: Company[] = company ? [company] : [];
+    const { data: memberships, error: membershipError } = await supabaseAdmin
+      .from("profile_company_memberships")
+      .select("company_id")
+      .eq("user_id", user.id);
+
+    if (!membershipError) {
+      const membershipIds = new Set(
+        ((memberships ?? []) as Array<{ company_id: string | null }>).map((row) => row.company_id).filter(Boolean) as string[]
+      );
+      if (company?.id) membershipIds.add(company.id);
+      availableCompanies = companyList.filter((item) => membershipIds.has(item.id));
+    }
+
     let department: Department | null = null;
     if (profile?.department_id) {
       const { data } = await supabaseAdmin
@@ -146,6 +160,7 @@ export async function GET(req: Request) {
     return NextResponse.json({
       ok: true,
       company,
+      availableCompanies,
       department,
       fullName: profile?.full_name || collaborator?.nome || null,
       jobTitle: collaborator?.cargo || null,
