@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, FileText, MessageCircle, Share2, Trophy } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileText, Maximize2, MessageCircle, Share2, Trophy } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 import { PulseSprintPage, PulseSprintWidget } from "@/components/engagement-game/PulseSprint";
@@ -130,6 +130,7 @@ type MediaPreview = {
   type: "image" | "video" | "pdf";
   url: string;
   label: string;
+  storagePath?: string | null;
   caption?: string | null;
 };
 
@@ -593,7 +594,10 @@ function compactText(value: string | null | undefined, max = 160) {
   return `${normalized.slice(0, Math.max(0, max - 1))}...`;
 }
 
-function getPulseHubPdfSourceUrl(value: string) {
+function getPulseHubPdfSourceUrl(value: string, storagePath?: string | null) {
+  if (storagePath) {
+    return `/api/institucional/rede-social/pdf-proxy?path=${encodeURIComponent(storagePath)}`;
+  }
   try {
     const targetUrl = new URL(value);
     const supabaseUrl = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "");
@@ -969,12 +973,14 @@ function EmojiPicker({ groups, onSelect, className, panelClassName }: EmojiPicke
 function PdfCarousel({
   url,
   label,
+  storagePath,
   compact = false,
   onOpen,
   className = "",
 }: {
   url: string;
   label: string;
+  storagePath?: string | null;
   compact?: boolean;
   onOpen?: () => void;
   className?: string;
@@ -1017,7 +1023,7 @@ function PdfCarousel({
       try {
         const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
         pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/legacy/build/pdf.worker.mjs", import.meta.url).toString();
-        const sourceUrl = getPulseHubPdfSourceUrl(url);
+        const sourceUrl = getPulseHubPdfSourceUrl(url, storagePath);
         const sessionRes = sourceUrl.startsWith("/api/") ? await supabase.auth.getSession() : null;
         const token = sessionRes?.data.session?.access_token;
         const response = await fetch(sourceUrl, {
@@ -1050,7 +1056,7 @@ function PdfCarousel({
       cancelled = true;
       void loadedDoc?.destroy?.();
     };
-  }, [url]);
+  }, [storagePath, url]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1065,9 +1071,9 @@ function PdfCarousel({
         if (cancelled) return;
         const baseViewport = page.getViewport({ scale: 1 });
         const hasThumbnailRail = !compact && pageCount > 1;
-        const reservedHeight = compact ? 32 : hasThumbnailRail ? 142 : 64;
+        const reservedHeight = compact ? 116 : hasThumbnailRail ? 190 : 116;
         const maxWidth = compact ? Math.min(frameSize.width - 32, 760) : Math.min(frameSize.width - 32, 1280);
-        const maxHeight = compact ? Math.min(Math.max(frameSize.height - 32, 260), 460) : Math.max(320, frameSize.height - reservedHeight);
+        const maxHeight = compact ? Math.min(Math.max(frameSize.height - reservedHeight, 320), 620) : Math.max(360, frameSize.height - reservedHeight);
         const cssScale = Math.min(maxWidth / baseViewport.width, maxHeight / baseViewport.height, compact ? 1.35 : 2.2);
         const safeCssScale = Math.max(0.35, cssScale);
         const cssViewport = page.getViewport({ scale: safeCssScale });
@@ -1142,9 +1148,13 @@ function PdfCarousel({
   return (
     <div
       ref={frameRef}
-      className={`relative w-full bg-slate-100 ${compact ? "min-h-[260px]" : "min-h-[420px]"} ${className}`}
+      className={`relative flex w-full flex-col overflow-hidden bg-slate-100 ${compact ? "min-h-[560px]" : "min-h-[620px]"} ${className}`}
     >
-      <div className="flex h-full min-h-[inherit] w-full items-center justify-center p-4">
+      <div className="flex h-12 shrink-0 items-center justify-between bg-slate-700 px-4 text-xs font-semibold text-white">
+        <span className="truncate">{label || "Documento"}</span>
+        <span>{pageCount > 0 ? `${pageCount} página${pageCount === 1 ? "" : "s"}` : "PDF"}</span>
+      </div>
+      <div className="relative flex min-h-0 flex-1 items-center justify-center bg-slate-200 p-0">
         {loading ? (
           <div className="flex flex-col items-center gap-3 text-sm font-semibold text-slate-500">
             <FileText size={28} />
@@ -1154,11 +1164,11 @@ function PdfCarousel({
           <iframe
             src={`${url}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
             title={label || "Pré-visualização do PDF"}
-            className="h-full min-h-[inherit] w-full rounded-xl border-0 bg-white"
+            className="h-full w-full border-0 bg-white"
           />
         ) : (
-          <button type="button" onClick={onOpen} className="flex max-h-full max-w-full cursor-zoom-in items-center justify-center" aria-label="Ampliar PDF">
-            <canvas ref={canvasRef} className="mx-auto max-h-full max-w-full rounded-xl bg-white shadow-sm" />
+          <button type="button" onClick={onOpen} className="flex h-full w-full cursor-zoom-in items-center justify-center" aria-label="Ampliar PDF">
+            <canvas ref={canvasRef} className="mx-auto max-h-full max-w-full bg-white shadow-sm" />
           </button>
         )}
       </div>
@@ -1184,9 +1194,22 @@ function PdfCarousel({
           </button>
         </>
       ) : null}
-      <div className="absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-slate-950/80 px-3 py-1.5 text-xs font-semibold text-white">
-        <FileText size={14} />
-        <span>{pageCount > 0 ? `${pageNumber}/${pageCount}` : "PDF"}</span>
+      <div className="flex h-11 shrink-0 items-center justify-between bg-slate-700 px-4 text-xs font-semibold text-white">
+        <span>{pageCount > 0 ? `${pageNumber} de ${pageCount}` : "PDF"}</span>
+        <div className="h-1.5 flex-1 mx-4 overflow-hidden rounded-full bg-white/15">
+          <div
+            className="h-full rounded-full bg-white"
+            style={{ width: `${pageCount > 0 ? Math.max(8, (pageNumber / pageCount) * 100) : 8}%` }}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={onOpen}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-white transition hover:bg-white/15"
+          aria-label="Expandir PDF"
+        >
+          <Maximize2 size={17} />
+        </button>
       </div>
       {!compact && Object.keys(thumbnailUrls).length ? (
         <div className="flex gap-2 overflow-x-auto border-t border-slate-200 bg-white/90 p-3">
@@ -4558,12 +4581,14 @@ export default function InternalSocialPage() {
                                 ) : attachment.type === "pdf" && imageReady ? (
                                   <PdfCarousel
                                     url={mediaUrl}
+                                    storagePath={extractInternalSocialStoragePath(attachment.url)}
                                     label={attachment.label ?? "Documento da publicação"}
                                     compact
                                     onOpen={() =>
                                       setMediaPreview({
                                         type: "pdf",
                                         url: mediaUrl,
+                                        storagePath: extractInternalSocialStoragePath(attachment.url),
                                         label: "Documento da publicação",
                                         caption: post.text,
                                       })
@@ -4573,12 +4598,14 @@ export default function InternalSocialPage() {
                                   /\.pdf(\?|#|$)/i.test(mediaUrl) && canRenderImageUrl(mediaUrl) ? (
                                     <PdfCarousel
                                       url={mediaUrl}
+                                      storagePath={extractInternalSocialStoragePath(attachment.url)}
                                       label={attachment.label ?? "Documento da publicação"}
                                       compact
                                       onOpen={() =>
                                         setMediaPreview({
                                           type: "pdf",
                                           url: mediaUrl,
+                                          storagePath: extractInternalSocialStoragePath(attachment.url),
                                           label: "Documento da publicação",
                                           caption: post.text,
                                         })
@@ -6723,6 +6750,7 @@ export default function InternalSocialPage() {
                   <PdfCarousel
                     url={mediaPreview.url}
                     label={mediaPreview.label}
+                    storagePath={mediaPreview.storagePath}
                     className="h-full"
                   />
                 </div>
@@ -7239,12 +7267,14 @@ export default function InternalSocialPage() {
                       ) : item.type === "pdf" ? (
                         <PdfCarousel
                           url={item.url}
+                          storagePath={item.storagePath}
                           label={item.label}
                           compact
                           onOpen={() =>
                             setMediaPreview({
                               type: "pdf",
                               url: item.url,
+                              storagePath: item.storagePath,
                               label: item.label || "Documento da publicação",
                               caption: postText,
                             })

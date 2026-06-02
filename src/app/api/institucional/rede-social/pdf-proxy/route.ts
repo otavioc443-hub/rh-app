@@ -47,6 +47,11 @@ function isAllowedStorageUrl(value: string) {
   }
 }
 
+function isSafeStoragePath(value: string) {
+  const trimmed = value.trim();
+  return !!trimmed && !trimmed.includes("..") && !trimmed.startsWith("/") && /\.pdf$/i.test(trimmed.split("?")[0].split("#")[0]);
+}
+
 export async function GET(req: Request) {
   try {
     const user = await getRequesterUser(req);
@@ -62,6 +67,23 @@ export async function GET(req: Request) {
     if (!profile?.id || profile.active !== true) return NextResponse.json({ error: "Sem permissao" }, { status: 403 });
 
     const requestUrl = new URL(req.url);
+    const path = requestUrl.searchParams.get("path") ?? "";
+    if (path) {
+      if (!isSafeStoragePath(path)) return NextResponse.json({ error: "Caminho de PDF invalido" }, { status: 400 });
+      const file = await supabaseAdmin.storage.from("internal-social-media").download(path);
+      if (file.error || !file.data) {
+        return NextResponse.json({ error: file.error?.message || "PDF indisponivel" }, { status: 400 });
+      }
+      const body = await file.data.arrayBuffer();
+      return new NextResponse(body, {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+          "Cache-Control": "private, max-age=300",
+        },
+      });
+    }
+
     const target = requestUrl.searchParams.get("url") ?? "";
     if (!target || !isAllowedStorageUrl(target)) {
       return NextResponse.json({ error: "URL de PDF invalida" }, { status: 400 });
@@ -71,11 +93,12 @@ export async function GET(req: Request) {
     if (!response.ok) return NextResponse.json({ error: "PDF indisponivel" }, { status: response.status });
 
     const contentType = response.headers.get("content-type") || "application/pdf";
-    if (!contentType.toLowerCase().includes("pdf")) {
+    const body = await response.arrayBuffer();
+    const header = new TextDecoder().decode(body.slice(0, 5));
+    if (!contentType.toLowerCase().includes("pdf") && header !== "%PDF-") {
       return NextResponse.json({ error: "Arquivo nao e PDF" }, { status: 400 });
     }
 
-    const body = await response.arrayBuffer();
     return new NextResponse(body, {
       status: 200,
       headers: {
