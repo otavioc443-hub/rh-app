@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, Eye, FileSpreadsheet, MoreHorizontal, RefreshCcw, Save, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Download, Eye, FileSpreadsheet, MoreHorizontal, RefreshCcw, X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserRole } from "@/hooks/useUserRole";
 
@@ -35,7 +35,7 @@ type InvoiceFileRow = {
   created_at: string;
 };
 
-type CollaboratorRow = { user_id: string | null; nome: string | null; email: string | null; setor: string | null };
+type CollaboratorRow = { id?: string | null; user_id: string | null; nome: string | null; email: string | null; setor: string | null };
 
 const PAGE_SIZE = 25;
 
@@ -187,15 +187,22 @@ export default function FinanceiroNotasFiscaisPage() {
 
         const { data: collabRows, error: collabErr } = await supabase
           .from("colaboradores")
-          .select("user_id,nome,email,setor")
-          .in("user_id", userIds);
+          .select("id,user_id,nome,email,setor")
+          .or(`user_id.in.(${userIds.join(",")}),id.in.(${userIds.join(",")})`);
         if (!collabErr) {
           const names: Record<string, string> = {};
           const sectors: Record<string, string> = {};
           for (const collaborator of (collabRows ?? []) as CollaboratorRow[]) {
-            if (!collaborator.user_id) continue;
-            names[collaborator.user_id] = collaborator.nome?.trim() || collaborator.email?.trim() || collaborator.user_id;
-            sectors[collaborator.user_id] = collaborator.setor?.trim() || "Sem setor";
+            const name = collaborator.nome?.trim() || collaborator.email?.trim() || "";
+            const sector = collaborator.setor?.trim() || "Sem setor";
+            if (collaborator.user_id) {
+              names[collaborator.user_id] = name || collaborator.user_id;
+              sectors[collaborator.user_id] = sector;
+            }
+            if (collaborator.id) {
+              names[collaborator.id] = name || collaborator.id;
+              sectors[collaborator.id] = sector;
+            }
           }
           setNameByUserId((current) => ({ ...current, ...names }));
           setSectorByUserId(sectors);
@@ -379,17 +386,17 @@ export default function FinanceiroNotasFiscaisPage() {
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-slate-200 bg-white p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+          <div className="min-w-0">
             <h1 className="text-xl font-semibold text-slate-900">Notas fiscais dos colaboradores</h1>
             <p className="mt-1 text-sm text-slate-600">Analise, aprove ou reprove notas enviadas no Meu Perfil.</p>
           </div>
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex flex-wrap justify-start gap-2 xl:justify-end">
             <button
               type="button"
               onClick={() => void downloadFilteredFiles()}
               disabled={loading || exportingFiles || !filtered.length}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
             >
               <Download size={16} />
               {exportingFiles ? "Gerando..." : "Baixar notas"}
@@ -398,7 +405,7 @@ export default function FinanceiroNotasFiscaisPage() {
               type="button"
               onClick={exportFilteredSheet}
               disabled={loading || !filtered.length}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
             >
               <FileSpreadsheet size={16} />
               Baixar planilha
@@ -407,7 +414,7 @@ export default function FinanceiroNotasFiscaisPage() {
               type="button"
               onClick={() => void load()}
               disabled={loading}
-              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 px-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
             >
               <RefreshCcw size={16} className={loading ? "animate-spin" : ""} />
               Atualizar
@@ -415,10 +422,10 @@ export default function FinanceiroNotasFiscaisPage() {
           </div>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-5">
+        <div className="mt-4 grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(130px,0.85fr)_minmax(150px,0.9fr)_minmax(240px,1.5fr)_minmax(130px,0.85fr)_minmax(130px,0.85fr)]">
           <label className="grid gap-1 text-xs font-semibold text-slate-700">
             Status
-            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "all" | InvoiceStatus)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900">
+            <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as "all" | InvoiceStatus)} className="h-10 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900">
               <option value="all">Todos</option>
               <option value="draft">Rascunho</option>
               <option value="submitted">Enviada</option>
@@ -429,28 +436,28 @@ export default function FinanceiroNotasFiscaisPage() {
           </label>
           <label className="grid gap-1 text-xs font-semibold text-slate-700">
             Setor
-            <select value={sectorFilter} onChange={(event) => setSectorFilter(event.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900">
+            <select value={sectorFilter} onChange={(event) => setSectorFilter(event.target.value)} className="h-10 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900">
               <option value="all">Todos</option>
               {filterOptions.sectors.map((sector) => <option key={sector} value={sector}>{sector}</option>)}
             </select>
           </label>
           <label className="grid gap-1 text-xs font-semibold text-slate-700">
             Colaborador
-            <select value={collaboratorFilter} onChange={(event) => setCollaboratorFilter(event.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900">
+            <select value={collaboratorFilter} onChange={(event) => setCollaboratorFilter(event.target.value)} className="h-10 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900">
               <option value="all">Todos</option>
               {filterOptions.collaborators.map((userId) => <option key={userId} value={userId}>{collaboratorName(userId)}</option>)}
             </select>
           </label>
           <label className="grid gap-1 text-xs font-semibold text-slate-700">
             Mes
-            <select value={monthFilter} onChange={(event) => setMonthFilter(event.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900">
+            <select value={monthFilter} onChange={(event) => setMonthFilter(event.target.value)} className="h-10 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900">
               <option value="all">Todos</option>
               {filterOptions.months.map((month) => <option key={month} value={month}>{month}</option>)}
             </select>
           </label>
           <label className="grid gap-1 text-xs font-semibold text-slate-700">
             Ano
-            <select value={yearFilter} onChange={(event) => setYearFilter(event.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900">
+            <select value={yearFilter} onChange={(event) => setYearFilter(event.target.value)} className="h-10 min-w-0 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900">
               <option value="all">Todos</option>
               {filterOptions.years.map((year) => <option key={year} value={year}>{year}</option>)}
             </select>
@@ -468,19 +475,19 @@ export default function FinanceiroNotasFiscaisPage() {
           </span>
           <span>Notas pendentes aparecem primeiro.</span>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[1120px] text-left text-sm">
+        <div className="w-full overflow-hidden">
+          <table className="w-full table-fixed text-left text-sm">
             <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-3 py-2">Colaborador</th>
-                <th className="px-3 py-2">Setor</th>
-                <th className="px-3 py-2">Competencia</th>
-                <th className="px-3 py-2">Numero NF</th>
-                <th className="px-3 py-2">Valor</th>
-                <th className="px-3 py-2">Plataforma</th>
-                <th className="px-3 py-2">Status</th>
-                <th className="px-3 py-2">Anexos</th>
-                <th className="px-3 py-2 text-right">Acoes</th>
+                <th className="w-[18%] px-2 py-2">Colaborador</th>
+                <th className="hidden w-[12%] px-2 py-2 lg:table-cell">Setor</th>
+                <th className="w-[9%] px-2 py-2">Comp.</th>
+                <th className="w-[8%] px-2 py-2">NF</th>
+                <th className="w-[12%] px-2 py-2">Valor</th>
+                <th className="hidden w-[10%] px-2 py-2 xl:table-cell">Plataforma</th>
+                <th className="w-[10%] px-2 py-2">Status</th>
+                <th className="w-[9%] px-2 py-2">Anexo</th>
+                <th className="w-[14%] px-2 py-2 text-right">Acoes</th>
               </tr>
             </thead>
             <tbody>
@@ -492,41 +499,40 @@ export default function FinanceiroNotasFiscaisPage() {
                   const files = filesByInvoiceId[row.id] ?? [];
                   return (
                     <tr key={row.id} className="border-t border-slate-100">
-                      <td className="max-w-[190px] truncate px-3 py-2 font-semibold text-slate-900">{collaboratorName(row.user_id)}</td>
-                      <td className="max-w-[150px] truncate px-3 py-2 text-slate-600">{sectorByUserId[row.user_id] ?? "Sem setor"}</td>
-                      <td className="whitespace-nowrap px-3 py-2">{invoiceMonth(row)}/{invoiceYear(row)}</td>
-                      <td className="max-w-[120px] truncate px-3 py-2">{row.invoice_number ?? "-"}</td>
-                      <td className="whitespace-nowrap px-3 py-2">{money(row.gross_amount)}</td>
-                      <td className="px-3 py-2">{providerLabel(row.integration_provider)}</td>
-                      <td className="px-3 py-2">
+                      <td className="truncate px-2 py-2 font-semibold text-slate-900" title={collaboratorName(row.user_id)}>{collaboratorName(row.user_id)}</td>
+                      <td className="hidden truncate px-2 py-2 text-slate-600 lg:table-cell" title={sectorByUserId[row.user_id] ?? "Sem setor"}>{sectorByUserId[row.user_id] ?? "Sem setor"}</td>
+                      <td className="whitespace-nowrap px-2 py-2">{invoiceMonth(row)}/{invoiceYear(row)}</td>
+                      <td className="truncate px-2 py-2" title={row.invoice_number ?? "-"}>{row.invoice_number ?? "-"}</td>
+                      <td className="whitespace-nowrap px-2 py-2">{money(row.gross_amount)}</td>
+                      <td className="hidden truncate px-2 py-2 xl:table-cell" title={providerLabel(row.integration_provider)}>{providerLabel(row.integration_provider)}</td>
+                      <td className="px-2 py-2">
                         <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass(row.status)}`}>
                           {statusLabel(row.status)}
                         </span>
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-2 py-2">
                         {files.length ? (
-                          <button type="button" onClick={() => void openInvoiceFile(files[0])} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                          <button type="button" onClick={() => void openInvoiceFile(files[0])} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700 hover:bg-slate-50" title="Ver nota">
                             <Eye size={13} />
-                            Ver nota
+                            <span className="hidden 2xl:inline">Ver nota</span>
                           </button>
                         ) : (
                           <span className="text-xs text-slate-500">Sem anexo</span>
                         )}
                       </td>
-                      <td className="px-3 py-2">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button type="button" onClick={() => setCommentInvoice(row)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-label="Abrir comentario">
+                      <td className="px-2 py-2">
+                        <div className="flex items-center justify-end gap-1">
+                          <button type="button" onClick={() => setCommentInvoice(row)} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50" aria-label="Abrir comentario" title="Comentario">
                             <MoreHorizontal size={16} />
                           </button>
-                          <button type="button" onClick={() => void updateStatus(row, "approved")} disabled={busy} className="inline-flex h-8 items-center gap-1 rounded-lg bg-emerald-600 px-2.5 text-xs font-semibold text-white disabled:opacity-60">
-                            <Save size={13} />
-                            Aprovar
+                          <button type="button" onClick={() => void updateStatus(row, "approved")} disabled={busy} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white disabled:opacity-60" aria-label="Aprovar" title="Aprovar">
+                            <Check size={14} />
                           </button>
-                          <button type="button" onClick={() => void updateStatus(row, "rejected")} disabled={busy} className="h-8 rounded-lg bg-rose-600 px-2.5 text-xs font-semibold text-white disabled:opacity-60">
-                            Recusar
+                          <button type="button" onClick={() => void updateStatus(row, "rejected")} disabled={busy} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-rose-600 text-white disabled:opacity-60" aria-label="Recusar" title="Recusar">
+                            <X size={14} />
                           </button>
-                          <button type="button" onClick={() => void updateStatus(row, "cancelled")} disabled={busy} className="h-8 rounded-lg bg-slate-700 px-2.5 text-xs font-semibold text-white disabled:opacity-60">
-                            Cancelar
+                          <button type="button" onClick={() => void updateStatus(row, "cancelled")} disabled={busy} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-700 text-[10px] font-bold text-white disabled:opacity-60" aria-label="Cancelar" title="Cancelar">
+                            C
                           </button>
                         </div>
                       </td>

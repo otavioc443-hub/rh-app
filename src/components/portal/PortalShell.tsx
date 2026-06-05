@@ -928,7 +928,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
           />
         ) : null}
 
-        <main className="flex-1">
+        <main className="min-w-0 flex-1">
           <div className="mx-auto w-full max-w-[1400px] px-6 py-6">
             {sidebarCollapsed ? (
               <div className="mb-4">

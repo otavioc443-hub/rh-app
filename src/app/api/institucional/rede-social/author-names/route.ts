@@ -11,6 +11,7 @@ type ProfileRow = {
 };
 
 type CollaboratorRow = {
+  id?: string | null;
   user_id: string | null;
   nome: string | null;
   email: string | null;
@@ -73,7 +74,10 @@ export async function POST(req: Request) {
 
     const [profilesRes, collaboratorsRes] = await Promise.all([
       supabaseAdmin.from("profiles").select("id,full_name,email,active").in("id", userIds),
-      supabaseAdmin.from("colaboradores").select("user_id,nome,email,email_empresarial,email_pessoal").in("user_id", userIds),
+      supabaseAdmin
+        .from("colaboradores")
+        .select("id,user_id,nome,email,email_empresarial,email_pessoal")
+        .or(`user_id.in.(${userIds.join(",")}),id.in.(${userIds.join(",")})`),
     ]);
 
     if (profilesRes.error) return NextResponse.json({ error: profilesRes.error.message }, { status: 400 });
@@ -83,7 +87,9 @@ export async function POST(req: Request) {
     const profiles = (profilesRes.data ?? []) as ProfileRow[];
     for (const row of (collaboratorsRes.data ?? []) as CollaboratorRow[]) {
       const name = cleanName(row.nome);
-      if (row.user_id && name) names[row.user_id] = name;
+      if (!name) continue;
+      if (row.user_id) names[row.user_id] = name;
+      if (row.id) names[row.id] = name;
     }
 
     const unresolvedProfileEmails = profiles

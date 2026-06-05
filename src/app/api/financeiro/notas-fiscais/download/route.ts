@@ -226,10 +226,14 @@ export async function POST(req: Request) {
     const userIds = Array.from(new Set(files.map((file) => invoiceFromFile(file)?.user_id).filter(Boolean) as string[]));
     const nameByUserId: Record<string, string> = {};
     if (userIds.length) {
-      const collaborators = await supabaseAdmin.from("colaboradores").select("user_id,nome,email").in("user_id", userIds);
-      for (const item of (collaborators.data ?? []) as Array<{ user_id: string | null; nome: string | null; email: string | null }>) {
-        if (!item.user_id) continue;
-        nameByUserId[item.user_id] = item.nome?.trim() || item.email?.trim() || item.user_id;
+      const collaborators = await supabaseAdmin
+        .from("colaboradores")
+        .select("id,user_id,nome,email")
+        .or(`user_id.in.(${userIds.join(",")}),id.in.(${userIds.join(",")})`);
+      for (const item of (collaborators.data ?? []) as Array<{ id: string | null; user_id: string | null; nome: string | null; email: string | null }>) {
+        const name = item.nome?.trim() || item.email?.trim() || "";
+        if (item.user_id) nameByUserId[item.user_id] = name || item.user_id;
+        if (item.id) nameByUserId[item.id] = name || item.id;
       }
     }
 
@@ -241,9 +245,7 @@ export async function POST(req: Request) {
       const invoice = invoiceFromFile(file);
       const collaborator = safeName(nameByUserId[invoice?.user_id ?? ""] ?? "colaborador");
       const competence = invoice?.reference_month ? monthYear(invoice.reference_month) : "sem-competencia";
-      const number = safeName(invoice?.invoice_number ?? file.invoice_id);
-      const fileName = safeName(file.file_name ?? `${file.file_kind || "arquivo"}-${file.id}`);
-      const zipPath = uniquePath(`${collaborator}_${competence}_NF-${number}_${fileName}`, usedNames);
+      const zipPath = uniquePath(`${collaborator}_${competence}.pdf`, usedNames);
       entries.push({ name: zipPath, data: new Uint8Array(await downloaded.data.arrayBuffer()) });
     }
 
