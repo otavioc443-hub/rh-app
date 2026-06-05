@@ -42,6 +42,31 @@ function cleanEmail(value: string | null | undefined) {
   return (value ?? "").trim().toLowerCase();
 }
 
+async function findCollaboratorsByEmails(emails: string[]) {
+  const uniqueEmails = Array.from(new Set(emails.map(cleanEmail).filter(Boolean)));
+  if (!uniqueEmails.length) return [] as CollaboratorRow[];
+
+  const [primaryRes, businessRes, personalRes] = await Promise.all([
+    supabaseAdmin.from("colaboradores").select("user_id,nome,email,email_empresarial,email_pessoal").in("email", uniqueEmails),
+    supabaseAdmin
+      .from("colaboradores")
+      .select("user_id,nome,email,email_empresarial,email_pessoal")
+      .in("email_empresarial", uniqueEmails),
+    supabaseAdmin
+      .from("colaboradores")
+      .select("user_id,nome,email,email_empresarial,email_pessoal")
+      .in("email_pessoal", uniqueEmails),
+  ]);
+
+  const rows = [...(primaryRes.data ?? []), ...(businessRes.data ?? []), ...(personalRes.data ?? [])] as CollaboratorRow[];
+  const byKey = new Map<string, CollaboratorRow>();
+  for (const row of rows) {
+    const key = row.user_id || cleanEmail(row.email) || cleanEmail(row.email_empresarial) || cleanEmail(row.email_pessoal);
+    if (key) byKey.set(key, row);
+  }
+  return Array.from(byKey.values());
+}
+
 export async function POST(req: Request) {
   try {
     const authHeader = req.headers.get("authorization") || "";
@@ -97,31 +122,19 @@ export async function POST(req: Request) {
       .map((row) => cleanEmail(row.email))
       .filter(Boolean);
     if (unresolvedProfileEmails.length) {
-      const emailCollaboratorsRes = await supabaseAdmin
-        .from("colaboradores")
-        .select("user_id,nome,email,email_empresarial,email_pessoal")
-        .or(
-          [
-            `email.in.(${unresolvedProfileEmails.join(",")})`,
-            `email_empresarial.in.(${unresolvedProfileEmails.join(",")})`,
-            `email_pessoal.in.(${unresolvedProfileEmails.join(",")})`,
-          ].join(",")
-        );
-
-      if (!emailCollaboratorsRes.error) {
-        const collaboratorByEmail = new Map<string, string>();
-        for (const collaborator of (emailCollaboratorsRes.data ?? []) as CollaboratorRow[]) {
-          const name = cleanName(collaborator.nome);
-          if (!name) continue;
-          for (const email of [collaborator.email, collaborator.email_empresarial, collaborator.email_pessoal]) {
-            const normalizedEmail = cleanEmail(email);
-            if (normalizedEmail) collaboratorByEmail.set(normalizedEmail, name);
-          }
+      const emailCollaborators = await findCollaboratorsByEmails(unresolvedProfileEmails);
+      const collaboratorByEmail = new Map<string, string>();
+      for (const collaborator of emailCollaborators) {
+        const name = cleanName(collaborator.nome);
+        if (!name) continue;
+        for (const email of [collaborator.email, collaborator.email_empresarial, collaborator.email_pessoal]) {
+          const normalizedEmail = cleanEmail(email);
+          if (normalizedEmail) collaboratorByEmail.set(normalizedEmail, name);
         }
-        for (const profile of profiles) {
-          const name = collaboratorByEmail.get(cleanEmail(profile.email));
-          if (name) names[profile.id] = name;
-        }
+      }
+      for (const profile of profiles) {
+        const name = collaboratorByEmail.get(cleanEmail(profile.email));
+        if (name) names[profile.id] = name;
       }
     }
 
@@ -138,6 +151,30 @@ export async function POST(req: Request) {
           return data?.user ?? null;
         })
       );
+      const authEmailById = new Map<string, string>();
+      for (const authUser of authUsers) {
+        const email = cleanEmail(authUser?.email);
+        if (authUser?.id && email) authEmailById.set(authUser.id, email);
+      }
+
+      const authEmails = Array.from(new Set(Array.from(authEmailById.values()).filter(Boolean)));
+      if (authEmails.length) {
+        const emailCollaborators = await findCollaboratorsByEmails(authEmails);
+        const collaboratorNameByEmail = new Map<string, string>();
+        for (const collaborator of emailCollaborators) {
+          const name = cleanName(collaborator.nome);
+          if (!name) continue;
+          for (const email of [collaborator.email, collaborator.email_empresarial, collaborator.email_pessoal]) {
+            const normalizedEmail = cleanEmail(email);
+            if (normalizedEmail) collaboratorNameByEmail.set(normalizedEmail, name);
+          }
+        }
+        for (const [id, email] of authEmailById.entries()) {
+          const name = collaboratorNameByEmail.get(email);
+          if (name) names[id] = name;
+        }
+      }
+
       for (const authUser of authUsers) {
         if (!authUser?.id || names[authUser.id]) continue;
         const metadata = authUser.user_metadata as Record<string, unknown> | null;

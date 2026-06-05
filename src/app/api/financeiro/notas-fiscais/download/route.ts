@@ -231,9 +231,9 @@ export async function POST(req: Request) {
         .select("id,user_id,nome,email")
         .or(`user_id.in.(${userIds.join(",")}),id.in.(${userIds.join(",")})`);
       for (const item of (collaborators.data ?? []) as Array<{ id: string | null; user_id: string | null; nome: string | null; email: string | null }>) {
-        const name = item.nome?.trim() || item.email?.trim() || "";
-        if (item.user_id) nameByUserId[item.user_id] = name || item.user_id;
-        if (item.id) nameByUserId[item.id] = name || item.id;
+        const name = item.nome?.trim() || "";
+        if (item.user_id && name) nameByUserId[item.user_id] = name;
+        if (item.id && name) nameByUserId[item.id] = name;
       }
     }
 

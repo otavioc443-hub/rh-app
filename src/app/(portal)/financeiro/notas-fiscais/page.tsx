@@ -36,6 +36,7 @@ type InvoiceFileRow = {
 };
 
 type CollaboratorRow = { id?: string | null; user_id: string | null; nome: string | null; email: string | null; setor: string | null };
+type CollaboratorEmailRow = { nome: string | null; email: string | null; email_empresarial?: string | null; email_pessoal?: string | null };
 
 const PAGE_SIZE = 25;
 
@@ -104,6 +105,27 @@ function isUuid(value: string | null | undefined) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value ?? "").trim());
 }
 
+async function findCollaboratorsByEmails(emails: string[]) {
+  const uniqueEmails = Array.from(new Set(emails.map((email) => email.trim().toLowerCase()).filter(Boolean)));
+  if (!uniqueEmails.length) return [] as CollaboratorEmailRow[];
+
+  const [primaryRes, businessRes, personalRes] = await Promise.all([
+    supabase.from("colaboradores").select("nome,email,email_empresarial,email_pessoal").in("email", uniqueEmails),
+    supabase.from("colaboradores").select("nome,email,email_empresarial,email_pessoal").in("email_empresarial", uniqueEmails),
+    supabase.from("colaboradores").select("nome,email,email_empresarial,email_pessoal").in("email_pessoal", uniqueEmails),
+  ]);
+
+  const rows = [...(primaryRes.data ?? []), ...(businessRes.data ?? []), ...(personalRes.data ?? [])] as CollaboratorEmailRow[];
+  const byEmail = new Map<string, CollaboratorEmailRow>();
+  for (const row of rows) {
+    for (const email of [row.email, row.email_empresarial, row.email_pessoal]) {
+      const normalized = email?.trim().toLowerCase();
+      if (normalized) byEmail.set(normalized, row);
+    }
+  }
+  return Array.from(new Set(byEmail.values()));
+}
+
 export default function FinanceiroNotasFiscaisPage() {
   const { role, loading: roleLoading } = useUserRole();
   const canReview = role === "financeiro" || role === "admin" || role === "rh";
@@ -129,7 +151,7 @@ export default function FinanceiroNotasFiscaisPage() {
 
   function collaboratorName(userId: string) {
     const name = nameByUserId[userId]?.trim();
-    if (name && !isUuid(name)) return name;
+    if (name && !isUuid(name) && !name.includes("@")) return name;
     return isUuid(userId) ? "Colaborador sem nome" : userId;
   }
 
@@ -185,6 +207,31 @@ export default function FinanceiroNotasFiscaisPage() {
         const apiNames = namesRes.ok && namesJson.names ? namesJson.names : {};
         setNameByUserId(apiNames);
 
+        const emailFallbacks = Object.entries(apiNames)
+          .map(([id, value]) => ({ id, email: value.trim().toLowerCase() }))
+          .filter((item) => item.email.includes("@"));
+        if (emailFallbacks.length) {
+          const emails = Array.from(new Set(emailFallbacks.map((item) => item.email)));
+          const collaboratorsByEmail = await findCollaboratorsByEmails(emails);
+          const nameByEmail = new Map<string, string>();
+          for (const row of collaboratorsByEmail) {
+            const name = row.nome?.trim();
+            if (!name) continue;
+            for (const email of [row.email, row.email_empresarial, row.email_pessoal]) {
+              const normalized = email?.trim().toLowerCase();
+              if (normalized) nameByEmail.set(normalized, name);
+            }
+          }
+          const replacements: Record<string, string> = {};
+          for (const item of emailFallbacks) {
+            const name = nameByEmail.get(item.email);
+            if (name) replacements[item.id] = name;
+          }
+          if (Object.keys(replacements).length) {
+            setNameByUserId((current) => ({ ...current, ...replacements }));
+          }
+        }
+
         const { data: collabRows, error: collabErr } = await supabase
           .from("colaboradores")
           .select("id,user_id,nome,email,setor")
@@ -193,14 +240,14 @@ export default function FinanceiroNotasFiscaisPage() {
           const names: Record<string, string> = {};
           const sectors: Record<string, string> = {};
           for (const collaborator of (collabRows ?? []) as CollaboratorRow[]) {
-            const name = collaborator.nome?.trim() || collaborator.email?.trim() || "";
+            const name = collaborator.nome?.trim() || "";
             const sector = collaborator.setor?.trim() || "Sem setor";
             if (collaborator.user_id) {
-              names[collaborator.user_id] = name || collaborator.user_id;
+              if (name) names[collaborator.user_id] = name;
               sectors[collaborator.user_id] = sector;
             }
             if (collaborator.id) {
-              names[collaborator.id] = name || collaborator.id;
+              if (name) names[collaborator.id] = name;
               sectors[collaborator.id] = sector;
             }
           }
