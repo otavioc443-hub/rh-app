@@ -220,8 +220,8 @@ export async function POST(req: Request) {
       .limit(MAX_FILES);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
-    const files = ((data ?? []) as unknown as InvoiceFileRow[]).filter((file) => file.storage_bucket && file.storage_path);
-    if (!files.length) return NextResponse.json({ error: "As notas filtradas nao possuem anexos para baixar." }, { status: 404 });
+    const files = ((data ?? []) as unknown as InvoiceFileRow[]).filter((file) => file.storage_bucket && file.storage_path && file.file_kind === "pdf");
+    if (!files.length) return NextResponse.json({ error: "As notas filtradas nao possuem PDFs para baixar." }, { status: 404 });
 
     const userIds = Array.from(new Set(files.map((file) => invoiceFromFile(file)?.user_id).filter(Boolean) as string[]));
     const nameByUserId: Record<string, string> = {};
@@ -243,7 +243,7 @@ export async function POST(req: Request) {
       const competence = invoice?.reference_month ? monthYear(invoice.reference_month) : "sem-competencia";
       const number = safeName(invoice?.invoice_number ?? file.invoice_id);
       const fileName = safeName(file.file_name ?? `${file.file_kind || "arquivo"}-${file.id}`);
-      const zipPath = uniquePath(`${collaborator}/${competence}/NF-${number}/${fileName}`, usedNames);
+      const zipPath = uniquePath(`${collaborator}_${competence}_NF-${number}_${fileName}`, usedNames);
       entries.push({ name: zipPath, data: new Uint8Array(await downloaded.data.arrayBuffer()) });
     }
 
