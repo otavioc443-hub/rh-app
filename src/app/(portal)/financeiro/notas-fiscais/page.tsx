@@ -35,7 +35,7 @@ type InvoiceFileRow = {
   created_at: string;
 };
 
-type CollaboratorRow = { id?: string | null; user_id: string | null; nome: string | null; email: string | null; setor: string | null };
+type CollaboratorRow = { id?: string | null; user_id: string | null; nome: string | null; email: string | null; setor: string | null; company_id?: string | null };
 type CollaboratorEmailRow = { nome: string | null; email: string | null; email_empresarial?: string | null; email_pessoal?: string | null };
 
 const PAGE_SIZE = 25;
@@ -137,6 +137,8 @@ export default function FinanceiroNotasFiscaisPage() {
   const [filesByInvoiceId, setFilesByInvoiceId] = useState<Record<string, InvoiceFileRow[]>>({});
   const [nameByUserId, setNameByUserId] = useState<Record<string, string>>({});
   const [sectorByUserId, setSectorByUserId] = useState<Record<string, string>>({});
+  const [companyByUserId, setCompanyByUserId] = useState<Record<string, string>>({});
+  const [activeCompanyId, setActiveCompanyId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | InvoiceStatus>("all");
   const [sectorFilter, setSectorFilter] = useState("all");
   const [collaboratorFilter, setCollaboratorFilter] = useState("all");
@@ -162,6 +164,14 @@ export default function FinanceiroNotasFiscaisPage() {
       const { data: authData, error: authErr } = await supabase.auth.getUser();
       if (authErr || !authData.user) throw new Error("Sessao invalida.");
       setReviewerUserId(authData.user.id);
+
+      const profileCompanyRes = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("id", authData.user.id)
+        .maybeSingle<{ company_id: string | null }>();
+      const currentCompanyId = profileCompanyRes.data?.company_id ?? null;
+      setActiveCompanyId(currentCompanyId);
 
       const { data, error } = await supabase
         .from("collaborator_invoices")
@@ -234,35 +244,53 @@ export default function FinanceiroNotasFiscaisPage() {
 
         const { data: collabRows, error: collabErr } = await supabase
           .from("colaboradores")
-          .select("id,user_id,nome,email,setor")
+          .select("id,user_id,nome,email,setor,company_id")
           .or(`user_id.in.(${userIds.join(",")}),id.in.(${userIds.join(",")})`);
         if (!collabErr) {
           const names: Record<string, string> = {};
           const sectors: Record<string, string> = {};
+          const companies: Record<string, string> = {};
           for (const collaborator of (collabRows ?? []) as CollaboratorRow[]) {
             const name = collaborator.nome?.trim() || "";
             const sector = collaborator.setor?.trim() || "Sem setor";
+            const companyId = collaborator.company_id?.trim() || "";
             if (collaborator.user_id) {
               if (name) names[collaborator.user_id] = name;
               sectors[collaborator.user_id] = sector;
+              if (companyId) companies[collaborator.user_id] = companyId;
             }
             if (collaborator.id) {
               if (name) names[collaborator.id] = name;
               sectors[collaborator.id] = sector;
+              if (companyId) companies[collaborator.id] = companyId;
             }
           }
+
+          const profileCompanies = await supabase
+            .from("profiles")
+            .select("id,company_id")
+            .in("id", userIds);
+          if (!profileCompanies.error) {
+            for (const profile of (profileCompanies.data ?? []) as Array<{ id: string; company_id: string | null }>) {
+              if (profile.company_id && !companies[profile.id]) companies[profile.id] = profile.company_id;
+            }
+          }
+
           setNameByUserId((current) => ({ ...current, ...names }));
           setSectorByUserId(sectors);
+          setCompanyByUserId(companies);
         }
       } else {
         setNameByUserId({});
         setSectorByUserId({});
+        setCompanyByUserId({});
       }
     } catch (error: unknown) {
       setRows([]);
       setFilesByInvoiceId({});
       setNameByUserId({});
       setSectorByUserId({});
+      setCompanyByUserId({});
       setMsg(error instanceof Error ? error.message : "Erro ao carregar notas fiscais.");
     } finally {
       setLoading(false);
@@ -275,15 +303,17 @@ export default function FinanceiroNotasFiscaisPage() {
   }, [canReview]);
 
   const filterOptions = useMemo(() => {
-    const sectors = Array.from(new Set(rows.map((row) => sectorByUserId[row.user_id] ?? "Sem setor"))).sort();
-    const collaborators = Array.from(new Set(rows.map((row) => row.user_id))).sort((a, b) => collaboratorName(a).localeCompare(collaboratorName(b)));
-    const months = Array.from(new Set(rows.map(invoiceMonth))).sort();
-    const years = Array.from(new Set(rows.map(invoiceYear))).sort((a, b) => b.localeCompare(a));
+    const scopedRows = rows.filter((row) => role === "admin" || !activeCompanyId || companyByUserId[row.user_id] === activeCompanyId);
+    const sectors = Array.from(new Set(scopedRows.map((row) => sectorByUserId[row.user_id] ?? "Sem setor"))).sort();
+    const collaborators = Array.from(new Set(scopedRows.map((row) => row.user_id))).sort((a, b) => collaboratorName(a).localeCompare(collaboratorName(b)));
+    const months = Array.from(new Set(scopedRows.map(invoiceMonth))).sort();
+    const years = Array.from(new Set(scopedRows.map(invoiceYear))).sort((a, b) => b.localeCompare(a));
     return { sectors, collaborators, months, years };
-  }, [nameByUserId, rows, sectorByUserId]);
+  }, [activeCompanyId, companyByUserId, nameByUserId, role, rows, sectorByUserId]);
 
   const filtered = useMemo(() => {
     return rows.filter((row) => {
+      if (role !== "admin" && activeCompanyId && companyByUserId[row.user_id] !== activeCompanyId) return false;
       if (statusFilter !== "all" && row.status !== statusFilter) return false;
       if (sectorFilter !== "all" && (sectorByUserId[row.user_id] ?? "Sem setor") !== sectorFilter) return false;
       if (collaboratorFilter !== "all" && row.user_id !== collaboratorFilter) return false;
@@ -297,7 +327,7 @@ export default function FinanceiroNotasFiscaisPage() {
       if (monthDiff !== 0) return monthDiff;
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
-  }, [collaboratorFilter, monthFilter, rows, sectorByUserId, sectorFilter, statusFilter, yearFilter]);
+  }, [activeCompanyId, collaboratorFilter, companyByUserId, monthFilter, role, rows, sectorByUserId, sectorFilter, statusFilter, yearFilter]);
 
   useEffect(() => {
     setPage(1);
@@ -346,7 +376,7 @@ export default function FinanceiroNotasFiscaisPage() {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ invoice_ids: filtered.map((row) => row.id) }),
+        body: JSON.stringify({ invoice_ids: filtered.map((row) => row.id), company_id: activeCompanyId }),
       });
       if (!res.ok) {
         const json = (await res.json().catch(() => ({}))) as { error?: string };

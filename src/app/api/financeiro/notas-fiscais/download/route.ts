@@ -22,6 +22,13 @@ type InvoiceFileRow = {
   }> | null;
 };
 
+type FinanceAccess = {
+  allowed: boolean;
+  role: string | null;
+  active: boolean;
+  companyId: string | null;
+};
+
 const MAX_FILES = 300;
 const CRC_TABLE = makeCrcTable();
 
@@ -65,27 +72,52 @@ async function getRequesterSupabase(token: string | null): Promise<SupabaseClien
   return getServerSupabase();
 }
 
-async function canDownloadInvoices(userId: string, token: string | null) {
+async function getFinanceAccess(userId: string, token: string | null): Promise<FinanceAccess> {
   try {
     const supabaseUser = await getRequesterSupabase(token);
-    const [{ data: role, error: roleErr }, { data: active, error: activeErr }] = await Promise.all([
+    const [{ data: role, error: roleErr }, { data: active, error: activeErr }, profileRes] = await Promise.all([
       supabaseUser.rpc("current_role"),
       supabaseUser.rpc("current_active"),
+      supabaseAdmin.from("profiles").select("company_id").eq("id", userId).maybeSingle<{ company_id: string | null }>(),
     ]);
     if (roleErr || activeErr) throw new Error(roleErr?.message || activeErr?.message || "rpc failed");
-    if (active !== true) return false;
+    if (active !== true) return { allowed: false, role: null, active: false, companyId: profileRes.data?.company_id ?? null };
     const effectiveRole = String(role ?? "").trim().toLowerCase();
-    return effectiveRole === "financeiro" || effectiveRole === "admin" || effectiveRole === "rh";
+    return {
+      allowed: effectiveRole === "financeiro" || effectiveRole === "admin" || effectiveRole === "rh",
+      role: effectiveRole || null,
+      active: true,
+      companyId: profileRes.data?.company_id ?? null,
+    };
   } catch {
     const { data, error } = await supabaseAdmin
       .from("profiles")
-      .select("role,active")
+      .select("role,active,company_id")
       .eq("id", userId)
-      .maybeSingle<{ role: string | null; active: boolean | null }>();
-    if (error || !data?.active) return false;
+      .maybeSingle<{ role: string | null; active: boolean | null; company_id: string | null }>();
+    if (error || !data?.active) return { allowed: false, role: null, active: false, companyId: data?.company_id ?? null };
     const fallbackRole = String(data.role ?? "").trim().toLowerCase();
-    return fallbackRole === "financeiro" || fallbackRole === "admin" || fallbackRole === "rh";
+    return {
+      allowed: fallbackRole === "financeiro" || fallbackRole === "admin" || fallbackRole === "rh",
+      role: fallbackRole || null,
+      active: true,
+      companyId: data.company_id ?? null,
+    };
   }
+}
+
+async function getAllowedCompanyIds(userId: string, profileCompanyId: string | null) {
+  const ids = new Set<string>();
+  if (profileCompanyId) ids.add(profileCompanyId);
+
+  const { data } = await supabaseAdmin
+    .from("profile_company_memberships")
+    .select("company_id")
+    .eq("user_id", userId);
+  for (const row of (data ?? []) as Array<{ company_id: string | null }>) {
+    if (row.company_id) ids.add(row.company_id);
+  }
+  return ids;
 }
 
 function makeCrcTable() {
@@ -232,9 +264,23 @@ export async function POST(req: Request) {
     const requester = await getRequesterUser(req);
     if (!requester?.user) return NextResponse.json({ error: "Nao autenticado" }, { status: 401 });
     const user = requester.user;
-    if (!(await canDownloadInvoices(user.id, requester.token))) return NextResponse.json({ error: "Sem permissao" }, { status: 403 });
+    const access = await getFinanceAccess(user.id, requester.token);
+    if (!access.allowed) return NextResponse.json({ error: "Sem permissao" }, { status: 403 });
 
-    const body = (await req.json().catch(() => ({}))) as { invoice_ids?: unknown };
+    const body = (await req.json().catch(() => ({}))) as { invoice_ids?: unknown; company_id?: unknown };
+    const requestedCompanyId = typeof body.company_id === "string" && body.company_id.trim() ? body.company_id.trim() : null;
+    const targetCompanyId = requestedCompanyId || access.companyId;
+    const isAdmin = access.role === "admin";
+    if (!isAdmin && !targetCompanyId) {
+      return NextResponse.json({ error: "Selecione a empresa ativa para baixar as notas." }, { status: 400 });
+    }
+    if (targetCompanyId && !isAdmin) {
+      const allowedCompanies = await getAllowedCompanyIds(user.id, access.companyId);
+      if (!allowedCompanies.has(targetCompanyId)) {
+        return NextResponse.json({ error: "Empresa nao vinculada ao seu perfil." }, { status: 403 });
+      }
+    }
+
     const invoiceIds = Array.isArray(body.invoice_ids)
       ? Array.from(new Set(body.invoice_ids.map((id) => String(id).trim()).filter(Boolean)))
       : [];
@@ -252,21 +298,43 @@ export async function POST(req: Request) {
 
     const userIds = Array.from(new Set(files.map((file) => invoiceFromFile(file)?.user_id).filter(Boolean) as string[]));
     const nameByUserId: Record<string, string> = {};
+    const companyByUserId: Record<string, string> = {};
     if (userIds.length) {
       const collaborators = await supabaseAdmin
         .from("colaboradores")
-        .select("id,user_id,nome,email")
+        .select("id,user_id,nome,email,company_id")
         .or(`user_id.in.(${userIds.join(",")}),id.in.(${userIds.join(",")})`);
-      for (const item of (collaborators.data ?? []) as Array<{ id: string | null; user_id: string | null; nome: string | null; email: string | null }>) {
+      for (const item of (collaborators.data ?? []) as Array<{ id: string | null; user_id: string | null; nome: string | null; email: string | null; company_id: string | null }>) {
         const name = item.nome?.trim() || "";
-        if (item.user_id && name) nameByUserId[item.user_id] = name;
-        if (item.id && name) nameByUserId[item.id] = name;
+        if (item.user_id) {
+          if (name) nameByUserId[item.user_id] = name;
+          if (item.company_id) companyByUserId[item.user_id] = item.company_id;
+        }
+        if (item.id) {
+          if (name) nameByUserId[item.id] = name;
+          if (item.company_id) companyByUserId[item.id] = item.company_id;
+        }
       }
+
+      const profileCompanies = await supabaseAdmin
+        .from("profiles")
+        .select("id,company_id")
+        .in("id", userIds);
+      for (const item of (profileCompanies.data ?? []) as Array<{ id: string; company_id: string | null }>) {
+        if (item.company_id && !companyByUserId[item.id]) companyByUserId[item.id] = item.company_id;
+      }
+    }
+
+    const scopedFiles = targetCompanyId
+      ? files.filter((file) => companyByUserId[invoiceFromFile(file)?.user_id ?? ""] === targetCompanyId)
+      : files;
+    if (!scopedFiles.length) {
+      return NextResponse.json({ error: "As notas filtradas nao pertencem a empresa ativa selecionada." }, { status: 404 });
     }
 
     const usedNames = new Set<string>();
     const entries: Array<{ name: string; data: Uint8Array }> = [];
-    for (const file of files) {
+    for (const file of scopedFiles) {
       const downloaded = await supabaseAdmin.storage.from(file.storage_bucket).download(file.storage_path);
       if (downloaded.error || !downloaded.data) continue;
       const invoice = invoiceFromFile(file);

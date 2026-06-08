@@ -100,6 +100,50 @@ type Department = { id: string; company_id: string; name: string; parent_departm
 type CargoRow = { id: string; name: string; cbo: string | null };
 type ColabRow = { id: string; nome: string | null; email: string | null; cargo: string | null; cpf: string | null };
 const CONTRACT_TYPE_OPTIONS = ["CLT", "PJ", "Temporario", "Estagio", "Aprendiz", "Autonomo", "Terceirizado"] as const;
+const SEX_OPTIONS = ["Masculino", "Feminino", "Outro", "Prefere nao informar"] as const;
+const MARITAL_STATUS_OPTIONS = ["Solteiro(a)", "Casado(a)", "Uniao estavel", "Divorciado(a)", "Separado(a)", "Viuvo(a)"] as const;
+const GREETING_OPTIONS = ["Sr.", "Sra.", "Sre.", "Dr.", "Dra."] as const;
+const NATIONALITY_OPTIONS = ["Brasileiro(a)", "Estrangeiro(a)", "Naturalizado(a)"] as const;
+const ETHNICITY_OPTIONS = ["Branca", "Preta", "Parda", "Amarela", "Indigena", "Nao informado"] as const;
+const TERMINATION_REASON_OPTIONS = [
+  "Pedido de demissao",
+  "Demissao sem justa causa",
+  "Demissao por justa causa",
+  "Termino de contrato",
+  "Fim de experiencia",
+  "Acordo entre as partes",
+  "Baixo desempenho",
+  "Reestruturacao interna",
+  "Abandono de emprego",
+  "Outro",
+] as const;
+const SHIFT_OPTIONS = ["Administrativo", "Comercial", "Diurno", "Noturno", "Escala", "Hibrido", "Remoto"] as const;
+const CURRENCY_OPTIONS = ["BRL", "USD", "EUR"] as const;
+const EDUCATION_OPTIONS = [
+  "Ensino fundamental incompleto",
+  "Ensino fundamental completo",
+  "Ensino medio incompleto",
+  "Ensino medio completo",
+  "Tecnico",
+  "Superior incompleto",
+  "Superior completo",
+  "Pos-graduacao",
+  "Mestrado",
+  "Doutorado",
+] as const;
+const HIERARCHY_OPTIONS = ["Aprendiz/Estagio", "Operacional", "Tecnico", "Analista", "Coordenacao", "Gestao", "Diretoria", "Executivo"] as const;
+const CONTRACT_DURATION_OPTIONS = ["Indeterminado", "Determinado", "Experiencia 45 dias", "Experiencia 90 dias", "Temporario", "Por projeto"] as const;
+const SYSTEM_OPTIONS = ["Portal RH", "SouGov", "Contrata PJ", "Sistema interno", "Outro"] as const;
+const BANK_OPTIONS = [
+  "001 - Banco do Brasil",
+  "033 - Santander",
+  "104 - Caixa",
+  "237 - Bradesco",
+  "341 - Itau",
+  "260 - Nubank",
+  "077 - Inter",
+  "Outro",
+] as const;
 
 function digits(v: string) {
   return (v ?? "").replace(/\D/g, "");
@@ -120,6 +164,11 @@ function normalizeText(value: string | null | undefined) {
 
 function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
+}
+
+function hasOption(options: readonly string[], value: string) {
+  const normalized = normalizeText(value);
+  return !normalized || options.some((option) => normalizeText(option) === normalized);
 }
 
 function Section({
@@ -636,23 +685,63 @@ export default function EmployeeForm({
           </Field>
 
           <Field label="Sexo" required>
-            <input value={sexo} onChange={(e) => setSexo(e.target.value)} className={inputCls} placeholder="Sexo*" />
+            <select value={sexo} onChange={(e) => setSexo(e.target.value)} className={inputCls}>
+              <option value="">Selecione...</option>
+              {!hasOption(SEX_OPTIONS, sexo) ? <option value={sexo}>{sexo}</option> : null}
+              {SEX_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="Estado Civil">
-            <input value={estadoCivil} onChange={(e) => setEstadoCivil(e.target.value)} className={inputCls} />
+            <select value={estadoCivil} onChange={(e) => setEstadoCivil(e.target.value)} className={inputCls}>
+              <option value="">Selecione...</option>
+              {!hasOption(MARITAL_STATUS_OPTIONS, estadoCivil) ? <option value={estadoCivil}>{estadoCivil}</option> : null}
+              {MARITAL_STATUS_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="Saudação">
-            <input value={saudacao} onChange={(e) => setSaudacao(e.target.value)} className={inputCls} />
+            <select value={saudacao} onChange={(e) => setSaudacao(e.target.value)} className={inputCls}>
+              <option value="">Selecione...</option>
+              {!hasOption(GREETING_OPTIONS, saudacao) ? <option value={saudacao}>{saudacao}</option> : null}
+              {GREETING_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </Field>
 
           <Field label="Nacionalidade">
-            <input value={nacionalidade} onChange={(e) => setNacionalidade(e.target.value)} className={inputCls} />
+            <select value={nacionalidade} onChange={(e) => setNacionalidade(e.target.value)} className={inputCls}>
+              <option value="">Selecione...</option>
+              {!hasOption(NATIONALITY_OPTIONS, nacionalidade) ? <option value={nacionalidade}>{nacionalidade}</option> : null}
+              {NATIONALITY_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="Naturalidade">
             <input value={naturalidade} onChange={(e) => setNaturalidade(e.target.value)} className={inputCls} />
           </Field>
           <Field label="Etnia">
-            <input value={etnia} onChange={(e) => setEtnia(e.target.value)} className={inputCls} />
+            <select value={etnia} onChange={(e) => setEtnia(e.target.value)} className={inputCls}>
+              <option value="">Selecione...</option>
+              {!hasOption(ETHNICITY_OPTIONS, etnia) ? <option value={etnia}>{etnia}</option> : null}
+              {ETHNICITY_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </Field>
 
           <Field label="Nome do Pai">
@@ -681,7 +770,15 @@ export default function EmployeeForm({
             <input type="date" value={dataDemissao} onChange={(e) => setDataDemissao(e.target.value)} className={inputCls} />
           </Field>
           <Field label="Motivo da demissão">
-            <input value={motivoDemissao} onChange={(e) => setMotivoDemissao(e.target.value)} className={inputCls} />
+            <select value={motivoDemissao} onChange={(e) => setMotivoDemissao(e.target.value)} className={inputCls}>
+              <option value="">Selecione...</option>
+              {!hasOption(TERMINATION_REASON_OPTIONS, motivoDemissao) ? <option value={motivoDemissao}>{motivoDemissao}</option> : null}
+              {TERMINATION_REASON_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </Field>
 
           <Field label="Valor da Rescisão">
@@ -741,10 +838,26 @@ export default function EmployeeForm({
             <input value={salario} onChange={(e) => setSalario(e.target.value)} className={inputCls} />
           </Field>
           <Field label="Turno">
-            <input value={turno} onChange={(e) => setTurno(e.target.value)} className={inputCls} />
+            <select value={turno} onChange={(e) => setTurno(e.target.value)} className={inputCls}>
+              <option value="">Selecione...</option>
+              {!hasOption(SHIFT_OPTIONS, turno) ? <option value={turno}>{turno}</option> : null}
+              {SHIFT_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="Moeda">
-            <input value={moeda} onChange={(e) => setMoeda(e.target.value)} className={inputCls} />
+            <select value={moeda} onChange={(e) => setMoeda(e.target.value)} className={inputCls}>
+              <option value="">Selecione...</option>
+              {!hasOption(CURRENCY_OPTIONS, moeda) ? <option value={moeda}>{moeda}</option> : null}
+              {CURRENCY_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </Field>
 
           <Field label="Tipo de contrato" helper="Selecione um tipo padrao (CLT, PJ, etc).">
@@ -780,7 +893,15 @@ export default function EmployeeForm({
             <input type="date" value={dataContrato} onChange={(e) => setDataContrato(e.target.value)} className={inputCls} />
           </Field>
           <Field label="Escolaridade">
-            <input value={escolaridade} onChange={(e) => setEscolaridade(e.target.value)} className={inputCls} />
+            <select value={escolaridade} onChange={(e) => setEscolaridade(e.target.value)} className={inputCls}>
+              <option value="">Selecione...</option>
+              {!hasOption(EDUCATION_OPTIONS, escolaridade) ? <option value={escolaridade}>{escolaridade}</option> : null}
+              {EDUCATION_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </Field>
 
           {/* ✅ SUPERIOR DIRETO (select de colaboradores) */}
@@ -817,11 +938,27 @@ export default function EmployeeForm({
           </Field>
 
           <Field label="Grau hierárquico">
-            <input value={grauHierarquico} onChange={(e) => setGrauHierarquico(e.target.value)} className={inputCls} />
+            <select value={grauHierarquico} onChange={(e) => setGrauHierarquico(e.target.value)} className={inputCls}>
+              <option value="">Selecione...</option>
+              {!hasOption(HIERARCHY_OPTIONS, grauHierarquico) ? <option value={grauHierarquico}>{grauHierarquico}</option> : null}
+              {HIERARCHY_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </Field>
 
           <Field label="Duração do contrato">
-            <input value={duracaoContrato} onChange={(e) => setDuracaoContrato(e.target.value)} className={inputCls} />
+            <select value={duracaoContrato} onChange={(e) => setDuracaoContrato(e.target.value)} className={inputCls}>
+              <option value="">Selecione...</option>
+              {!hasOption(CONTRACT_DURATION_OPTIONS, duracaoContrato) ? <option value={duracaoContrato}>{duracaoContrato}</option> : null}
+              {CONTRACT_DURATION_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </Field>
 
           <Field label="Vencimento do contrato">
@@ -931,14 +1068,12 @@ export default function EmployeeForm({
           <Field label="Banco">
             <select value={banco} onChange={(e) => setBanco(e.target.value)} className={inputCls}>
               <option value="">Selecione...</option>
-              <option value="001 - Banco do Brasil">001 - Banco do Brasil</option>
-              <option value="033 - Santander">033 - Santander</option>
-              <option value="104 - Caixa">104 - Caixa</option>
-              <option value="237 - Bradesco">237 - Bradesco</option>
-              <option value="341 - Itau">341 - Itau</option>
-              <option value="260 - Nubank">260 - Nubank</option>
-              <option value="077 - Inter">077 - Inter</option>
-              <option value="Outro">Outro</option>
+              {!hasOption(BANK_OPTIONS, banco) ? <option value={banco}>{banco}</option> : null}
+              {BANK_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
             </select>
           </Field>
           <Field label="Agência">
@@ -962,14 +1097,12 @@ export default function EmployeeForm({
           <Field label="Banco PIX">
             <select value={pixBank} onChange={(e) => setPixBank(e.target.value)} className={inputCls}>
               <option value="">Selecione...</option>
-              <option value="001 - Banco do Brasil">001 - Banco do Brasil</option>
-              <option value="033 - Santander">033 - Santander</option>
-              <option value="104 - Caixa">104 - Caixa</option>
-              <option value="237 - Bradesco">237 - Bradesco</option>
-              <option value="341 - Itau">341 - Itau</option>
-              <option value="260 - Nubank">260 - Nubank</option>
-              <option value="077 - Inter">077 - Inter</option>
-              <option value="Outro">Outro</option>
+              {!hasOption(BANK_OPTIONS, pixBank) ? <option value={pixBank}>{pixBank}</option> : null}
+              {BANK_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
             </select>
           </Field>
         </div>
@@ -979,7 +1112,15 @@ export default function EmployeeForm({
       <Section title="Integrações e IDs">
         <div className="grid gap-4 md:grid-cols-3">
           <Field label="Sistema">
-            <input value={sistema} onChange={(e) => setSistema(e.target.value)} className={inputCls} />
+            <select value={sistema} onChange={(e) => setSistema(e.target.value)} className={inputCls}>
+              <option value="">Selecione...</option>
+              {!hasOption(SYSTEM_OPTIONS, sistema) ? <option value={sistema}>{sistema}</option> : null}
+              {SYSTEM_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="ID Colaborador">
             <input value={idColabExt} onChange={(e) => setIdColabExt(e.target.value)} className={inputCls} />
