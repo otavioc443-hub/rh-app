@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BriefcaseBusiness, CalendarDays, GitBranch, RefreshCcw, UserRound } from "lucide-react";
+import { BriefcaseBusiness, CalendarDays, GitBranch, RefreshCcw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
 type ColaboradorResumo = {
@@ -14,8 +14,6 @@ type ColaboradorResumo = {
   vencimento_contrato: string | null;
   data_demissao: string | null;
   motivo_demissao: string | null;
-  superior_direto: string | null;
-  grau_hierarquico: string | null;
   empresa: string | null;
   departamento: string | null;
   setor: string | null;
@@ -124,7 +122,7 @@ export default function MinhaLinhaDoTempoPage() {
         supabase
           .from("colaboradores")
           .select(
-            "user_id,nome,cargo,tipo_contrato,data_admissao,data_contrato,vencimento_contrato,data_demissao,motivo_demissao,superior_direto,grau_hierarquico,empresa,departamento,setor,updated_at,created_at"
+            "user_id,nome,cargo,tipo_contrato,data_admissao,data_contrato,vencimento_contrato,data_demissao,motivo_demissao,empresa,departamento,setor,updated_at,created_at"
           )
           .eq("user_id", user.id)
           .maybeSingle<ColaboradorResumo>(),
@@ -177,7 +175,6 @@ export default function MinhaLinhaDoTempoPage() {
   }, []);
 
   const tenureDays = useMemo(() => diffInDays(row?.data_admissao ?? null), [row?.data_admissao]);
-  const isPjContract = useMemo(() => (row?.tipo_contrato ?? "").trim().toUpperCase() === "PJ", [row?.tipo_contrato]);
 
   const historyTimeline = useMemo<TimelineEvent[]>(() => {
     return careerRows.map((evt) => {
@@ -234,9 +231,7 @@ export default function MinhaLinhaDoTempoPage() {
         key: "cargo-atual",
         title: "Cargo atual registrado",
         date: row.updated_at ?? row.created_at ?? "",
-        description: row.cargo
-          ? `Cargo atual: ${row.cargo}${row.grau_hierarquico ? ` (${row.grau_hierarquico})` : ""}.`
-          : "Cargo nao informado no cadastro.",
+        description: row.cargo ? `Cargo atual: ${row.cargo}.` : "Cargo nao informado no cadastro.",
         kind: "progress",
       });
     }
@@ -290,7 +285,7 @@ export default function MinhaLinhaDoTempoPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
           <div className="inline-flex items-center gap-2 text-sm text-slate-500">
             <BriefcaseBusiness size={16} /> Cargo atual
@@ -309,14 +304,6 @@ export default function MinhaLinhaDoTempoPage() {
           </div>
           <p className="mt-2 text-base font-semibold text-slate-900">{row?.tipo_contrato?.trim() || "-"}</p>
         </div>
-        {!isPjContract ? (
-          <div className="rounded-2xl border border-slate-200 bg-white p-5">
-            <div className="inline-flex items-center gap-2 text-sm text-slate-500">
-              <UserRound size={16} /> Gestor direto
-            </div>
-            <p className="mt-2 text-base font-semibold text-slate-900">{row?.superior_direto?.trim() || "-"}</p>
-          </div>
-        ) : null}
       </div>
 
       {msg ? <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">{msg}</div> : null}
