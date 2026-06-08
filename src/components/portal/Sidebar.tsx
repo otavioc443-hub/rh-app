@@ -237,7 +237,7 @@ export default function Sidebar({
       {
         label: "CEO",
         icon: Shield,
-        roles: ["diretoria", "admin"],
+        roles: ["admin"],
         children: [
           { label: "Painel CEO", icon: LayoutDashboard, href: "/ceo", exact: true },
           { label: "Painel TV", icon: MonitorCheck, href: "/ceo-tv" },
@@ -270,7 +270,7 @@ export default function Sidebar({
       {
         label: "Diretoria",
         icon: Briefcase,
-        roles: ["admin"],
+        roles: ["diretoria", "admin"],
         children: [
           { label: "Acompanhamento", icon: ClipboardList, href: "/diretoria/projetos", exact: true },
           { label: "Novo projeto", icon: Briefcase, href: "/diretoria/projetos/novo" },

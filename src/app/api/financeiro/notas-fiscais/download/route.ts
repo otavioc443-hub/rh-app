@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 type InvoiceFileRow = {
@@ -44,22 +45,47 @@ async function getRequesterUser(req: Request) {
   if (token) {
     const { data, error } = await supabaseAdmin.auth.getUser(token);
     if (error || !data?.user) return null;
-    return data.user;
+    return { user: data.user, token };
   }
 
   const supabaseServer = await getServerSupabase();
   const { data } = await supabaseServer.auth.getUser();
-  return data?.user ?? null;
+  return data?.user ? { user: data.user, token: null } : null;
 }
 
-async function canDownloadInvoices(userId: string) {
-  const { data, error } = await supabaseAdmin
-    .from("profiles")
-    .select("role,active")
-    .eq("id", userId)
-    .maybeSingle<{ role: string | null; active: boolean | null }>();
-  if (error || !data?.active) return false;
-  return data.role === "financeiro" || data.role === "admin" || data.role === "rh";
+async function getRequesterSupabase(token: string | null): Promise<SupabaseClient> {
+  if (token) {
+    return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      global: {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  }
+  return getServerSupabase();
+}
+
+async function canDownloadInvoices(userId: string, token: string | null) {
+  try {
+    const supabaseUser = await getRequesterSupabase(token);
+    const [{ data: role, error: roleErr }, { data: active, error: activeErr }] = await Promise.all([
+      supabaseUser.rpc("current_role"),
+      supabaseUser.rpc("current_active"),
+    ]);
+    if (roleErr || activeErr) throw new Error(roleErr?.message || activeErr?.message || "rpc failed");
+    if (active !== true) return false;
+    const effectiveRole = String(role ?? "").trim().toLowerCase();
+    return effectiveRole === "financeiro" || effectiveRole === "admin" || effectiveRole === "rh";
+  } catch {
+    const { data, error } = await supabaseAdmin
+      .from("profiles")
+      .select("role,active")
+      .eq("id", userId)
+      .maybeSingle<{ role: string | null; active: boolean | null }>();
+    if (error || !data?.active) return false;
+    const fallbackRole = String(data.role ?? "").trim().toLowerCase();
+    return fallbackRole === "financeiro" || fallbackRole === "admin" || fallbackRole === "rh";
+  }
 }
 
 function makeCrcTable() {
@@ -203,9 +229,10 @@ function invoiceFromFile(file: InvoiceFileRow) {
 
 export async function POST(req: Request) {
   try {
-    const user = await getRequesterUser(req);
-    if (!user) return NextResponse.json({ error: "Nao autenticado" }, { status: 401 });
-    if (!(await canDownloadInvoices(user.id))) return NextResponse.json({ error: "Sem permissao" }, { status: 403 });
+    const requester = await getRequesterUser(req);
+    if (!requester?.user) return NextResponse.json({ error: "Nao autenticado" }, { status: 401 });
+    const user = requester.user;
+    if (!(await canDownloadInvoices(user.id, requester.token))) return NextResponse.json({ error: "Sem permissao" }, { status: 403 });
 
     const body = (await req.json().catch(() => ({}))) as { invoice_ids?: unknown };
     const invoiceIds = Array.isArray(body.invoice_ids)

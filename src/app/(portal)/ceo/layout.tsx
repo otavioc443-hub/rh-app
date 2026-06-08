@@ -10,7 +10,7 @@ export default function CeoLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (loading) return;
-    const allowed = active && (role === "admin" || role === "diretoria");
+    const allowed = active && role === "admin";
     if (!allowed) router.replace("/unauthorized");
   }, [loading, active, role, router]);
 

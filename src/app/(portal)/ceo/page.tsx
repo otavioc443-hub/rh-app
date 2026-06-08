@@ -146,7 +146,7 @@ export default function CeoPage() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const { loading: roleLoading, role, active } = useUserRole();
-  const canAccess = active && (role === "admin" || role === "diretoria");
+  const canAccess = active && role === "admin";
 
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
