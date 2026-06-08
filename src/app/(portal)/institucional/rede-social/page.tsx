@@ -4242,7 +4242,7 @@ export default function InternalSocialPage() {
       </header>
 
       <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 md:px-6">
-        {activeTab !== "inicio" ? (
+        {activeTab !== "inicio" && activeTab !== "game" ? (
           <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[linear-gradient(120deg,#020617_0%,#0f172a_18%,#102c5c_52%,#312e81_100%)] px-6 py-7 text-white shadow-[0_30px_90px_-40px_rgba(15,23,42,0.75)]">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
@@ -5454,30 +5454,6 @@ export default function InternalSocialPage() {
 
               <PulseSprintWidget />
 
-              <section className="overflow-hidden rounded-[2rem] border border-emerald-200 bg-[linear-gradient(135deg,#022c22_0%,#064e3b_50%,#0f172a_100%)] p-5 text-white shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)]">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">Trilha Pulse</p>
-                    <p className="mt-1 text-lg font-semibold">Sequencia diaria</p>
-                    <p className="mt-2 text-sm leading-6 text-emerald-50/85">
-                      Conduza a trilha, colete pontos e avance no ranking da empresa usando a mesma rodada diaria.
-                    </p>
-                  </div>
-                  <Trophy className="shrink-0 text-emerald-200" size={24} />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveGameMode("snake");
-                    setActiveTab("game");
-                    setSearchSubmitted(false);
-                  }}
-                  className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-emerald-300 px-4 py-3 text-sm font-semibold text-emerald-950 hover:bg-emerald-200"
-                >
-                  Abrir Trilha Pulse
-                </button>
-              </section>
-
               {showBolaoPulseHubCard === true ? (
                 <section className="overflow-hidden rounded-[2rem] border border-emerald-200 bg-emerald-950 p-5 text-white shadow-[0_20px_50px_-38px_rgba(15,23,42,0.32)]">
                   <div className="flex items-start justify-between gap-3">
@@ -6167,18 +6143,6 @@ export default function InternalSocialPage() {
 
         {!searchSubmitted && activeTab === "game" ? (
           <section id="jogo" className="space-y-6">
-            <section className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[linear-gradient(120deg,#020617_0%,#0f172a_18%,#102c5c_52%,#312e81_100%)] px-6 py-7 text-white shadow-[0_30px_90px_-40px_rgba(15,23,42,0.75)]">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-200">PulseHub</p>
-                  <h1 className="mt-2 text-2xl font-semibold">Arena diaria de engajamento</h1>
-                  <p className="mt-2 max-w-3xl text-sm text-blue-100/90">
-                    Escolha entre o Pulse Sprint e o Trilha Pulse. Ambos usam a mesma regra diaria, ranking por empresa e sequencia de participacao.
-                  </p>
-                </div>
-              </div>
-            </section>
-
             <div className="grid gap-4 lg:grid-cols-2">
               <button
                 type="button"

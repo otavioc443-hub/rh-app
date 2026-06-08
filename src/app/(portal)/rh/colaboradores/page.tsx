@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Papa from "papaparse";
 import { supabase } from "@/lib/supabaseClient";
-import { Pencil, Send, Trash2, TrendingUp } from "lucide-react";
+import { Download, Pencil, Send, Trash2, TrendingUp, Upload } from "lucide-react";
 import CollaboratorEditWizard from "@/components/rh/CollaboratorEditWizard";
 
 type Row = {
@@ -19,8 +20,173 @@ type Row = {
 
 type AnyColaborador = Record<string, unknown>;
 
+const EXPORT_COLUMNS = [
+  "id",
+  "user_id",
+  "nome",
+  "email",
+  "email_pessoal",
+  "email_empresarial",
+  "cpf",
+  "matricula",
+  "company_id",
+  "empresa",
+  "department_id",
+  "departamento",
+  "setor",
+  "cargo_id",
+  "cargo",
+  "cbo",
+  "data_nascimento",
+  "sexo",
+  "estado_civil",
+  "saudacao",
+  "nacionalidade",
+  "naturalidade",
+  "etnia",
+  "pne",
+  "data_admissao",
+  "data_demissao",
+  "motivo_demissao",
+  "valor_rescisao",
+  "salario",
+  "turno",
+  "moeda",
+  "tipo_contrato",
+  "data_contrato",
+  "escolaridade",
+  "superior_direto",
+  "email_superior_direto",
+  "grau_hierarquico",
+  "duracao_contrato",
+  "vencimento_contrato",
+  "telefone",
+  "celular",
+  "telefone_emergencia",
+  "cep",
+  "logradouro",
+  "numero",
+  "complemento",
+  "bairro",
+  "cidade",
+  "rg",
+  "titulo_eleitor",
+  "zona_eleitoral",
+  "secao_eleitoral",
+  "ctps_num",
+  "ctps_serie",
+  "reservista",
+  "cnh",
+  "pis",
+  "banco",
+  "agencia",
+  "conta_corrente",
+  "pix_key_type",
+  "pix_key",
+  "pix_bank",
+  "sistema",
+  "id_colaborador_externo",
+  "id_departamento_externo",
+  "id_cargo_externo",
+  "unidade",
+  "id_unidade_externo",
+  "is_active",
+] as const;
+
+const READONLY_IMPORT_COLUMNS = new Set(["id", "user_id"]);
+const IMPORT_BOOLEAN_COLUMNS = new Set(["is_active", "active", "pne"]);
+const IMPORT_NUMERIC_COLUMNS = new Set(["salario", "valor_rescisao"]);
+const IMPORT_DATE_COLUMNS = new Set([
+  "data_nascimento",
+  "data_admissao",
+  "data_demissao",
+  "data_contrato",
+  "vencimento_contrato",
+]);
+
+type ImportRow = Record<string, string | undefined>;
+
 function cx(...classes: Array<string | false | undefined>) {
   return classes.filter(Boolean).join(" ");
+}
+
+function normalizeHeader(value: string) {
+  return String(value ?? "")
+    .replace(/^\uFEFF/, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\*/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function compactHeader(value: string) {
+  return normalizeHeader(value).replace(/[^a-z0-9]/g, "");
+}
+
+function cell(row: ImportRow, ...headers: string[]) {
+  const wanted = new Set(headers.flatMap((h) => [normalizeHeader(h), compactHeader(h)]));
+  for (const [key, value] of Object.entries(row)) {
+    if (wanted.has(normalizeHeader(key)) || wanted.has(compactHeader(key))) return String(value ?? "").trim();
+  }
+  return "";
+}
+
+function csvCell(value: unknown) {
+  const text = String(value ?? "").replace(/"/g, '""');
+  return `"${text}"`;
+}
+
+function downloadTextFile(filename: string, text: string) {
+  const blob = new Blob(["\uFEFF" + text], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function cleanCpf(value?: string) {
+  return String(value ?? "").replace(/\D/g, "");
+}
+
+function normalizeBool(value: string) {
+  const v = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
+  if (["sim", "true", "1", "ativo", "ativa"].includes(v)) return true;
+  if (["nao", "false", "0", "inativo", "inativa"].includes(v)) return false;
+  return undefined;
+}
+
+function normalizeNumber(value: string) {
+  const normalized = value.replace(/[R$\s]/gi, "").replace(/\./g, "").replace(",", ".");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function normalizeDate(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+
+  const br = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (br) {
+    const [, day, month, year] = br;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+
+  return trimmed;
+}
+
+function getTodayForFilename() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function CardStat({ label, value }: { label: string; value: number }) {
@@ -34,6 +200,7 @@ function CardStat({ label, value }: { label: string; value: number }) {
 
 export default function Page() {
   const [rows, setRows] = useState<Row[]>([]);
+  const [rawRows, setRawRows] = useState<AnyColaborador[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
@@ -41,6 +208,7 @@ export default function Page() {
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<Row | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [bulkUpdating, setBulkUpdating] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
   async function load() {
@@ -54,13 +222,15 @@ export default function Page() {
 
     if (error) {
       setErr(error.message);
+      setRawRows([]);
       setRows([]);
       setLoading(false);
       return;
     }
 
-    const rows = (rawRows ?? []) as AnyColaborador[];
-    const normalized = rows.map((r) => {
+    const sourceRows = (rawRows ?? []) as AnyColaborador[];
+    setRawRows(sourceRows);
+    const normalized = sourceRows.map((r) => {
       const id = String(r.id ?? "");
       const nome = typeof r.nome === "string" ? r.nome : null;
       const email = typeof r.email === "string" ? r.email : null;
@@ -135,6 +305,151 @@ export default function Page() {
     const inativos = total - ativos;
     return { total, ativos, inativos };
   }, [rows]);
+
+  function exportCollaboratorsCsv() {
+    if (rawRows.length === 0) {
+      setToast("Nenhum colaborador disponivel para exportar.");
+      return;
+    }
+
+    const header = EXPORT_COLUMNS.join(";");
+    const lines = rawRows.map((row) => EXPORT_COLUMNS.map((key) => csvCell(row[key])).join(";"));
+    downloadTextFile(`colaboradores-${getTodayForFilename()}.csv`, [header, ...lines].join("\n"));
+    setToast("Planilha de colaboradores baixada. Edite apenas os campos necessarios e importe novamente.");
+  }
+
+  function resolveImportTarget(row: ImportRow, byId: Map<string, AnyColaborador>, byUserId: Map<string, AnyColaborador>, byEmail: Map<string, AnyColaborador>, byCpf: Map<string, AnyColaborador>) {
+    const id = cell(row, "id");
+    if (id && byId.has(id)) return byId.get(id);
+
+    const userId = cell(row, "user_id");
+    if (userId && byUserId.has(userId)) return byUserId.get(userId);
+
+    const email = cell(row, "email", "e-mail").toLowerCase();
+    if (email && byEmail.has(email)) return byEmail.get(email);
+
+    const cpf = cleanCpf(cell(row, "cpf"));
+    if (cpf && byCpf.has(cpf)) return byCpf.get(cpf);
+
+    return null;
+  }
+
+  function buildImportPayload(importRow: ImportRow, target: AnyColaborador) {
+    const payload: AnyColaborador = {};
+    const availableColumns = new Set(Object.keys(target));
+
+    for (const key of EXPORT_COLUMNS) {
+      if (READONLY_IMPORT_COLUMNS.has(key)) continue;
+      if (!availableColumns.has(key)) continue;
+
+      const value = cell(importRow, key);
+      if (!value) continue;
+
+      if (IMPORT_BOOLEAN_COLUMNS.has(key)) {
+        const parsed = normalizeBool(value);
+        if (typeof parsed === "boolean") payload[key] = parsed;
+        continue;
+      }
+
+      if (IMPORT_NUMERIC_COLUMNS.has(key)) {
+        const parsed = normalizeNumber(value);
+        if (typeof parsed === "number") payload[key] = parsed;
+        continue;
+      }
+
+      if (IMPORT_DATE_COLUMNS.has(key)) {
+        const parsed = normalizeDate(value);
+        if (parsed) payload[key] = parsed;
+        continue;
+      }
+
+      payload[key] = key === "cpf" ? cleanCpf(value) : value;
+    }
+
+    if (availableColumns.has("updated_at")) payload.updated_at = new Date().toISOString();
+    return payload;
+  }
+
+  async function importCollaboratorsCsv(file: File | null) {
+    if (!file) return;
+
+    setBulkUpdating(true);
+    setToast(null);
+
+    try {
+      const parsed = await new Promise<Papa.ParseResult<ImportRow>>((resolve, reject) => {
+        Papa.parse<ImportRow>(file, {
+          header: true,
+          skipEmptyLines: "greedy",
+          delimiter: "",
+          complete: resolve,
+          error: reject,
+        });
+      });
+
+      const importRows = parsed.data.filter((row) => Object.values(row).some((value) => String(value ?? "").trim()));
+      if (importRows.length === 0) {
+        setToast("A planilha nao possui linhas para atualizar.");
+        return;
+      }
+
+      const byId = new Map<string, AnyColaborador>(
+        rawRows
+          .map((row) => [String(row.id ?? ""), row] as const)
+          .filter(([id]) => id)
+      );
+      const byUserId = new Map<string, AnyColaborador>(
+        rawRows
+          .map((row) => [String(row.user_id ?? ""), row] as const)
+          .filter(([id]) => id)
+      );
+      const byEmail = new Map(
+        rawRows
+          .map((row) => [String(row.email ?? "").trim().toLowerCase(), row] as const)
+          .filter(([email]) => email)
+      );
+      const byCpf = new Map(
+        rawRows
+          .map((row) => [cleanCpf(String(row.cpf ?? "")), row] as const)
+          .filter(([cpf]) => cpf)
+      );
+
+      let updated = 0;
+      let skipped = 0;
+      let failed = 0;
+      const errors: string[] = [];
+
+      for (const importRow of importRows) {
+        const target = resolveImportTarget(importRow, byId, byUserId, byEmail, byCpf);
+        if (!target?.id) {
+          skipped += 1;
+          continue;
+        }
+
+        const payload = buildImportPayload(importRow, target);
+        if (Object.keys(payload).length === 0) {
+          skipped += 1;
+          continue;
+        }
+
+        const { error } = await supabase.from("colaboradores").update(payload).eq("id", target.id);
+        if (error) {
+          failed += 1;
+          errors.push(error.message);
+        } else {
+          updated += 1;
+        }
+      }
+
+      await load();
+      const detail = errors.length > 0 ? ` Erros: ${Array.from(new Set(errors)).slice(0, 2).join(" | ")}` : "";
+      setToast(`Atualizacao em massa concluida: ${updated} atualizado(s), ${skipped} ignorado(s), ${failed} erro(s).${detail}`);
+    } catch (e: unknown) {
+      setToast(e instanceof Error ? e.message : "Erro ao importar planilha.");
+    } finally {
+      setBulkUpdating(false);
+    }
+  }
 
   async function sendAccess(row: Row) {
     setSendingId(row.id);
@@ -211,6 +526,10 @@ export default function Page() {
         <p className="mt-1 text-sm text-slate-600">
           Visualize e edite os colaboradores cadastrados.
         </p>
+        <p className="mt-2 text-xs text-slate-500">
+          Para atualizacao em massa, baixe a planilha, altere somente os campos necessarios e envie o arquivo de volta.
+          Celulas vazias sao ignoradas para preservar dados ja cadastrados.
+        </p>
       </header>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -220,7 +539,7 @@ export default function Page() {
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white">
-        <div className="flex items-center justify-between gap-3 border-b border-slate-200 p-4">
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-sm font-semibold text-slate-900">Lista</h2>
             <p className="text-xs text-slate-500">
@@ -228,12 +547,44 @@ export default function Page() {
             </p>
           </div>
 
-          <button
-            onClick={load}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
-          >
-            Atualizar
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={exportCollaboratorsCsv}
+              disabled={loading || rawRows.length === 0}
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:opacity-60"
+            >
+              <Download size={16} />
+              Baixar planilha
+            </button>
+
+            <label
+              className={cx(
+                "inline-flex cursor-pointer items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-800 hover:bg-blue-100",
+                bulkUpdating && "pointer-events-none opacity-60"
+              )}
+            >
+              <Upload size={16} />
+              {bulkUpdating ? "Atualizando..." : "Atualizar em massa"}
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                className="hidden"
+                disabled={bulkUpdating}
+                onChange={async (event) => {
+                  const file = event.currentTarget.files?.[0] ?? null;
+                  event.currentTarget.value = "";
+                  await importCollaboratorsCsv(file);
+                }}
+              />
+            </label>
+
+            <button
+              onClick={load}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+            >
+              Atualizar
+            </button>
+          </div>
         </div>
 
         {toast && (
