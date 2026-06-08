@@ -98,6 +98,32 @@ function mapKindFromType(type: CareerTimelineRow["event_type"]): TimelineEvent["
   return "progress";
 }
 
+function isServiceContractType(value: string | null | undefined) {
+  const normalized = String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toUpperCase();
+
+  return (
+    normalized.includes("PJ") ||
+    normalized.includes("TERCEIR") ||
+    normalized.includes("PRESTADOR") ||
+    normalized.includes("PESSOA JURIDICA") ||
+    normalized.includes("MEI")
+  );
+}
+
+function serviceEventTitle(evt: CareerTimelineRow) {
+  if (evt.event_type === "admission") return "Inicio da prestacao";
+  if (evt.event_type === "promotion" || evt.event_type === "role_change") return "Alteracao de escopo/funcao";
+  if (evt.event_type === "department_change") return "Mudanca de area/projeto";
+  if (evt.event_type === "contract_change") return "Alteracao contratual";
+  if (evt.event_type === "contract_renewal") return "Renovacao contratual";
+  if (evt.event_type === "termination") return "Encerramento contratual";
+  return evt.title;
+}
+
 export default function MinhaLinhaDoTempoPage() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
@@ -175,30 +201,41 @@ export default function MinhaLinhaDoTempoPage() {
   }, []);
 
   const tenureDays = useMemo(() => diffInDays(row?.data_admissao ?? null), [row?.data_admissao]);
+  const isServiceContract = useMemo(() => isServiceContractType(row?.tipo_contrato), [row?.tipo_contrato]);
 
   const historyTimeline = useMemo<TimelineEvent[]>(() => {
     return careerRows.map((evt) => {
       const moves: string[] = [];
-      if (evt.from_cargo || evt.to_cargo) moves.push(`Cargo: ${evt.from_cargo ?? "-"} -> ${evt.to_cargo ?? "-"}`);
+      if (evt.from_cargo || evt.to_cargo) {
+        moves.push(
+          isServiceContract
+            ? `Funcao/escopo: ${evt.from_cargo ?? "-"} -> ${evt.to_cargo ?? "-"}`
+            : `Cargo: ${evt.from_cargo ?? "-"} -> ${evt.to_cargo ?? "-"}`
+        );
+      }
       if (evt.from_department || evt.to_department) {
-        moves.push(`Departamento: ${evt.from_department ?? "-"} -> ${evt.to_department ?? "-"}`);
+        moves.push(
+          isServiceContract
+            ? `Area/projeto: ${evt.from_department ?? "-"} -> ${evt.to_department ?? "-"}`
+            : `Departamento: ${evt.from_department ?? "-"} -> ${evt.to_department ?? "-"}`
+        );
       }
       if (evt.from_contract_type || evt.to_contract_type) {
         moves.push(`Contrato: ${evt.from_contract_type ?? "-"} -> ${evt.to_contract_type ?? "-"}`);
       }
-      if (evt.from_salary !== null || evt.to_salary !== null) {
+      if (!isServiceContract && (evt.from_salary !== null || evt.to_salary !== null)) {
         moves.push(`Salario: ${formatMoney(evt.from_salary)} -> ${formatMoney(evt.to_salary)}`);
       }
       const details = [evt.description ?? "", ...moves].filter(Boolean).join(" ");
       return {
         key: evt.id,
-        title: evt.title,
+        title: isServiceContract ? serviceEventTitle(evt) : evt.title,
         date: evt.event_date,
-        description: details || "Evento registrado no historico contratual.",
+        description: details || (isServiceContract ? "Evento administrativo registrado no contrato." : "Evento registrado no historico contratual."),
         kind: mapKindFromType(evt.event_type),
       };
     });
-  }, [careerRows]);
+  }, [careerRows, isServiceContract]);
 
   const fallbackTimeline = useMemo<TimelineEvent[]>(() => {
     if (!row) return [];
@@ -207,9 +244,11 @@ export default function MinhaLinhaDoTempoPage() {
     if (row.data_admissao) {
       events.push({
         key: "admissao",
-        title: "Admissao",
+        title: isServiceContract ? "Inicio da prestacao" : "Admissao",
         date: row.data_admissao,
-        description: `Entrada na empresa${row.empresa ? ` (${row.empresa})` : ""}.`,
+        description: isServiceContract
+          ? `Inicio do vinculo contratual${row.empresa ? ` com ${row.empresa}` : ""}.`
+          : `Entrada na empresa${row.empresa ? ` (${row.empresa})` : ""}.`,
         kind: "start",
       });
     }
@@ -217,7 +256,7 @@ export default function MinhaLinhaDoTempoPage() {
     if (row.data_contrato) {
       events.push({
         key: "contrato",
-        title: "Inicio do contrato atual",
+        title: isServiceContract ? "Contrato de prestacao atual" : "Inicio do contrato atual",
         date: row.data_contrato,
         description: row.tipo_contrato
           ? `Contrato registrado como ${row.tipo_contrato}.`
@@ -229,9 +268,15 @@ export default function MinhaLinhaDoTempoPage() {
     if (row.updated_at || row.created_at) {
       events.push({
         key: "cargo-atual",
-        title: "Cargo atual registrado",
+        title: isServiceContract ? "Funcao/escopo registrado" : "Cargo atual registrado",
         date: row.updated_at ?? row.created_at ?? "",
-        description: row.cargo ? `Cargo atual: ${row.cargo}.` : "Cargo nao informado no cadastro.",
+        description: row.cargo
+          ? isServiceContract
+            ? `Funcao/escopo atual: ${row.cargo}.`
+            : `Cargo atual: ${row.cargo}.`
+          : isServiceContract
+          ? "Funcao/escopo nao informado no cadastro."
+          : "Cargo nao informado no cadastro.",
         kind: "progress",
       });
     }
@@ -249,9 +294,13 @@ export default function MinhaLinhaDoTempoPage() {
     if (row.data_demissao) {
       events.push({
         key: "demissao",
-        title: "Desligamento",
+        title: isServiceContract ? "Encerramento contratual" : "Desligamento",
         date: row.data_demissao,
-        description: row.motivo_demissao ? `Motivo: ${row.motivo_demissao}.` : "Desligamento registrado.",
+        description: row.motivo_demissao
+          ? `Motivo: ${row.motivo_demissao}.`
+          : isServiceContract
+          ? "Encerramento do contrato registrado."
+          : "Desligamento registrado.",
         kind: "end",
       });
     }
@@ -259,7 +308,7 @@ export default function MinhaLinhaDoTempoPage() {
     return events
       .filter((evt) => evt.date)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [row]);
+  }, [row, isServiceContract]);
 
   const timeline = historyTimeline.length ? historyTimeline : fallbackTimeline;
 
@@ -270,7 +319,9 @@ export default function MinhaLinhaDoTempoPage() {
           <div>
             <h1 className="text-xl font-semibold text-slate-900">Minha linha do tempo</h1>
             <p className="mt-1 text-sm text-slate-600">
-              Visualize sua trajetoria contratual na empresa, com marcos de contratacao e movimentacoes.
+              {isServiceContract
+                ? "Visualize registros administrativos do contrato de prestacao de servicos."
+                : "Visualize sua trajetoria contratual na empresa, com marcos de contratacao e movimentacoes."}
             </p>
           </div>
           <button
@@ -288,13 +339,13 @@ export default function MinhaLinhaDoTempoPage() {
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
           <div className="inline-flex items-center gap-2 text-sm text-slate-500">
-            <BriefcaseBusiness size={16} /> Cargo atual
+            <BriefcaseBusiness size={16} /> {isServiceContract ? "Funcao/escopo atual" : "Cargo atual"}
           </div>
           <p className="mt-2 text-base font-semibold text-slate-900">{row?.cargo?.trim() || "-"}</p>
         </div>
         <div className="rounded-2xl border border-slate-200 bg-white p-5">
           <div className="inline-flex items-center gap-2 text-sm text-slate-500">
-            <CalendarDays size={16} /> Tempo de casa
+            <CalendarDays size={16} /> {isServiceContract ? "Tempo de contrato" : "Tempo de casa"}
           </div>
           <p className="mt-2 text-base font-semibold text-slate-900">{toHumanTenure(tenureDays)}</p>
         </div>
@@ -306,13 +357,25 @@ export default function MinhaLinhaDoTempoPage() {
         </div>
       </div>
 
+      {isServiceContract ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          As informacoes exibidas tem finalidade administrativa e contratual, sem caracterizar vinculo empregaticio.
+        </div>
+      ) : null}
+
       {msg ? <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">{msg}</div> : null}
 
       <div className="rounded-2xl border border-slate-200 bg-white p-6">
-        <p className="text-sm font-semibold text-slate-900">Trajetoria contratual</p>
+        <p className="text-sm font-semibold text-slate-900">
+          {isServiceContract ? "Historico contratual" : "Trajetoria contratual"}
+        </p>
         <p className="mt-1 text-sm text-slate-600">
           {historyTimeline.length
-            ? "Linha do tempo alimentada por eventos de promocao, movimentacao e contrato."
+            ? isServiceContract
+              ? "Linha do tempo alimentada por eventos administrativos, escopo, area/projeto e contrato."
+              : "Linha do tempo alimentada por eventos de promocao, movimentacao e contrato."
+            : isServiceContract
+            ? "Ordem cronologica dos principais registros administrativos do contrato."
             : "Ordem cronologica dos principais registros do seu vinculo com a empresa."}
         </p>
 
@@ -344,7 +407,8 @@ export default function MinhaLinhaDoTempoPage() {
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 text-xs text-slate-600">
-        Local atual: {row?.empresa?.trim() || "-"} - {row?.departamento?.trim() || "-"} - {row?.setor?.trim() || "-"}
+        {isServiceContract ? "Contratante/area atual" : "Local atual"}: {row?.empresa?.trim() || "-"} -{" "}
+        {row?.departamento?.trim() || "-"} - {row?.setor?.trim() || "-"}
       </div>
     </div>
   );
