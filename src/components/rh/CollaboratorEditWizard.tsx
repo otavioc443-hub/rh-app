@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { X, History, TrendingUp, ClipboardPlus, CalendarClock, UserX } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import EmployeeForm, { ColaboradorPayload } from "@/components/rh/EmployeeForm";
+import { parseMoneyValue } from "@/lib/payroll";
 
 type AuditRow = {
   id: string;
@@ -70,10 +71,7 @@ function n(v: unknown) {
 }
 
 function num(v: unknown) {
-  const s = n(v).replace(",", ".");
-  if (!s) return null;
-  const x = Number(s);
-  return Number.isFinite(x) ? x : null;
+  return parseMoneyValue(typeof v === "string" || typeof v === "number" ? v : null);
 }
 
 function formatCurrency(v: number | null) {
@@ -168,6 +166,7 @@ function toDb(payload: ColaboradorPayload, isActive: boolean, editorEmail: strin
   base.cargo = n(payload.cargo) || null;
   base.cbo = n(payload.cbo) || null;
   base.salario = num(payload.salario);
+  base.bonus_mensal = num(payload.bonus_mensal);
   base.turno = n(payload.turno) || null;
   base.moeda = n(payload.moeda) || null;
   base.tipo_contrato = n(payload.tipo_contrato) || null;

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { RefreshCcw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { monthlyCompensation } from "@/lib/payroll";
 import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
 
 type SectorKey = "coordenador" | "gestor" | "pd" | "rh" | "financeiro" | "diretoria";
@@ -851,16 +852,16 @@ export default function SectorOverviewDashboard({ sector }: { sector: SectorKey 
             const [indRes, allocRes, collabRes] = await Promise.all([
               supabase.from("project_indirect_costs").select("id,project_id,cost_type,amount,notes").in("project_id", projectIds),
               supabase.from("project_member_allocations").select("project_id,user_id,allocation_pct").in("project_id", projectIds),
-              supabase.from("colaboradores").select("nome,salario,is_active"),
+              supabase.from("colaboradores").select("nome,salario,bonus_mensal,is_active"),
             ]);
             if (!indRes.error) indirectCosts = (indRes.data ?? []) as IndirectCostRow[];
             if (!allocRes.error) allocations = (allocRes.data ?? []) as ProjectAllocationRow[];
             if (!collabRes.error) {
-              for (const row of (collabRes.data ?? []) as Array<{ nome?: string | null; salario?: number | null; is_active?: boolean | null }>) {
+              for (const row of (collabRes.data ?? []) as Array<{ nome?: string | null; salario?: number | null; bonus_mensal?: number | null; is_active?: boolean | null }>) {
                 if (row.is_active === false) continue;
                 const name = String(row.nome ?? "").trim().toLowerCase();
                 if (!name) continue;
-                salaryByCollaboratorName.set(name, Number(row.salario ?? 0) || 0);
+                salaryByCollaboratorName.set(name, monthlyCompensation(row));
               }
             }
           } catch {}

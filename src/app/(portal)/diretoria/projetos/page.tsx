@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Download, FolderKanban, RefreshCcw, Save } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { monthlyCompensation } from "@/lib/payroll";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import DiretoriaPageHeader from "@/components/portal/DiretoriaPageHeader";
@@ -457,7 +458,7 @@ export default function DiretoriaProjetosPage() {
         projectIds.length
           ? supabase.from("project_member_allocations").select("project_id,user_id,allocation_pct,created_at").in("project_id", projectIds)
           : Promise.resolve({ data: [], error: null }),
-        supabase.from("colaboradores").select("user_id,nome,salario,is_active"),
+        supabase.from("colaboradores").select("user_id,nome,salario,bonus_mensal,is_active"),
         supabase.from("collaborator_invoice_remittances").select("id,total_amount,status,due_date,created_at"),
         projectIds.length
           ? supabase.from("project_measurement_bulletins").select("id,project_id,amount_total,paid_amount,status,expected_payment_date,paid_at,created_at").in("project_id", projectIds)
@@ -493,12 +494,12 @@ export default function DiretoriaProjetosPage() {
 
       const salaryMap: Record<string, number> = {};
       const collaboratorNameMap: Record<string, string> = {};
-      for (const c of (collabsRes.data ?? []) as Array<{ user_id: string | null; salario: number | null; is_active: boolean | null }>) {
+      for (const c of (collabsRes.data ?? []) as Array<{ user_id: string | null; nome?: string | null; salario: number | null; bonus_mensal?: number | null; is_active: boolean | null }>) {
         const uid = (c.user_id ?? "").trim();
         if (!uid) continue;
         if (c.is_active === false) continue;
-        salaryMap[uid] = Number(c.salario) || 0;
-        const name = String((c as { nome?: string | null }).nome ?? "").trim();
+        salaryMap[uid] = monthlyCompensation(c);
+        const name = String(c.nome ?? "").trim();
         if (name) collaboratorNameMap[uid] = name;
       }
       setSalaryByUserId(salaryMap);

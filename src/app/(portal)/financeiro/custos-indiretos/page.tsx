@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, MoreHorizontal, Pencil, Printer, RefreshCcw, Save } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useUserRole } from "@/hooks/useUserRole";
+import { monthlyCompensation } from "@/lib/payroll";
 
 type CostCategory =
   | "rh"
@@ -34,6 +35,7 @@ type CollaboratorRow = {
   departamento: string | null;
   setor: string | null;
   salario: number | null;
+  bonus_mensal: number | null;
   is_active: boolean | null;
 };
 
@@ -272,7 +274,7 @@ export default function FinanceiroCustosIndiretosPage() {
     for (const c of collabs) {
       const name = String(c.nome ?? "").trim().toLowerCase();
       if (!name) continue;
-      map.set(name, Number(c.salario) || 0);
+      map.set(name, monthlyCompensation(c));
     }
     return map;
   }, [collabs]);
@@ -283,7 +285,7 @@ export default function FinanceiroCustosIndiretosPage() {
     const list = collabs.filter((c) => (c.setor ?? c.departamento ?? "").trim().toLowerCase() === key);
     return {
       count: list.length,
-      payroll: list.reduce((acc, c) => acc + (Number(c.salario) || 0), 0),
+      payroll: list.reduce((acc, c) => acc + monthlyCompensation(c), 0),
     };
   }, [collabs, selectedSector]);
 
@@ -437,7 +439,7 @@ export default function FinanceiroCustosIndiretosPage() {
         supabase.from("projects").select("id,name,status,company_id,budget_total").order("created_at", { ascending: false }),
         supabase
           .from("colaboradores")
-          .select("id,user_id,nome,departamento,setor,salario,is_active")
+          .select("id,user_id,nome,departamento,setor,salario,bonus_mensal,is_active")
           .eq("is_active", true)
           .order("nome", { ascending: true }),
       ]);
@@ -555,7 +557,7 @@ export default function FinanceiroCustosIndiretosPage() {
     if (!selectedCollaborator) return;
     if (costType === "percentage_payroll") return;
     if (amountNum > 0) return;
-    const salary = Number(selectedCollaborator.salario) || 0;
+    const salary = monthlyCompensation(selectedCollaborator);
     if (salary > 0) setAmount(String(salary));
   }, [sourceMode, selectedCollaborator, amountNum, costType]);
 
@@ -1275,7 +1277,7 @@ export default function FinanceiroCustosIndiretosPage() {
           <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
             Colaborador: <b>{selectedCollaborator.nome ?? "-"}</b> | Setor:{" "}
             <b>{(selectedCollaborator.setor ?? selectedCollaborator.departamento ?? "-").trim()}</b> | Salario base:{" "}
-            <b>{fmtMoney(Number(selectedCollaborator.salario) || 0)}</b>
+            <b>{fmtMoney(monthlyCompensation(selectedCollaborator))}</b>
           </div>
         ) : null}
 

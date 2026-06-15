@@ -5,6 +5,7 @@ import { Users, BadgeCheck, AlertTriangle, Search, Pencil } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import EmployeeForm, { ColaboradorPayload } from "@/components/rh/EmployeeForm";
 import { PageHeader, StatCard, Card, CardBody, TableShell, TableWrap } from "@/components/ui/PageShell";
+import { parseMoneyValue } from "@/lib/payroll";
 
 type Row = ColaboradorPayload & { id: string; created_at: string; data_demissao?: string | null };
 
@@ -15,10 +16,7 @@ function maskCpf(value?: string | null) {
 }
 
 function cleanNumber(v?: string) {
-  const s = (v ?? "").trim().replace(",", ".");
-  if (!s) return null;
-  const n = Number(s);
-  return Number.isFinite(n) ? n : null;
+  return parseMoneyValue(v);
 }
 
 export default function Page() {
@@ -86,6 +84,7 @@ export default function Page() {
       .update({
         ...collaboratorPayload,
         salario: cleanNumber(payload.salario),
+        bonus_mensal: cleanNumber(payload.bonus_mensal),
         valor_rescisao: cleanNumber(payload.valor_rescisao),
       })
       .eq("id", editing.id);

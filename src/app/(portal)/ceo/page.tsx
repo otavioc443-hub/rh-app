@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useUserRole } from "@/hooks/useUserRole";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { PageHelpModal } from "@/components/ui/PageHelpModal";
+import { monthlyCompensation } from "@/lib/payroll";
 
 type WindowKey = "30" | "90" | "180" | "365" | "all";
 
@@ -45,7 +46,7 @@ type IndirectRow = {
   created_at: string | null;
 };
 type ProjectMemberRow = { project_id: string; user_id: string; member_role: string };
-type CollaboratorRow = { id: string; user_id: string | null; nome?: string | null; salario: number | null; is_active: boolean | null };
+type CollaboratorRow = { id: string; user_id: string | null; nome?: string | null; salario: number | null; bonus_mensal: number | null; is_active: boolean | null };
 type ContractEventRow = { id: string; project_id: string; status: string; additional_amount: number | null; created_at: string };
 type ProfileMiniRow = { id: string; full_name: string | null; email: string | null; company_id?: string | null };
 
@@ -214,7 +215,7 @@ export default function CeoPage() {
           supabase.from("project_extra_payments").select("id,project_id,amount,status,created_at"),
           supabase.from("project_indirect_costs").select("id,project_id,cost_type,amount,notes,start_date,end_date,created_at"),
           supabase.from("project_members").select("project_id,user_id,member_role"),
-          supabase.from("colaboradores").select("id,user_id,nome,salario,is_active"),
+          supabase.from("colaboradores").select("id,user_id,nome,salario,bonus_mensal,is_active"),
           supabase.from("project_contract_events").select("id,project_id,status,additional_amount,created_at,event_type").eq("event_type", "aditivo_valor"),
           supabase.from("profiles").select("id,full_name,email,company_id"),
         ]);
@@ -378,7 +379,7 @@ export default function CeoPage() {
       if (c.is_active !== true) continue;
       const name = String(c.nome ?? "").trim().toLowerCase();
       if (!name) continue;
-      map.set(name, Number(c.salario || 0));
+      map.set(name, monthlyCompensation(c));
     }
     return map;
   }, [collabs]);
@@ -440,7 +441,7 @@ export default function CeoPage() {
       if (c.is_active !== true) continue;
       const id = c.user_id ?? c.id;
       if (!id || !ids.has(id)) continue;
-      sum += Number(c.salario || 0);
+      sum += monthlyCompensation(c);
     }
     return sum;
   }, [members, collabs, projectIds]);

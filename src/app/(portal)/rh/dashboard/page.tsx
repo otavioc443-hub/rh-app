@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CalendarRange, DollarSign, Download, Printer, RefreshCcw, TrendingDown, TrendingUp, Users } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { monthlyCompensation } from "@/lib/payroll";
 
 type ColaboradorRow = {
   id: string;
@@ -11,6 +12,7 @@ type ColaboradorRow = {
   data_admissao: string | null;
   data_demissao: string | null;
   salario: number | null;
+  bonus_mensal: number | null;
   departamento: string | null;
   tipo_contrato: string | null;
 };
@@ -210,7 +212,7 @@ export default function RhDashboardPage() {
       const [colRes, absRes, extraRes] = await Promise.all([
         supabase
           .from("colaboradores")
-          .select("id,nome,is_active,data_admissao,data_demissao,salario,departamento,tipo_contrato")
+          .select("id,nome,is_active,data_admissao,data_demissao,salario,bonus_mensal,departamento,tipo_contrato")
           .order("nome", { ascending: true }),
         supabase
           .from("absence_requests")
@@ -353,7 +355,7 @@ export default function RhDashboardPage() {
   const costs = useMemo(() => {
     const monthlySalary = filteredColabs
       .filter((c) => Boolean(c.is_active) && !c.data_demissao)
-      .reduce((acc, c) => acc + (Number(c.salario ?? 0) || 0), 0);
+      .reduce((acc, c) => acc + monthlyCompensation(c), 0);
 
     const months = Math.max(
       1,

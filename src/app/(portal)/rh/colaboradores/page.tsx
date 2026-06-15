@@ -50,6 +50,7 @@ const EXPORT_COLUMNS = [
   "motivo_demissao",
   "valor_rescisao",
   "salario",
+  "bonus_mensal",
   "turno",
   "moeda",
   "tipo_contrato",
@@ -95,7 +96,7 @@ const EXPORT_COLUMNS = [
 
 const READONLY_IMPORT_COLUMNS = new Set(["id", "user_id"]);
 const IMPORT_BOOLEAN_COLUMNS = new Set(["is_active", "active", "pne"]);
-const IMPORT_NUMERIC_COLUMNS = new Set(["salario", "valor_rescisao"]);
+const IMPORT_NUMERIC_COLUMNS = new Set(["salario", "bonus_mensal", "valor_rescisao"]);
 const IMPORT_DATE_COLUMNS = new Set([
   "data_nascimento",
   "data_admissao",

@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { useUserRole } from "@/hooks/useUserRole";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import { PageHelpModal } from "@/components/ui/PageHelpModal";
+import { monthlyCompensation } from "@/lib/payroll";
 
 type ProjectRow = {
   id: string;
@@ -51,6 +52,7 @@ type CollaboratorRow = {
   user_id: string | null;
   nome?: string | null;
   salario: number | null;
+  bonus_mensal: number | null;
   is_active: boolean | null;
 };
 
@@ -381,7 +383,7 @@ export default function FinanceiroGerencialPage() {
           .select("id,project_id,cost_type,amount,notes,start_date,end_date,created_at"),
         supabase
           .from("colaboradores")
-          .select("id,user_id,nome,salario,is_active"),
+          .select("id,user_id,nome,salario,bonus_mensal,is_active"),
         supabase
           .from("collaborator_invoice_remittances")
           .select("id,total_amount,status,due_date,created_at,paid_at"),
@@ -515,7 +517,7 @@ export default function FinanceiroGerencialPage() {
       if (c.is_active !== true) continue;
       const key = c.user_id ?? "";
       if (!key) continue;
-      map.set(key, Number(c.salario ?? 0) || 0);
+      map.set(key, monthlyCompensation(c));
     }
     return map;
   }, [collabs]);
@@ -538,7 +540,7 @@ export default function FinanceiroGerencialPage() {
       if (c.is_active !== true) continue;
       const name = String(c.nome ?? "").trim().toLowerCase();
       if (!name) continue;
-      map.set(name, Number(c.salario ?? 0) || 0);
+      map.set(name, monthlyCompensation(c));
     }
     return map;
   }, [collabs]);

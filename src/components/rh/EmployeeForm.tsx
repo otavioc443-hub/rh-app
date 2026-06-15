@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { formatMoneyValue } from "@/lib/payroll";
 
 export type ColaboradorPayload = {
   company_id?: string | null;
@@ -47,6 +48,7 @@ export type ColaboradorPayload = {
   cargo?: string;
   cbo?: string;
   salario?: string;
+  bonus_mensal?: string;
   turno?: string;
   moeda?: string;
   tipo_contrato?: string;
@@ -171,6 +173,10 @@ function hasOption(options: readonly string[], value: string) {
   return !normalized || options.some((option) => normalizeText(option) === normalized);
 }
 
+function formatMoneyField(value: string) {
+  return formatMoneyValue(value) || value;
+}
+
 function Section({
   title,
   subtitle,
@@ -264,7 +270,8 @@ export default function EmployeeForm({
   const [cargoMode, setCargoMode] = useState<"select" | "manual">("select");
 
   const [cbo, setCbo] = useState(initial?.cbo ?? "");
-  const [salario, setSalario] = useState(initial?.salario ?? "");
+  const [salario, setSalario] = useState(formatMoneyValue(initial?.salario) || "");
+  const [bonusMensal, setBonusMensal] = useState(formatMoneyValue(initial?.bonus_mensal) || "");
   const [turno, setTurno] = useState(initial?.turno ?? "");
   const [moeda, setMoeda] = useState(initial?.moeda ?? "");
   const [tipoContrato, setTipoContrato] = useState(initial?.tipo_contrato ?? "");
@@ -460,8 +467,23 @@ export default function EmployeeForm({
     if (!departments.length) return;
 
     const existingDepartmentId = String(initial?.department_id ?? "").trim();
-    if (existingDepartmentId && departments.some((d) => d.id === existingDepartmentId)) {
-      setDepartmentId(existingDepartmentId);
+    const existingDepartment = existingDepartmentId ? departments.find((d) => d.id === existingDepartmentId) : null;
+    if (existingDepartment?.parent_department_id) {
+      setDepartmentId(existingDepartment.parent_department_id);
+      setSectorId(existingDepartment.id);
+      return;
+    }
+    if (existingDepartment) {
+      setDepartmentId(existingDepartment.id);
+      const setorTxt = normalizeText(String(initial?.setor ?? ""));
+      const foundSetor = setorTxt
+        ? departments.find(
+            (d) =>
+              normalizeText(d.name) === setorTxt &&
+              d.parent_department_id === existingDepartment.id
+          )
+        : null;
+      if (foundSetor) setSectorId(foundSetor.id);
       return;
     }
 
@@ -525,11 +547,12 @@ export default function EmployeeForm({
     const company = companies.find((c) => c.id === companyId);
     const dep = departments.find((d) => d.id === departmentId);
     const setor = departments.find((d) => d.id === sectorId);
+    const portalDepartmentId = setor?.id ?? dep?.id ?? null;
 
     const payload: ColaboradorPayload = {
       ...(initial ?? {}),
       company_id: company?.id ?? null,
-      department_id: departmentId || null,
+      department_id: portalDepartmentId,
       empresa: company?.name ?? "",
       departamento: dep?.name ?? "",
       setor: setor?.name ?? "",
@@ -568,6 +591,7 @@ export default function EmployeeForm({
       cargo,
       cbo,
       salario,
+      bonus_mensal: bonusMensal,
       turno,
       moeda,
       tipo_contrato: tipoContrato,
@@ -835,7 +859,24 @@ export default function EmployeeForm({
           </Field>
 
           <Field label="Salário">
-            <input value={salario} onChange={(e) => setSalario(e.target.value)} className={inputCls} />
+            <input
+              value={salario}
+              onChange={(e) => setSalario(e.target.value)}
+              onBlur={() => setSalario((current) => formatMoneyField(current))}
+              inputMode="decimal"
+              className={inputCls}
+              placeholder="R$ 0,00"
+            />
+          </Field>
+          <Field label="Bonus mensal" helper="Valor recorrente somado ao salario nos calculos de folha mensal.">
+            <input
+              value={bonusMensal}
+              onChange={(e) => setBonusMensal(e.target.value)}
+              onBlur={() => setBonusMensal((current) => formatMoneyField(current))}
+              inputMode="decimal"
+              className={inputCls}
+              placeholder="R$ 0,00"
+            />
           </Field>
           <Field label="Turno">
             <select value={turno} onChange={(e) => setTurno(e.target.value)} className={inputCls}>

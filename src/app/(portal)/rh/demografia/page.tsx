@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Download, Printer, RefreshCcw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { monthlyCompensation } from "@/lib/payroll";
 
 type Collaborator = {
   id: string;
@@ -15,6 +16,7 @@ type Collaborator = {
   departamento: string | null;
   setor: string | null;
   salario: number | null;
+  bonus_mensal: number | null;
   data_admissao: string | null;
 };
 
@@ -254,7 +256,7 @@ export default function RhDemografiaPage() {
       const [colRes, profileRes] = await Promise.all([
         supabase
           .from("colaboradores")
-          .select("id,nome,is_active,data_nascimento,sexo,estado_civil,tipo_contrato,departamento,setor,salario,data_admissao")
+          .select("id,nome,is_active,data_nascimento,sexo,estado_civil,tipo_contrato,departamento,setor,salario,bonus_mensal,data_admissao")
           .order("nome", { ascending: true }),
         uid
           ? supabase.from("profiles").select("company_id").eq("id", uid).maybeSingle<{ company_id: string | null }>()
@@ -425,7 +427,7 @@ export default function RhDemografiaPage() {
     const m = new Map<string, number>();
     for (const r of active) {
       const key = keyOf(r);
-      const salary = Number(r.salario ?? 0) || 0;
+      const salary = monthlyCompensation(r);
       m.set(key, (m.get(key) ?? 0) + salary);
     }
     const rows = Array.from(m.entries())

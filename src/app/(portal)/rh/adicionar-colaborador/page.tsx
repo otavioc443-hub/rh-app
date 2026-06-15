@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabaseClient";
 import EmployeeForm, { ColaboradorPayload } from "@/components/rh/EmployeeForm";
 import EmployeesImport from "@/components/rh/EmployeesImport";
 import { StatCard, Card, CardBody } from "@/components/ui/PageShell";
+import { parseMoneyValue } from "@/lib/payroll";
 
 function normalizeError(error: unknown, fallback: string) {
   if (!error) return fallback;
@@ -30,10 +31,7 @@ function toDb(payload: ColaboradorPayload) {
     return "";
   };
   const num = (v: unknown) => {
-    const s = n(v).replace(",", ".");
-    if (!s) return null;
-    const x = Number(s);
-    return Number.isFinite(x) ? x : null;
+    return parseMoneyValue(typeof v === "string" || typeof v === "number" ? v : null);
   };
   const dateOnly = (v: unknown) => {
     const s = n(v);
@@ -68,6 +66,7 @@ function toDb(payload: ColaboradorPayload) {
 
   base.celular = n(payload.celular) || null;
   base.salario = num(payload.salario);
+  base.bonus_mensal = num(payload.bonus_mensal);
   base.valor_rescisao = num(payload.valor_rescisao);
 
   for (const [key, value] of Object.entries(base)) {
