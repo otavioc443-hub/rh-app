@@ -4,6 +4,7 @@ import {
   getPredominantBehaviorAxes,
 } from "@/lib/behaviorProfile";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { notifyRoles } from "@/lib/server/notifications";
 
 function normalizeIds(input: unknown) {
   if (!Array.isArray(input)) return [] as string[];
@@ -133,6 +134,19 @@ export async function POST(req: Request) {
     if (inviteUpdateErr) {
       return NextResponse.json({ error: inviteUpdateErr.message }, { status: 400 });
     }
+
+    await notifyRoles(
+      ["rh", "admin"],
+      {
+        title: "Mapa comportamental concluido",
+        body: `${fullName} concluiu o mapa comportamental.`,
+        link: "/rh/mapa-comportamental/analises",
+        type: "behavior_completed",
+        entity_type: "behavior_assessment_invite",
+        entity_id: invite.id,
+      },
+      { excludeUserIds: userId ? [userId] : [] },
+    );
 
     return NextResponse.json({
       ok: true,

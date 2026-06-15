@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { requireRoles } from "@/lib/server/feedbackGuard";
+import { insertNotifications } from "@/lib/server/notifications";
 
 type Scores = Record<string, number>;
 
@@ -121,7 +122,7 @@ export async function POST(req: Request) {
       finalScore >= 9 ? "Destaque" : finalScore >= 7 ? "Bom desempenho" : finalScore >= 5 ? "Atencao" : "Critico";
     const legacyRating = Math.min(5, Math.max(1, Math.round(finalScore / 2)));
 
-    const { error: insertErr } = await supabaseAdmin.from("feedbacks").insert({
+    const { data: insertedFeedback, error: insertErr } = await supabaseAdmin.from("feedbacks").insert({
       user_id: guard.userId,
       user_email: guard.email,
       rating: legacyRating,
@@ -136,7 +137,7 @@ export async function POST(req: Request) {
       status,
       released_to_collaborator: false,
       created_at: new Date().toISOString(),
-    });
+    }).select("id").maybeSingle<{ id: string }>();
 
     if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 400 });
 
@@ -193,6 +194,27 @@ export async function POST(req: Request) {
       if (pdiErr) {
         return NextResponse.json({ error: `Feedback salvo, mas PDI falhou: ${pdiErr.message}` }, { status: 400 });
       }
+
+      await insertNotifications([
+        {
+          to_user_id: targetUserId,
+          title: "Novo feedback registrado",
+          body: "Um feedback foi registrado e sera liberado conforme o calendario do ciclo.",
+          link: "/meu-perfil/feedback",
+          type: "feedback_submitted",
+          entity_type: "feedback",
+          entity_id: insertedFeedback?.id ?? undefined,
+        },
+        {
+          to_user_id: targetUserId,
+          title: "PDI criado a partir do feedback",
+          body: "Seu plano de desenvolvimento recebeu acoes vinculadas ao novo feedback.",
+          link: "/meu-perfil/pdi",
+          type: "pdi_created",
+          entity_type: "feedback",
+          entity_id: insertedFeedback?.id ? `${insertedFeedback.id}:pdi` : undefined,
+        },
+      ]);
     }
 
     return NextResponse.json({ ok: true, final_score: finalScore, final_classification: finalClassification });

@@ -110,8 +110,15 @@ export default function LgpdRequestCenter() {
         request_type: requestType,
         title: trimmedTitle,
         details: trimmedDetails,
-      });
+      }).select("id").maybeSingle<{ id: string }>();
       if (insertRes.error) throw new Error(insertRes.error.message);
+      if (insertRes.data?.id) {
+        await fetch("/api/notifications/lgpd", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ request_id: insertRes.data.id, action: "created" }),
+        }).catch(() => null);
+      }
 
       setTitle("");
       setDetails("");
@@ -134,6 +141,11 @@ export default function LgpdRequestCenter() {
     try {
       const res = await supabase.from("lgpd_requests").update({ status: "cancelled" }).eq("id", row.id);
       if (res.error) throw new Error(res.error.message);
+      await fetch("/api/notifications/lgpd", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request_id: row.id, action: "updated" }),
+      }).catch(() => null);
       setMessage("Solicitacao cancelada.");
       await load();
     } catch (error) {

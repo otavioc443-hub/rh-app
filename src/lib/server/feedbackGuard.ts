@@ -1,7 +1,16 @@
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { getServerSupabase } from "@/lib/server/supabaseServer";
 
-export type AppRole = "colaborador" | "coordenador" | "gestor" | "diretoria" | "rh" | "admin" | "compliance";
+export type AppRole =
+  | "colaborador"
+  | "coordenador"
+  | "gestor"
+  | "diretoria"
+  | "rh"
+  | "financeiro"
+  | "pd"
+  | "admin"
+  | "compliance";
 
 export type GuardResult =
   | {

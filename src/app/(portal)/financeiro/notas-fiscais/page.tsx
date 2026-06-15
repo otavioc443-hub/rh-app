@@ -416,6 +416,12 @@ export default function FinanceiroNotasFiscaisPage() {
         })
         .eq("id", row.id);
       if (error) throw new Error(error.message);
+      const note = (reviewComment[row.id] ?? row.review_comment ?? "").trim();
+      await fetch("/api/notifications/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoice_id: row.id, action: status, note }),
+      }).catch(() => null);
       setCommentInvoice(null);
       setMsg("Status atualizado.");
       await load();

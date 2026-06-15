@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createPublicEthicsCase } from "@/lib/ethicsCases/public";
 import type { PublicEthicsCaseCreatePayload } from "@/lib/ethicsCases/types";
+import { notifyRoles } from "@/lib/server/notifications";
 
 function isValidPayload(body: Partial<PublicEthicsCaseCreatePayload>): body is PublicEthicsCaseCreatePayload {
   return Boolean(
@@ -21,6 +22,20 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await createPublicEthicsCase(body);
+    await notifyRoles(
+      ["compliance", "rh", "admin"],
+      {
+        title: "Novo relato no canal de etica",
+        body: "Um novo relato foi registrado e aguarda triagem. O conteudo sensivel deve ser acessado apenas no modulo.",
+        link: "/admin/canal-de-etica",
+        type: "ethics_case_created",
+        entity_type: "ethics_case_protocol",
+        entity_id: result.protocol,
+        severity: "warning",
+        action_required: true,
+      },
+      { companyId: body.companyId },
+    );
     return NextResponse.json({ item: result });
   } catch (error) {
     return NextResponse.json(

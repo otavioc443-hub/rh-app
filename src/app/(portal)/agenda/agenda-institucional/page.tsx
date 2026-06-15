@@ -98,14 +98,21 @@ export default function AgendaInstitucionalPage() {
     try {
       const { data: userData } = await supabase.auth.getUser();
       const user = userData.user;
-      const { error } = await supabase.from("institutional_events").insert({
+      const { data, error } = await supabase.from("institutional_events").insert({
         title: title.trim(),
         description: description.trim() || null,
         event_date: eventDate,
         visibility: "all",
         created_by: user?.id ?? null,
-      });
+      }).select("id").maybeSingle<{ id: string }>();
       if (error) throw error;
+      if (data?.id) {
+        await fetch("/api/notifications/institutional-events", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ event_id: data.id }),
+        }).catch(() => null);
+      }
 
       setTitle("");
       setDescription("");

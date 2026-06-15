@@ -234,8 +234,15 @@ export default function GestorPagamentosExtrasPage() {
         description: description.trim() || null,
         requested_by: meId,
       };
-      const r = await supabase.from("project_extra_payments").insert(payload);
+      const r = await supabase.from("project_extra_payments").insert(payload).select("id").maybeSingle<{ id: string }>();
       if (r.error) throw r.error;
+      if (r.data?.id) {
+        await fetch("/api/notifications/extra-payments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ payment_id: r.data.id, action: "created" }),
+        }).catch(() => null);
+      }
 
       setTargetUserId("");
       setRefMonth("");

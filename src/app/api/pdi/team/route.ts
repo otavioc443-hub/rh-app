@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { requireRoles } from "@/lib/server/feedbackGuard";
+import { insertNotifications } from "@/lib/server/notifications";
 
 type TeamRole = "coordenador" | "gestor";
 type PdiStatus = "planejado" | "em_andamento" | "concluido";
@@ -189,6 +190,18 @@ export async function PATCH(req: Request) {
 
     const { error: updateErr } = await supabaseAdmin.from("pdi_items").update({ status: nextStatus }).eq("id", pdiId);
     if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 400 });
+
+    await insertNotifications([
+      {
+        to_user_id: pdiItem.user_id,
+        title: "PDI atualizado",
+        body: `Um item do seu PDI foi atualizado para ${nextStatus}.`,
+        link: "/meu-perfil/pdi",
+        type: "pdi_updated",
+        entity_type: "pdi_item",
+        entity_id: pdiItem.id,
+      },
+    ]);
 
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {

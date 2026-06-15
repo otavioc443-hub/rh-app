@@ -68,7 +68,7 @@ export default function NotificationBell() {
     setUserId(currentUserId);
     let query = supabase
       .from("notifications")
-      .select("id,to_user_id,title,body,link,type,read_at,created_at")
+      .select("id,to_user_id,title,body,link,type,category,severity,action_required,entity_type,entity_id,data,read_at,created_at")
       .order("created_at", { ascending: false })
       .limit(PREVIEW_LIMIT);
     if (currentUserId) query = query.eq("to_user_id", currentUserId);

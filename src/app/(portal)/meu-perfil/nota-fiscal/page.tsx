@@ -376,6 +376,11 @@ export default function MeuPerfilNotaFiscalPage() {
       if (insertRes.error || !insertRes.data?.id) throw new Error(insertRes.error?.message || "Falha ao criar nota.");
 
       const queued = await enqueueAutomaticIssue(insertRes.data.id, { silent: true, skipReload: true });
+      await fetch("/api/notifications/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoice_id: insertRes.data.id, action: "submitted" }),
+      }).catch(() => null);
 
       setEmitOpen(false);
       setEmitValue("");
@@ -435,6 +440,11 @@ export default function MeuPerfilNotaFiscalPage() {
       });
       const uploadJson = (await uploadRes.json()) as { error?: string };
       if (!uploadRes.ok) throw new Error(uploadJson.error || `Erro ao enviar arquivo (status ${uploadRes.status})`);
+      await fetch("/api/notifications/invoices", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ invoice_id: insertRes.data.id, action: "submitted" }),
+      }).catch(() => null);
 
       setUploadOpen(false);
       setUploadInvoiceNumber("");

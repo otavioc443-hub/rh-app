@@ -456,6 +456,16 @@ export default function MeuPerfilChamadosPage() {
         if (error) throw error;
       }
 
+      await fetch("/api/notifications/chamados/opened", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          area: destination,
+          title: resolvedTitle,
+          description: description.trim(),
+        }),
+      }).catch(() => null);
+
       setTitlePreset(titleOptions[0] ?? "");
       setCustomTitle("");
       setDescription("");

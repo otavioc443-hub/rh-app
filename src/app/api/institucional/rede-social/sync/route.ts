@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getBroadcastProfileIds, insertNotifications } from "@/lib/server/notifications";
 
 type SyncBody =
   | {
@@ -294,16 +295,17 @@ async function syncPost(
 
   const dedupedTargetUserIds = Array.from(new Set(targetUserIds)).filter((userId) => userId !== requesterUserId);
   if (dedupedTargetUserIds.length) {
-    await supabaseAdmin.from("internal_social_notifications").insert(
-      dedupedTargetUserIds.map((userId) => ({
-        user_id: userId,
-        actor_user_id: requesterUserId,
-        kind: postType === "campaign" ? "campaign" : "announcement",
-        entity_type: "post",
-        entity_id: body.postId,
+    const megaphoneRecipients =
+      post.audience_type === "project" && post.audience_project_id
+        ? dedupedTargetUserIds
+        : await getBroadcastProfileIds(post.audience_company_id ?? null, [requesterUserId]);
+    await insertNotifications(
+      megaphoneRecipients.map((userId) => ({
+        to_user_id: userId,
         title: postType === "campaign" ? "Nova campanha interna" : "Novo comunicado oficial",
         body: compactText(body.text),
-        link_url: "/institucional/rede-social",
+        link: "/institucional/rede-social",
+        type: postType === "campaign" ? "pulsehub_campaign" : "pulsehub_announcement",
       }))
     );
   }

@@ -167,10 +167,18 @@ export default function AdminComunicadosPage() {
       };
 
       const res = editingId
-        ? await supabase.from("pulsehub_home_announcements").update(payload).eq("id", editingId)
-        : await supabase.from("pulsehub_home_announcements").insert({ ...payload, created_by: userId });
+        ? await supabase.from("pulsehub_home_announcements").update(payload).eq("id", editingId).select("id").maybeSingle<{ id: string }>()
+        : await supabase.from("pulsehub_home_announcements").insert({ ...payload, created_by: userId }).select("id").maybeSingle<{ id: string }>();
 
       if (res.error) throw res.error;
+      const announcementId = res.data?.id ?? editingId;
+      if (announcementId && payload.active) {
+        await fetch("/api/admin/comunicados/notify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ announcement_id: announcementId, mode: editingId ? "updated" : "created" }),
+        }).catch(() => null);
+      }
       setMsg(editingId ? "Comunicado atualizado." : "Comunicado cadastrado.");
       resetForm();
       await load();

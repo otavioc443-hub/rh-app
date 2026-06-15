@@ -200,15 +200,22 @@ export default function PdChamadosPage() {
     setSaving(true);
     setMsg("");
     try {
-      const { error } = await supabase.from("pd_tickets").insert({
+      const { data, error } = await supabase.from("pd_tickets").insert({
         requester_user_id: userId,
         requester_role: role ?? null,
         title,
         request_type: formType,
         priority: formPriority,
         description,
-      });
+      }).select("id").maybeSingle<{ id: string }>();
       if (error) throw new Error(error.message);
+      if (data?.id) {
+        await fetch("/api/notifications/pd-tickets", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ticket_id: data.id, action: "created" }),
+        }).catch(() => null);
+      }
 
       setFormTitle("");
       setFormDescription("");
@@ -238,6 +245,11 @@ export default function PdChamadosPage() {
 
       const { error } = await supabase.from("pd_tickets").update(patch).eq("id", selected.id);
       if (error) throw new Error(error.message);
+      await fetch("/api/notifications/pd-tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticket_id: selected.id, action: "updated" }),
+      }).catch(() => null);
 
       setMsg("Chamado atualizado.");
       await load();

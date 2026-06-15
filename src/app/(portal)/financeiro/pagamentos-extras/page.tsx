@@ -184,6 +184,13 @@ export default function FinanceiroPagamentosExtrasPage() {
         })
         .eq("id", selected.id);
       if (upd.error) throw new Error(upd.error.message);
+      if (decisionStatus !== "pending") {
+        await fetch("/api/notifications/extra-payments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ payment_id: selected.id, action: decisionStatus, note: decisionNote.trim() || null }),
+        }).catch(() => null);
+      }
       setMsg("Decisao registrada.");
       await load();
     } catch (e: unknown) {

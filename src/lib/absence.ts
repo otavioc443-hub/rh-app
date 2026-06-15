@@ -49,6 +49,12 @@ export type NotificationRow = {
   body: string;
   link: string | null;
   type: string;
+  category?: string | null;
+  severity?: "info" | "success" | "warning" | "critical" | null;
+  action_required?: boolean | null;
+  entity_type?: string | null;
+  entity_id?: string | null;
+  data?: Record<string, unknown> | null;
   read_at: string | null;
   created_at: string;
 };

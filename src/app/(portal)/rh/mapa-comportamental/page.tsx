@@ -264,9 +264,16 @@ export default function RhMapaComportamentalPage() {
           status: "pending" as const,
         }));
 
+      let releaseIds: string[] = [];
       if (releaseRows.length) {
-        const { error } = await supabase.from("behavior_assessment_releases").insert(releaseRows);
+        const { data, error } = await supabase.from("behavior_assessment_releases").insert(releaseRows).select("id,user_id");
         if (error) throw error;
+        releaseIds = ((data ?? []) as Array<{ id: string; user_id: string }>).map((row) => row.id);
+        await fetch("/api/notifications/behavior-invites", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_ids: releaseRows.map((row) => row.user_id), release_ids: releaseIds }),
+        }).catch(() => null);
       }
 
       if (inviteRows.length) {
