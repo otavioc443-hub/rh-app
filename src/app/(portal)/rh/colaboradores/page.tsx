@@ -216,9 +216,41 @@ export default function Page() {
     setLoading(true);
     setErr(null);
 
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError || !authData.user) {
+      setErr("Sessao invalida. Faca login novamente.");
+      setRawRows([]);
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("id", authData.user.id)
+      .maybeSingle<{ company_id: string | null }>();
+    if (profileError) {
+      setErr(profileError.message);
+      setRawRows([]);
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+
+    const companyId = profile?.company_id ?? null;
+    if (!companyId) {
+      setErr("Selecione uma empresa no topo do portal para visualizar os colaboradores.");
+      setRawRows([]);
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+
     const { data: rawRows, error } = await supabase
       .from("colaboradores")
       .select("*")
+      .eq("company_id", companyId)
       .order("nome", { ascending: true });
 
     if (error) {
