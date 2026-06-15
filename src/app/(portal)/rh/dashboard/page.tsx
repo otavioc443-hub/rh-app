@@ -7,6 +7,7 @@ import { monthlyCompensation } from "@/lib/payroll";
 
 type ColaboradorRow = {
   id: string;
+  user_id: string | null;
   nome: string | null;
   is_active: boolean | null;
   data_admissao: string | null;
@@ -183,18 +184,19 @@ export default function RhDashboardPage() {
 
       const authRes = await supabase.auth.getUser();
       const uid = authRes.data.user?.id ?? null;
+      let companyId: string | null = null;
       if (uid) {
         const profileRes = await supabase
           .from("profiles")
           .select("company_id")
-          .eq("id", uid)
-          .maybeSingle<{ company_id: string | null }>();
-        const cid = !profileRes.error ? profileRes.data?.company_id ?? null : null;
-        if (cid) {
+            .eq("id", uid)
+            .maybeSingle<{ company_id: string | null }>();
+        companyId = !profileRes.error ? profileRes.data?.company_id ?? null : null;
+        if (companyId) {
           const companyRes = await supabase
             .from("company")
             .select("name,logo_url")
-            .eq("id", cid)
+            .eq("id", companyId)
             .maybeSingle<{ name: string | null; logo_url: string | null }>();
           if (!companyRes.error && companyRes.data) {
             setCompanyName((companyRes.data.name ?? "Empresa").trim() || "Empresa");
@@ -209,28 +211,50 @@ export default function RhDashboardPage() {
         }
       }
 
-      const [colRes, absRes, extraRes] = await Promise.all([
-        supabase
-          .from("colaboradores")
-          .select("id,nome,is_active,data_admissao,data_demissao,salario,bonus_mensal,departamento,tipo_contrato")
-          .order("nome", { ascending: true }),
-        supabase
-          .from("absence_requests")
-          .select("id,user_id,start_date,end_date,days_count,status")
-          .eq("status", "approved")
-          .lte("start_date", toDate)
-          .gte("end_date", fromDate),
-        supabase
-          .from("project_extra_payments")
-          .select("id,amount,status,reference_month,created_at")
-          .gte("reference_month", fromDate)
-          .lte("reference_month", toDate),
-      ]);
+      if (!companyId) {
+        setColabs([]);
+        setAbsences([]);
+        setExtras([]);
+        setCompanyName("Empresa");
+        setCompanyLogoUrl("/logo.png");
+        setMsg("Selecione uma empresa no topo do portal para visualizar o dashboard de RH.");
+        return;
+      }
+
+      const colRes = await supabase
+        .from("colaboradores")
+        .select("id,user_id,nome,is_active,data_admissao,data_demissao,salario,bonus_mensal,departamento,tipo_contrato")
+        .eq("company_id", companyId)
+        .order("nome", { ascending: true });
 
       if (colRes.error) throw new Error(`Colaboradores: ${colRes.error.message}`);
 
       const nextColabs = (colRes.data ?? []) as ColaboradorRow[];
       setColabs(nextColabs);
+
+      const userIds = Array.from(new Set(nextColabs.map((item) => item.user_id).filter(Boolean))) as string[];
+      const projectsRes = await supabase.from("projects").select("id").eq("company_id", companyId);
+      const projectIds = projectsRes.error ? [] : ((projectsRes.data ?? []) as Array<{ id: string }>).map((project) => project.id);
+
+      const [absRes, extraRes] = await Promise.all([
+        userIds.length
+          ? supabase
+              .from("absence_requests")
+              .select("id,user_id,start_date,end_date,days_count,status")
+              .eq("status", "approved")
+              .in("user_id", userIds)
+              .lte("start_date", toDate)
+              .gte("end_date", fromDate)
+          : Promise.resolve({ data: [], error: null }),
+        projectIds.length
+          ? supabase
+              .from("project_extra_payments")
+              .select("id,amount,status,reference_month,created_at")
+              .in("project_id", projectIds)
+              .gte("reference_month", fromDate)
+              .lte("reference_month", toDate)
+          : Promise.resolve({ data: [], error: null }),
+      ]);
 
       if (absRes.error) {
         setAbsences([]);

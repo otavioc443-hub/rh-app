@@ -253,17 +253,9 @@ export default function RhDemografiaPage() {
       const authRes = await supabase.auth.getUser();
       const uid = authRes.data.user?.id ?? null;
 
-      const [colRes, profileRes] = await Promise.all([
-        supabase
-          .from("colaboradores")
-          .select("id,nome,is_active,data_nascimento,sexo,estado_civil,tipo_contrato,departamento,setor,salario,bonus_mensal,data_admissao")
-          .order("nome", { ascending: true }),
-        uid
-          ? supabase.from("profiles").select("company_id").eq("id", uid).maybeSingle<{ company_id: string | null }>()
-          : Promise.resolve({ data: null, error: null }),
-      ]);
-      if (colRes.error) throw new Error(colRes.error.message);
-      setRows((colRes.data ?? []) as Collaborator[]);
+      const profileRes = uid
+        ? await supabase.from("profiles").select("company_id").eq("id", uid).maybeSingle<{ company_id: string | null }>()
+        : { data: null, error: null };
 
       const cid = !profileRes.error ? profileRes.data?.company_id ?? null : null;
       if (cid) {
@@ -274,9 +266,23 @@ export default function RhDemografiaPage() {
           .maybeSingle<{ name: string | null; logo_url: string | null }>();
         if (!cRes.error && cRes.data) {
           setCompanyName((cRes.data.name ?? "Empresa").trim() || "Empresa");
-          setCompanyLogoUrl((cRes.data.logo_url ?? "").trim() || "/logo.png");
+            setCompanyLogoUrl((cRes.data.logo_url ?? "").trim() || "/logo.png");
         }
+      } else {
+        setRows([]);
+        setCompanyName("Empresa");
+        setCompanyLogoUrl("/logo.png");
+        setMsg("Selecione uma empresa no topo do portal para visualizar a demografia.");
+        return;
       }
+
+      const colRes = await supabase
+        .from("colaboradores")
+        .select("id,nome,is_active,data_nascimento,sexo,estado_civil,tipo_contrato,departamento,setor,salario,bonus_mensal,data_admissao")
+        .eq("company_id", cid)
+        .order("nome", { ascending: true });
+      if (colRes.error) throw new Error(colRes.error.message);
+      setRows((colRes.data ?? []) as Collaborator[]);
     } catch (e: unknown) {
       setRows([]);
       setMsg(e instanceof Error ? e.message : "Erro ao carregar dashboard demografico.");
