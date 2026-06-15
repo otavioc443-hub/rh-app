@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Camera, RefreshCcw } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { resolvePortalAvatarUrl } from "@/lib/avatarUrl";
-import { monthlyCompensation } from "@/lib/payroll";
 
 type CollaboratorRow = {
   id: string;
@@ -279,8 +278,6 @@ export default function MeusDadosPage() {
             <p><b>Tipo de contrato:</b> {collaborator?.tipo_contrato?.trim() || "-"}</p>
             <p><b>Data de admissao:</b> {formatDate(collaborator?.data_admissao)}</p>
             <p><b>Salario:</b> {formatCurrency(collaborator?.salario ?? null)}</p>
-            <p><b>Bonus mensal:</b> {formatCurrency(collaborator?.bonus_mensal ?? null)}</p>
-            <p><b>Total mensal:</b> {collaborator ? formatCurrency(monthlyCompensation(collaborator)) : "-"}</p>
             <p><b>Gestor direto:</b> {collaborator?.superior_direto?.trim() || "-"}</p>
             <p><b>Lotacao:</b> {[collaborator?.empresa, collaborator?.departamento, collaborator?.setor].map((v) => (v ?? "").trim()).filter(Boolean).join(" - ") || "-"}</p>
             <p className="md:col-span-2"><b>Endereco:</b> {fullAddress}</p>
