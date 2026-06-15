@@ -16,6 +16,7 @@ type Department = {
 };
 
 type Profile = {
+  role: string | null;
   company_id: string | null;
   department_id: string | null;
   full_name: string | null;
@@ -114,7 +115,7 @@ export async function GET(req: Request) {
     const [{ data: profile }, collaborator, { data: companies }] = await Promise.all([
       supabaseAdmin
         .from("profiles")
-        .select("company_id,department_id,full_name")
+        .select("role,company_id,department_id,full_name")
         .eq("id", user.id)
         .maybeSingle<Profile>(),
       findCollaborator(user.id, user.email ?? null),
@@ -134,17 +135,25 @@ export async function GET(req: Request) {
     }
 
     let availableCompanies: Company[] = company ? [company] : [];
-    const { data: memberships, error: membershipError } = await supabaseAdmin
-      .from("profile_company_memberships")
-      .select("company_id")
-      .eq("user_id", user.id);
+    if (profile?.role === "admin") {
+      availableCompanies = companyList;
+      company = company ?? companyList[0] ?? null;
+      if (!profile.company_id && company?.id) {
+        await supabaseAdmin.from("profiles").update({ company_id: company.id }).eq("id", user.id);
+      }
+    } else {
+      const { data: memberships, error: membershipError } = await supabaseAdmin
+        .from("profile_company_memberships")
+        .select("company_id")
+        .eq("user_id", user.id);
 
-    if (!membershipError) {
-      const membershipIds = new Set(
-        ((memberships ?? []) as Array<{ company_id: string | null }>).map((row) => row.company_id).filter(Boolean) as string[]
-      );
-      if (company?.id) membershipIds.add(company.id);
-      availableCompanies = companyList.filter((item) => membershipIds.has(item.id));
+      if (!membershipError) {
+        const membershipIds = new Set(
+          ((memberships ?? []) as Array<{ company_id: string | null }>).map((row) => row.company_id).filter(Boolean) as string[]
+        );
+        if (company?.id) membershipIds.add(company.id);
+        availableCompanies = companyList.filter((item) => membershipIds.has(item.id));
+      }
     }
 
     let department: Department | null = null;

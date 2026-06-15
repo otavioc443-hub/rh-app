@@ -853,6 +853,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
       setLoading(true);
       setBootNonce((value) => value + 1);
       window.dispatchEvent(new Event("portal-profile-updated"));
+      window.location.reload();
     } catch {
       // Mantem a empresa atual caso a troca falhe.
     }
