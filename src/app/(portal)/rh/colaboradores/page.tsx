@@ -250,7 +250,7 @@ export default function Page() {
     const { data: rawRows, error } = await supabase
       .from("colaboradores")
       .select("*")
-      .eq("company_id", companyId)
+      .or(`company_id.eq.${companyId},company_id.is.null`)
       .order("nome", { ascending: true });
 
     if (error) {
