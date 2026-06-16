@@ -137,16 +137,14 @@ function Kpi({
   iconSize?: number;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-xs font-semibold text-slate-500">{title}</div>
-          <div className="mt-2 text-2xl font-semibold text-slate-900">{value}</div>
-          <div className="mt-1 text-xs text-slate-500">{subtitle}</div>
-        </div>
-        <div className="grid h-10 w-10 place-items-center rounded-xl bg-slate-900 text-white">
-          <Icon size={iconSize} />
-        </div>
+    <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5">
+      <div className="min-w-0 pr-12">
+        <div className="text-xs font-semibold text-slate-500">{title}</div>
+        <div className="mt-2 break-words text-2xl font-semibold leading-tight text-slate-900">{value}</div>
+        <div className="mt-1 text-xs text-slate-500">{subtitle}</div>
+      </div>
+      <div className="absolute right-5 top-5 grid h-10 w-10 place-items-center rounded-xl bg-slate-900 text-white">
+        <Icon size={iconSize} />
       </div>
     </div>
   );

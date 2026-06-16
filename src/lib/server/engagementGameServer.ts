@@ -35,18 +35,6 @@ type PortalProfileRow = {
   role: string | null;
 };
 
-type LeaderboardRow = {
-  user_id: string;
-  display_name: string;
-  department_name: string | null;
-  score_current: number;
-  score_total: number;
-  streak: number;
-  rank_position: number;
-  last_played_date?: string | null;
-  updated_at?: string | null;
-};
-
 type LeaderboardCollaboratorRow = {
   user_id: string | null;
   nome: string | null;
@@ -357,7 +345,8 @@ export async function loadEngagementGameDepartmentRanking(
   const { data, error } = await supabaseAdmin
     .from("engagement_game_players")
     .select("user_id,department_id,department_name,score_current,score_total")
-    .in("user_id", companyUserIds);
+    .in("user_id", companyUserIds)
+    .gt("score_current", 0);
   if (error) throw new Error(error.message);
 
   const rows = (data ?? []) as DepartmentRankingPlayerRow[];
@@ -403,6 +392,7 @@ export async function loadEngagementGameDepartmentRanking(
 
   const currentDepartmentKey = normalizeDepartmentName(currentDepartmentName) || "Setor não informado";
   return Array.from(grouped.entries())
+    .filter(([, stats]) => stats.scoreCurrent > 0)
     .map(([departmentName, stats]) => ({
       departmentName,
       scoreCurrent: stats.scoreCurrent,

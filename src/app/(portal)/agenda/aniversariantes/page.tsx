@@ -51,27 +51,6 @@ function formatBirthdayStatus(daysLeft: number) {
   return "Ja passou";
 }
 
-function normalizeCompanyName(value: string | null | undefined) {
-  return (value ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .toLowerCase();
-}
-
-function belongsToCompany(
-  rowCompanyId: string | null | undefined,
-  rowCompany: string | null | undefined,
-  currentCompanyId: string | null | undefined,
-  currentCompany: string | null
-) {
-  if (currentCompanyId && rowCompanyId === currentCompanyId) return true;
-  if (!currentCompany) return !currentCompanyId;
-  const current = normalizeCompanyName(currentCompany);
-  const row = normalizeCompanyName(rowCompany);
-  return Boolean(row) && (row === current || row.includes(current) || current.includes(row));
-}
-
 export default function AniversariantesPage() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
@@ -186,7 +165,7 @@ export default function AniversariantesPage() {
               <div key={r.id} className="flex flex-col gap-2 rounded-xl border border-slate-200 p-4 md:flex-row md:items-center md:justify-between">
                 <div>
                   <p className="font-medium text-slate-900">{r.nome}</p>
-                  <p className="text-sm text-slate-600">{r.cargo} - {r.departamento}</p>
+                  {r.cargo !== "-" ? <p className="text-sm text-slate-600">{r.cargo}</p> : null}
                 </div>
                 <div className="flex items-center gap-3 text-sm">
                   <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-3 py-1 font-semibold text-pink-700">
