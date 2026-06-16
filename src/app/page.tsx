@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 import {
   clearPortalExitIntent,
   clearPasswordRecoveryIntent,
@@ -71,6 +71,8 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [capsLockOn, setCapsLockOn] = useState(false);
   const [msg, setMsg] = useState("");
   const [msgType, setMsgType] = useState<"error" | "success">("error");
   const [loading, setLoading] = useState(false);
@@ -176,6 +178,10 @@ export default function LoginPage() {
     }
   }
 
+  function updateCapsLockState(event: React.KeyboardEvent<HTMLInputElement>) {
+    setCapsLockOn(event.getModifierState("CapsLock"));
+  }
+
   async function sendPasswordRecovery() {
     setMsg("");
     setMsgType("error");
@@ -233,14 +239,31 @@ export default function LoginPage() {
                 inputMode="email"
               />
 
-              <input
-                className="w-full rounded-lg border p-3 focus:outline-none focus:ring-2 focus:ring-black"
-                placeholder="Senha"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-              />
+              <div className="space-y-1.5">
+                <div className="relative">
+                  <input
+                    className="w-full rounded-lg border p-3 pr-12 focus:outline-none focus:ring-2 focus:ring-black"
+                    placeholder="Senha"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={updateCapsLockState}
+                    onKeyUp={updateCapsLockState}
+                    onBlur={() => setCapsLockOn(false)}
+                    autoComplete="current-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                    className="absolute right-3 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-black"
+                    aria-label={showPassword ? "Ocultar senha" : "Visualizar senha"}
+                    title={showPassword ? "Ocultar senha" : "Visualizar senha"}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+                {capsLockOn ? <p className="text-xs font-medium text-amber-700">Caps Lock est&aacute; ativo.</p> : null}
+              </div>
 
               <div className="flex justify-end">
                 <button
