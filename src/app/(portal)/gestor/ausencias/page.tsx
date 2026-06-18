@@ -465,9 +465,14 @@ export default function GestorAusenciasPage() {
       if (error) throw error;
       const reqRow = pendingRequests.find((r) => r.id === requestId);
       if (reqRow) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
         await fetch("/api/ausencias/requests/notify", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
           body: JSON.stringify({
             action: nextStatus === "approved" ? "approved" : "rejected",
             requests: [{ ...reqRow, manager_comment }],

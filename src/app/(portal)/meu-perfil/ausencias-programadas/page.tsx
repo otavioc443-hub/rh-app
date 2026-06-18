@@ -253,9 +253,14 @@ export default function AusenciasProgramadasPage() {
         .eq("id", r.id)
         .in("status", ["pending_manager", "rejected"]);
       if (error) throw error;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
       await fetch("/api/ausencias/requests/notify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ action: "updated", requests: [{ ...r, ...updatePayload }] }),
       }).catch(() => null);
       cancelEditRequest();
@@ -281,9 +286,14 @@ export default function AusenciasProgramadasPage() {
         .eq("id", r.id)
         .in("status", ["pending_manager", "rejected"]);
       if (error) throw error;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
       await fetch("/api/ausencias/requests/notify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ action: "cancelled", requests: [{ ...r, status: "cancelled" }] }),
       }).catch(() => null);
       if (editingRequestId === r.id) cancelEditRequest();

@@ -4,6 +4,7 @@ import { requireRoles } from "@/lib/server/feedbackGuard";
 import { sendPortalEmail } from "@/lib/server/mailer";
 
 type NotifyAction = "created" | "updated" | "cancelled" | "approved" | "rejected";
+type NotifyRole = "colaborador" | "gestor" | "rh" | "admin";
 
 type AbsenceRequestNotifyInput = {
   id?: string;
@@ -37,9 +38,39 @@ type CollaboratorEmailRow = {
   email: string | null;
   email_empresarial: string | null;
   email_pessoal: string | null;
+  superior_direto?: string | null;
+  email_superior_direto?: string | null;
+  company_id?: string | null;
 };
 
 const PORTAL_ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://rh-app-seven.vercel.app").replace(/\/$/, "");
+
+async function requireNotifyAccess(req: Request) {
+  const auth = req.headers.get("authorization") || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;
+
+  if (!token) return requireRoles(["colaborador", "gestor", "rh", "admin"]);
+
+  const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+  const user = userData?.user;
+  if (userError || !user) return { ok: false as const, status: 401, error: "Nao autenticado." };
+
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from("profiles")
+    .select("role,active")
+    .eq("id", user.id)
+    .maybeSingle<{ role: NotifyRole | null; active: boolean | null }>();
+
+  if (profileError || profile?.active === false || !profile?.role) {
+    return { ok: false as const, status: 403, error: "Perfil sem permissao." };
+  }
+
+  if (!["colaborador", "gestor", "rh", "admin"].includes(profile.role)) {
+    return { ok: false as const, status: 403, error: "Acesso negado." };
+  }
+
+  return { ok: true as const };
+}
 
 function fmtDateBR(raw: string | null | undefined) {
   if (!raw) return "-";
@@ -53,6 +84,17 @@ function clean(value: string | null | undefined) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
 }
 
+function cleanEmail(value: string | null | undefined) {
+  return clean(value).toLowerCase();
+}
+
+function normalizeText(value: string | null | undefined) {
+  return clean(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
 function escapeHtml(value: string | number | null | undefined) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -64,6 +106,92 @@ function escapeHtml(value: string | number | null | undefined) {
 
 function firstEmail(...values: Array<string | null | undefined>) {
   return values.map(clean).find((value) => value.includes("@")) ?? "";
+}
+
+async function findActiveProfileId(userId: string | null | undefined) {
+  if (!userId) return null;
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select("id,active")
+    .eq("id", userId)
+    .maybeSingle<{ id: string; active: boolean | null }>();
+  if (error || !data || data.active === false) return null;
+  return data.id;
+}
+
+async function findProfileIdByEmail(email: string) {
+  if (!email) return null;
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select("id,active")
+    .ilike("email", email)
+    .limit(5);
+  if (error) throw error;
+  return ((data ?? []) as Array<{ id: string; active: boolean | null }>).find((item) => item.active !== false)?.id ?? null;
+}
+
+async function findManagerIdByEmail(email: string, companyId: string | null) {
+  if (!email) return null;
+  const { data, error } = await supabaseAdmin
+    .from("colaboradores")
+    .select("user_id,nome,email,email_empresarial,email_pessoal,company_id")
+    .or(`email.ilike.${email},email_empresarial.ilike.${email},email_pessoal.ilike.${email}`)
+    .limit(10);
+  if (error) throw error;
+
+  const candidates = ((data ?? []) as CollaboratorEmailRow[]).filter((item) => !companyId || item.company_id === companyId);
+  for (const candidate of candidates) {
+    const profileId = await findActiveProfileId(candidate.user_id);
+    if (profileId) return profileId;
+  }
+
+  return findProfileIdByEmail(email);
+}
+
+async function findManagerIdByName(name: string, companyId: string | null) {
+  const normalizedName = normalizeText(name);
+  if (!normalizedName) return null;
+
+  let query = supabaseAdmin
+    .from("colaboradores")
+    .select("user_id,nome,email,email_empresarial,email_pessoal,company_id")
+    .limit(100);
+  if (companyId) query = query.eq("company_id", companyId);
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  const candidates = ((data ?? []) as CollaboratorEmailRow[]).filter((item) => {
+    const candidateName = normalizeText(item.nome);
+    return candidateName === normalizedName || candidateName.includes(normalizedName) || normalizedName.includes(candidateName);
+  });
+
+  for (const candidate of candidates) {
+    const profileId = await findActiveProfileId(candidate.user_id);
+    if (profileId) return profileId;
+    const emailProfileId =
+      (await findProfileIdByEmail(cleanEmail(candidate.email))) ||
+      (await findProfileIdByEmail(cleanEmail(candidate.email_empresarial))) ||
+      (await findProfileIdByEmail(cleanEmail(candidate.email_pessoal)));
+    if (emailProfileId) return emailProfileId;
+  }
+
+  return null;
+}
+
+async function resolveManagerIdForRequester(requesterId: string, fallbackManagerId: string | null) {
+  const { data: requester, error } = await supabaseAdmin
+    .from("colaboradores")
+    .select("user_id,nome,email,email_empresarial,email_pessoal,superior_direto,email_superior_direto,company_id")
+    .eq("user_id", requesterId)
+    .maybeSingle<CollaboratorEmailRow>();
+  if (error) throw error;
+  if (!requester) return fallbackManagerId;
+
+  const managerEmail = cleanEmail(requester.email_superior_direto);
+  const managerName = clean(requester.superior_direto);
+  const companyId = clean(requester.company_id) || null;
+  return (await findManagerIdByEmail(managerEmail, companyId)) || (await findManagerIdByName(managerName, companyId)) || fallbackManagerId;
 }
 
 async function loadPeopleForEmail(userIds: string[]) {
@@ -141,7 +269,7 @@ async function sendAbsenceCreatedEmail(input: {
 }
 
 export async function POST(req: Request) {
-  const guard = await requireRoles(["colaborador", "gestor", "rh", "admin"]);
+  const guard = await requireNotifyAccess(req);
   if (!guard.ok) return NextResponse.json({ error: guard.error }, { status: guard.status });
 
   try {
@@ -195,8 +323,13 @@ export async function POST(req: Request) {
 
     for (const r of requests) {
       const requesterId = String(r.user_id ?? "").trim();
-      const managerId = String(r.manager_id ?? "").trim();
       if (!requesterId) continue;
+      const fallbackManagerId = String(r.manager_id ?? "").trim() || null;
+      const managerId = await resolveManagerIdForRequester(requesterId, fallbackManagerId);
+
+      if (r.id && managerId && managerId !== fallbackManagerId) {
+        await supabaseAdmin.from("absence_requests").update({ manager_id: managerId }).eq("id", r.id);
+      }
 
       const days = Number(r.days_count ?? 0) || 0;
       const periodText = `${fmtDateBR(r.start_date)} ate ${fmtDateBR(r.end_date)}`;
@@ -264,7 +397,8 @@ export async function POST(req: Request) {
     for (const row of rows) dedup.set(`${row.to_user_id}|${row.type}|${row.body}`, row);
 
     let notified = 0;
-    if (!notificationDisabled && dedup.size) {
+    const forceWorkflowNotification = eventKey.startsWith("absence_request_");
+    if ((!notificationDisabled || forceWorkflowNotification) && dedup.size) {
       const { error } = await supabaseAdmin.from("notifications").insert(Array.from(dedup.values()));
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       notified = dedup.size;
@@ -310,7 +444,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
       ok: true,
       notified,
-      skipped: notificationDisabled ? "event_disabled" : !dedup.size ? "no_internal_recipients" : undefined,
+      skipped: notificationDisabled && !forceWorkflowNotification ? "event_disabled" : !dedup.size ? "no_internal_recipients" : undefined,
       event_key: eventKey,
       emailSent,
       emailSkipped,

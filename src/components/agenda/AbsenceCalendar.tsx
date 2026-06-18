@@ -17,6 +17,18 @@ type AbsenceNotifyResponse = {
   error?: string;
 };
 
+type CreatedAbsenceRequest = {
+  id: string;
+  user_id: string;
+  manager_id: string;
+  allowance_id: string | null;
+  start_date: string;
+  end_date: string;
+  days_count: number | null;
+  reason: string | null;
+  status: string;
+};
+
 function monthLabel(d: Date) {
   return d.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 }
@@ -175,13 +187,22 @@ export default function AbsenceCalendar({ myAllowance, myRequests, onRefresh }: 
         reason: reason.trim() ? reason.trim() : null,
         status: "pending_manager",
       };
-      const { error: ierr } = await supabase.from("absence_requests").insert(insertPayload);
+      const { data: createdRequest, error: ierr } = await supabase
+        .from("absence_requests")
+        .insert(insertPayload)
+        .select("id,user_id,manager_id,allowance_id,start_date,end_date,days_count,reason,status")
+        .single<CreatedAbsenceRequest>();
 
       if (ierr) throw ierr;
+      const { data: notifySessionData } = await supabase.auth.getSession();
+      const notifyToken = notifySessionData.session?.access_token;
       const notifyResponse = await fetch("/api/ausencias/requests/notify", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "created", requests: [insertPayload] }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(notifyToken ? { Authorization: `Bearer ${notifyToken}` } : {}),
+        },
+        body: JSON.stringify({ action: "created", requests: [createdRequest ?? insertPayload] }),
       });
       const notifyPayload = (await notifyResponse.json().catch(() => null)) as AbsenceNotifyResponse | null;
 
