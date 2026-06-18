@@ -163,7 +163,6 @@ export async function GET(req: Request) {
       .eq("id", user.id)
       .maybeSingle<ProfileRow>();
     if (profileError) throw profileError;
-    if (profile?.manager_id) return NextResponse.json({ ok: true, managerId: profile.manager_id, source: "profile" });
 
     const userEmail = cleanEmail(user.email ?? profile?.email);
     let collaboratorQuery = supabaseAdmin
@@ -187,6 +186,8 @@ export async function GET(req: Request) {
     );
 
     if (!collaborator) {
+      if (profile?.manager_id) return NextResponse.json({ ok: true, managerId: profile.manager_id, source: "profile" });
+
       return NextResponse.json(
         { error: "Nao encontrei o cadastro de colaborador vinculado ao seu acesso para resolver o gestor direto." },
         { status: 404 }
@@ -199,17 +200,20 @@ export async function GET(req: Request) {
     const managerId = (await findManagerIdByEmail(managerEmail, companyId)) || (await findManagerIdByName(managerName, companyId));
 
     if (!managerId) {
+      if (profile?.manager_id) return NextResponse.json({ ok: true, managerId: profile.manager_id, source: "profile" });
+
       return NextResponse.json(
         { error: "O superior direto esta preenchido, mas nao encontrei um perfil ativo de acesso para ele." },
         { status: 404 }
       );
     }
 
-    await supabaseAdmin
-      .from("profiles")
-      .update({ manager_id: managerId })
-      .eq("id", user.id)
-      .is("manager_id", null);
+    if (profile?.manager_id !== managerId) {
+      await supabaseAdmin
+        .from("profiles")
+        .update({ manager_id: managerId })
+        .eq("id", user.id);
+    }
 
     return NextResponse.json({ ok: true, managerId, source: "collaborator" });
   } catch (error) {

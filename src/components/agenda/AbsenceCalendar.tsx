@@ -11,6 +11,12 @@ type Props = {
   onRefresh: () => Promise<void>;
 };
 
+type AbsenceNotifyResponse = {
+  emailFailed?: number;
+  emailSkipped?: number;
+  error?: string;
+};
+
 function monthLabel(d: Date) {
   return d.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
 }
@@ -172,14 +178,19 @@ export default function AbsenceCalendar({ myAllowance, myRequests, onRefresh }: 
       const { error: ierr } = await supabase.from("absence_requests").insert(insertPayload);
 
       if (ierr) throw ierr;
-      await fetch("/api/ausencias/requests/notify", {
+      const notifyResponse = await fetch("/api/ausencias/requests/notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "created", requests: [insertPayload] }),
-      }).catch(() => null);
+      });
+      const notifyPayload = (await notifyResponse.json().catch(() => null)) as AbsenceNotifyResponse | null;
 
       setReason("");
-      setMsg("Solicitação enviada ao gestor para aprovação ✅");
+      if (!notifyResponse.ok || notifyPayload?.emailFailed || notifyPayload?.emailSkipped) {
+        setMsg("Solicitacao criada, mas houve falha ao notificar o gestor. Avise o RH para verificar o envio.");
+      } else {
+        setMsg("Solicitacao enviada ao gestor para aprovacao.");
+      }
       await onRefresh();
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao solicitar ausência.");

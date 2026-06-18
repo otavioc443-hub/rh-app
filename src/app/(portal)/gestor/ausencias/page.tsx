@@ -9,6 +9,11 @@ type Colaborador = {
   id: string;
   user_id: string | null;
   nome: string | null;
+  email?: string | null;
+  email_empresarial?: string | null;
+  email_pessoal?: string | null;
+  superior_direto?: string | null;
+  email_superior_direto?: string | null;
   is_active: boolean | null;
   department_id?: string | null;
   departamento?: string | null;
@@ -17,6 +22,7 @@ type Colaborador = {
 
 type ProfileRow = {
   id: string;
+  email?: string | null;
   full_name: string | null;
   role: string | null;
   manager_id: string | null;
@@ -119,6 +125,21 @@ function fmtDateTimeBR(iso: string | null | undefined) {
   return d.toLocaleString("pt-BR");
 }
 
+function clean(value: string | null | undefined) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function cleanEmail(value: string | null | undefined) {
+  return clean(value).toLowerCase();
+}
+
+function normalizeText(value: string | null | undefined) {
+  return clean(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
 function statusLabel(status: AbsenceRequestRow["status"]) {
   if (status === "pending_manager") return "Pendente";
   if (status === "approved") return "Aprovada";
@@ -159,7 +180,7 @@ export default function GestorAusenciasPage() {
       setMeId(userId);
 
       const [profilesRes, collabRes, allowancesRes, requestsRes, membersRes] = await Promise.all([
-        supabase.from("profiles").select("id,full_name,role,manager_id,company_id,department_id,active"),
+        supabase.from("profiles").select("id,email,full_name,role,manager_id,company_id,department_id,active"),
         supabase.from("colaboradores").select("*").eq("is_active", true).order("nome", { ascending: true }),
         supabase
           .from("absence_allowances")
@@ -220,6 +241,33 @@ export default function GestorAusenciasPage() {
     () => (meId ? colaboradores.find((c) => c.user_id === meId) ?? null : null),
     [colaboradores, meId]
   );
+
+  const collaboratorDirectReportUserIds = useMemo(() => {
+    if (!meId) return new Set<string>();
+    const ids = new Set<string>();
+    const managerEmails = new Set(
+      [
+        myProfile?.email,
+        myCollaborator?.email,
+        myCollaborator?.email_empresarial,
+        myCollaborator?.email_pessoal,
+      ]
+        .map(cleanEmail)
+        .filter(Boolean)
+    );
+    const managerNames = new Set([myProfile?.full_name, myCollaborator?.nome].map(normalizeText).filter(Boolean));
+
+    for (const collab of colaboradores) {
+      if (!collab.user_id || collab.user_id === meId) continue;
+      const superiorEmail = cleanEmail(collab.email_superior_direto);
+      const superiorName = normalizeText(collab.superior_direto);
+      if ((superiorEmail && managerEmails.has(superiorEmail)) || (superiorName && managerNames.has(superiorName))) {
+        ids.add(collab.user_id);
+      }
+    }
+
+    return ids;
+  }, [colaboradores, meId, myCollaborator, myProfile]);
 
   const collabByUserId = useMemo(() => {
     const map = new Map<string, Colaborador>();
@@ -287,16 +335,17 @@ export default function GestorAusenciasPage() {
     }
 
     for (const uid of directReportUserIds) ids.add(uid);
+    for (const uid of collaboratorDirectReportUserIds) ids.add(uid);
     for (const uid of sameDepartmentUserIds) ids.add(uid);
     for (const r of requests) {
       if (meId && r.manager_id === meId) ids.add(r.user_id);
     }
     for (const a of allowances) {
       if (!a.user_id) continue;
-      if (directReportUserIds.has(a.user_id) || sameDepartmentUserIds.has(a.user_id)) ids.add(a.user_id);
+      if (directReportUserIds.has(a.user_id) || collaboratorDirectReportUserIds.has(a.user_id) || sameDepartmentUserIds.has(a.user_id)) ids.add(a.user_id);
     }
     return ids;
-  }, [allowances, colaboradores, directReportUserIds, meId, meRole, profiles, requests, sameDepartmentUserIds]);
+  }, [allowances, colaboradores, collaboratorDirectReportUserIds, directReportUserIds, meId, meRole, profiles, requests, sameDepartmentUserIds]);
 
   const teamCollaboratorIds = useMemo(() => {
     const ids = new Set<string>();
