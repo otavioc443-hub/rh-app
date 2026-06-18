@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { requireRoles } from "@/lib/server/feedbackGuard";
+import { sendPortalEmail } from "@/lib/server/mailer";
 
 type NotifyAction = "created" | "updated" | "cancelled" | "approved" | "rejected";
 
@@ -24,12 +25,119 @@ type RuleRow = {
   link_default: string | null;
 };
 
+type ProfileEmailRow = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+};
+
+type CollaboratorEmailRow = {
+  user_id: string | null;
+  nome: string | null;
+  email: string | null;
+  email_empresarial: string | null;
+  email_pessoal: string | null;
+};
+
+const PORTAL_ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://rh-app-seven.vercel.app").replace(/\/$/, "");
+
 function fmtDateBR(raw: string | null | undefined) {
   if (!raw) return "-";
   const s = String(raw).slice(0, 10);
   const [y, m, d] = s.split("-");
   if (y && m && d) return `${d}/${m}/${y}`;
   return String(raw);
+}
+
+function clean(value: string | null | undefined) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function escapeHtml(value: string | number | null | undefined) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function firstEmail(...values: Array<string | null | undefined>) {
+  return values.map(clean).find((value) => value.includes("@")) ?? "";
+}
+
+async function loadPeopleForEmail(userIds: string[]) {
+  const ids = Array.from(new Set(userIds.map(clean).filter(Boolean)));
+  if (!ids.length) return new Map<string, { name: string; email: string }>();
+
+  const [profilesRes, collaboratorsRes] = await Promise.all([
+    supabaseAdmin.from("profiles").select("id,full_name,email").in("id", ids),
+    supabaseAdmin
+      .from("colaboradores")
+      .select("user_id,nome,email,email_empresarial,email_pessoal")
+      .in("user_id", ids),
+  ]);
+
+  if (profilesRes.error) throw profilesRes.error;
+  if (collaboratorsRes.error) throw collaboratorsRes.error;
+
+  const out = new Map<string, { name: string; email: string }>();
+  for (const profile of (profilesRes.data ?? []) as ProfileEmailRow[]) {
+    out.set(profile.id, {
+      name: clean(profile.full_name) || clean(profile.email) || "Usuario",
+      email: firstEmail(profile.email),
+    });
+  }
+  for (const collaborator of (collaboratorsRes.data ?? []) as CollaboratorEmailRow[]) {
+    const userId = clean(collaborator.user_id);
+    if (!userId) continue;
+    const current = out.get(userId);
+    out.set(userId, {
+      name: clean(collaborator.nome) || current?.name || "Usuario",
+      email: firstEmail(collaborator.email_empresarial, collaborator.email, collaborator.email_pessoal, current?.email),
+    });
+  }
+
+  return out;
+}
+
+async function sendAbsenceCreatedEmail(input: {
+  managerEmail: string;
+  managerName: string;
+  requesterName: string;
+  periodText: string;
+  days: number;
+  reasonText: string;
+}) {
+  const to = clean(input.managerEmail);
+  if (!to) return { sent: false, skipped: true as const };
+
+  const approvalUrl = `${PORTAL_ORIGIN}/gestor/ausencias`;
+  const reasonLine = input.reasonText
+    ? `<p><strong>Motivo informado:</strong> ${escapeHtml(input.reasonText)}</p>`
+    : "";
+
+  return sendPortalEmail({
+    to,
+    subject: "Ausencia pendente de aprovacao",
+    html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
+        <h2 style="margin:0 0 12px">Ausencia pendente de aprovacao</h2>
+        <p>Ola, ${escapeHtml(input.managerName || "gestor")}.</p>
+        <p><strong>${escapeHtml(input.requesterName || "Colaborador")}</strong> solicitou uma ausencia e aguarda sua aprovacao.</p>
+        <p><strong>Periodo:</strong> ${escapeHtml(input.periodText)}</p>
+        <p><strong>Quantidade:</strong> ${escapeHtml(input.days)} dia(s)</p>
+        ${reasonLine}
+        <p>
+          <a href="${escapeHtml(approvalUrl)}" style="display:inline-block;background:#020617;color:#fff;text-decoration:none;padding:10px 14px;border-radius:10px;font-weight:700">
+            Acessar aprovacoes
+          </a>
+        </p>
+        <p style="font-size:12px;color:#64748b">Este e-mail foi enviado automaticamente pelo Portal de RH.</p>
+      </div>
+    `,
+    text: `Ausencia pendente de aprovacao\n\n${input.requesterName} solicitou ausencia.\nPeriodo: ${input.periodText}\nQuantidade: ${input.days} dia(s)\n${input.reasonText ? `Motivo: ${input.reasonText}\n` : ""}Acesse: ${approvalUrl}`,
+  });
 }
 
 export async function POST(req: Request) {
@@ -79,6 +187,13 @@ export async function POST(req: Request) {
     }
 
     const rows: Array<{ to_user_id: string; title: string; body: string; link: string; type: string }> = [];
+    const createdEmailJobs: Array<{
+      requesterId: string;
+      managerId: string;
+      periodText: string;
+      days: number;
+      reasonText: string;
+    }> = [];
 
     for (const r of requests) {
       const requesterId = String(r.user_id ?? "").trim();
@@ -140,6 +255,10 @@ export async function POST(req: Request) {
           link: action === "created" || action === "updated" || action === "cancelled" ? link : "/gestor/ausencias",
           type: eventKey,
         });
+
+        if (action === "created") {
+          createdEmailJobs.push({ requesterId, managerId, periodText, days, reasonText });
+        }
       }
     }
 
@@ -149,9 +268,46 @@ export async function POST(req: Request) {
 
     const { error } = await supabaseAdmin.from("notifications").insert(Array.from(dedup.values()));
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    return NextResponse.json({ ok: true, notified: dedup.size, event_key: eventKey });
+
+    let emailSent = 0;
+    let emailSkipped = 0;
+    let emailFailed = 0;
+    if (action === "created" && createdEmailJobs.length) {
+      const people = await loadPeopleForEmail(
+        createdEmailJobs.flatMap((job) => [job.requesterId, job.managerId])
+      );
+      const sentKeys = new Set<string>();
+
+      for (const job of createdEmailJobs) {
+        const manager = people.get(job.managerId);
+        const requester = people.get(job.requesterId);
+        const key = `${manager?.email ?? ""}|${job.requesterId}|${job.periodText}`;
+        if (!manager?.email || sentKeys.has(key)) {
+          emailSkipped += 1;
+          continue;
+        }
+        sentKeys.add(key);
+
+        try {
+          const result = await sendAbsenceCreatedEmail({
+            managerEmail: manager.email,
+            managerName: manager.name,
+            requesterName: requester?.name ?? "Colaborador",
+            periodText: job.periodText,
+            days: job.days,
+            reasonText: job.reasonText,
+          });
+          if (result.sent) emailSent += 1;
+          else emailSkipped += 1;
+        } catch (emailError) {
+          emailFailed += 1;
+          console.error("Falha ao enviar e-mail de ausencia pendente:", emailError);
+        }
+      }
+    }
+
+    return NextResponse.json({ ok: true, notified: dedup.size, event_key: eventKey, emailSent, emailSkipped, emailFailed });
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Erro inesperado." }, { status: 500 });
   }
 }
-

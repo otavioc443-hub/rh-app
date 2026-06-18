@@ -9,7 +9,7 @@ import {
 } from "@/lib/lms/gamification";
 import { buildCertificatePdf } from "@/lib/lms/pdf";
 import { publishLmsPulseHubHighlight } from "@/lib/lms/social";
-import { sendPortalEmail } from "@/lib/server/mailer";
+import { getPortalMailerStatus, sendPortalEmail } from "@/lib/server/mailer";
 import type {
   LmsAdminDashboardData,
   LmsAssignment,
@@ -130,6 +130,7 @@ function getCurrentWeekLabel() {
 
 function buildWeeklyDigest(rows: LmsTeamTrainingRow[], progressRows: LmsUserProgress[]): LmsWeeklyDigest {
   const weekStart = startOfCurrentWeek().toISOString();
+
   return {
     periodLabel: getCurrentWeekLabel(),
     completedThisWeek: progressRows.filter((row) => row.completed_at && row.completed_at >= weekStart).length,
@@ -144,6 +145,7 @@ function buildAdminWeeklyDigest(
   rows: Array<Pick<LmsTeamTrainingRow, "urgency">>,
 ): LmsWeeklyDigest {
   const weekStart = startOfCurrentWeek().toISOString();
+
   return {
     periodLabel: getCurrentWeekLabel(),
     completedThisWeek: progressRows.filter((row) => row.completed_at && row.completed_at >= weekStart).length,
@@ -1509,14 +1511,16 @@ export async function getLmsGovernanceData(companyId: string | null): Promise<Lm
         }) satisfies LmsGovernanceLogRow,
     );
 
+  const mailerStatus = getPortalMailerStatus();
+
   return {
     recentLogs,
     automationStatus: [
       {
         key: "email",
         label: "Envio de e-mail LMS",
-        enabled: Boolean(process.env.RESEND_API_KEY?.trim() && process.env.LMS_EMAIL_FROM?.trim()),
-        helper: "Usado para lembretes e resumos semanais.",
+        enabled: mailerStatus.enabled,
+        helper: `Usado para lembretes e resumos semanais.${mailerStatus.provider ? ` Provedor: ${mailerStatus.provider}.` : ""}`,
       },
       {
         key: "reminders",

@@ -60,29 +60,6 @@ function isTakenAbsence(request: Pick<AbsenceRequest, "end_date" | "manager_comm
   return request.end_date < toISODate(new Date());
 }
 
-function normalizeManagerLookup(value: string | null | undefined) {
-  return String(value ?? "").replace(/\s+/g, " ").trim();
-}
-
-type ManagerProfileRow = {
-  id: string;
-  manager_id: string | null;
-};
-
-type ManagerCollaboratorRow = {
-  user_id: string | null;
-  nome: string | null;
-  email: string | null;
-  email_empresarial: string | null;
-  company_id: string | null;
-};
-
-type CollaboratorManagerSourceRow = {
-  superior_direto: string | null;
-  email_superior_direto: string | null;
-  company_id: string | null;
-};
-
 export default function AbsenceCalendar({ myAllowance, myRequests, onRefresh }: Props) {
   const [cursor, setCursor] = useState(() => new Date());
   const [startISO, setStartISO] = useState<string>(toISODate(new Date()));
@@ -137,83 +114,20 @@ export default function AbsenceCalendar({ myAllowance, myRequests, onRefresh }: 
     return true;
   }
 
-  async function resolveManagerId(userId: string) {
-    const { data: me, error: perr } = await supabase
-      .from("profiles")
-      .select("id, manager_id")
-      .eq("id", userId)
-      .single<ManagerProfileRow>();
+  async function resolveManagerId() {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const token = sessionData.session?.access_token;
+    const response = await fetch("/api/me/absence-manager", {
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    const payload = (await response.json()) as { managerId?: string | null; error?: string };
 
-    if (perr) throw perr;
-    if (me?.manager_id) return me.manager_id;
-
-    const { data: collaborator, error: collaboratorError } = await supabase
-      .from("colaboradores")
-      .select("superior_direto,email_superior_direto,company_id")
-      .eq("user_id", userId)
-      .maybeSingle<CollaboratorManagerSourceRow>();
-
-    if (collaboratorError && collaboratorError.code !== "PGRST116") throw collaboratorError;
-
-    const managerEmail = normalizeManagerLookup(collaborator?.email_superior_direto).toLowerCase();
-    const managerName = normalizeManagerLookup(collaborator?.superior_direto);
-    const companyId = normalizeManagerLookup(collaborator?.company_id);
-    let managerId: string | null = null;
-
-    if (managerEmail) {
-      const { data: managerByEmail, error: managerByEmailError } = await supabase
-        .from("colaboradores")
-        .select("user_id,nome,email,email_empresarial,company_id")
-        .or(`email.ilike.${managerEmail},email_empresarial.ilike.${managerEmail}`)
-        .not("user_id", "is", null)
-        .limit(1);
-
-      if (managerByEmailError) throw managerByEmailError;
-      managerId = ((managerByEmail ?? []) as ManagerCollaboratorRow[])[0]?.user_id ?? null;
-
-      if (!managerId) {
-        const { data: profileByEmail, error: profileByEmailError } = await supabase
-          .from("profiles")
-          .select("id")
-          .ilike("email", managerEmail)
-          .limit(1);
-
-        if (profileByEmailError) throw profileByEmailError;
-        managerId = ((profileByEmail ?? []) as Array<{ id: string }>)[0]?.id ?? null;
-      }
+    if (!response.ok || !payload.managerId) {
+      throw new Error(payload.error || "Gestor direto nao encontrado para aprovacao.");
     }
 
-    if (!managerId && managerName) {
-      let managerQuery = supabase
-        .from("colaboradores")
-        .select("user_id,nome,email,email_empresarial,company_id")
-        .ilike("nome", managerName)
-        .not("user_id", "is", null)
-        .limit(10);
-
-      if (companyId) managerQuery = managerQuery.eq("company_id", companyId);
-
-      const { data: managerByName, error: managerByNameError } = await managerQuery;
-      if (managerByNameError) throw managerByNameError;
-
-      const normalizedManagerName = normalizeText(managerName);
-      managerId =
-        ((managerByName ?? []) as ManagerCollaboratorRow[]).find((row) => normalizeText(row.nome ?? "") === normalizedManagerName)
-          ?.user_id ?? null;
-    }
-
-    if (!managerId) {
-      throw new Error("Voce nao tem gestor definido no perfil e o superior direto do cadastro de colaborador nao foi encontrado com acesso ao portal.");
-    }
-
-    await supabase
-      .from("profiles")
-      .update({ manager_id: managerId })
-      .eq("id", userId)
-      .is("manager_id", null)
-      .then(() => null);
-
-    return managerId;
+    return payload.managerId;
   }
 
   async function submitRequest() {
@@ -226,7 +140,7 @@ export default function AbsenceCalendar({ myAllowance, myRequests, onRefresh }: 
       if (!user) throw new Error("Sessão inválida");
 
       // 1) pegar gestor do profile ou do superior direto vinculado no colaborador
-      const managerId = await resolveManagerId(user.id);
+      const managerId = await resolveManagerId();
       if (!managerId) throw new Error("Gestor nao encontrado para aprovacao.");
 
       // 2) validações: allowance
