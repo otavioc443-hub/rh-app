@@ -182,9 +182,7 @@ export async function POST(req: Request) {
       rule = ruleRes.data ?? null;
     }
 
-    if (rule?.enabled === false) {
-      return NextResponse.json({ ok: true, notified: 0, skipped: "event_disabled" });
-    }
+    const notificationDisabled = rule?.enabled === false;
 
     const rows: Array<{ to_user_id: string; title: string; body: string; link: string; type: string }> = [];
     const createdEmailJobs: Array<{
@@ -255,19 +253,22 @@ export async function POST(req: Request) {
           link: action === "created" || action === "updated" || action === "cancelled" ? link : "/gestor/ausencias",
           type: eventKey,
         });
+      }
 
-        if (action === "created") {
-          createdEmailJobs.push({ requesterId, managerId, periodText, days, reasonText });
-        }
+      if (action === "created" && managerId) {
+        createdEmailJobs.push({ requesterId, managerId, periodText, days, reasonText });
       }
     }
 
     const dedup = new Map<string, (typeof rows)[number]>();
     for (const row of rows) dedup.set(`${row.to_user_id}|${row.type}|${row.body}`, row);
-    if (!dedup.size) return NextResponse.json({ ok: true, notified: 0, skipped: "no_recipients" });
 
-    const { error } = await supabaseAdmin.from("notifications").insert(Array.from(dedup.values()));
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    let notified = 0;
+    if (!notificationDisabled && dedup.size) {
+      const { error } = await supabaseAdmin.from("notifications").insert(Array.from(dedup.values()));
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      notified = dedup.size;
+    }
 
     let emailSent = 0;
     let emailSkipped = 0;
@@ -306,7 +307,15 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({ ok: true, notified: dedup.size, event_key: eventKey, emailSent, emailSkipped, emailFailed });
+    return NextResponse.json({
+      ok: true,
+      notified,
+      skipped: notificationDisabled ? "event_disabled" : !dedup.size ? "no_internal_recipients" : undefined,
+      event_key: eventKey,
+      emailSent,
+      emailSkipped,
+      emailFailed,
+    });
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Erro inesperado." }, { status: 500 });
   }
