@@ -403,6 +403,7 @@ export function PulseSprintWidget({
 
 export function PulseSprintPage() {
   const [status, setStatus] = useState<StatusResponse | null>(null);
+  const [trailPulseStatus, setTrailPulseStatus] = useState<StatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -440,11 +441,18 @@ export function PulseSprintPage() {
   const loadStatus = useCallback(async () => {
     setLoading(true);
     setError("");
+    setTrailPulseStatus(null);
     try {
       const res = await fetch("/api/institucional/jogo-diario/status", { cache: "no-store" });
       const json = (await res.json()) as StatusResponse & { error?: string };
       if (!res.ok) throw new Error(json.error || "Erro ao carregar o jogo.");
       setStatus(json);
+
+      const trailRes = await fetch("/api/institucional/jogo-diario/status?game=trilha-pulse", { cache: "no-store" });
+      if (trailRes.ok) {
+        const trailJson = (await trailRes.json()) as StatusResponse;
+        setTrailPulseStatus(trailJson);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar o jogo.");
     } finally {
@@ -777,6 +785,12 @@ export function PulseSprintPage() {
     : "Rodada concluida hoje.";
   const streakLabel = `${status?.player.streak ?? 0} dia(s) uteis`;
   const showArena = (gameState === "countdown" || gameState === "playing") && !!sessionId && rounds.length > 0;
+  const canPlayTrailPulse = Boolean(
+    trailPulseStatus &&
+      !trailPulseStatus.game.isWeekend &&
+      trailPulseStatus.player.canPlayToday &&
+      !trailPulseStatus.player.playedToday
+  );
   const introMessage =
     status?.message ??
     "Preparado para mais uma rodada? Seu desempenho de hoje pode melhorar sua posicao no ranking.";
@@ -848,6 +862,14 @@ export function PulseSprintPage() {
               >
                 <RefreshCcw size={15} /> Atualizar
               </button>
+              {canPlayTrailPulse ? (
+                <Link
+                  href="/institucional/rede-social?tab=game&game=trilha-pulse"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+                >
+                  <Target size={15} /> Jogar Trilha Pulse
+                </Link>
+              ) : null}
               <Link
                 href="/institucional/rede-social"
                 className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
@@ -916,6 +938,14 @@ export function PulseSprintPage() {
               >
                 <RefreshCcw size={16} /> Atualizar
               </button>
+              {canPlayTrailPulse ? (
+                <Link
+                  href="/institucional/rede-social?tab=game&game=trilha-pulse"
+                  className="inline-flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+                >
+                  <Target size={16} /> Jogar Trilha Pulse
+                </Link>
+              ) : null}
               <Link
                 href="/institucional/rede-social"
                 className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
