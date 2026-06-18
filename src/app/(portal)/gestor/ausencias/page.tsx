@@ -83,6 +83,16 @@ type TeamAvailabilityRow = {
   lastUpdatedAt: string | null;
 };
 
+type GestorAusenciasPayload = {
+  profiles?: ProfileRow[];
+  colaboradores?: Colaborador[];
+  allowances?: AllowanceRow[];
+  requests?: AbsenceRequestRow[];
+  members?: ProjectMemberRow[];
+  meRole?: string | null;
+  error?: string;
+};
+
 function KpiCard({
   label,
   value,
@@ -178,34 +188,22 @@ export default function GestorAusenciasPage() {
       if (authErr || !authData.user) throw new Error("Sessao invalida.");
       const userId = authData.user.id;
       setMeId(userId);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const response = await fetch("/api/gestor/ausencias", {
+        credentials: "include",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      const payload = (await response.json()) as GestorAusenciasPayload;
 
-      const [profilesRes, collabRes, allowancesRes, requestsRes, membersRes] = await Promise.all([
-        supabase.from("profiles").select("id,email,full_name,role,manager_id,company_id,department_id,active"),
-        supabase.from("colaboradores").select("*").eq("is_active", true).order("nome", { ascending: true }),
-        supabase
-          .from("absence_allowances")
-          .select("id,user_id,collaborator_id,valid_from,valid_to,max_days,window_start,window_end,days_allowed,is_active,created_at,updated_at,created_by")
-          .order("created_at", { ascending: false }),
-        supabase
-          .from("absence_requests")
-          .select("id,user_id,manager_id,allowance_id,start_date,end_date,days_count,reason,status,manager_comment,created_at,updated_at")
-          .order("created_at", { ascending: false }),
-        supabase.from("project_members").select("project_id,user_id,member_role"),
-      ]);
+      if (!response.ok) throw new Error(payload.error || "Erro ao carregar ausencias da equipe.");
 
-      if (profilesRes.error) throw profilesRes.error;
-      if (collabRes.error) throw collabRes.error;
-      if (allowancesRes.error) throw allowancesRes.error;
-      if (requestsRes.error) throw requestsRes.error;
-      if (membersRes.error) throw membersRes.error;
-
-      setProfiles((profilesRes.data ?? []) as ProfileRow[]);
-      setColaboradores((collabRes.data ?? []) as Colaborador[]);
-      setAllowances((allowancesRes.data ?? []) as AllowanceRow[]);
-      setRequests((requestsRes.data ?? []) as AbsenceRequestRow[]);
-      setProjectMembers((membersRes.data ?? []) as ProjectMemberRow[]);
-      const myProfile = ((profilesRes.data ?? []) as ProfileRow[]).find((p) => p.id === userId) ?? null;
-      setMeRole(myProfile?.role ?? null);
+      setProfiles(payload.profiles ?? []);
+      setColaboradores(payload.colaboradores ?? []);
+      setAllowances(payload.allowances ?? []);
+      setRequests(payload.requests ?? []);
+      setProjectMembers(payload.members ?? []);
+      setMeRole(payload.meRole ?? null);
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao carregar ausencias da equipe.");
       setProfiles([]);
