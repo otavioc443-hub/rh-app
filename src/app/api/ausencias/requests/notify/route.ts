@@ -43,6 +43,11 @@ type CollaboratorEmailRow = {
   company_id?: string | null;
 };
 
+type ManagerResolution = {
+  managerId: string | null;
+  managerEmailFallback: string;
+};
+
 const PORTAL_ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://rh-app-seven.vercel.app").replace(/\/$/, "");
 
 async function requireNotifyAccess(req: Request) {
@@ -179,19 +184,22 @@ async function findManagerIdByName(name: string, companyId: string | null) {
   return null;
 }
 
-async function resolveManagerIdForRequester(requesterId: string, fallbackManagerId: string | null) {
+async function resolveManagerForRequester(requesterId: string, fallbackManagerId: string | null): Promise<ManagerResolution> {
   const { data: requester, error } = await supabaseAdmin
     .from("colaboradores")
     .select("user_id,nome,email,email_empresarial,email_pessoal,superior_direto,email_superior_direto,company_id")
     .eq("user_id", requesterId)
     .maybeSingle<CollaboratorEmailRow>();
   if (error) throw error;
-  if (!requester) return fallbackManagerId;
+  if (!requester) return { managerId: fallbackManagerId, managerEmailFallback: "" };
 
   const managerEmail = cleanEmail(requester.email_superior_direto);
   const managerName = clean(requester.superior_direto);
   const companyId = clean(requester.company_id) || null;
-  return (await findManagerIdByEmail(managerEmail, companyId)) || (await findManagerIdByName(managerName, companyId)) || fallbackManagerId;
+  return {
+    managerId: (await findManagerIdByEmail(managerEmail, companyId)) || (await findManagerIdByName(managerName, companyId)) || fallbackManagerId,
+    managerEmailFallback: managerEmail,
+  };
 }
 
 async function loadPeopleForEmail(userIds: string[]) {
@@ -223,6 +231,19 @@ async function loadPeopleForEmail(userIds: string[]) {
     out.set(userId, {
       name: clean(collaborator.nome) || current?.name || "Usuario",
       email: firstEmail(collaborator.email_empresarial, collaborator.email, collaborator.email_pessoal, current?.email),
+    });
+  }
+
+  for (const id of ids) {
+    const current = out.get(id);
+    if (current?.email) continue;
+
+    const { data, error } = await supabaseAdmin.auth.admin.getUserById(id);
+    if (error || !data?.user?.email) continue;
+
+    out.set(id, {
+      name: current?.name || clean(data.user.user_metadata?.full_name) || clean(data.user.email) || "Usuario",
+      email: data.user.email,
     });
   }
 
@@ -316,6 +337,7 @@ export async function POST(req: Request) {
     const createdEmailJobs: Array<{
       requesterId: string;
       managerId: string;
+      managerEmailFallback: string;
       periodText: string;
       days: number;
       reasonText: string;
@@ -325,7 +347,7 @@ export async function POST(req: Request) {
       const requesterId = String(r.user_id ?? "").trim();
       if (!requesterId) continue;
       const fallbackManagerId = String(r.manager_id ?? "").trim() || null;
-      const managerId = await resolveManagerIdForRequester(requesterId, fallbackManagerId);
+      const { managerId, managerEmailFallback } = await resolveManagerForRequester(requesterId, fallbackManagerId);
 
       if (r.id && managerId && managerId !== fallbackManagerId) {
         await supabaseAdmin.from("absence_requests").update({ manager_id: managerId }).eq("id", r.id);
@@ -389,7 +411,7 @@ export async function POST(req: Request) {
       }
 
       if (action === "created" && managerId) {
-        createdEmailJobs.push({ requesterId, managerId, periodText, days, reasonText });
+        createdEmailJobs.push({ requesterId, managerId, managerEmailFallback, periodText, days, reasonText });
       }
     }
 
@@ -416,8 +438,9 @@ export async function POST(req: Request) {
       for (const job of createdEmailJobs) {
         const manager = people.get(job.managerId);
         const requester = people.get(job.requesterId);
-        const key = `${manager?.email ?? ""}|${job.requesterId}|${job.periodText}`;
-        if (!manager?.email || sentKeys.has(key)) {
+        const managerEmail = manager?.email || job.managerEmailFallback;
+        const key = `${managerEmail}|${job.requesterId}|${job.periodText}`;
+        if (!managerEmail || sentKeys.has(key)) {
           emailSkipped += 1;
           continue;
         }
@@ -425,8 +448,8 @@ export async function POST(req: Request) {
 
         try {
           const result = await sendAbsenceCreatedEmail({
-            managerEmail: manager.email,
-            managerName: manager.name,
+            managerEmail,
+            managerName: manager?.name ?? "gestor",
             requesterName: requester?.name ?? "Colaborador",
             periodText: job.periodText,
             days: job.days,
