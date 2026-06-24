@@ -17,7 +17,6 @@ function sanitizeRedirect(path: string | null) {
   if (!path) return fallback;
   if (!path.startsWith("/")) return fallback;
 
-  // bloqueia rotas que podem causar loop
   const blocked = ["/", "/auth", "/auth/callback", "/set-password"];
   if (blocked.some((b) => path === b || path.startsWith(b + "/"))) return fallback;
 
@@ -27,9 +26,9 @@ function sanitizeRedirect(path: string | null) {
 
 function passwordValidationMessage(value: string) {
   if (value.length < 8) return "A senha precisa ter pelo menos 8 caracteres.";
-  if (!/[A-Z]/.test(value)) return "Inclua pelo menos uma letra maiúscula.";
-  if (!/[a-z]/.test(value)) return "Inclua pelo menos uma letra minúscula.";
-  if (!/[0-9]/.test(value)) return "Inclua pelo menos um número.";
+  if (!/[A-Z]/.test(value)) return "Inclua pelo menos uma letra maiuscula.";
+  if (!/[a-z]/.test(value)) return "Inclua pelo menos uma letra minuscula.";
+  if (!/[0-9]/.test(value)) return "Inclua pelo menos um numero.";
   if (!/[^A-Za-z0-9]/.test(value)) return "Inclua pelo menos um caractere especial.";
   return null;
 }
@@ -80,7 +79,6 @@ export default function SetPasswordPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // destino final após definir senha
   const finalRedirect = useMemo(() => {
     const fromQuery =
       typeof window !== "undefined"
@@ -177,7 +175,7 @@ export default function SetPasswordPage() {
       return;
     }
     if (pass1 !== pass2) {
-      setMsg("As senhas não conferem.");
+      setMsg("As senhas nao conferem.");
       return;
     }
 
@@ -196,8 +194,9 @@ export default function SetPasswordPage() {
     setSaving(false);
 
     if (error) {
-      setMsg(friendlyAuthError(error.message));
-      if (isSessionMessage(friendlyAuthError(error.message))) setLinkInvalid(true);
+      const friendlyMessage = friendlyAuthError(error.message);
+      setMsg(friendlyMessage);
+      if (isSessionMessage(friendlyMessage)) setLinkInvalid(true);
       console.warn("Falha ao redefinir senha:", error.message);
       return;
     }
@@ -209,7 +208,6 @@ export default function SetPasswordPage() {
     clearPasswordRecoveryIntent();
     markRecentLogin();
 
-    // limpa o destino após usar (boa prática)
     try {
       localStorage.removeItem("redirectedFrom");
     } catch {}
@@ -332,7 +330,7 @@ export default function SetPasswordPage() {
             {saving ? "Salvando..." : "Salvar senha"}
           </button>
 
-          {msg && <p className="text-sm text-slate-700 text-center">{msg}</p>}
+          {msg ? <p className="text-sm text-slate-700 text-center">{msg}</p> : null}
           {success ? (
             <button
               type="button"

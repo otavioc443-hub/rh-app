@@ -23,7 +23,8 @@
     "calibrate:behavior:check-baseline": "node --preserve-symlinks-main scripts/check-behavior-baseline.mjs",
     "test:admin-flow": "node scripts/test-admin-flow.mjs",
     "test:feature-modules": "node scripts/test-feature-modules.mjs",
-    "test:notifications": "node scripts/check-notification-center.mjs"
+    "test:notifications": "node scripts/check-notification-center.mjs",
+    "test:set-password": "node scripts/check-set-password-flow.mjs"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.0.0",
