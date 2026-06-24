@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { CheckCircle2, Circle, Eye, EyeOff } from "lucide-react";
 import {
   clearPasswordRecoveryIntent,
   clearPortalExitIntent,
@@ -33,11 +34,32 @@ function passwordValidationMessage(value: string) {
   return null;
 }
 
+function passwordChecklist(value: string, confirmValue: string) {
+  return [
+    { label: "Pelo menos 8 caracteres", done: value.length >= 8 },
+    { label: "Uma letra maiuscula", done: /[A-Z]/.test(value) },
+    { label: "Uma letra minuscula", done: /[a-z]/.test(value) },
+    { label: "Um numero", done: /[0-9]/.test(value) },
+    { label: "Um caractere especial", done: /[^A-Za-z0-9]/.test(value) },
+    { label: "Senhas iguais", done: Boolean(value) && value === confirmValue },
+  ];
+}
+
+function friendlyAuthError(message: string) {
+  const lower = message.toLowerCase();
+  if (lower.includes("auth session missing") || lower.includes("session") || lower.includes("expired")) {
+    return "Sua sessao de redefinicao expirou ou o link ja foi usado. Solicite um novo link para definir a senha.";
+  }
+  return message;
+}
+
 export default function SetPasswordPage() {
   const router = useRouter();
 
   const [pass1, setPass1] = useState("");
   const [pass2, setPass2] = useState("");
+  const [showPass1, setShowPass1] = useState(false);
+  const [showPass2, setShowPass2] = useState(false);
   const [msg, setMsg] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -144,7 +166,7 @@ export default function SetPasswordPage() {
     setSaving(false);
 
     if (error) {
-      setMsg(error.message);
+      setMsg(friendlyAuthError(error.message));
       return;
     }
 
@@ -160,6 +182,9 @@ export default function SetPasswordPage() {
 
     setTimeout(() => router.replace(finalRedirect), 600);
   }
+
+  const checks = passwordChecklist(pass1, pass2);
+  const canSave = checks.every((item) => item.done) && !saving;
 
   if (loading) {
     return (
@@ -180,37 +205,73 @@ export default function SetPasswordPage() {
         </p>
 
         <div className="mt-5 space-y-3">
-          <input
-            className="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-slate-300"
-            placeholder="Nova senha"
-            type="password"
-            value={pass1}
-            onChange={(e) => setPass1(e.target.value)}
-            disabled={saving}
-          />
-          <input
-            className="w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-slate-300"
-            placeholder="Confirmar senha"
-            type="password"
-            value={pass2}
-            onChange={(e) => setPass2(e.target.value)}
-            disabled={saving}
-          />
+          <div className="relative">
+            <input
+              className="w-full rounded-xl border border-slate-200 p-3 pr-12 text-sm outline-none focus:border-slate-300"
+              placeholder="Nova senha"
+              type={showPass1 ? "text" : "password"}
+              value={pass1}
+              onChange={(e) => setPass1(e.target.value)}
+              disabled={saving}
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              aria-label={showPass1 ? "Ocultar senha" : "Visualizar senha"}
+              title={showPass1 ? "Ocultar senha" : "Visualizar senha"}
+              onClick={() => setShowPass1((value) => !value)}
+              className="absolute right-3 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
+              disabled={saving}
+            >
+              {showPass1 ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
+          <div className="relative">
+            <input
+              className="w-full rounded-xl border border-slate-200 p-3 pr-12 text-sm outline-none focus:border-slate-300"
+              placeholder="Confirmar senha"
+              type={showPass2 ? "text" : "password"}
+              value={pass2}
+              onChange={(e) => setPass2(e.target.value)}
+              disabled={saving}
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              aria-label={showPass2 ? "Ocultar senha" : "Visualizar senha"}
+              title={showPass2 ? "Ocultar senha" : "Visualizar senha"}
+              onClick={() => setShowPass2((value) => !value)}
+              className="absolute right-3 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
+              disabled={saving}
+            >
+              {showPass2 ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
 
-          <div className="rounded-xl bg-slate-50 p-3 text-xs leading-5 text-slate-600">
-            Use pelo menos 8 caracteres, com letra maiúscula, letra minúscula, número e caractere especial.
+          <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
+            <ul className="space-y-2">
+              {checks.map((item) => {
+                const Icon = item.done ? CheckCircle2 : Circle;
+                return (
+                  <li key={item.label} className={item.done ? "flex items-center gap-2 text-emerald-700" : "flex items-center gap-2 text-slate-500"}>
+                    <Icon size={15} />
+                    <span>{item.label}</span>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
 
           <button
             onClick={save}
-            disabled={saving}
+            disabled={!canSave}
             className="w-full rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:opacity-95 disabled:opacity-60"
           >
             {saving ? "Salvando..." : "Salvar senha"}
           </button>
 
           {msg && <p className="text-sm text-slate-700 text-center">{msg}</p>}
-          {msg.toLowerCase().includes("expirado") || msg.toLowerCase().includes("invalido") ? (
+          {msg.toLowerCase().includes("expirado") || msg.toLowerCase().includes("invalido") || msg.toLowerCase().includes("sessao") ? (
             <Link href="/recuperar-senha" className="block text-center text-sm font-semibold text-slate-900 underline underline-offset-2">
               Solicitar novo link
             </Link>
