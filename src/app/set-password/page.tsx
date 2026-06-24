@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CheckCircle2, Circle, Eye, EyeOff } from "lucide-react";
+import { AlertCircle, CheckCircle2, Circle, Eye, EyeOff } from "lucide-react";
 import {
   clearPasswordRecoveryIntent,
   clearPortalExitIntent,
@@ -53,6 +53,19 @@ function friendlyAuthError(message: string) {
   return message;
 }
 
+function passwordStrength(value: string) {
+  const completed = passwordChecklist(value, value).slice(0, 5).filter((item) => item.done).length;
+  if (!value) return { label: "Informe uma senha", width: "0%", color: "bg-slate-200" };
+  if (completed <= 2) return { label: "Senha fraca", width: "33%", color: "bg-rose-500" };
+  if (completed <= 4) return { label: "Senha boa", width: "66%", color: "bg-amber-500" };
+  return { label: "Senha forte", width: "100%", color: "bg-emerald-600" };
+}
+
+function isSessionMessage(message: string) {
+  const lower = message.toLowerCase();
+  return lower.includes("expirado") || lower.includes("invalido") || lower.includes("sessao");
+}
+
 export default function SetPasswordPage() {
   const router = useRouter();
 
@@ -61,6 +74,9 @@ export default function SetPasswordPage() {
   const [showPass1, setShowPass1] = useState(false);
   const [showPass2, setShowPass2] = useState(false);
   const [msg, setMsg] = useState<string>("");
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [linkInvalid, setLinkInvalid] = useState(false);
+  const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -137,10 +153,13 @@ export default function SetPasswordPage() {
 
       if (!data.user) {
         setMsg("Link de redefinicao invalido ou expirado. Solicite um novo link.");
+        setLinkInvalid(true);
         setLoading(false);
         return;
       }
 
+      setUserEmail(data.user.email ?? null);
+      setLinkInvalid(false);
       clearPortalExitIntent();
       setLoading(false);
     }
@@ -150,6 +169,7 @@ export default function SetPasswordPage() {
 
   async function save() {
     setMsg("");
+    setSuccess(false);
 
     const validation = passwordValidationMessage(pass1);
     if (validation) {
@@ -162,15 +182,29 @@ export default function SetPasswordPage() {
     }
 
     setSaving(true);
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData.session) {
+      const message = "Sua sessao de redefinicao expirou ou o link ja foi usado. Solicite um novo link para definir a senha.";
+      setMsg(message);
+      setLinkInvalid(true);
+      setSaving(false);
+      console.warn("Falha ao redefinir senha: sessao ausente antes de salvar.");
+      return;
+    }
+
     const { error } = await supabase.auth.updateUser({ password: pass1 });
     setSaving(false);
 
     if (error) {
       setMsg(friendlyAuthError(error.message));
+      if (isSessionMessage(friendlyAuthError(error.message))) setLinkInvalid(true);
+      console.warn("Falha ao redefinir senha:", error.message);
       return;
     }
 
-    setMsg("Senha definida com sucesso! Redirecionando...");
+    setMsg("Senha definida com sucesso. Voce sera direcionado para o portal.");
+    setSuccess(true);
+    setLinkInvalid(false);
     clearPortalExitIntent();
     clearPasswordRecoveryIntent();
     markRecentLogin();
@@ -184,7 +218,8 @@ export default function SetPasswordPage() {
   }
 
   const checks = passwordChecklist(pass1, pass2);
-  const canSave = checks.every((item) => item.done) && !saving;
+  const strength = passwordStrength(pass1);
+  const canSave = checks.every((item) => item.done) && !saving && !linkInvalid && !success;
 
   if (loading) {
     return (
@@ -203,8 +238,28 @@ export default function SetPasswordPage() {
         <p className="mt-1 text-sm text-slate-600">
           Crie uma senha para acessar o Portal de RH.
         </p>
+        {userEmail ? (
+          <p className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            Definindo senha para <span className="font-semibold text-slate-900">{userEmail}</span>
+          </p>
+        ) : null}
 
         <div className="mt-5 space-y-3">
+          {linkInvalid ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="mt-0.5 shrink-0" size={17} />
+                <div>
+                  <p className="font-semibold">Este link expirou ou ja foi usado.</p>
+                  <p className="mt-1 text-xs leading-5">Solicite um novo link para continuar com a redefinicao da senha.</p>
+                </div>
+              </div>
+              <Link href="/recuperar-senha" className="mt-3 block rounded-lg bg-slate-900 px-3 py-2 text-center text-xs font-semibold text-white">
+                Solicitar novo link
+              </Link>
+            </div>
+          ) : null}
+
           <div className="relative">
             <input
               className="w-full rounded-xl border border-slate-200 p-3 pr-12 text-sm outline-none focus:border-slate-300"
@@ -212,7 +267,7 @@ export default function SetPasswordPage() {
               type={showPass1 ? "text" : "password"}
               value={pass1}
               onChange={(e) => setPass1(e.target.value)}
-              disabled={saving}
+              disabled={saving || linkInvalid || success}
               autoComplete="new-password"
             />
             <button
@@ -221,7 +276,7 @@ export default function SetPasswordPage() {
               title={showPass1 ? "Ocultar senha" : "Visualizar senha"}
               onClick={() => setShowPass1((value) => !value)}
               className="absolute right-3 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
-              disabled={saving}
+              disabled={saving || linkInvalid || success}
             >
               {showPass1 ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
@@ -233,7 +288,7 @@ export default function SetPasswordPage() {
               type={showPass2 ? "text" : "password"}
               value={pass2}
               onChange={(e) => setPass2(e.target.value)}
-              disabled={saving}
+              disabled={saving || linkInvalid || success}
               autoComplete="new-password"
             />
             <button
@@ -242,10 +297,17 @@ export default function SetPasswordPage() {
               title={showPass2 ? "Ocultar senha" : "Visualizar senha"}
               onClick={() => setShowPass2((value) => !value)}
               className="absolute right-3 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50"
-              disabled={saving}
+              disabled={saving || linkInvalid || success}
             >
               {showPass2 ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
+          </div>
+
+          <div>
+            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+              <div className={`h-full rounded-full transition-all ${strength.color}`} style={{ width: strength.width }} />
+            </div>
+            <p className="mt-1 text-xs font-medium text-slate-600">{strength.label}</p>
           </div>
 
           <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-600">
@@ -271,7 +333,16 @@ export default function SetPasswordPage() {
           </button>
 
           {msg && <p className="text-sm text-slate-700 text-center">{msg}</p>}
-          {msg.toLowerCase().includes("expirado") || msg.toLowerCase().includes("invalido") || msg.toLowerCase().includes("sessao") ? (
+          {success ? (
+            <button
+              type="button"
+              onClick={() => router.replace(finalRedirect)}
+              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+            >
+              Ir para o portal
+            </button>
+          ) : null}
+          {isSessionMessage(msg) && !linkInvalid ? (
             <Link href="/recuperar-senha" className="block text-center text-sm font-semibold text-slate-900 underline underline-offset-2">
               Solicitar novo link
             </Link>
