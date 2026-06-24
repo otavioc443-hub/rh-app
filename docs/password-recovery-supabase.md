@@ -10,6 +10,8 @@ No Supabase, revisar em `Authentication > Providers > Email` ou `Authentication 
 - Recomendacao inicial: 60 minutos.
 - Confirmar que `Site URL` aponta para a URL de producao do portal.
 - Confirmar que `Redirect URLs` inclui a URL de producao com `/set-password` e `/auth/recovery`.
+- Manter o link de recuperacao redirecionando para `/set-password`.
+- O app usa fluxo `implicit` no cliente Supabase para evitar falha quando o link do e-mail abre em outra aba.
 
 ## Template do email
 
@@ -18,6 +20,7 @@ No template de `Reset Password`:
 - Informar que o link expira e deve ser usado apenas uma vez.
 - Orientar o usuario a abrir o link no mesmo navegador/dispositivo em que pretende definir a senha.
 - Usar o link oficial do Supabase para recuperacao, apontando para o redirect configurado.
+- Preferir o token/link padrao do Supabase para reset de senha, sem reescrever manualmente os parametros da URL.
 
 Texto sugerido:
 

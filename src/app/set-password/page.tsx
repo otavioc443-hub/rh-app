@@ -103,27 +103,39 @@ export default function SetPasswordPage() {
 
         if (code) {
           markPasswordRecoveryIntent();
-          await supabase.auth.exchangeCodeForSession(code);
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) {
+            console.warn("Falha ao trocar code de redefinicao:", error.message);
+            return;
+          }
           window.history.replaceState({}, document.title, "/set-password");
           return;
         }
 
         if (tokenHash && type) {
           markPasswordRecoveryIntent();
-          await supabase.auth.verifyOtp({
+          const { error } = await supabase.auth.verifyOtp({
             type: type as "recovery" | "email" | "signup" | "invite" | "magiclink" | "email_change",
             token_hash: tokenHash,
           });
+          if (error) {
+            console.warn("Falha ao verificar token de redefinicao:", error.message);
+            return;
+          }
           window.history.replaceState({}, document.title, "/set-password");
           return;
         }
 
         if (accessToken && refreshToken) {
           markPasswordRecoveryIntent();
-          await supabase.auth.setSession({
+          const { error } = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           });
+          if (error) {
+            console.warn("Falha ao aplicar sessao de redefinicao:", error.message);
+            return;
+          }
           window.history.replaceState({}, document.title, "/set-password");
         }
       }

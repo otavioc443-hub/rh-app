@@ -8,6 +8,10 @@ export const supabase = createBrowserClient(
     auth: {
       // Sessao apenas por aba/janela: ao fechar o navegador, exige novo login.
       storage: typeof window !== "undefined" ? window.sessionStorage : undefined,
+      // Recovery precisa funcionar mesmo quando o link do e-mail abre em outra aba.
+      // O fluxo implicit entrega access_token/refresh_token na URL e evita depender
+      // do code_verifier salvo no sessionStorage da aba que solicitou o e-mail.
+      flowType: "implicit",
       // O app processa links de invite/recovery manualmente em /auth/callback e /set-password.
       // Se o Supabase consumir o code/hash automaticamente na pagina de login, ele cria sessao
       // e o login redireciona para /home antes de abrir a tela de nova senha.

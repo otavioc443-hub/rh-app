@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const file = resolve("src/app/set-password/page.tsx");
-const source = readFileSync(file, "utf8");
+const pageFile = resolve("src/app/set-password/page.tsx");
+const clientFile = resolve("src/lib/supabaseClient.ts");
+const source = `${readFileSync(pageFile, "utf8")}\n${readFileSync(clientFile, "utf8")}`;
 
 const checks = [
   ["checklist de requisitos", "passwordChecklist"],
@@ -14,6 +15,8 @@ const checks = [
   ["email do usuario exibido", "Definindo senha para"],
   ["checagem de sessao antes de salvar", "supabase.auth.getSession()"],
   ["mensagem amigavel para sessao ausente", "Sua sessao de redefinicao expirou"],
+  ["fluxo implicit no cliente Supabase", "flowType: \"implicit\""],
+  ["tratamento de access_token do link", "access_token"],
   ["botao ir para o portal", "Ir para o portal"],
 ];
 
