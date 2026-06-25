@@ -62,7 +62,7 @@ export default function RecuperarSenhaPage() {
     setLoading(false);
 
     if (!response.ok) {
-      setMessage(payload?.error || "Nao foi possivel enviar o link de redefinicao agora.");
+      setMessage(payload?.error || "Nao foi possivel enviar o link de redefinicao agora. Tente novamente em alguns minutos ou acione o RH.");
       return;
     }
 
