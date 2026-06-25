@@ -20,6 +20,7 @@ const checks = [
   ["tratamento de access_token do link", "access_token"],
   ["endpoint proprio de recuperacao", "generateLink"],
   ["uso do action_link oficial do Supabase", "action_link"],
+  ["redirect intermediario de recuperacao", "/auth/recovery"],
   ["envio pelo mailer do portal", "sendPortalEmail"],
   ["botao ir para o portal", "Ir para o portal"],
 ];

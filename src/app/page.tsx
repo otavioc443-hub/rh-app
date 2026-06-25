@@ -48,11 +48,9 @@ function hasAuthLinkParams() {
   if (typeof window === "undefined") return false;
   const url = new URL(window.location.href);
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-  const type = url.searchParams.get("type") || hash.get("type");
   return Boolean(
     url.searchParams.get("code") ||
       url.searchParams.get("token_hash") ||
-      type === "recovery" ||
       (hash.get("access_token") && hash.get("refresh_token"))
   );
 }

@@ -9,15 +9,15 @@ No Supabase, revisar em `Authentication > Providers > Email` ou `Authentication 
 - Manter o link de recuperacao com validade suficiente para o usuario abrir o email com calma.
 - Recomendacao inicial: 60 minutos.
 - Confirmar que `Site URL` aponta para a URL de producao do portal.
-- Confirmar que `Redirect URLs` inclui a URL de producao com `/set-password` e `/auth/recovery`.
-- Manter o link de recuperacao redirecionando para `/set-password`.
+- Confirmar que `Redirect URLs` inclui a URL de producao com `/auth/recovery` e `/set-password`.
+- Manter o link de recuperacao redirecionando para `/auth/recovery`, que encaminha para `/set-password` preservando os parametros do Supabase.
 - O app usa fluxo `implicit` no cliente Supabase para evitar falha quando o link do e-mail abre em outra aba.
 
 ## Envio do email
 
 O portal envia o e-mail de redefinicao pela rota `/api/auth/password-recovery`, usando Brevo e o `action_link` oficial gerado pelo Supabase Admin.
 
-Esse link primeiro valida o token no Supabase e depois redireciona para `/set-password` com a sessao de redefinicao ativa.
+Esse link primeiro valida o token no Supabase e depois redireciona para `/auth/recovery`, que abre `/set-password` com a sessao de redefinicao ativa.
 
 O template padrao de `Reset Password` do Supabase deixa de ser o fluxo principal do portal. Ainda assim, se ele for usado manualmente no painel do Supabase:
 

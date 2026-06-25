@@ -42,7 +42,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Informe um e-mail valido." }, { status: 400 });
     }
 
-    const redirectTo = `${PORTAL_ORIGIN}/set-password?flow=recovery`;
+    const redirectTo = `${PORTAL_ORIGIN}/auth/recovery`;
     const { data, error } = await supabaseAdmin.auth.admin.generateLink({
       type: "recovery",
       email,
