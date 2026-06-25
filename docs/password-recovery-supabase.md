@@ -15,7 +15,9 @@ No Supabase, revisar em `Authentication > Providers > Email` ou `Authentication 
 
 ## Envio do email
 
-O portal envia o e-mail de redefinicao pela rota `/api/auth/password-recovery`, usando Brevo e um `token_hash` gerado pelo Supabase Admin.
+O portal envia o e-mail de redefinicao pela rota `/api/auth/password-recovery`, usando Brevo e o `action_link` oficial gerado pelo Supabase Admin.
+
+Esse link primeiro valida o token no Supabase e depois redireciona para `/set-password` com a sessao de redefinicao ativa.
 
 O template padrao de `Reset Password` do Supabase deixa de ser o fluxo principal do portal. Ainda assim, se ele for usado manualmente no painel do Supabase:
 

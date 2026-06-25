@@ -42,9 +42,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Informe um e-mail valido." }, { status: 400 });
     }
 
+    const redirectTo = `${PORTAL_ORIGIN}/set-password?flow=recovery`;
     const { data, error } = await supabaseAdmin.auth.admin.generateLink({
       type: "recovery",
       email,
+      options: { redirectTo },
     });
 
     if (error) {
@@ -52,14 +54,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    const properties = data.properties as { hashed_token?: string | null } | null;
+    const properties = data.properties as { action_link?: string | null; hashed_token?: string | null } | null;
+    const actionLink = clean(properties?.action_link);
     const tokenHash = clean(properties?.hashed_token);
-    if (!tokenHash) {
-      console.warn("Link de redefinicao sem hashed_token.");
+    if (!actionLink && !tokenHash) {
+      console.warn("Link de redefinicao sem action_link/token_hash.");
       return NextResponse.json({ ok: true });
     }
 
-    const recoveryUrl = `${PORTAL_ORIGIN}/set-password?flow=recovery&type=recovery&token_hash=${encodeURIComponent(tokenHash)}`;
+    const recoveryUrl = actionLink || `${PORTAL_ORIGIN}/set-password?flow=recovery&type=recovery&token_hash=${encodeURIComponent(tokenHash)}`;
     await sendPortalEmail({
       to: email,
       subject: "Redefinicao de senha - Portal de RH",
