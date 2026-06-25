@@ -39,7 +39,10 @@ type AbsenceRequestRow = {
   id: string;
   user_id: string;
   manager_id: string;
+  status?: "pending_manager" | "approved" | "rejected" | "cancelled";
 };
+
+type AbsenceDecision = "approved" | "rejected";
 
 async function getServerSupabase() {
   const cookieStore = await cookies();
@@ -246,6 +249,86 @@ export async function GET(req: Request) {
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Erro ao carregar ausencias do gestor." },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const user = await getRequesterUser(req);
+    if (!user) return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
+
+    const body = (await req.json().catch(() => ({}))) as {
+      requestId?: unknown;
+      status?: unknown;
+      manager_comment?: unknown;
+    };
+    const requestId = clean(typeof body.requestId === "string" ? body.requestId : "");
+    const nextStatus = typeof body.status === "string" ? body.status : "";
+    const managerComment = clean(typeof body.manager_comment === "string" ? body.manager_comment : "") || null;
+
+    if (!requestId) return NextResponse.json({ error: "Solicitacao nao informada." }, { status: 400 });
+    if (nextStatus !== "approved" && nextStatus !== "rejected") {
+      return NextResponse.json({ error: "Status invalido." }, { status: 400 });
+    }
+
+    const [profilesRes, collabRes, allowancesRes, requestsRes] = await Promise.all([
+      supabaseAdmin.from("profiles").select("id,email,full_name,role,manager_id,company_id,department_id,active"),
+      supabaseAdmin.from("colaboradores").select("*").order("nome", { ascending: true }),
+      supabaseAdmin.from("absence_allowances").select("id,user_id,collaborator_id"),
+      supabaseAdmin.from("absence_requests").select("id,user_id,manager_id,status").order("created_at", { ascending: false }),
+    ]);
+
+    if (profilesRes.error) throw profilesRes.error;
+    if (collabRes.error) throw collabRes.error;
+    if (allowancesRes.error) throw allowancesRes.error;
+    if (requestsRes.error) throw requestsRes.error;
+
+    const profiles = ((profilesRes.data ?? []) as ProfileRow[]).filter((item) => item.active !== false);
+    const colaboradores = ((collabRes.data ?? []) as Colaborador[]).filter((item) => item.is_active !== false);
+    const allowances = (allowancesRes.data ?? []) as AllowanceRow[];
+    const requests = (requestsRes.data ?? []) as AbsenceRequestRow[];
+    const target = requests.find((request) => request.id === requestId) ?? null;
+    if (!target) return NextResponse.json({ error: "Solicitacao nao encontrada." }, { status: 404 });
+    if (target.status !== "pending_manager") {
+      return NextResponse.json({ error: "Solicitacao ja foi decidida." }, { status: 409 });
+    }
+
+    const myProfile = profiles.find((p) => p.id === user.id) ?? null;
+    const meRole = myProfile?.role ?? null;
+    const isWideViewer = meRole === "admin" || meRole === "rh" || meRole === "diretoria";
+    const teamUserIds = pickTeamUserIds({
+      meId: user.id,
+      meRole,
+      profiles,
+      colaboradores,
+      requests,
+      allowances,
+    });
+
+    const canDecide = isWideViewer || target.manager_id === user.id || teamUserIds.has(target.user_id);
+    if (!canDecide) return NextResponse.json({ error: "Voce nao pode decidir esta solicitacao." }, { status: 403 });
+
+    const { data: updated, error: updateError } = await supabaseAdmin
+      .from("absence_requests")
+      .update({
+        status: nextStatus as AbsenceDecision,
+        manager_comment: managerComment,
+        decided_at: new Date().toISOString(),
+      })
+      .eq("id", requestId)
+      .eq("status", "pending_manager")
+      .select("id,user_id,manager_id,allowance_id,start_date,end_date,days_count,reason,status,manager_comment,created_at,updated_at")
+      .maybeSingle();
+
+    if (updateError) throw updateError;
+    if (!updated) return NextResponse.json({ error: "Solicitacao ja foi decidida." }, { status: 409 });
+
+    return NextResponse.json({ ok: true, request: updated });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Erro ao decidir solicitacao." },
       { status: 500 }
     );
   }

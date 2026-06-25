@@ -93,6 +93,11 @@ type GestorAusenciasPayload = {
   error?: string;
 };
 
+type GestorAusenciasDecisionPayload = {
+  request?: AbsenceRequestRow;
+  error?: string;
+};
+
 function KpiCard({
   label,
   value,
@@ -457,16 +462,24 @@ export default function GestorAusenciasPage() {
     setActingRequestId(requestId);
     try {
       const manager_comment = (decisionCommentById[requestId] ?? "").trim() || null;
-      const { error } = await supabase
-        .from("absence_requests")
-        .update({ status: nextStatus, manager_comment, decided_at: new Date().toISOString() })
-        .eq("id", requestId)
-        .eq("status", "pending_manager");
-      if (error) throw error;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const decisionResponse = await fetch("/api/gestor/ausencias", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ requestId, status: nextStatus, manager_comment }),
+      });
+      const decisionPayload = (await decisionResponse.json()) as GestorAusenciasDecisionPayload;
+      if (!decisionResponse.ok || !decisionPayload.request) {
+        throw new Error(decisionPayload.error || "Erro ao decidir solicitacao.");
+      }
       const reqRow = pendingRequests.find((r) => r.id === requestId);
-      if (reqRow) {
-        const { data: sessionData } = await supabase.auth.getSession();
-        const token = sessionData.session?.access_token;
+      const notifyRow = decisionPayload.request ?? reqRow;
+      if (notifyRow) {
         await fetch("/api/ausencias/requests/notify", {
           method: "POST",
           headers: {
@@ -475,7 +488,7 @@ export default function GestorAusenciasPage() {
           },
           body: JSON.stringify({
             action: nextStatus === "approved" ? "approved" : "rejected",
-            requests: [{ ...reqRow, manager_comment }],
+            requests: [{ ...notifyRow, manager_comment }],
           }),
         }).catch(() => null);
       }
