@@ -3,7 +3,8 @@ import { resolve } from "node:path";
 
 const pageFile = resolve("src/app/set-password/page.tsx");
 const clientFile = resolve("src/lib/supabaseClient.ts");
-const source = `${readFileSync(pageFile, "utf8")}\n${readFileSync(clientFile, "utf8")}`;
+const recoveryRouteFile = resolve("src/app/api/auth/password-recovery/route.ts");
+const source = `${readFileSync(pageFile, "utf8")}\n${readFileSync(clientFile, "utf8")}\n${readFileSync(recoveryRouteFile, "utf8")}`;
 
 const checks = [
   ["checklist de requisitos", "passwordChecklist"],
@@ -17,6 +18,8 @@ const checks = [
   ["mensagem amigavel para sessao ausente", "Sua sessao de redefinicao expirou"],
   ["fluxo implicit no cliente Supabase", "flowType: \"implicit\""],
   ["tratamento de access_token do link", "access_token"],
+  ["endpoint proprio de recuperacao", "generateLink"],
+  ["envio pelo mailer do portal", "sendPortalEmail"],
   ["botao ir para o portal", "Ir para o portal"],
 ];
 

@@ -18,8 +18,6 @@ import {
 } from "@/lib/supabaseClient";
 
 const DEFAULT_AFTER_LOGIN = "/home";
-const PORTAL_ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://rh-app-seven.vercel.app").replace(/\/$/, "");
-
 function sanitizeRedirect(path: string | null) {
   if (!path) return DEFAULT_AFTER_LOGIN;
   if (!path.startsWith("/")) return DEFAULT_AFTER_LOGIN;
@@ -76,7 +74,6 @@ export default function LoginPage() {
   const [msg, setMsg] = useState("");
   const [msgType, setMsgType] = useState<"error" | "success">("error");
   const [loading, setLoading] = useState(false);
-  const [recoveryLoading, setRecoveryLoading] = useState(false);
   const [showPrivacyNotice, setShowPrivacyNotice] = useState(true);
 
   useEffect(() => {
@@ -182,31 +179,6 @@ export default function LoginPage() {
     setCapsLockOn(event.getModifierState("CapsLock"));
   }
 
-  async function sendPasswordRecovery() {
-    setMsg("");
-    setMsgType("error");
-
-    const cleanEmail = email.trim().toLowerCase();
-    if (!cleanEmail) {
-      setMsg("Informe seu e-mail para redefinir a senha.");
-      return;
-    }
-
-    setRecoveryLoading(true);
-    const redirectTo = `${PORTAL_ORIGIN}/set-password`;
-
-    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo });
-    setRecoveryLoading(false);
-
-    if (error) {
-      setMsg(error.message);
-      return;
-    }
-
-    setMsgType("success");
-    setMsg("Enviamos um link de redefinição para seu e-mail.");
-  }
-
   return (
     <main
       className="
@@ -269,7 +241,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => router.push(`/recuperar-senha${email.trim() ? `?email=${encodeURIComponent(email.trim().toLowerCase())}` : ""}`)}
-                  disabled={loading || recoveryLoading}
+                  disabled={loading}
                   className="text-xs font-medium text-slate-700 underline underline-offset-2 disabled:opacity-50"
                 >
                   Esqueci minha senha
@@ -278,7 +250,7 @@ export default function LoginPage() {
 
               <button
                 type="submit"
-                disabled={loading || recoveryLoading || !email.trim() || !password}
+                disabled={loading || !email.trim() || !password}
                 className="w-full rounded-lg bg-black px-4 py-3 font-medium text-white disabled:opacity-50"
               >
                 {loading ? "Entrando..." : "Entrar"}

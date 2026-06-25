@@ -4,9 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, MailCheck } from "lucide-react";
-import { forceClientLogout, markPasswordRecoveryIntent, supabase } from "@/lib/supabaseClient";
+import { forceClientLogout, markPasswordRecoveryIntent } from "@/lib/supabaseClient";
 
-const PORTAL_ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://rh-app-seven.vercel.app").replace(/\/$/, "");
 const RATE_LIMIT_SECONDS = 60;
 
 function getInitialEmail() {
@@ -54,19 +53,23 @@ export default function RecuperarSenhaPage() {
 
     await forceClientLogout();
     markPasswordRecoveryIntent();
-    const redirectTo = `${PORTAL_ORIGIN}/auth/recovery`;
-    const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, { redirectTo });
+    const response = await fetch("/api/auth/password-recovery", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: cleanEmail }),
+    });
+    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
     setLoading(false);
 
-    if (error) {
-      setMessage(error.message);
+    if (!response.ok) {
+      setMessage(payload?.error || "Nao foi possivel enviar o link de redefinicao agora.");
       return;
     }
 
     window.sessionStorage.setItem("password_recovery_sent_at", String(Date.now()));
     setSecondsLeft(RATE_LIMIT_SECONDS);
     setSuccess(true);
-    setMessage("Enviamos um link seguro para criar uma nova senha. Verifique sua caixa de entrada e o spam.");
+    setMessage("Enviamos um link seguro para criar uma nova senha. Ele expira em ate 10 minutos. Verifique sua caixa de entrada e o spam.");
   }
 
   return (

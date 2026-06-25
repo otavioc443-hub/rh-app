@@ -13,9 +13,11 @@ No Supabase, revisar em `Authentication > Providers > Email` ou `Authentication 
 - Manter o link de recuperacao redirecionando para `/set-password`.
 - O app usa fluxo `implicit` no cliente Supabase para evitar falha quando o link do e-mail abre em outra aba.
 
-## Template do email
+## Envio do email
 
-No template de `Reset Password`:
+O portal envia o e-mail de redefinicao pela rota `/api/auth/password-recovery`, usando Brevo e um `token_hash` gerado pelo Supabase Admin.
+
+O template padrao de `Reset Password` do Supabase deixa de ser o fluxo principal do portal. Ainda assim, se ele for usado manualmente no painel do Supabase:
 
 - Informar que o link expira e deve ser usado apenas uma vez.
 - Orientar o usuario a abrir o link no mesmo navegador/dispositivo em que pretende definir a senha.
