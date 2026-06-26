@@ -33,6 +33,19 @@ function isEmail(value: string) {
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
 }
 
+function summarizeBrevoError(status: number, detail: string, fallback: string) {
+  try {
+    const parsed = JSON.parse(detail) as { code?: unknown; message?: unknown };
+    const code = clean(String(parsed.code ?? ""));
+    const message = clean(String(parsed.message ?? ""));
+    if (code || message) return `HTTP ${status}${code ? ` ${code}` : ""}${message ? `: ${message}` : ""}`;
+  } catch {
+    // Brevo costuma responder JSON, mas mantemos texto bruto quando nao for.
+  }
+
+  return `HTTP ${status}: ${clean(detail) || fallback}`;
+}
+
 function getBrevoConfig() {
   const apiKey = clean(process.env.BREVO_API_KEY);
   const from =
@@ -62,6 +75,10 @@ export function getPortalMailerStatus() {
 export async function sendPortalEmail(payload: MailPayload) {
   const brevo = getBrevoConfig();
   if (brevo) {
+    if (!brevo.apiKey.startsWith("xkeysib-")) {
+      throw new Error("BREVO_API_KEY nao parece ser uma API Key v3 do Brevo. Ela deve comecar com xkeysib-.");
+    }
+
     const sender = parseSender(brevo.from);
     if (!sender.email) return { sent: false, skipped: true as const };
     if (!isEmail(sender.email)) {
@@ -86,7 +103,7 @@ export async function sendPortalEmail(payload: MailPayload) {
 
     if (!response.ok) {
       const detail = await response.text().catch(() => "");
-      throw new Error(`Falha ao enviar e-mail via Brevo: ${detail || response.statusText}`);
+      throw new Error(`Falha ao enviar e-mail via Brevo: ${summarizeBrevoError(response.status, detail, response.statusText)}`);
     }
 
     return { sent: true, skipped: false as const };

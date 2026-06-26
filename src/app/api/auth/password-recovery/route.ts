@@ -39,8 +39,9 @@ function publicDeliveryError(error: unknown) {
   const normalized = message.toLowerCase();
 
   if (normalized.includes("remetente brevo invalido")) return message;
+  if (normalized.includes("brevo_api_key nao parece")) return message;
   if (normalized.includes("unauthorized") || normalized.includes("unauthorised") || normalized.includes("invalid api key") || normalized.includes("key not found")) {
-    return "A chave BREVO_API_KEY foi recusada pelo Brevo. Verifique se a chave e de API transacional e se foi copiada corretamente.";
+    return `A chave BREVO_API_KEY foi recusada pelo Brevo. Detalhe: ${message.slice(0, 220)}`;
   }
   if (normalized.includes("sender") || normalized.includes("remetente") || normalized.includes("not verified") || normalized.includes("unauthorized sender")) {
     return "O remetente configurado no BREVO_EMAIL_FROM nao foi aceito pelo Brevo. Verifique se o e-mail/remetente esta validado no Brevo.";
