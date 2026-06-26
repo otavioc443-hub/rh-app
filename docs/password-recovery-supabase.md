@@ -26,6 +26,8 @@ Na Vercel, confirmar que as variaveis abaixo estao cadastradas no projeto em pro
 
 Se as variaveis forem criadas como compartilhadas no time/conta, vincular explicitamente ao projeto do portal no campo `Link to Projects`.
 
+`BREVO_API_KEY` deve ser uma chave de API do Brevo para envio transacional, nao a senha SMTP. `BREVO_EMAIL_FROM` deve conter um remetente aceito pelo Brevo, como `rh@dominio.com` ou `Portal RH <rh@dominio.com>`.
+
 O template padrao de `Reset Password` do Supabase deixa de ser o fluxo principal do portal. Ainda assim, se ele for usado manualmente no painel do Supabase:
 
 - Informar que o link expira e deve ser usado apenas uma vez.

@@ -29,6 +29,10 @@ function parseSender(value: string) {
   };
 }
 
+function isEmail(value: string) {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
+}
+
 function getBrevoConfig() {
   const apiKey = clean(process.env.BREVO_API_KEY);
   const from =
@@ -60,6 +64,9 @@ export async function sendPortalEmail(payload: MailPayload) {
   if (brevo) {
     const sender = parseSender(brevo.from);
     if (!sender.email) return { sent: false, skipped: true as const };
+    if (!isEmail(sender.email)) {
+      throw new Error("Remetente Brevo invalido. Configure BREVO_EMAIL_FROM como email@dominio.com ou Nome <email@dominio.com>.");
+    }
 
     const response = await fetch("https://api.brevo.com/v3/smtp/email", {
       method: "POST",

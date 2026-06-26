@@ -34,6 +34,24 @@ function recoveryHtml(link: string) {
   `;
 }
 
+function publicDeliveryError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("remetente brevo invalido")) return message;
+  if (normalized.includes("unauthorized") || normalized.includes("unauthorised") || normalized.includes("invalid api key") || normalized.includes("key not found")) {
+    return "A chave BREVO_API_KEY foi recusada pelo Brevo. Verifique se a chave e de API transacional e se foi copiada corretamente.";
+  }
+  if (normalized.includes("sender") || normalized.includes("remetente") || normalized.includes("not verified") || normalized.includes("unauthorized sender")) {
+    return "O remetente configurado no BREVO_EMAIL_FROM nao foi aceito pelo Brevo. Verifique se o e-mail/remetente esta validado no Brevo.";
+  }
+  if (normalized.includes("brevo")) {
+    return `Brevo recusou o envio: ${message.slice(0, 220)}`;
+  }
+
+  return "Nao foi possivel enviar o link de redefinicao agora. Verifique os logs do deploy na Vercel.";
+}
+
 async function generateRecoveryLink(email: string) {
   let lastError: string | null = null;
 
@@ -95,6 +113,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("Erro ao enviar redefinicao de senha:", error);
-    return NextResponse.json({ error: "Nao foi possivel enviar o link de redefinicao agora." }, { status: 500 });
+    return NextResponse.json({ error: publicDeliveryError(error) }, { status: 500 });
   }
 }
