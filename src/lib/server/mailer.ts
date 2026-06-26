@@ -31,7 +31,12 @@ function parseSender(value: string) {
 
 function getBrevoConfig() {
   const apiKey = clean(process.env.BREVO_API_KEY);
-  const from = clean(process.env.BREVO_EMAIL_FROM) || clean(process.env.LMS_EMAIL_FROM);
+  const from =
+    clean(process.env.BREVO_EMAIL_FROM) ||
+    clean(process.env.BREVO_FROM_EMAIL) ||
+    clean(process.env.BREVO_FROM) ||
+    clean(process.env.EMAIL_FROM) ||
+    clean(process.env.LMS_EMAIL_FROM);
   return apiKey && from ? { apiKey, from } : null;
 }
 

@@ -19,6 +19,13 @@ O portal envia o e-mail de redefinicao pela rota `/api/auth/password-recovery`, 
 
 Esse link primeiro valida o token no Supabase e depois redireciona para `/auth/recovery`, que abre `/set-password` com a sessao de redefinicao ativa.
 
+Na Vercel, confirmar que as variaveis abaixo estao cadastradas no projeto em producao:
+
+- `BREVO_API_KEY`
+- `BREVO_EMAIL_FROM` ou alias compativel (`BREVO_FROM_EMAIL`, `BREVO_FROM`, `EMAIL_FROM`, `LMS_EMAIL_FROM`)
+
+Se as variaveis forem criadas como compartilhadas no time/conta, vincular explicitamente ao projeto do portal no campo `Link to Projects`.
+
 O template padrao de `Reset Password` do Supabase deixa de ser o fluxo principal do portal. Ainda assim, se ele for usado manualmente no painel do Supabase:
 
 - Informar que o link expira e deve ser usado apenas uma vez.

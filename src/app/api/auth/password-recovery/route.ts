@@ -86,7 +86,10 @@ export async function POST(req: Request) {
 
     if (!delivery.sent) {
       console.error("Envio de redefinicao ignorado: provedor de e-mail nao configurado.");
-      return NextResponse.json({ error: "O envio de e-mail do portal nao esta configurado." }, { status: 500 });
+      return NextResponse.json(
+        { error: "O envio de e-mail do portal nao esta configurado neste ambiente. Verifique BREVO_API_KEY e BREVO_EMAIL_FROM na Vercel." },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({ ok: true });
