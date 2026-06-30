@@ -910,7 +910,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 text-slate-900 [color-scheme:light]">
       <div className="flex">
         {!sidebarCollapsed ? (
           <Sidebar

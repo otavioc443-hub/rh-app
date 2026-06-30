@@ -201,7 +201,7 @@ export default function LoginPage() {
 
             <form onSubmit={signIn} className="mt-6 space-y-3">
               <input
-                className="w-full rounded-lg border p-3 focus:outline-none focus:ring-2 focus:ring-black"
+                className="w-full rounded-lg border border-slate-300 bg-white p-3 text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-black"
                 placeholder="E-mail"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -212,7 +212,7 @@ export default function LoginPage() {
               <div className="space-y-1.5">
                 <div className="relative">
                   <input
-                    className="w-full rounded-lg border p-3 pr-12 focus:outline-none focus:ring-2 focus:ring-black"
+                    className="w-full rounded-lg border border-slate-300 bg-white p-3 pr-12 text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-black"
                     placeholder="Senha"
                     type={showPassword ? "text" : "password"}
                     value={password}
@@ -249,7 +249,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading || !email.trim() || !password}
-                className="w-full rounded-lg bg-black px-4 py-3 font-medium text-white disabled:opacity-50"
+                className="w-full rounded-lg bg-black px-4 py-3 font-medium text-white disabled:cursor-not-allowed disabled:bg-slate-700"
               >
                 {loading ? "Entrando..." : "Entrar"}
               </button>
@@ -267,7 +267,7 @@ export default function LoginPage() {
           </div>
 
           <div className="rounded-2xl border border-white/60 bg-white/85 px-5 py-5 shadow-[0_18px_40px_-30px_rgba(15,23,42,0.28)] backdrop-blur-md">
-            <p className="text-center text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">Acesso institucional</p>
+            <p className="text-center text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-600">Acesso institucional</p>
             <div className="mt-3 flex justify-center">
               <Link
                 href="/canal-de-etica"

@@ -590,8 +590,8 @@ export default function GestorAusenciasPage() {
                   return (
                     <tr key={r.id} className="border-t">
                       <td className="p-3 font-medium text-slate-900">{nome}</td>
-                      <td className="p-3">{fmtDateBR(r.start_date)} até {fmtDateBR(r.end_date)}</td>
-                      <td className="p-3">{Number(r.days_count ?? 0) || 0}</td>
+                      <td className="p-3 text-slate-800">{fmtDateBR(r.start_date)} até {fmtDateBR(r.end_date)}</td>
+                      <td className="p-3 text-slate-800">{Number(r.days_count ?? 0) || 0}</td>
                       <td className="p-3 text-slate-700">{(r.reason ?? "").trim() || "-"}</td>
                       <td className="p-3">
                         {r.status === "pending_manager" ? (
@@ -600,7 +600,7 @@ export default function GestorAusenciasPage() {
                             value={decisionCommentById[r.id] ?? ""}
                             onChange={(e) => setDecisionCommentById((prev) => ({ ...prev, [r.id]: e.target.value }))}
                             placeholder="Comentario do gestor (opcional)"
-                            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-slate-400"
+                            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-slate-400"
                           />
                         ) : (
                           <span className={r.status === "rejected" ? "inline-flex rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700" : "text-slate-600"}>
@@ -682,10 +682,10 @@ export default function GestorAusenciasPage() {
                 availabilityRows.map((row) => (
                   <tr key={row.allowanceId} className="border-t">
                     <td className="p-3 font-medium text-slate-900">{row.nome}</td>
-                    <td className="p-3">{fmtDateBR(row.windowStart)} até {fmtDateBR(row.windowEnd)}</td>
-                    <td className="p-3 text-right">{row.daysAllowed}</td>
-                    <td className="p-3 text-right">{row.approvedUsed}</td>
-                    <td className="p-3 text-right">{row.pendingDays}</td>
+                    <td className="p-3 text-slate-800">{fmtDateBR(row.windowStart)} até {fmtDateBR(row.windowEnd)}</td>
+                    <td className="p-3 text-right text-slate-800">{row.daysAllowed}</td>
+                    <td className="p-3 text-right text-slate-800">{row.approvedUsed}</td>
+                    <td className="p-3 text-right text-slate-800">{row.pendingDays}</td>
                     <td className={`p-3 text-right font-semibold ${row.remaining <= 0 ? "text-rose-700" : row.remaining <= 1 ? "text-amber-700" : "text-emerald-700"}`}>
                       {row.remaining}
                     </td>

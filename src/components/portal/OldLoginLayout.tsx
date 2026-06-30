@@ -50,7 +50,7 @@ export default function OldLoginLayout({
               {/* Inputs */}
               <div className="mt-8 space-y-4">
                 <input
-                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-gray-400"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-gray-400"
                   placeholder="E-mail"
                   type="email"
                   value={email}
@@ -60,7 +60,7 @@ export default function OldLoginLayout({
                 />
 
                 <input
-                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none focus:border-gray-400"
+                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-gray-400"
                   placeholder="Senha"
                   type="password"
                   value={password}
@@ -75,7 +75,7 @@ export default function OldLoginLayout({
                 <button
                   onClick={onLogin}
                   disabled={loading || !email.trim() || !password}
-                  className="w-full rounded-lg bg-black px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                  className="w-full rounded-lg bg-black px-4 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-700"
                 >
                   {loading ? "Entrando..." : "Entrar"}
                 </button>
