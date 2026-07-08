@@ -484,6 +484,7 @@ export default function GestorAusenciasPage() {
                     "Colaborador sem nome";
                   const canDecideRequest =
                     r.status === "pending_manager" &&
+                    r.user_id !== meId &&
                     (meRole === "admin" || meRole === "rh" || meRole === "diretoria" || approvableUserIdSet.has(r.user_id));
                   return (
                     <tr key={r.id} className="border-t">

@@ -296,6 +296,9 @@ export async function POST(req: Request) {
     if (target.status !== "pending_manager") {
       return NextResponse.json({ error: "Solicitacao ja foi decidida." }, { status: 409 });
     }
+    if (target.user_id === user.id) {
+      return NextResponse.json({ error: "Voce nao pode aprovar ou recusar a propria ausencia." }, { status: 403 });
+    }
 
     const myProfile = profiles.find((p) => p.id === user.id) ?? null;
     const meRole = myProfile?.role ?? null;
