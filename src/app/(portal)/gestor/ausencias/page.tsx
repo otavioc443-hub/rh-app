@@ -82,6 +82,7 @@ type GestorAusenciasPayload = {
   colaboradores?: Colaborador[];
   allowances?: AllowanceRow[];
   requests?: AbsenceRequestRow[];
+  approvableUserIds?: string[];
   meRole?: string | null;
   error?: string;
 };
@@ -133,21 +134,6 @@ function fmtDateTimeBR(iso: string | null | undefined) {
   return d.toLocaleString("pt-BR");
 }
 
-function clean(value: string | null | undefined) {
-  return String(value ?? "").replace(/\s+/g, " ").trim();
-}
-
-function cleanEmail(value: string | null | undefined) {
-  return clean(value).toLowerCase();
-}
-
-function normalizeText(value: string | null | undefined) {
-  return clean(value)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-}
-
 function statusLabel(status: AbsenceRequestRow["status"]) {
   if (status === "pending_manager") return "Pendente";
   if (status === "approved") return "Aprovada";
@@ -173,6 +159,7 @@ export default function GestorAusenciasPage() {
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [allowances, setAllowances] = useState<AllowanceRow[]>([]);
   const [requests, setRequests] = useState<AbsenceRequestRow[]>([]);
+  const [approvableUserIds, setApprovableUserIds] = useState<string[]>([]);
   const [decisionCommentById, setDecisionCommentById] = useState<Record<string, string>>({});
   const [actingRequestId, setActingRequestId] = useState<string | null>(null);
   const [requestStatusFilter, setRequestStatusFilter] = useState<"all" | AbsenceRequestRow["status"]>("all");
@@ -199,6 +186,7 @@ export default function GestorAusenciasPage() {
       setColaboradores(payload.colaboradores ?? []);
       setAllowances(payload.allowances ?? []);
       setRequests(payload.requests ?? []);
+      setApprovableUserIds(payload.approvableUserIds ?? []);
       setMeRole(payload.meRole ?? null);
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao carregar ausencias da equipe.");
@@ -206,6 +194,7 @@ export default function GestorAusenciasPage() {
       setColaboradores([]);
       setAllowances([]);
       setRequests([]);
+      setApprovableUserIds([]);
       setMeRole(null);
     } finally {
       setLoading(false);
@@ -215,43 +204,6 @@ export default function GestorAusenciasPage() {
   useEffect(() => {
     void load();
   }, []);
-
-  const myProfile = useMemo(
-    () => (meId ? profiles.find((p) => p.id === meId) ?? null : null),
-    [profiles, meId]
-  );
-
-  const myCollaborator = useMemo(
-    () => (meId ? colaboradores.find((c) => c.user_id === meId) ?? null : null),
-    [colaboradores, meId]
-  );
-
-  const collaboratorDirectReportUserIds = useMemo(() => {
-    if (!meId) return new Set<string>();
-    const ids = new Set<string>();
-    const managerEmails = new Set(
-      [
-        myProfile?.email,
-        myCollaborator?.email,
-        myCollaborator?.email_empresarial,
-        myCollaborator?.email_pessoal,
-      ]
-        .map(cleanEmail)
-        .filter(Boolean)
-    );
-    const managerNames = new Set([myProfile?.full_name, myCollaborator?.nome].map(normalizeText).filter(Boolean));
-
-    for (const collab of colaboradores) {
-      if (!collab.user_id || collab.user_id === meId) continue;
-      const superiorEmail = cleanEmail(collab.email_superior_direto);
-      const superiorName = normalizeText(collab.superior_direto);
-      if ((superiorEmail && managerEmails.has(superiorEmail)) || (superiorName && managerNames.has(superiorName))) {
-        ids.add(collab.user_id);
-      }
-    }
-
-    return ids;
-  }, [colaboradores, meId, myCollaborator, myProfile]);
 
   const collabByUserId = useMemo(() => {
     const map = new Map<string, Colaborador>();
@@ -278,24 +230,20 @@ export default function GestorAusenciasPage() {
 
   const teamUserIds = useMemo(() => {
     const ids = new Set<string>();
-    const isWideViewer = meRole === "admin" || meRole === "rh" || meRole === "diretoria";
-    if (isWideViewer) {
-      for (const profile of profiles) {
-        if (profile.active !== false && profile.id !== meId) ids.add(profile.id);
-      }
-      for (const collab of colaboradores) {
-        if (collab.user_id && collab.user_id !== meId) ids.add(collab.user_id);
-      }
-      return ids;
+    for (const profile of profiles) {
+      if (profile.active !== false && profile.id !== meId) ids.add(profile.id);
     }
-
-    for (const uid of collaboratorDirectReportUserIds) ids.add(uid);
+    for (const collab of colaboradores) {
+      if (collab.user_id && collab.user_id !== meId) ids.add(collab.user_id);
+    }
     for (const a of allowances) {
       if (!a.user_id) continue;
-      if (collaboratorDirectReportUserIds.has(a.user_id)) ids.add(a.user_id);
+      if (a.user_id !== meId) ids.add(a.user_id);
     }
     return ids;
-  }, [allowances, colaboradores, collaboratorDirectReportUserIds, meId, meRole, profiles]);
+  }, [allowances, colaboradores, meId, profiles]);
+
+  const approvableUserIdSet = useMemo(() => new Set(approvableUserIds), [approvableUserIds]);
 
   const teamCollaboratorIds = useMemo(() => {
     const ids = new Set<string>();
@@ -308,10 +256,8 @@ export default function GestorAusenciasPage() {
 
   const scopedRequests = useMemo(() => {
     if (!meId) return [] as AbsenceRequestRow[];
-    const isWideViewer = meRole === "admin" || meRole === "rh" || meRole === "diretoria";
-    if (isWideViewer) return requests;
-    return requests.filter((r) => teamUserIds.has(r.user_id));
-  }, [requests, meId, meRole, teamUserIds]);
+    return requests;
+  }, [requests, meId]);
 
   const pendingRequests = useMemo(
     () => scopedRequests.filter((r) => r.status === "pending_manager"),
@@ -536,6 +482,9 @@ export default function GestorAusenciasPage() {
                     collabByUserId.get(r.user_id)?.nome?.trim() ||
                     profileNameById.get(r.user_id) ||
                     "Colaborador sem nome";
+                  const canDecideRequest =
+                    r.status === "pending_manager" &&
+                    (meRole === "admin" || meRole === "rh" || meRole === "diretoria" || approvableUserIdSet.has(r.user_id));
                   return (
                     <tr key={r.id} className="border-t">
                       <td className="p-3 font-medium text-slate-900">{nome}</td>
@@ -543,7 +492,7 @@ export default function GestorAusenciasPage() {
                       <td className="p-3 text-slate-800">{Number(r.days_count ?? 0) || 0}</td>
                       <td className="p-3 text-slate-700">{(r.reason ?? "").trim() || "-"}</td>
                       <td className="p-3">
-                        {r.status === "pending_manager" ? (
+                        {canDecideRequest ? (
                           <input
                             type="text"
                             value={decisionCommentById[r.id] ?? ""}
@@ -564,7 +513,7 @@ export default function GestorAusenciasPage() {
                       </td>
                       <td className="p-3 text-slate-700">{fmtDateTimeBR(r.created_at)}</td>
                       <td className="p-3">
-                        {r.status === "pending_manager" ? (
+                        {canDecideRequest ? (
                           <div className="flex justify-end gap-2">
                             <button
                               type="button"
@@ -583,6 +532,8 @@ export default function GestorAusenciasPage() {
                               Recusar
                             </button>
                           </div>
+                        ) : r.status === "pending_manager" ? (
+                          <span className="text-xs font-semibold text-slate-500">Aguardando superior direto</span>
                         ) : (
                           <span className="text-xs text-slate-400">-</span>
                         )}

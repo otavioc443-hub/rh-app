@@ -91,14 +91,54 @@ function normalizeText(value: string | null | undefined) {
     .toLowerCase();
 }
 
+function managerIdentity(userId: string, profiles: ProfileRow[], colaboradores: Colaborador[]) {
+  const profile = profiles.find((p) => p.id === userId) ?? null;
+  const collaborator = colaboradores.find((c) => c.user_id === userId) ?? null;
+  return {
+    emails: new Set(
+      [
+        profile?.email,
+        collaborator?.email,
+        collaborator?.email_empresarial,
+        collaborator?.email_pessoal,
+      ]
+        .map(cleanEmail)
+        .filter(Boolean)
+    ),
+    names: new Set([profile?.full_name, collaborator?.nome].map(normalizeText).filter(Boolean)),
+  };
+}
+
+function pickDirectReportUserIds(input: {
+  managerId: string;
+  profiles: ProfileRow[];
+  colaboradores: Colaborador[];
+}) {
+  const { managerId, profiles, colaboradores } = input;
+  const ids = new Set<string>();
+  const identity = managerIdentity(managerId, profiles, colaboradores);
+
+  for (const collab of colaboradores) {
+    if (!collab.user_id || collab.user_id === managerId) continue;
+    const superiorEmail = cleanEmail(collab.email_superior_direto);
+    const superiorName = normalizeText(collab.superior_direto);
+
+    if ((superiorEmail && identity.emails.has(superiorEmail)) || (superiorName && identity.names.has(superiorName))) {
+      ids.add(collab.user_id);
+    }
+  }
+
+  return ids;
+}
+
 function pickTeamUserIds(input: {
   meId: string;
   meRole: string | null;
   profiles: ProfileRow[];
   colaboradores: Colaborador[];
-  allowances: AllowanceRow[];
+  includeIndirect?: boolean;
 }) {
-  const { meId, meRole, profiles, colaboradores, allowances } = input;
+  const { meId, meRole, profiles, colaboradores, includeIndirect = false } = input;
   const ids = new Set<string>();
   const isWideViewer = meRole === "admin" || meRole === "rh" || meRole === "diretoria";
 
@@ -112,32 +152,19 @@ function pickTeamUserIds(input: {
     return ids;
   }
 
-  const myProfile = profiles.find((p) => p.id === meId) ?? null;
-  const myCollaborator = colaboradores.find((c) => c.user_id === meId) ?? null;
-  const managerEmails = new Set(
-    [
-      myProfile?.email,
-      myCollaborator?.email,
-      myCollaborator?.email_empresarial,
-      myCollaborator?.email_pessoal,
-    ]
-      .map(cleanEmail)
-      .filter(Boolean)
-  );
-  const managerNames = new Set([myProfile?.full_name, myCollaborator?.nome].map(normalizeText).filter(Boolean));
+  const queue = [...pickDirectReportUserIds({ managerId: meId, profiles, colaboradores })];
+  for (const id of queue) ids.add(id);
 
-  for (const collab of colaboradores) {
-    if (!collab.user_id || collab.user_id === meId) continue;
-    const superiorEmail = cleanEmail(collab.email_superior_direto);
-    const superiorName = normalizeText(collab.superior_direto);
+  if (!includeIndirect) return ids;
 
-    if ((superiorEmail && managerEmails.has(superiorEmail)) || (superiorName && managerNames.has(superiorName))) {
-      ids.add(collab.user_id);
+  for (let index = 0; index < queue.length; index += 1) {
+    const managerId = queue[index];
+    const directReports = pickDirectReportUserIds({ managerId, profiles, colaboradores });
+    for (const reportId of directReports) {
+      if (reportId === meId || ids.has(reportId)) continue;
+      ids.add(reportId);
+      queue.push(reportId);
     }
-  }
-
-  for (const allowance of allowances) {
-    if (allowance.user_id && ids.has(allowance.user_id)) ids.add(allowance.user_id);
   }
 
   return ids;
@@ -168,7 +195,6 @@ export async function GET(req: Request) {
 
     const profiles = ((profilesRes.data ?? []) as ProfileRow[]).filter((item) => item.active !== false);
     const colaboradores = ((collabRes.data ?? []) as Colaborador[]).filter((item) => item.is_active !== false);
-    const allowances = (allowancesRes.data ?? []) as AllowanceRow[];
     const myProfile = profiles.find((p) => p.id === user.id) ?? null;
     const meRole = myProfile?.role ?? null;
     const isWideViewer = meRole === "admin" || meRole === "rh" || meRole === "diretoria";
@@ -178,7 +204,14 @@ export async function GET(req: Request) {
       meRole,
       profiles,
       colaboradores,
-      allowances,
+      includeIndirect: true,
+    });
+    const approvableUserIds = pickTeamUserIds({
+      meId: user.id,
+      meRole,
+      profiles,
+      colaboradores,
+      includeIndirect: false,
     });
     const teamCollaboratorIds = new Set(
       colaboradores
@@ -187,7 +220,14 @@ export async function GET(req: Request) {
     );
 
     if (isWideViewer) {
-      return NextResponse.json({ profiles, colaboradores, allowances: allowancesRes.data ?? [], requests: requestsRes.data ?? [], meRole });
+      return NextResponse.json({
+        profiles,
+        colaboradores,
+        allowances: allowancesRes.data ?? [],
+        requests: requestsRes.data ?? [],
+        approvableUserIds: Array.from(approvableUserIds),
+        meRole,
+      });
     }
 
     const scopedRequests = ((requestsRes.data ?? []) as Array<AbsenceRequestRow>).filter((request) => teamUserIds.has(request.user_id));
@@ -208,6 +248,7 @@ export async function GET(req: Request) {
       colaboradores: scopedColaboradores,
       allowances: scopedAllowances,
       requests: scopedRequests,
+      approvableUserIds: Array.from(approvableUserIds),
       meRole,
     });
   } catch (error) {
@@ -237,21 +278,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Status invalido." }, { status: 400 });
     }
 
-    const [profilesRes, collabRes, allowancesRes, requestsRes] = await Promise.all([
+    const [profilesRes, collabRes, requestsRes] = await Promise.all([
       supabaseAdmin.from("profiles").select("id,email,full_name,role,manager_id,company_id,department_id,active"),
       supabaseAdmin.from("colaboradores").select("*").order("nome", { ascending: true }),
-      supabaseAdmin.from("absence_allowances").select("id,user_id,collaborator_id"),
       supabaseAdmin.from("absence_requests").select("id,user_id,manager_id,status").order("created_at", { ascending: false }),
     ]);
 
     if (profilesRes.error) throw profilesRes.error;
     if (collabRes.error) throw collabRes.error;
-    if (allowancesRes.error) throw allowancesRes.error;
     if (requestsRes.error) throw requestsRes.error;
 
     const profiles = ((profilesRes.data ?? []) as ProfileRow[]).filter((item) => item.active !== false);
     const colaboradores = ((collabRes.data ?? []) as Colaborador[]).filter((item) => item.is_active !== false);
-    const allowances = (allowancesRes.data ?? []) as AllowanceRow[];
     const requests = (requestsRes.data ?? []) as AbsenceRequestRow[];
     const target = requests.find((request) => request.id === requestId) ?? null;
     if (!target) return NextResponse.json({ error: "Solicitacao nao encontrada." }, { status: 404 });
@@ -267,7 +305,7 @@ export async function POST(req: Request) {
       meRole,
       profiles,
       colaboradores,
-      allowances,
+      includeIndirect: false,
     });
 
     const canDecide = isWideViewer || teamUserIds.has(target.user_id);
