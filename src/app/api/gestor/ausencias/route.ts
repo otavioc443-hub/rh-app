@@ -213,6 +213,9 @@ export async function GET(req: Request) {
       colaboradores,
       includeIndirect: false,
     });
+    for (const request of (requestsRes.data ?? []) as Array<AbsenceRequestRow>) {
+      if (request.manager_id === user.id && request.user_id !== user.id) approvableUserIds.add(request.user_id);
+    }
     const teamCollaboratorIds = new Set(
       colaboradores
         .filter((collab) => collab.user_id && teamUserIds.has(collab.user_id))
@@ -311,7 +314,7 @@ export async function POST(req: Request) {
       includeIndirect: false,
     });
 
-    const canDecide = isWideViewer || teamUserIds.has(target.user_id);
+    const canDecide = isWideViewer || target.manager_id === user.id || teamUserIds.has(target.user_id);
     if (!canDecide) return NextResponse.json({ error: "Voce nao pode decidir esta solicitacao." }, { status: 403 });
 
     const { data: updated, error: updateError } = await supabaseAdmin

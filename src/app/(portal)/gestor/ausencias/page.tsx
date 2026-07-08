@@ -485,7 +485,11 @@ export default function GestorAusenciasPage() {
                   const canDecideRequest =
                     r.status === "pending_manager" &&
                     r.user_id !== meId &&
-                    (meRole === "admin" || meRole === "rh" || meRole === "diretoria" || approvableUserIdSet.has(r.user_id));
+                    (meRole === "admin" ||
+                      meRole === "rh" ||
+                      meRole === "diretoria" ||
+                      r.manager_id === meId ||
+                      approvableUserIdSet.has(r.user_id));
                   return (
                     <tr key={r.id} className="border-t">
                       <td className="p-3 font-medium text-slate-900">{nome}</td>
