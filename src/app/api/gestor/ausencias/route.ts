@@ -91,23 +91,14 @@ function normalizeText(value: string | null | undefined) {
     .toLowerCase();
 }
 
-function collaboratorDepartmentKey(collab: Colaborador | null | undefined) {
-  return (
-    clean(collab?.department_id) ||
-    clean(collab?.departamento).toLowerCase() ||
-    clean(collab?.setor).toLowerCase()
-  );
-}
-
 function pickTeamUserIds(input: {
   meId: string;
   meRole: string | null;
   profiles: ProfileRow[];
   colaboradores: Colaborador[];
-  requests: AbsenceRequestRow[];
   allowances: AllowanceRow[];
 }) {
-  const { meId, meRole, profiles, colaboradores, requests, allowances } = input;
+  const { meId, meRole, profiles, colaboradores, allowances } = input;
   const ids = new Set<string>();
   const isWideViewer = meRole === "admin" || meRole === "rh" || meRole === "diretoria";
 
@@ -134,30 +125,15 @@ function pickTeamUserIds(input: {
       .filter(Boolean)
   );
   const managerNames = new Set([myProfile?.full_name, myCollaborator?.nome].map(normalizeText).filter(Boolean));
-  const myProfileDepartment = clean(myProfile?.department_id);
-  const myCollabDepartment = collaboratorDepartmentKey(myCollaborator);
-
-  for (const profile of profiles) {
-    if (profile.active === false || profile.id === meId) continue;
-    if (profile.manager_id === meId) ids.add(profile.id);
-    if (myProfileDepartment && profile.department_id === myProfileDepartment) ids.add(profile.id);
-  }
 
   for (const collab of colaboradores) {
     if (!collab.user_id || collab.user_id === meId) continue;
     const superiorEmail = cleanEmail(collab.email_superior_direto);
     const superiorName = normalizeText(collab.superior_direto);
-    const collabDepartment = collaboratorDepartmentKey(collab);
 
     if ((superiorEmail && managerEmails.has(superiorEmail)) || (superiorName && managerNames.has(superiorName))) {
       ids.add(collab.user_id);
     }
-    if (myCollabDepartment && collabDepartment && collabDepartment === myCollabDepartment) ids.add(collab.user_id);
-    if (myProfileDepartment && collab.department_id === myProfileDepartment) ids.add(collab.user_id);
-  }
-
-  for (const request of requests) {
-    if (request.manager_id === meId) ids.add(request.user_id);
   }
 
   for (const allowance of allowances) {
@@ -172,7 +148,7 @@ export async function GET(req: Request) {
     const user = await getRequesterUser(req);
     if (!user) return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
 
-    const [profilesRes, collabRes, allowancesRes, requestsRes, membersRes] = await Promise.all([
+    const [profilesRes, collabRes, allowancesRes, requestsRes] = await Promise.all([
       supabaseAdmin.from("profiles").select("id,email,full_name,role,manager_id,company_id,department_id,active"),
       supabaseAdmin.from("colaboradores").select("*").order("nome", { ascending: true }),
       supabaseAdmin
@@ -183,20 +159,16 @@ export async function GET(req: Request) {
         .from("absence_requests")
         .select("id,user_id,manager_id,allowance_id,start_date,end_date,days_count,reason,status,manager_comment,created_at,updated_at")
         .order("created_at", { ascending: false }),
-      supabaseAdmin.from("project_members").select("project_id,user_id,member_role"),
     ]);
 
     if (profilesRes.error) throw profilesRes.error;
     if (collabRes.error) throw collabRes.error;
     if (allowancesRes.error) throw allowancesRes.error;
     if (requestsRes.error) throw requestsRes.error;
-    if (membersRes.error) throw membersRes.error;
 
     const profiles = ((profilesRes.data ?? []) as ProfileRow[]).filter((item) => item.active !== false);
     const colaboradores = ((collabRes.data ?? []) as Colaborador[]).filter((item) => item.is_active !== false);
     const allowances = (allowancesRes.data ?? []) as AllowanceRow[];
-    const requests = (requestsRes.data ?? []) as AbsenceRequestRow[];
-    const members = membersRes.data ?? [];
     const myProfile = profiles.find((p) => p.id === user.id) ?? null;
     const meRole = myProfile?.role ?? null;
     const isWideViewer = meRole === "admin" || meRole === "rh" || meRole === "diretoria";
@@ -206,7 +178,6 @@ export async function GET(req: Request) {
       meRole,
       profiles,
       colaboradores,
-      requests,
       allowances,
     });
     const teamCollaboratorIds = new Set(
@@ -216,12 +187,10 @@ export async function GET(req: Request) {
     );
 
     if (isWideViewer) {
-      return NextResponse.json({ profiles, colaboradores, allowances: allowancesRes.data ?? [], requests: requestsRes.data ?? [], members, meRole });
+      return NextResponse.json({ profiles, colaboradores, allowances: allowancesRes.data ?? [], requests: requestsRes.data ?? [], meRole });
     }
 
-    const scopedRequests = ((requestsRes.data ?? []) as Array<AbsenceRequestRow>).filter(
-      (request) => request.manager_id === user.id || teamUserIds.has(request.user_id)
-    );
+    const scopedRequests = ((requestsRes.data ?? []) as Array<AbsenceRequestRow>).filter((request) => teamUserIds.has(request.user_id));
     const scopedRequestUserIds = new Set(scopedRequests.map((request) => request.user_id));
     const scopedAllowances = ((allowancesRes.data ?? []) as Array<AllowanceRow>).filter(
       (allowance) =>
@@ -234,16 +203,11 @@ export async function GET(req: Request) {
     const scopedColaboradores = colaboradores.filter(
       (collab) => collab.user_id === user.id || (!!collab.user_id && teamUserIds.has(collab.user_id)) || teamCollaboratorIds.has(collab.id)
     );
-    const scopedMembers = (members as Array<{ user_id?: string | null }>).filter(
-      (member) => member.user_id === user.id || (!!member.user_id && teamUserIds.has(member.user_id))
-    );
-
     return NextResponse.json({
       profiles: scopedProfiles,
       colaboradores: scopedColaboradores,
       allowances: scopedAllowances,
       requests: scopedRequests,
-      members: scopedMembers,
       meRole,
     });
   } catch (error) {
@@ -303,11 +267,10 @@ export async function POST(req: Request) {
       meRole,
       profiles,
       colaboradores,
-      requests,
       allowances,
     });
 
-    const canDecide = isWideViewer || target.manager_id === user.id || teamUserIds.has(target.user_id);
+    const canDecide = isWideViewer || teamUserIds.has(target.user_id);
     if (!canDecide) return NextResponse.json({ error: "Voce nao pode decidir esta solicitacao." }, { status: 403 });
 
     const { data: updated, error: updateError } = await supabaseAdmin

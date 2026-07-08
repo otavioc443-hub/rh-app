@@ -62,12 +62,6 @@ type AbsenceRequestRow = {
   updated_at: string | null;
 };
 
-type ProjectMemberRow = {
-  project_id: string;
-  user_id: string;
-  member_role: "gestor" | "coordenador" | "colaborador" | string;
-};
-
 type TeamAvailabilityRow = {
   user_id: string;
   collaborator_id: string | null;
@@ -88,7 +82,6 @@ type GestorAusenciasPayload = {
   colaboradores?: Colaborador[];
   allowances?: AllowanceRow[];
   requests?: AbsenceRequestRow[];
-  members?: ProjectMemberRow[];
   meRole?: string | null;
   error?: string;
 };
@@ -180,7 +173,6 @@ export default function GestorAusenciasPage() {
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [allowances, setAllowances] = useState<AllowanceRow[]>([]);
   const [requests, setRequests] = useState<AbsenceRequestRow[]>([]);
-  const [projectMembers, setProjectMembers] = useState<ProjectMemberRow[]>([]);
   const [decisionCommentById, setDecisionCommentById] = useState<Record<string, string>>({});
   const [actingRequestId, setActingRequestId] = useState<string | null>(null);
   const [requestStatusFilter, setRequestStatusFilter] = useState<"all" | AbsenceRequestRow["status"]>("all");
@@ -207,7 +199,6 @@ export default function GestorAusenciasPage() {
       setColaboradores(payload.colaboradores ?? []);
       setAllowances(payload.allowances ?? []);
       setRequests(payload.requests ?? []);
-      setProjectMembers(payload.members ?? []);
       setMeRole(payload.meRole ?? null);
     } catch (e: unknown) {
       setMsg(e instanceof Error ? e.message : "Erro ao carregar ausencias da equipe.");
@@ -215,7 +206,6 @@ export default function GestorAusenciasPage() {
       setColaboradores([]);
       setAllowances([]);
       setRequests([]);
-      setProjectMembers([]);
       setMeRole(null);
     } finally {
       setLoading(false);
@@ -225,15 +215,6 @@ export default function GestorAusenciasPage() {
   useEffect(() => {
     void load();
   }, []);
-
-  const directReportUserIds = useMemo(() => {
-    if (!meId) return new Set<string>();
-    return new Set(
-      profiles
-        .filter((p) => p.active !== false && p.manager_id === meId)
-        .map((p) => p.id)
-    );
-  }, [profiles, meId]);
 
   const myProfile = useMemo(
     () => (meId ? profiles.find((p) => p.id === meId) ?? null : null),
@@ -295,35 +276,6 @@ export default function GestorAusenciasPage() {
     return map;
   }, [profiles]);
 
-  function collaboratorDepartmentKey(collab: Colaborador | null | undefined) {
-    return (
-      (collab?.department_id ?? "").trim() ||
-      (collab?.departamento ?? "").trim().toLowerCase() ||
-      (collab?.setor ?? "").trim().toLowerCase()
-    );
-  }
-
-  const sameDepartmentUserIds = useMemo(() => {
-    const ids = new Set<string>();
-    const myProfileDepartment = (myProfile?.department_id ?? "").trim();
-    const myCollabDepartment = collaboratorDepartmentKey(myCollaborator);
-    if (!myProfileDepartment && !myCollabDepartment) return ids;
-
-    for (const profile of profiles) {
-      if (profile.active === false || profile.id === meId) continue;
-      if (myProfileDepartment && profile.department_id === myProfileDepartment) ids.add(profile.id);
-    }
-
-    for (const collab of colaboradores) {
-      if (!collab.user_id || collab.user_id === meId) continue;
-      const collabDepartment = collaboratorDepartmentKey(collab);
-      if (myCollabDepartment && collabDepartment && collabDepartment === myCollabDepartment) ids.add(collab.user_id);
-      if (myProfileDepartment && collab.department_id === myProfileDepartment) ids.add(collab.user_id);
-    }
-
-    return ids;
-  }, [colaboradores, meId, myCollaborator, myProfile, profiles]);
-
   const teamUserIds = useMemo(() => {
     const ids = new Set<string>();
     const isWideViewer = meRole === "admin" || meRole === "rh" || meRole === "diretoria";
@@ -337,18 +289,13 @@ export default function GestorAusenciasPage() {
       return ids;
     }
 
-    for (const uid of directReportUserIds) ids.add(uid);
     for (const uid of collaboratorDirectReportUserIds) ids.add(uid);
-    for (const uid of sameDepartmentUserIds) ids.add(uid);
-    for (const r of requests) {
-      if (meId && r.manager_id === meId) ids.add(r.user_id);
-    }
     for (const a of allowances) {
       if (!a.user_id) continue;
-      if (directReportUserIds.has(a.user_id) || collaboratorDirectReportUserIds.has(a.user_id) || sameDepartmentUserIds.has(a.user_id)) ids.add(a.user_id);
+      if (collaboratorDirectReportUserIds.has(a.user_id)) ids.add(a.user_id);
     }
     return ids;
-  }, [allowances, colaboradores, collaboratorDirectReportUserIds, directReportUserIds, meId, meRole, profiles, requests, sameDepartmentUserIds]);
+  }, [allowances, colaboradores, collaboratorDirectReportUserIds, meId, meRole, profiles]);
 
   const teamCollaboratorIds = useMemo(() => {
     const ids = new Set<string>();
@@ -361,8 +308,10 @@ export default function GestorAusenciasPage() {
 
   const scopedRequests = useMemo(() => {
     if (!meId) return [] as AbsenceRequestRow[];
-    return requests.filter((r) => r.manager_id === meId || teamUserIds.has(r.user_id));
-  }, [requests, meId, teamUserIds]);
+    const isWideViewer = meRole === "admin" || meRole === "rh" || meRole === "diretoria";
+    if (isWideViewer) return requests;
+    return requests.filter((r) => teamUserIds.has(r.user_id));
+  }, [requests, meId, meRole, teamUserIds]);
 
   const pendingRequests = useMemo(
     () => scopedRequests.filter((r) => r.status === "pending_manager"),

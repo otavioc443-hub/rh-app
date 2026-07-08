@@ -186,8 +186,6 @@ export async function GET(req: Request) {
     );
 
     if (!collaborator) {
-      if (profile?.manager_id) return NextResponse.json({ ok: true, managerId: profile.manager_id, source: "profile" });
-
       return NextResponse.json(
         { error: "Nao encontrei o cadastro de colaborador vinculado ao seu acesso para resolver o gestor direto." },
         { status: 404 }
@@ -200,8 +198,6 @@ export async function GET(req: Request) {
     const managerId = (await findManagerIdByEmail(managerEmail, companyId)) || (await findManagerIdByName(managerName, companyId));
 
     if (!managerId) {
-      if (profile?.manager_id) return NextResponse.json({ ok: true, managerId: profile.manager_id, source: "profile" });
-
       return NextResponse.json(
         { error: "O superior direto esta preenchido, mas nao encontrei um perfil ativo de acesso para ele." },
         { status: 404 }
