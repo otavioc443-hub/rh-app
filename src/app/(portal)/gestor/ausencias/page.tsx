@@ -335,14 +335,14 @@ export default function GestorAusenciasPage() {
         .filter((r) => r.status === "pending_manager")
         .reduce((acc, r) => acc + (Number(r.days_count) || 0), 0);
       const daysAllowed = Number(a.days_allowed ?? a.max_days ?? 0) || 0;
-      const collab = collabByUserId.get(userId);
+      const collab = (a.collaborator_id ? collabById.get(a.collaborator_id) : null) ?? collabByUserId.get(userId);
       const nome =
         (collab?.nome ?? "").trim() ||
         profileNameById.get(userId) ||
         "Colaborador sem nome";
       rows.push({
         user_id: userId,
-        collaborator_id: a.collaborator_id ?? collab?.id ?? null,
+        collaborator_id: collab?.id ?? a.collaborator_id ?? null,
         nome,
         allowanceId: a.id,
         windowStart: (a.window_start ?? a.valid_from ?? "").slice(0, 10),

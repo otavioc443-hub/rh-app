@@ -240,6 +240,7 @@ export async function GET(req: Request) {
         (!!allowance.user_id && teamUserIds.has(allowance.user_id)) ||
         (!!allowance.collaborator_id && teamCollaboratorIds.has(allowance.collaborator_id))
     );
+    const scopedAllowanceCollaboratorIds = new Set(scopedAllowances.map((allowance) => allowance.collaborator_id).filter(Boolean));
     const scopedProfiles = profiles.filter(
       (profile) => profile.id === user.id || teamUserIds.has(profile.id) || scopedRequestUserIds.has(profile.id)
     );
@@ -249,6 +250,7 @@ export async function GET(req: Request) {
         collab.user_id === user.id ||
         (!!collab.user_id && teamUserIds.has(collab.user_id)) ||
         teamCollaboratorIds.has(collab.id) ||
+        scopedAllowanceCollaboratorIds.has(collab.id) ||
         [collab.email, collab.email_empresarial, collab.email_pessoal].map(cleanEmail).some((email) => email && scopedProfileEmails.has(email))
     );
     return NextResponse.json({
