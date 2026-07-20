@@ -221,12 +221,24 @@ export default function GestorAusenciasPage() {
 
   const profileNameById = useMemo(() => {
     const map = new Map<string, string>();
+    const collabNameByEmail = new Map<string, string>();
+    for (const c of colaboradores) {
+      const name = (c.nome ?? "").trim();
+      if (!name || name.includes("@")) continue;
+      for (const email of [c.email, c.email_empresarial, c.email_pessoal]) {
+        const key = (email ?? "").trim().toLowerCase();
+        if (key) collabNameByEmail.set(key, name);
+      }
+    }
+
     for (const p of profiles) {
       const n = (p.full_name ?? "").trim();
-      map.set(p.id, n && !n.includes("@") ? n : "Usuario sem nome");
+      const byEmail = p.email ? collabNameByEmail.get(p.email.trim().toLowerCase()) : null;
+      const name = byEmail || (n && !n.includes("@") ? n : "");
+      if (name) map.set(p.id, name);
     }
     return map;
-  }, [profiles]);
+  }, [colaboradores, profiles]);
 
   const teamUserIds = useMemo(() => {
     const ids = new Set<string>();

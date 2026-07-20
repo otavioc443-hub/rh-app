@@ -13,10 +13,19 @@ type Colaborador = {
   user_id: string | null;
   nome: string | null;
   is_active: boolean;
+  email?: string | null;
+  email_empresarial?: string | null;
+  email_pessoal?: string | null;
   empresa?: string | null;
   departamento?: string | null;
   setor?: string | null;
   department_id?: string | null;
+};
+
+type ProfileRow = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
 };
 
 type AllowanceHistoryRow = {
@@ -107,6 +116,15 @@ function htmlEscape(value: string) {
     .replace(/'/g, "&#039;");
 }
 
+function cleanEmail(value: string | null | undefined) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function cleanPersonName(value: string | null | undefined) {
+  const name = String(value ?? "").replace(/\s+/g, " ").trim();
+  return name && !name.includes("@") ? name : "";
+}
+
 function isTakenAbsence(request: Pick<AbsenceRequestRow, "end_date" | "manager_comment" | "reason">) {
   const marker = normalizeText(`${request.manager_comment ?? ""} ${request.reason ?? ""}`);
   if (marker.includes("ja tirada") || marker.includes("ja tirado") || marker.includes("efetivamente tirada")) return true;
@@ -119,6 +137,7 @@ function timingLabel(request: Pick<AbsenceRequestRow, "end_date" | "manager_comm
 
 export default function RHAusenciasPage() {
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([]);
+  const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [selectedCollabId, setSelectedCollabId] = useState<string>("");
@@ -201,12 +220,15 @@ export default function RHAusenciasPage() {
     async function load() {
       setLoading(true);
       setHistoryLoading(true);
-      const [collabRes, histRes, requestsRes] = await Promise.all([
+      const [collabRes, profilesRes, histRes, requestsRes] = await Promise.all([
         supabase
           .from("colaboradores")
           .select("*")
           .eq("is_active", true)
           .order("nome", { ascending: true }),
+        supabase
+          .from("profiles")
+          .select("id,full_name,email"),
         supabase
           .from("absence_allowances")
           .select("id,user_id,collaborator_id,valid_from,valid_to,max_days,window_start,window_end,days_allowed,is_active,created_by,created_at,updated_at")
@@ -229,12 +251,22 @@ export default function RHAusenciasPage() {
             user_id: typeof row.user_id === "string" ? row.user_id : null,
             nome: typeof row.nome === "string" ? row.nome : null,
             is_active: typeof row.is_active === "boolean" ? row.is_active : true,
+            email: typeof row.email === "string" ? row.email : null,
+            email_empresarial: typeof row.email_empresarial === "string" ? row.email_empresarial : null,
+            email_pessoal: typeof row.email_pessoal === "string" ? row.email_pessoal : null,
             empresa: typeof row.empresa === "string" ? row.empresa : null,
             departamento: typeof row.departamento === "string" ? row.departamento : null,
             setor: typeof row.setor === "string" ? row.setor : null,
             department_id: typeof row.department_id === "string" ? row.department_id : null,
           })),
         );
+      }
+
+      if (profilesRes.error) {
+        console.error("Erro ao carregar perfis:", profilesRes.error.message);
+        setProfiles([]);
+      } else {
+        setProfiles((profilesRes.data ?? []) as ProfileRow[]);
       }
 
       if (histRes.error) {
@@ -965,13 +997,29 @@ export default function RHAusenciasPage() {
 
   const colaboradorNomeByRef = useMemo(() => {
     const map: Record<string, string> = {};
+    const collabNameByEmail = new Map<string, string>();
+
     for (const c of colaboradores) {
-      const nome = (c.nome ?? "").trim() || "Colaborador sem nome";
+      const nome = cleanPersonName(c.nome);
+      if (!nome) continue;
       map[c.id] = nome;
       if (c.user_id) map[c.user_id] = nome;
+      for (const email of [c.email, c.email_empresarial, c.email_pessoal]) {
+        const key = cleanEmail(email);
+        if (key) collabNameByEmail.set(key, nome);
+      }
     }
+
+    for (const profile of profiles) {
+      if (map[profile.id]) continue;
+      const byEmail = collabNameByEmail.get(cleanEmail(profile.email));
+      const profileName = cleanPersonName(profile.full_name);
+      const nome = byEmail || profileName;
+      if (nome) map[profile.id] = nome;
+    }
+
     return map;
-  }, [colaboradores]);
+  }, [colaboradores, profiles]);
 
   function printAbsenceSummary() {
     const generatedAt = new Date().toLocaleString("pt-BR");
@@ -1412,7 +1460,7 @@ export default function RHAusenciasPage() {
             <div>
               <p className="text-sm font-semibold text-slate-900">Importacao em massa por CSV</p>
               <p className="mt-1 text-xs text-slate-500">
-                Colunas aceitas: colaborador, inicio, fim, dias, motivo e situacao. Use "ja tirado" na situacao quando o periodo ja foi gozado.
+                Colunas aceitas: colaborador, inicio, fim, dias, motivo e situacao. Use &quot;ja tirado&quot; na situacao quando o periodo ja foi gozado.
               </p>
               {importMsg ? <p className="mt-2 text-sm text-slate-700">{importMsg}</p> : null}
             </div>

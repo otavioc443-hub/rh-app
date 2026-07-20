@@ -243,8 +243,13 @@ export async function GET(req: Request) {
     const scopedProfiles = profiles.filter(
       (profile) => profile.id === user.id || teamUserIds.has(profile.id) || scopedRequestUserIds.has(profile.id)
     );
+    const scopedProfileEmails = new Set(scopedProfiles.map((profile) => cleanEmail(profile.email)).filter(Boolean));
     const scopedColaboradores = colaboradores.filter(
-      (collab) => collab.user_id === user.id || (!!collab.user_id && teamUserIds.has(collab.user_id)) || teamCollaboratorIds.has(collab.id)
+      (collab) =>
+        collab.user_id === user.id ||
+        (!!collab.user_id && teamUserIds.has(collab.user_id)) ||
+        teamCollaboratorIds.has(collab.id) ||
+        [collab.email, collab.email_empresarial, collab.email_pessoal].map(cleanEmail).some((email) => email && scopedProfileEmails.has(email))
     );
     return NextResponse.json({
       profiles: scopedProfiles,
