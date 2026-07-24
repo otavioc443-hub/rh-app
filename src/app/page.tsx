@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import Link from "next/link";
 import { Eye, EyeOff, ShieldCheck } from "lucide-react";
 import {
@@ -178,22 +177,21 @@ export default function LoginPage() {
   }
 
   return (
-    <main
-      className="
-        relative min-h-screen w-full
-        bg-[url('/bg-login.jpg')] bg-cover bg-center bg-no-repeat
-      "
-    >
-      <div className="absolute inset-0 bg-black/25" />
+    <main className="relative min-h-screen w-full bg-slate-100">
+      <div className="absolute inset-y-0 right-0 hidden w-[60%] border-l border-slate-200 bg-slate-200 lg:block" />
+      <div className="absolute inset-y-0 right-0 hidden w-[34%] bg-slate-50 lg:block" />
 
       <div className="relative min-h-screen w-full flex items-center justify-start p-6 md:pl-24">
         <div className="w-full max-w-md space-y-5">
           <div className="rounded-2xl border border-slate-200 bg-white/95 p-8 shadow-xl backdrop-blur-md">
             <div className="flex flex-col items-center text-center">
-              <div className="mb-4 flex items-center justify-center gap-6">
-                <Image src="/logo.png" alt="Solida" width={160} height={64} className="h-16 w-auto" />
-                <span className="h-12 w-[2px] bg-slate-300" />
-                <Image src="/logo2.png" alt="Area" width={120} height={48} className="h-12 w-auto" />
+              <div className="mb-4 flex items-center justify-center gap-5">
+                <div className="text-4xl font-semibold tracking-normal text-slate-950">solida</div>
+                <span className="h-10 w-px bg-slate-300" />
+                <div className="text-left">
+                  <p className="text-lg font-semibold uppercase tracking-[0.18em] text-slate-950">Area</p>
+                  <p className="text-[9px] font-semibold uppercase tracking-[0.22em] text-slate-500">Engenharia</p>
+                </div>
               </div>
 
               <p className="mt-1 text-sm text-gray-600">Acesso ao Portal de RH</p>
