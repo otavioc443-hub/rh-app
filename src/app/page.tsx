@@ -178,8 +178,10 @@ export default function LoginPage() {
 
   return (
     <main className="relative min-h-screen w-full bg-slate-100">
-      <div className="absolute inset-y-0 right-0 hidden w-[60%] border-l border-slate-200 bg-slate-200 lg:block" />
-      <div className="absolute inset-y-0 right-0 hidden w-[34%] bg-slate-50 lg:block" />
+      <div className="absolute inset-y-0 right-0 hidden w-[60%] overflow-hidden border-l border-slate-200 bg-slate-950 lg:block">
+        <div className="absolute inset-0 bg-[url('/login-portal-rh.png')] bg-cover bg-center" />
+        <div className="absolute inset-0 bg-slate-950/10" />
+      </div>
 
       <div className="relative min-h-screen w-full flex items-center justify-start p-6 md:pl-24">
         <div className="w-full max-w-md space-y-5">
