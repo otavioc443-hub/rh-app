@@ -48,7 +48,7 @@ type ManagerResolution = {
   managerEmailFallback: string;
 };
 
-const PORTAL_ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://rh-app-seven.vercel.app").replace(/\/$/, "");
+const PORTAL_ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://sourh.vercel.app").replace(/\/$/, "");
 
 async function requireNotifyAccess(req: Request) {
   const auth = req.headers.get("authorization") || "";

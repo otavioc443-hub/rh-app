@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { sendPortalEmail } from "@/lib/server/mailer";
 
-const PORTAL_ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://rh-app-seven.vercel.app").replace(/\/$/, "");
+const PORTAL_ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://sourh.vercel.app").replace(/\/$/, "");
 const RECOVERY_REDIRECTS = [`${PORTAL_ORIGIN}/auth/recovery`, `${PORTAL_ORIGIN}/set-password?flow=recovery`];
 
 function clean(value: unknown) {

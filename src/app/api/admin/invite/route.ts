@@ -41,7 +41,7 @@ async function requireAdminOrRH(req: Request) {
 }
 
 function getAuthRedirectTo() {
-  return "https://rh-app-seven.vercel.app/auth/callback";
+  return "https://sourh.vercel.app/auth/callback";
 }
 
 export async function POST(req: Request) {

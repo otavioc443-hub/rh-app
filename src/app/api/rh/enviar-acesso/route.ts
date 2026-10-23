@@ -36,7 +36,7 @@ async function getRequesterUser(req: Request) {
 }
 
 function getAuthRedirectTo() {
-  return "https://rh-app-seven.vercel.app/auth/callback";
+  return "https://sourh.vercel.app/auth/callback";
 }
 
 function cleanEmail(value: string | null | undefined) {

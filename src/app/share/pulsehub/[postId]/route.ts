@@ -5,7 +5,7 @@ type ShareRouteContext = {
   params: Promise<{ postId: string }>;
 };
 
-const FALLBACK_ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://rh-app-seven.vercel.app").replace(/\/$/, "");
+const FALLBACK_ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://sourh.vercel.app").replace(/\/$/, "");
 
 function escapeHtml(value: string | null | undefined) {
   return String(value ?? "")

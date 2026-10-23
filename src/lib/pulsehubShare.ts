@@ -12,7 +12,7 @@ export type PulseHubSharePost = {
   imageUrl: string;
 };
 
-const SITE_ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://rh-app-seven.vercel.app").replace(/\/$/, "");
+const SITE_ORIGIN = (process.env.NEXT_PUBLIC_SITE_URL?.trim() || "https://sourh.vercel.app").replace(/\/$/, "");
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function plainText(value: string | null | undefined) {
