@@ -377,12 +377,33 @@ export default function RHAusenciasPage() {
       const department = (collab.departamento ?? collab.setor ?? collab.department_id ?? "").trim() || "Sem setor";
       const companyMatches = companyFilter === "todos" || company === companyFilter;
       const departmentMatches = departmentFilter === "todos" || department === departmentFilter;
-      if (!collab.user_id) return nameMatches && companyMatches && departmentMatches && statusFilter === "todos";
-      const hasStatus =
-        statusFilter === "todos" || requests.some((request) => request.user_id === collab.user_id && request.status === statusFilter);
-      return nameMatches && companyMatches && departmentMatches && hasStatus;
+      if (!nameMatches || !companyMatches || !departmentMatches) return false;
+      if (statusFilter === "todos") return true;
+
+      const allowance = collab.user_id ? latestAllowanceByUser[collab.user_id] : null;
+      const allowed = Number(allowance?.days_allowed ?? allowance?.max_days ?? 0) || 0;
+      const used = collab.user_id ? approvedDaysByUser[collab.user_id] ?? 0 : 0;
+      const taken = collab.user_id ? takenDaysByUser[collab.user_id] ?? 0 : 0;
+      const scheduled = Math.max(0, used - taken);
+      if (statusFilter === "saldo_aberto") return Math.max(0, allowed - used) > 0;
+      if (statusFilter === "dias_liberados") return allowed > 0;
+      if (statusFilter === "dias_programados") return scheduled > 0;
+      if (statusFilter === "dias_tirados") return taken > 0;
+
+      if (!collab.user_id) return false;
+      return requests.some((request) => request.user_id === collab.user_id && request.status === statusFilter);
     });
-  }, [colaboradores, companyFilter, departmentFilter, requests, statusFilter, summaryQuery]);
+  }, [
+    approvedDaysByUser,
+    colaboradores,
+    companyFilter,
+    departmentFilter,
+    latestAllowanceByUser,
+    requests,
+    statusFilter,
+    summaryQuery,
+    takenDaysByUser,
+  ]);
 
   useEffect(() => {
     setSummaryPage(0);
@@ -937,6 +958,10 @@ export default function RHAusenciasPage() {
 
   function statusLabel(status: string) {
     const labels: Record<string, string> = {
+      saldo_aberto: "Com saldo em aberto",
+      dias_liberados: "Com dias liberados",
+      dias_programados: "Com dias programados",
+      dias_tirados: "Com dias ja tirados",
       approved: "Aprovada",
       pending_manager: "Pendente",
       rejected: "Recusada",
@@ -1201,10 +1226,18 @@ export default function RHAusenciasPage() {
             className="rounded-xl border border-slate-200 px-4 py-3 text-sm"
           >
             <option value="todos">Todos os status</option>
-            <option value="pending_manager">Pendentes</option>
-            <option value="approved">Aprovadas</option>
-            <option value="rejected">Recusadas</option>
-            <option value="cancelled">Canceladas</option>
+            <optgroup label="Situacao dos dias">
+              <option value="saldo_aberto">Com saldo em aberto</option>
+              <option value="dias_liberados">Com dias liberados</option>
+              <option value="dias_programados">Com dias programados</option>
+              <option value="dias_tirados">Com dias ja tirados</option>
+            </optgroup>
+            <optgroup label="Status das solicitacoes">
+              <option value="pending_manager">Pendentes</option>
+              <option value="approved">Aprovadas</option>
+              <option value="rejected">Recusadas</option>
+              <option value="cancelled">Canceladas</option>
+            </optgroup>
           </select>
         </div>
 
